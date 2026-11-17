@@ -112,8 +112,11 @@ test("Anrufer: offene Probe-Anrufe an das Ziel werden abgebrochen, fremde und be
   const abfrage = async (_url, optionen) => {
     const { name, arguments: argumente } = JSON.parse(optionen.body).params;
     if (name === "cancel_call") abgebrochen.push(argumente.call_id);
-    const strukturiert = name === "list_calls" ? { calls } : { call_id: argumente.call_id, status: "cancelled" };
-    const rpc = { jsonrpc: "2.0", id: 1, result: { structuredContent: strukturiert } };
+    const ergebnis =
+      name === "list_calls"
+        ? { structuredContent: { calls } }
+        : { content: [{ type: "text", text: JSON.stringify({ call_id: argumente.call_id, status: "cancelled" }) }] };
+    const rpc = { jsonrpc: "2.0", id: 1, result: ergebnis };
     return { ok: true, status: 200, text: async () => JSON.stringify(rpc) };
   };
   const anrufer = anruferBauen({ basis: BASIS, token: PROBE_STAGING_TEST_TOKEN, ziel: ZIEL, sprache: "de", abfrage });
