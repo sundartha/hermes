@@ -40,7 +40,6 @@ const FRISTEN = Object.freeze({
     offen: (call) => Boolean(call.fristReserveAt),
     faelligUm: "frist_reserve_at",
     parameter: [],
-    dauerS: () => 0,
   },
 });
 const SETZEN_SQL = "UPDATE call SET frist_hoechstdauer_at = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
