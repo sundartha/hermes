@@ -8,7 +8,7 @@ process.env.CONSULT_ENABLED = "true";
 process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.IN_CALL_CONSULT_ENABLED = "true";
 
-const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.js");
+const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.ts");
 const { makeConsultRaised, CONSULT_RESULT } = await import(
   "../../src/conversation/consult-raised.js"
 );

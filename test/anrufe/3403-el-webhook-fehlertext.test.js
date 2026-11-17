@@ -5,7 +5,7 @@ import http from "node:http";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { startServer, seedState, seedCall, waitForLog } from "../helpers.js";
 
-const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.js");
+const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.ts");
 const { config } = await import("../../src/config.js");
 
 const TOOL_TOKEN = "fehlertext-tool-token-testgeheim";
