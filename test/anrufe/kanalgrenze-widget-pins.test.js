@@ -7,12 +7,12 @@ import { widgetPins } from "../../src/ui/registry.js";
 const AUSGELASTET = "at-capacity";
 const AUSGELASTET_BESCHRIFTUNG = "At capacity";
 const ALLE_WIDGETS = ["agent-status", "my-number", "calls", "call"];
-const NAECHSTE_VERSION = { "agent-status": "26", "my-number": "27", calls: "27", call: "40" };
+const NAECHSTE_VERSION = { "agent-status": "27", "my-number": "28", calls: "28", call: "41" };
 const LETZTER_BESTEHENDER_PIN = {
-  "agent-status": ["25", "ba392cfcc036eb05717d4d029f7ed70a06d2092657ee41e5b03f1ab80e0a1724"],
-  "my-number": ["26", "13cac4fc81170c633739ce810c60b75c575311a80ee4c6e9fc196afb86a09ce9"],
-  calls: ["26", "73cffc009e3f281e1f57e30c559d4c9d5c9fd38db7acf5745db0d315acb69ca2"],
-  call: ["39", "a3114efd3faed9a6fef9bfa1c3b2589fbf5551ab320e14e920dce153c26e61e4"],
+  "agent-status": ["26", "f57397e4b6c53041ab941888bbb11fa10207ff8707e6b0006e7132e2fa396c72"],
+  "my-number": ["27", "a8bdace68a91b67a4d6b7fbd8b71973920abcac427d76939163771d5f7927c2a"],
+  calls: ["27", "207cdf04b614ce522cae54e318e969b02e5df88ad91914602e2843e097a8cb41"],
+  call: ["40", "d248ced955d276fd6ae6a78c7dc0d1d185f2151259132fc5134fa00b92633908"],
 };
 
 async function ausgelieferteWidgets() {

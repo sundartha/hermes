@@ -78,8 +78,9 @@ function karte(sprache = "en") {
   vm.createContext(sandbox);
   vm.runInContext(skriptbloecke(WIDGET).find((code) => code.includes("HermesI18n = {")), sandbox);
   vm.runInContext(skriptbloecke(WIDGET).find((code) => code.includes("function init()")), sandbox);
+  hole('[data-mcp="call_id"]').textContent = "c1";
   const meta = { "hermes/locale": sprache, "hermes/content_locale": sprache };
-  const schicke = (inhalt) => hoerer.forEach((h) => h({ data: { method: ERGEBNIS, params: { _meta: meta, structuredContent: { call_id: "c1", status: "completed", ...inhalt } } } }));
+  const schicke = (inhalt) => hoerer.forEach((h) => h({ data: { method: ERGEBNIS, params: { _meta: meta, structuredContent: { call_id: "c1", status: "completed", result_summary: "Termin gebucht.", ...inhalt } } } }));
   const sichtbar = () => hole(ZEILE).style.display === "";
   const zeilen = () =>
     hole(LISTE).kinder.map((zeile) => ({

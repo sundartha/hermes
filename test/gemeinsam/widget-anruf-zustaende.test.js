@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const ANRUF = (await ausgelieferteWidgets()).call;
 const WIDGET_DICT = JSON.parse(skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {")).match(/var WIDGET_DICT = (.*);\n/)[1]);
-const NEUE_VERSION = 40;
+const NEUE_VERSION = 41;
 const ERGEBNIS = "ui/notifications/tool-result";
 
 const UEBERSCHRIFT = {

@@ -45,6 +45,9 @@
   .sheet .zeile.lines{grid-template-columns:minmax(0,1fr)}
   .lines .turn{font-size:15px;line-height:21px;color:var(--fg);overflow-wrap:anywhere}
   .chatblock{padding:12px 0;border-bottom:1px solid var(--hair)}
+  .schritt{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0;padding:4px 0;font-size:14px;line-height:20px;color:var(--fg);overflow-wrap:anywhere}
+  .schritt span{min-width:0}
+  .schritt .art{color:var(--fg2)}
   .chat-titel{margin-bottom:8px;font-size:13px;color:var(--fg2)}
   .chat{box-sizing:border-box;height:240px;min-width:0;flex-shrink:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
   .bubble{box-sizing:border-box;max-width:82%;min-width:0;flex-shrink:0;padding:8px 12px;font-size:14px;line-height:20px;color:var(--fg);overflow-wrap:anywhere}
@@ -102,6 +105,10 @@
       </div>
       <div class="zeile rise d1" data-row="next_step" style="display:none">
         <span data-i18n="Next step">Next step</span><span data-mcp="next_step">—</span>
+      </div>
+      <div class="chatblock" data-row="next_steps" style="display:none">
+        <div class="chat-titel" data-i18n="Next steps">Next steps</div>
+        <div data-next-steps></div>
       </div>
       </div>
       <div class="fuss">
@@ -610,6 +617,45 @@
       setRowVisible("chat", turns.length > 0);
     }
 
+    var NEXT_STEP_KEYS = { appointment: "Appointment", callback: "Callback", task: "Task" };
+
+    function nextStepTime(at) {
+      var date = new Date(at);
+      if (isNaN(date.getTime())) return at;
+      return date.toLocaleString(doc.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" });
+    }
+
+    function nextStepRow(step) {
+      var row = doc.createElement("div");
+      row.className = "schritt";
+      var kind = doc.createElement("span");
+      kind.className = "art";
+      setKeyedText(kind, Object.prototype.hasOwnProperty.call(NEXT_STEP_KEYS, step.type) ? NEXT_STEP_KEYS[step.type] : "Other");
+      var text = doc.createElement("span");
+      text.textContent = step.text;
+      row.appendChild(kind);
+      row.appendChild(text);
+      if (typeof step.at === "string" && step.at.length > 0) {
+        var when = doc.createElement("span");
+        when.textContent = nextStepTime(step.at);
+        row.appendChild(when);
+      }
+      return row;
+    }
+
+    function isNextStep(step) {
+      return isRecord(step) && typeof step.text === "string" && step.text.trim().length > 0;
+    }
+
+    function applyNextSteps(data) {
+      var container = doc.querySelector("[data-next-steps]");
+      if (!container) return;
+      while (container.firstChild) container.removeChild(container.firstChild);
+      var steps = Array.isArray(data.next_steps) ? data.next_steps.filter(isNextStep) : [];
+      for (var i = 0; i < steps.length; i++) container.appendChild(nextStepRow(steps[i]));
+      setRowVisible("next_steps", steps.length > 0);
+    }
+
     // Terminal-Folgen: Sichtbarkeit je Status, Cancel deaktivieren,
     // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
@@ -687,6 +733,7 @@
       // Die beiden skalaren Karten-Felder.
       applyResultRow("outcome", data.outcome, currentStatus === "completed");
       applyResultRow("next_step", data.next_step, true);
+      applyNextSteps(data);
     }
 
     function pollPeriodFor(status) {
