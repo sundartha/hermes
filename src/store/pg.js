@@ -1505,7 +1505,7 @@ async function flush(client, state, preFlush) {
 
 async function flushTenantScope(client, state, { tenantId, geschrieben, abdruecke }) {
   const { calls, callIds } = ops.tenantCallScope(state, tenantId);
-  await flushCalls(client, tenantId, calls, abdruecke);
+  await flushCalls(client, { tenantId, calls, abdruecke });
   geschrieben.push(
     ...(await ausstehendeSchreiben(client, tenantId, {
       punkte: state.actionItems.filter((item) => callIds.has(item.callId)),
@@ -1705,7 +1705,7 @@ function callRowValues(call, tenantId) {
   ];
 }
 
-async function flushCalls(client, tenantId, calls, abdruecke) {
+async function flushCalls(client, { tenantId, calls, abdruecke }) {
   for (const c of calls) {
     const abdruck = anrufAbdruck(c, tenantId);
     if (geschriebeneAnrufe.get(c) === abdruck) continue;
