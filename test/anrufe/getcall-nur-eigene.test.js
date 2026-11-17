@@ -199,6 +199,21 @@ test("H7c2b3-12: nach einer gescheiterten und einer folgenden gelungenen Lesung 
   assert.deepEqual(b.activeCallsFor(BOOTSTRAP_TENANT_ID), []);
 });
 
+test("H7c2b3-15: nach einer gescheiterten und einer folgenden gelungenen Lesung zaehlt activeCallsFor eine beim Laden gelesene Fremdkopie eines von der anderen Instanz beendeten Anrufs nicht mehr", async () => {
+  const { store: a, db, runner } = await makePgTestStore();
+  const fremd = await legeAnrufAn(a);
+  const ausfall = mitAusfall(runner);
+  const b = makePgStore(ausfall.runner);
+  await b.init();
+  ausfall.schalter.aus = true;
+  await assert.rejects(b.activeCallsForSql(BOOTSTRAP_TENANT_ID));
+  ausfall.schalter.aus = false;
+  assert.deepEqual(ids(await b.activeCallsForSql(BOOTSTRAP_TENANT_ID)), [fremd.id]);
+  await db.query(BEENDEN_SQL, [fremd.id]);
+  await b.activeCallsForSql(BOOTSTRAP_TENANT_ID);
+  assert.deepEqual(b.activeCallsFor(BOOTSTRAP_TENANT_ID), []);
+});
+
 test("H7c2b3-13: der Abbruch-Weg ueber den Traeger legt einen von der anderen Instanz beendeten Anruf nicht noch einmal auf", async () => {
   const { store: a, runner } = await makePgTestStore();
   const fremd = await legeAnrufAn(a, { twilioSid: ANBIETER_ID });
