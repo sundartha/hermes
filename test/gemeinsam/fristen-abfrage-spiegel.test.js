@@ -85,3 +85,18 @@ test("Abfrage-Frist schreiben im JSON-Speicher: setzt die Frist eines aktiven An
   assert.equal(speicher.getCall(beendet).fristAbfrageAt, zeitpunkt(-MINUTE_MS));
   await speicher.setzeAbfrageFrist({ callId: "call_gibt_es_nicht", tenantId: A, faelligAt });
 });
+
+test("Abfrage-Frist schreiben im JSON-Speicher: die Frist eines Anrufs ueberschreibt nie die Frist eines anderen aktiven Anrufs", async () => {
+  const erster = anruf(A, { abfrage: -MINUTE_MS });
+  const zweiter = anruf(A, { abfrage: -MINUTE_MS });
+  speicher.getCall(erster).fristAbfrageVersuche = 2;
+  speicher.getCall(zweiter).fristAbfrageVersuche = 3;
+  const faelligAt = "2032-01-02T03:04:05.000Z";
+  await speicher.setzeAbfrageFrist({ callId: erster, tenantId: A, faelligAt });
+  await speicher.setzeAbfrageFrist({ callId: zweiter, tenantId: A, faelligAt });
+  for (const id of [erster, zweiter]) assert.equal(speicher.getCall(id).fristAbfrageAt, faelligAt);
+  const dritter = anruf(A, { abfrage: -MINUTE_MS });
+  await speicher.setzeAbfrageFrist({ callId: dritter, tenantId: A, faelligAt: "2033-01-01T00:00:00.000Z" });
+  for (const id of [erster, zweiter]) assert.equal(speicher.getCall(id).fristAbfrageAt, faelligAt);
+  assert.equal(speicher.getCall(dritter).fristAbfrageAt, "2033-01-01T00:00:00.000Z");
+});
