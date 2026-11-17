@@ -198,6 +198,11 @@ function handleInit({ req, res, deps }) {
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
 }
 
+function fehlerNachricht(err) {
+  if (typeof err !== "object" || err === null || !("message" in err)) return "";
+  return String(err.message ?? "");
+}
+
 export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt, vorspannText }) {
   const router = Router(EXAKTER_ROUTER);
   const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
@@ -206,7 +211,7 @@ export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = 
     try {
       return handleInit({ req, res, deps });
     } catch (err) {
-      console.error(`[${INIT_LOG_TAG}] fehler: ${String(err?.message ?? "") || "unbekannt"}`);
+      console.error(`[${INIT_LOG_TAG}] fehler: ${fehlerNachricht(err) || "unbekannt"}`);
       if (res.headersSent) return res.end();
       return res.status(HTTP_SERVER_ERROR).json(INIT_ANTWORT.INTERN);
     }
