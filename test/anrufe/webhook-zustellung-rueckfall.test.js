@@ -66,11 +66,11 @@ test("S4-K2b: Rückfall mit gültiger Signatur, aber fremdem CallSid bekommt nic
       const gleicherCallSid = rueckfall(signer, { callId: "call_s4b", callSid: "CArueck02", zusatz: { Wiederholt: "1" } });
       const positivkontrolle = await antwortVon(c, gleicherCallSid);
       assert.equal(positivkontrolle.xml, vonA.xml, "Positivkontrolle: gleicher CallSid liefert das XML von A");
+      assert.equal((await zeilenMitAntwort(sql)).length, 1, "mit demselben CallSid bleibt es bei einer Zeile");
 
       const vonB = await antwortVon(b, rueckfall(signer, { callId: "call_s4b", callSid: "CArueck99" }));
       assert.equal(vonB.status, HTTP_OK);
       assert.match(vonB.xml, LEER_ODER_AUFLEGEN);
-      assert.equal((await zeilenMitAntwort(sql)).length, 1, "mit demselben CallSid bleibt es bei einer Zeile");
       await zeilenBis(() => zeilenMitAntwort(sql), (zeilen) => zeilen.length === 2);
       assert.equal((await zeilenMitAntwort(sql)).length, 2, "fremder CallSid bekommt eine eigene Zeile, nicht die von A");
     },
