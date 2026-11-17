@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { startServer, externalIp, seedState, seedCall, waitForLog } from "../helpers.js";
 import { maskNumber } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAbbrechendeAttrappe } from "./vorspann-fahrzeug.js";
 
 const EXTERNAL_IP = externalIp();
 const postJson = (url, body) =>
@@ -16,8 +18,9 @@ const countMatches = (text, re) => (text.match(new RegExp(re, "g")) || []).lengt
 const sternImMuster = (text) => text.replace(/\*/g, "\\*");
 
 test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
+  const abbrechend = await starteAbbrechendeAttrappe("audit", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
-    env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: "+4915112345678" },
+    env: { ...abbrechend.env, ALLOWED_NUMBERS: "+4915112345678" },
     seed: seedState({ calls: [seedCall({ id: "call_audit1", to: "+4915199999999" })] }),
   });
   try {
@@ -64,6 +67,7 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
 
   } finally {
     await srv.stop();
+    await abbrechend.close();
   }
 });
 

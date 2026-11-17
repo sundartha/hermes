@@ -1,13 +1,16 @@
-import test from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { resolveProfileFrom, sanitizeProfile } from "../../src/begriffe/profil.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../../src/begriffe/mandant.js";
 import { planProfileFor } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
-const MT = { FAKE_ORIGINATE_ELEVENLABS: "false", MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
+const abbrechend = await starteAbbrechendeAttrappe("a4", [BOOTSTRAP_TENANT_ID, "t_np", "t_paid"]);
+after(() => abbrechend.close());
+const MT = { ...abbrechend.env, MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
 
 const postCall = (url, to, identity) =>
   abrufMitFrist(`${url}/api/calls`, {
@@ -28,14 +31,7 @@ const subscriberTenant = (id, idpSubject) => ({
   ownerName: `${id} Tester`,
   kycLevel: KYC_LEVEL.CARD,
 });
-const activeNumber = (id, e164, tenantId) => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
-  status: "active",
-  providerNumberId: null,
-});
+const activeNumber = (id, e164, tenantId) => vorspannSeedNummer({ tenantId, nummer: e164, id });
 
 test("A4: resolveProfileFrom - DEFAULT=0 harter Block, Owner/Tier unberuehrt", () => {
   assert.equal(

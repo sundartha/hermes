@@ -1,22 +1,19 @@
-import test from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
 const A = "tenant-a",
   SUB_A = "sub-a",
   NUM_A = "+4915110000001";
 
-const activeNumber = (id, e164, tenantId) => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
-  status: "active",
-  providerNumberId: null,
-});
+const activeNumber = (id, e164, tenantId) => vorspannSeedNummer({ tenantId, nummer: e164, id });
+
+const abbrechend = await starteAbbrechendeAttrappe("ident", [BOOTSTRAP_TENANT_ID, A]);
+after(() => abbrechend.close());
 
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
 
@@ -47,7 +44,7 @@ const placeCall = (srv, identity) =>
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
   });
 
-const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
+const FLAG_ON = { ...abbrechend.env, MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 const outboundCalls = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 

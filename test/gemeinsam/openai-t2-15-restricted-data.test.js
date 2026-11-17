@@ -26,8 +26,11 @@ import {
 } from "../gemeinsam/erfundene-geheimnisse.js";
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "./vorspann-fahrzeug.js";
 
 const TARGET = "+4915112340077";
+const VORSPANN_ENV = vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]);
 const CALL_EXEMPT_KEYS = ["to", "confirmation_code", "language"];
 const CARD = "4111 1111 1111 1111";
 const CARD_COMPACT = "4111111111111111";
@@ -394,7 +397,7 @@ const ALLOWED_INPUTS = [
 async function withCallServer(run, extraEnv = {}) {
   const srv = await startServer({
     env: {
-      FAKE_ORIGINATE: "true",
+      ...VORSPANN_ENV,
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
       ...extraEnv,
@@ -641,7 +644,7 @@ test("T6 (Draht HTTP OAuth): place_call mit Karte/SSN/Passwort -> isError; get_c
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
       OWNER_IDP_SUBJECT: OWNER_SUB,
-      FAKE_ORIGINATE: "true",
+      ...VORSPANN_ENV,
       ALLOWED_COUNTRY_CODES: "*",
       MCP_UI_ENABLED: "true",
     },
@@ -662,7 +665,7 @@ test("T6 (Draht HTTP OAuth): place_call mit Karte/SSN/Passwort -> isError; get_c
 
 test("T7 (Draht stdio): place_call mit Karte/SSN/Passwort -> isError; get_call_result maskiert", async () => {
   const gateway = await startServer({
-    env: { FAKE_ORIGINATE: "true", ALLOWED_COUNTRY_CODES: "*" },
+    env: { ...VORSPANN_ENV, ALLOWED_COUNTRY_CODES: "*" },
     seed: seededTranscriptState(),
   });
   const { transport } = stdioServerTransport({ GATEWAY_URL: gateway.localUrl, MCP_UI_ENABLED: "true" });
