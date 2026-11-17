@@ -15,6 +15,7 @@ const WIEDERHOLUNG_FRIST_MS = 1_000;
 const ABLAGE_TABELLE = "webhook_zustellung";
 const KRITERIUM_NAME = "S4-K1";
 const RUECKFALL_QUELLE = "dial_ende";
+const LEER_ODER_AUFLEGEN = /^\s*(<\?xml[^>]*\?>\s*)?<Response(\s*\/>|>\s*(<Hangup\s*\/>\s*)?<\/Response>)\s*$/;
 
 const rueckfall = (signer, { callId, callSid, quelle = RUECKFALL_QUELLE, zusatz = {} }) =>
   signierteRueckfallZustellung(signer, { callId, quelle, felder: { CallSid: callSid, ...zusatz } });
@@ -31,7 +32,7 @@ test("S4-K1: derselbe Rückfall gleichzeitig an Instanz A und B ergibt zweimal d
     for (const antwort of [vonA, vonB]) {
       assert.equal(antwort.status, HTTP_OK);
       assert.match(antwort.contentType, /^text\/xml/);
-      assert.match(antwort.xml, /<Gather/);
+      assert.match(antwort.xml, LEER_ODER_AUFLEGEN);
     }
     assert.equal(vonB.xml, vonA.xml, "Byte für Byte dasselbe XML");
   });
@@ -41,7 +42,7 @@ test("S4-K2: Rückfall mit anderem Körper an B liefert nach A das XML von A, oh
   await mitInstanzenAufPostgres(t, { anrufe: ["call_s4b"] }, async ({ instanzen: [a, b], sql, signer }) => {
     const vonA = await antwortVon(a, rueckfall(signer, { callId: "call_s4b", callSid: "CArueck02" }));
     assert.equal(vonA.status, HTTP_OK);
-    assert.match(vonA.xml, /<Gather/);
+    assert.match(vonA.xml, LEER_ODER_AUFLEGEN);
     await zeilenBis(() => zeilenMitAntwort(sql), (zeilen) => zeilen.length > 0);
     assert.ok((await zeilenMitAntwort(sql)).length > 0, "die Zeile trägt laut SQL eine Antwort");
 
@@ -68,7 +69,7 @@ test("S4-K2b: Rückfall mit gültiger Signatur, aber fremdem CallSid bekommt nic
 
       const vonB = await antwortVon(b, rueckfall(signer, { callId: "call_s4b", callSid: "CArueck99" }));
       assert.equal(vonB.status, HTTP_OK);
-      assert.match(vonB.xml, /<Gather/);
+      assert.match(vonB.xml, LEER_ODER_AUFLEGEN);
       assert.notEqual(vonB.xml, vonA.xml, "fremder CallSid bekommt nicht das XML von A");
     },
   );
