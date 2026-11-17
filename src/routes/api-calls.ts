@@ -107,7 +107,7 @@ interface Ablehnung {
 
 type Anspruch =
   | { denial: Ablehnung; call?: undefined; created?: false; wartet?: undefined }
-  | { denial?: undefined; call: Anruf; created: boolean; wartet?: undefined };
+  | { denial?: undefined; call: Anruf; created: boolean; wartet?: boolean };
 
 interface Abbruch {
   grund?: string | null;
@@ -530,11 +530,13 @@ async function claimCallRecord({
   const denial = await callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
   const abgelehnt = await belegePlatzOderWarte({ leitungsplaetze, ctx, felder, wartet });
-  if (abgelehnt) return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: abgelehnt }), created: false };
+  const imRennenVerloren = abgelehnt === LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
+  if (abgelehnt && !imRennenVerloren)
+    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: abgelehnt }), created: false };
   const call = store.createCall(felder);
   await store.persistCall(call.id);
   zaehleAnrufGestartet("outbound");
-  return { call, created: true };
+  return { call, created: true, wartet: wartet || imRennenVerloren };
 }
 
 function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anruf; ctx: Kontext; config: Konfiguration; deduplicated: boolean }) {
@@ -855,6 +857,7 @@ export function makeCallRoutes({
       );
       if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
       call = claim.call;
+      wartet = claim.wartet === true;
       audit(
         "place_call",
         req,

@@ -110,14 +110,14 @@ const KONTEXT = Object.freeze({
   context: null,
 });
 
-const leitungsplaetzeMit = (entscheidung, aufrufe) => ({
+const leitungsplaetzeMit = (entscheidung, aufrufe, belegenEntscheidung = entscheidung) => ({
   pruefenAusgehend: async (anfrage) => {
     aufrufe.pruefen.push(anfrage);
     return entscheidung;
   },
   belegenAusgehend: async (anfrage) => {
     aufrufe.belegen.push(anfrage);
-    return { entscheidung };
+    return { entscheidung: belegenEntscheidung };
   },
   freigeben: () => {},
 });
@@ -126,6 +126,7 @@ async function postBeiVollerPlattform({
   anrufstart,
   vorbereitung = () => {},
   entscheidung = LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL,
+  belegenEntscheidung = entscheidung,
   gates = [],
   attrappe = vorspannDiAttrappe(),
   arm = { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
@@ -140,7 +141,7 @@ async function postBeiVollerPlattform({
     makeCallRoutes({
       ...attrappe,
       store,
-      leitungsplaetze: leitungsplaetzeMit(entscheidung, aufrufe),
+      leitungsplaetze: leitungsplaetzeMit(entscheidung, aufrufe, belegenEntscheidung),
       config,
       audit: () => {},
       outboundGates: [{ name: "kontext", run: (ctx) => Object.assign(ctx, KONTEXT) && null }, ...gates],
@@ -257,6 +258,38 @@ test("Volle Plattform: der Anruf wird eingereiht und antwortet sofort dialing, o
   ]);
   assert.deepEqual(ergebnis.protokoll.gruende, []);
   assert.deepEqual(ergebnis.protokoll.enden, []);
+});
+
+test("Platz im Rennen verloren: war die Vorpruefung frei und ist die Plattform beim Belegen voll, wird der Anruf eingereiht statt mit 503 abgelehnt", async () => {
+  const eingereiht = [];
+  const ergebnis = await postBeiVollerPlattform({
+    anrufstart: {
+      einreihen: async (anrufId) => {
+        eingereiht.push(anrufId);
+        return true;
+      },
+    },
+    entscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.FREI,
+    belegenEntscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL,
+  });
+  const [angelegt] = ergebnis.protokoll.angelegt;
+  assert.equal(ergebnis.status, HTTP_OK);
+  assert.equal(ergebnis.body.status, "dialing");
+  assert.deepEqual(eingereiht, [angelegt.id]);
+  assert.equal(ergebnis.wahlversuche, 0);
+  assert.deepEqual(ergebnis.protokoll.gruende, []);
+});
+
+test("Platz im Rennen verloren: ist der Kunde beim Belegen voll, bleibt es bei 429 ohne Anlegen und Einreihen", async () => {
+  let eingereiht = 0;
+  const ergebnis = await postBeiVollerPlattform({
+    anrufstart: { einreihen: async () => ++eingereiht > 0 },
+    entscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.FREI,
+    belegenEntscheidung: LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL,
+  });
+  assert.equal(ergebnis.status, HTTP_TOO_MANY);
+  assert.equal(eingereiht, 0);
+  assert.deepEqual(ergebnis.protokoll.angelegt, []);
 });
 
 test("Kunde voll: bleibt die sofortige Ablehnung 429, nichts wird angelegt oder eingereiht", async () => {
