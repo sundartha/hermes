@@ -99,6 +99,7 @@ Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, darf rot sein)
 Neue Datei:   nur mit `npm run neu -- <route|fachdatei|test> <baustein oder bereich> <name>`
 Neuer Test:   in `test/<bereich>/<name>.test.js` (Bereiche in `tools/bereiche.json`), nie flach in `test/`
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
+              (ohne Alarmkanal zusätzlich OUTAGE_ALERT_WINDOW_MS=0 oder einen Alarmkanal setzen, sonst bricht der Start ab; Quelle: src/boot-guard.js#alertChannelFindings)
 ```
 
 Ein Test muss rot werden, wenn sich für einen Kunden oder Angerufenen etwas falsch verhält,
