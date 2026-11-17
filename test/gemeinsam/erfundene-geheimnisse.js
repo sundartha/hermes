@@ -84,3 +84,5 @@ export const KENNZAHLEN_PASSWORT_OHNE_SCHEMA = "Kz-erfunden-Passwort-0007";
 export const EL_OUTBOUND_SCHLUESSEL_BEISPIEL = "el-outbound-erfunden-key";
 export const EL_OUTBOUND_AGENT_ID_BEISPIEL = "agent_el_outbound_erfunden";
 export const PLATFORM_ALERT_SMS_TO_BEISPIEL = "+4915100000000";
+
+export const PROBE_TELNYX_SCHLUESSEL = "KEYtest-probe-schluessel-erfunden";

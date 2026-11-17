@@ -5,11 +5,13 @@ import { anfrage, githubZugang } from "./netz.mjs";
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
 const NACHTLAUF_TITEL = "Staging-Nachtlauf rot";
+const PROBE_TITEL = "Staging-Anrufprobe rot";
 const HOERTEST_MELDUNGEN = Object.freeze({ ersetzt: "issue_ersetzt", angelegt: "issue_angelegt" });
 const NACHTLAUF_MELDUNGEN = Object.freeze({
   ersetzt: "nachtlauf_ersetzt",
   angelegt: "nachtlauf_angelegt",
 });
+const PROBE_MELDUNGEN = Object.freeze({ ersetzt: "probe_ersetzt", angelegt: "probe_angelegt" });
 const NACHKONTROLLE_MELDUNGEN = Object.freeze({
   ersetzt: "nachkontrolle_ersetzt",
   angelegt: "nachkontrolle_angelegt",
@@ -59,6 +61,17 @@ function nachtlaufText({ commit, laufUrl }) {
     "Lauf: " + laufUrl,
     "",
     "Das ist kein Hörtest und keine Freigabe für Live. Die Ursache steht im Lauf.",
+    "",
+  ].join("\n");
+}
+
+function probeText({ commit, laufUrl, seit }) {
+  return [
+    "Die Anrufprobe gegen Staging ist rot, auch die Wiederholung (Commit " + commit + ").",
+    "Seit: " + seit,
+    "Lauf: " + laufUrl,
+    "",
+    "Das ist kein Hörtest und keine Freigabe für Live. Der gerissene Wert steht im Lauf.",
     "",
   ].join("\n");
 }
@@ -122,9 +135,10 @@ const SEKUNDEN_JE_MINUTE = 60;
 const ENTPRELLEN_MINUTEN = 60;
 const VORFALL_ENTPRELLEN_MS = ENTPRELLEN_MINUTEN * SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
 
-function vorfallText({ commit, laufUrl }) {
+function vorfallText({ titel, commit, laufUrl, seit }) {
   return [
-    NACHTLAUF_TITEL + " (Commit " + commit + ").",
+    titel + " (Commit " + commit + ").",
+    ...(seit === undefined ? [] : ["Seit: " + seit]),
     "Umgebung: Staging.",
     "Lauf: " + laufUrl,
     "Erster Schritt: Ursache im Lauf lesen",
@@ -136,7 +150,7 @@ function frischGemeldet(vorher, jetzt) {
   return Number.isFinite(geaendert) && jetzt - geaendert < VORFALL_ENTPRELLEN_MS;
 }
 
-async function vorfallMelden({ einstellungen, commit, vorher, ausgabe }) {
+async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
   if (einstellungen.vorfallUrl === null) {
     ausgabe.melde("vorfall_uebersprungen");
     return;
@@ -145,10 +159,10 @@ async function vorfallMelden({ einstellungen, commit, vorher, ausgabe }) {
     ausgabe.melde("vorfall_entprellt");
     return;
   }
-  const text = vorfallText({ commit, laufUrl: laufAdresse(einstellungen) });
+  const text = vorfallText({ ...vorfall, laufUrl: laufAdresse(einstellungen) });
   const { status } = await anfrage(einstellungen.vorfallUrl, {
     methode: "POST",
-    koerper: { incident: { id: "nachtlauf-staging", status: "alert" }, text },
+    koerper: { incident: { id: vorfall.id, status: "alert" }, text },
   });
   if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
     ausgabe.melde("vorfall_nicht_zugestellt", { http: status });
@@ -179,7 +193,18 @@ function laufAdresse({ serverUrl, repository, runId }) {
 
 const ANLAESSE = Object.freeze({
   hoertest: { titel: HOERTEST_TITEL, meldungen: HOERTEST_MELDUNGEN, text: issueText },
-  nachtlauf: { titel: NACHTLAUF_TITEL, meldungen: NACHTLAUF_MELDUNGEN, text: nachtlaufText },
+  nachtlauf: {
+    titel: NACHTLAUF_TITEL,
+    meldungen: NACHTLAUF_MELDUNGEN,
+    text: nachtlaufText,
+    vorfallId: "nachtlauf-staging",
+  },
+  probe: {
+    titel: PROBE_TITEL,
+    meldungen: PROBE_MELDUNGEN,
+    text: probeText,
+    vorfallId: "probe-staging",
+  },
 });
 
 export async function hoertestIssueAnlegenOderErsetzen({
@@ -187,12 +212,15 @@ export async function hoertestIssueAnlegenOderErsetzen({
   anlass = "hoertest",
   commit,
   teile,
+  seit,
   ausgabe,
 }) {
-  const { titel, meldungen, text } = ANLAESSE[anlass];
-  const body = text({ commit, teile, laufUrl: laufAdresse(einstellungen) });
+  const { titel, meldungen, text, vorfallId } = ANLAESSE[anlass];
+  const body = text({ commit, teile, seit, laufUrl: laufAdresse(einstellungen) });
   const vorher = await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
-  if (anlass === "nachtlauf") await vorfallMelden({ einstellungen, commit, vorher, ausgabe });
+  if (vorfallId === undefined) return;
+  const vorfall = { id: vorfallId, titel, commit, seit };
+  await vorfallMelden({ einstellungen, vorfall, vorher, ausgabe });
 }
 
 export async function nachkontrolleIssueSchreiben({

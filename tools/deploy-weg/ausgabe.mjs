@@ -100,7 +100,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest [--anlass nachtlauf] --commit <sha> --teile <namen> | vorfall --anlass nachtlauf --commit <sha> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha> | heartbeat --name nachtlauf",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest [--anlass nachtlauf|probe] [--seit <zeit>] --commit <sha> --teile <namen> | vorfall --anlass nachtlauf --commit <sha> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha> | heartbeat --name nachtlauf",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -158,6 +158,8 @@ const KATALOG = new Map([
   ["issue_angelegt", "Hörtest-Issue #{nummer} angelegt"],
   ["nachtlauf_ersetzt", "Nachtlauf-Issue #{nummer}: Text ersetzt"],
   ["nachtlauf_angelegt", "Nachtlauf-Issue #{nummer} angelegt"],
+  ["probe_ersetzt", "Probe-Issue #{nummer}: Text ersetzt"],
+  ["probe_angelegt", "Probe-Issue #{nummer} angelegt"],
   ["vorfall_uebersprungen", "Better Stack: übersprungen (BETTER_STACK_ALERT_URL fehlt)"],
   ["vorfall_gesendet", "Better Stack: Vorfall gesendet"],
   ["vorfall_entprellt", "Better Stack: kein neuer Vorfall (letzte Meldung vor weniger als 60 Minuten)"],
