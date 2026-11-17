@@ -77,6 +77,7 @@ export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}`
   assert.equal(angenommen.status, HTTP_OK);
   while (!anruf()?.answeredAt) {
     signal.throwIfAborted();
+    assert.ok(!anruf() || anruf().status === "active", `Anruf ${callId} wurde vor dem Abheben beendet (${anruf()?.failureReason})`);
     await new Promise(setImmediate);
   }
   const { streamToken, from } = anruf();

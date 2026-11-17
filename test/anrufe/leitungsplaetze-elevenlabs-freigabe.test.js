@@ -35,13 +35,17 @@ const EL_ENV = Object.freeze({
 const kundeVon = (index) => `t_elf_${index}`;
 const zielVon = (nummer) => `+1202555${String(6000 + nummer).padStart(4, "0")}`;
 
-const RESTBUDGET_CENT = 210;
+const WACHE_TAKT_VORBEI_MS = 500;
+const LAUFENDER_ANRUF_ID = "call_elf_laufend";
+const VERBRAUCH_VOR_ABHEBEN_CENT = 890;
 const LAUFENDER_ANRUF_MS = (9 * 60 + 5) * 1000;
+const NACHLAUF_NACH_MS = 4 * 60 * 1000;
 
 function laufenderAnruf(kunde) {
   const beginn = new Date(Date.now() - LAUFENDER_ANRUF_MS).toISOString();
+  const nachlauf = new Date(Date.now() - LAUFENDER_ANRUF_MS + NACHLAUF_NACH_MS).toISOString();
   return {
-    id: "call_elf_laufend",
+    id: LAUFENDER_ANRUF_ID,
     direction: "outbound",
     status: "active",
     tenantId: kunde,
@@ -50,6 +54,7 @@ function laufenderAnruf(kunde) {
     goal: "Laufender Anruf (EL-Freigabe)",
     startedAt: beginn,
     answeredAt: beginn,
+    elNachlaufStartedAt: nachlauf,
     maxDurationS: 1800,
   };
 }
@@ -137,16 +142,31 @@ test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt d
   });
 });
 
-test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den Platz nicht frei", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: seedKunden({ 0: KOSTENDECKE_CENT - RESTBUDGET_CENT }) }, async ({ srv, anbieter }) => {
+async function budgetWacheBeendetElAnruf(verzoegerungMs) {
+  await aufDemElWeg({ env: WACHE_ENV, seed: seedKunden({ 0: VERBRAUCH_VOR_ABHEBEN_CENT }) }, async ({ srv, anbieter }) => {
     await fuelleElPlaetze(srv);
     const ersterAuftrag = (s) => s.calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);
+    const abhebenFruehestens = Date.now() + verzoegerungMs;
+    await waitUntil(() => Date.now() >= abhebenFruehestens, { timeoutMs: verzoegerungMs + 1000 });
     await initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
+    const abgeschlossen = await abrufMitFrist(`${srv.localUrl}/api/calls/${LAUFENDER_ANRUF_ID}/cancel`, {
+      method: "POST",
+      headers: { "X-Internal-Tenant": kundeVon(0) },
+    });
+    assert.equal(abgeschlossen.status, HTTP_OK);
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(beendet.id), { timeoutMs: 3000 });
     await assertAusgelastet(srv, 902);
   });
+}
+
+test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den Platz nicht frei", async () => {
+  await budgetWacheBeendetElAnruf(0);
+});
+
+test("S22: das Ende kommt auch bei spätem Abheben erst nach dem Abheben und gibt den Platz nicht frei", async () => {
+  await budgetWacheBeendetElAnruf(WACHE_TAKT_VORBEI_MS);
 });
 
 const START_MS = 1_800_000_000_000;
