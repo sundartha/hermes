@@ -144,6 +144,7 @@ async function eingangsTeile(wurzel) {
         store: abdruckSpeicher(fall.speicherSprache),
         config: abdruckEinstellungen(),
         call: fall.anruf,
+        jetzt: () => new Date(),
       });
       return maskiereHeute(antwort);
     });
