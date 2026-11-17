@@ -117,3 +117,73 @@ test("Cross-Locale: jede Sprache markiert Nebenthemen als irrelevant + behaelt d
     }
   }
 });
+
+const NAECHSTE_SCHRITTE_PHRASEN = {
+  de: [
+    "next_steps",
+    "hoechstens 3",
+    "ausdruecklich belegt",
+    "Erfinde nichts",
+    "nichts in einen Kalender",
+  ],
+  en: [
+    "next_steps",
+    "at most 3",
+    "explicitly supported",
+    "Invent nothing",
+    "not enter anything into a calendar",
+  ],
+  fr: [
+    "next_steps",
+    "au maximum 3",
+    "expressément étayées",
+    "N'invente rien",
+    "n'inscrit rien dans un agenda",
+  ],
+};
+
+for (const lang of ["de", "en", "fr"]) {
+  test(`summarizeCall (${lang}) verlangt next_steps nur mit Beleg und ohne Kalendereintrag`, async () => {
+    const call = store.getCall(CALL_ID);
+    call.language = lang;
+    try {
+      await summarizeCall(call);
+    } finally {
+      call.language = "de";
+    }
+    for (const phrase of NAECHSTE_SCHRITTE_PHRASEN[lang]) {
+      assert.ok(lastRequest.system.includes(phrase), `${lang}: "${phrase}" fehlt im Prompt`);
+    }
+    assert.ok(lastRequest.system.includes('"type": "appointment"|"callback"|"task"|"other"'));
+    assert.ok(lastRequest.system.includes(LOCALES[lang].summaryNextStepsClause));
+    assert.ok(lastRequest.system.startsWith(LOCALES[lang].summarySystem(OWNER)));
+  });
+}
+
+test("summarizeCall legt next_steps der Modell-Antwort strukturiert in die Ergebnis-Karte", async () => {
+  const schritt = {
+    type: "appointment",
+    text: "Termin mit Dr. X, bitte in den Kalender eintragen",
+    at: "2026-11-20T10:00",
+  };
+  Object.assign(MOCK_DECISION, { outcome: "Termin am 20.11. 10:00.", next_steps: [schritt] });
+  const call = store.getCall(CALL_ID);
+  try {
+    await summarizeCall(call);
+  } finally {
+    delete MOCK_DECISION.outcome;
+    delete MOCK_DECISION.next_steps;
+  }
+  assert.deepEqual(call.result.nextSteps, [schritt]);
+});
+
+test("summarizeCall ohne next_steps in der Modell-Antwort ergibt eine leere Liste", async () => {
+  Object.assign(MOCK_DECISION, { outcome: "Auskunft erhalten." });
+  const call = store.getCall(CALL_ID);
+  try {
+    await summarizeCall(call);
+  } finally {
+    delete MOCK_DECISION.outcome;
+  }
+  assert.deepEqual(call.result.nextSteps, []);
+});
