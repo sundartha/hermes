@@ -120,8 +120,14 @@ test("4755: Zeilen ohne Text zaehlen nicht als Annahme", async () => {
   });
 });
 
-test("4755: ein Anruf ueber Telnyx wird von der Frist nicht beendet", async () => {
-  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, beobachteWeiterlaufend);
+test("4755: ein ausgehender Anruf ueber Telnyx wird nach der Frist ohne Annahme beendet", async () => {
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, async (srv, attrappe) => {
+    await waitForStoreState(srv, () => imStore(srv).status !== "active" && attrappe.anfragen.includes("DELETE"));
+
+    assert.equal(imStore(srv).status, "failed");
+    assert.equal(imStore(srv).failureReason, "no-answer");
+    assert.equal(imStore(srv).answeredAt, null);
+  });
 });
 
 const beendet = (srv) => waitForStoreState(srv, () => imStore(srv).status !== "active");
