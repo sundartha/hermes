@@ -79,6 +79,7 @@ export function recordElevenLabsKostenBelege({
     }
     recordElBeleg({ store, callId, conversation, mikroCents: ergebnis.mikroCents, belegNachreifbar, jetzt });
   } catch (fehler) {
-    console.error(`[el-kosten-beleg] Belegschreibung fehlgeschlagen (call=${callId}): ${fehler.message}`);
+    const art = fehler instanceof Error ? fehler.name : typeof fehler;
+    console.error(`[el-kosten-beleg] Belegschreibung fehlgeschlagen (call=${callId}): art=${art}`);
   }
 }
