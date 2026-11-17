@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
 
-import { OWNER_TEST_FIRST_NAME, seedCall, seedState, startServer } from "../helpers.js";
+import { OWNER_TEST_FIRST_NAME, seedCall, seedState, startServer, waitUntil } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -14,6 +14,8 @@ const AUDIO_BYTES = 200_000;
 const EIGENE_NUMMER = "+4915112484701";
 const ZIEL = "+4915112484799";
 const AGENT_ID = "agent_4847_h2";
+const RESERVE_FRIST_MS = 5_000;
+const TARIF_CENTS = "20";
 
 async function starteAttrappe({ ttsFehler = false } = {}) {
   const anfragen = [];
@@ -71,6 +73,7 @@ async function anrufMitServer({ umgebung = {}, numbers, ttsFehler = false, zusat
       TELNYX_CONNECTION_ID: "conn_4847",
       TELNYX_ACCOUNT_SID: "acct_4847",
       PUBLIC_URL: "https://agent.test",
+      VOICE_TARIFF_DOMESTIC_CENTS: TARIF_CENTS,
       ...umgebung,
     },
     seed: seedState({
@@ -85,6 +88,10 @@ async function anrufMitServer({ umgebung = {}, numbers, ttsFehler = false, zusat
       body: JSON.stringify({ to: ZIEL, objective: "Termin am Donnerstag vereinbaren", ...zusatz }),
     });
     const koerper = await antwort.json();
+    if (antwort.status !== HTTP_OK)
+      await waitUntil(() => srv.readStore().calls.some((eintrag) => eintrag.to === ZIEL && eintrag.reserveReleased), {
+        timeoutMs: RESERVE_FRIST_MS,
+      });
     const anruf = srv.readStore().calls.find((eintrag) => eintrag.to === ZIEL);
     return { status: antwort.status, koerper, anruf, anfragen: attrappe.anfragen, stdout: srv.stdout };
   } finally {
@@ -126,6 +133,7 @@ test("ausgehend-nur-vorspann: ohne TELNYX_CALL_CONTROL_APP_ID bricht der Anruf m
   assert.equal(wahlen(ergebnis.anfragen).length, 0);
   assert.equal(ergebnis.anruf.status, "failed");
   assert.equal(ergebnis.anruf.failureReason, "not-placed:keine_call_control_app");
+  assert.equal(ergebnis.anruf.reserveReleased, true);
   assert.match(ergebnis.stdout, /^\[el-outbound-weg\] weg=abbruch grund=keine_call_control_app call=/m);
 });
 
@@ -139,6 +147,7 @@ test("ausgehend-nur-vorspann: ein nicht freigeschalteter Mandant bricht mit inbo
   assert.equal(wahlen(ergebnis.anfragen).length, 0);
   assert.equal(ergebnis.anruf.status, "failed");
   assert.equal(ergebnis.anruf.failureReason, "not-placed:inbound_weg_nicht_bereit");
+  assert.equal(ergebnis.anruf.reserveReleased, true);
   assert.match(ergebnis.stdout, /^\[el-outbound-weg\] weg=abbruch grund=inbound_weg_nicht_bereit call=/m);
 });
 
@@ -148,6 +157,7 @@ test("ausgehend-nur-vorspann: Mandantennummer ohne Registrierung bricht ab, die 
   assert.equal(wahlen(ergebnis.anfragen).length, 0);
   assert.equal(ergebnis.anruf.status, "failed");
   assert.equal(ergebnis.anruf.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
+  assert.equal(ergebnis.anruf.reserveReleased, true);
 });
 
 test("ausgehend-nur-vorspann: ist der Vorspann nicht erzeugbar (tts_fehler), bricht der Anruf mit Grund ab und waehlt nicht", async () => {
@@ -157,6 +167,7 @@ test("ausgehend-nur-vorspann: ist der Vorspann nicht erzeugbar (tts_fehler), bri
   assert.equal(wahlen(ergebnis.anfragen).length, 0);
   assert.equal(ergebnis.anruf.status, "failed");
   assert.equal(ergebnis.anruf.failureReason, "not-placed:tts_fehler");
+  assert.equal(ergebnis.anruf.reserveReleased, true);
   assert.match(ergebnis.stdout, /^\[el-vorspann\] rueckfall grund=tts_fehler call=/m);
   assert.doesNotMatch(ergebnis.stdout, /^\[el-vorspann\] bereit /m);
 });
