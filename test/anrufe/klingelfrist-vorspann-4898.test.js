@@ -99,3 +99,17 @@ test("4898: war der Anruf schon per Webhook als nicht angenommen beendet, legt d
   assert.equal(anrufIn(callId).failureReason, "no-answer");
   assert.equal(calleeAufgelegt(callId), false);
 });
+
+const calleeAuflegeAnfragen = (callId) =>
+  umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup")).length;
+
+test("4898: war der Anruf schon abgebrochen, bevor die Frist ablaeuft, bleibt er abgebrochen und das Bein wird kein zweites Mal aufgelegt", async () => {
+  const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(4));
+  const abbruch = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${callId}/cancel`, { method: "POST" });
+  assert.equal(abbruch.status, HTTP_OK);
+  await fristFertig();
+
+  assert.equal(anrufIn(callId).status, "cancelled");
+  assert.equal(anrufIn(callId).failureReason ?? null, null);
+  assert.equal(calleeAuflegeAnfragen(callId), 1);
+});
