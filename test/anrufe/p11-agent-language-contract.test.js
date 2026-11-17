@@ -107,9 +107,6 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     assert.equal(typeof p.turnControl.openingBootstrap.outbound, "string");
     assert.equal(typeof p.turnControl.openingBootstrap.inbound, "string");
     assert.equal(typeof p.turnControl.silentTurn, "string");
-    assert.equal(typeof p.turnControl.endCallWait, "string");
-    assert.equal(typeof p.turnControl.takeMessageResult, "string");
-    assert.equal(typeof p.turnControl.unknownTool, "string");
   }
 });
 
@@ -167,8 +164,6 @@ test("P11-6 GAP-28-Marker sind je Sprache uebersetzt (nicht leer, ungleich DE fu
     ["openingBootstrap.outbound", (tc) => tc.openingBootstrap.outbound],
     ["openingBootstrap.inbound", (tc) => tc.openingBootstrap.inbound],
     ["silentTurn", (tc) => tc.silentTurn],
-    ["endCallWait", (tc) => tc.endCallWait],
-    ["takeMessageResult", (tc) => tc.takeMessageResult],
   ];
   for (const lang of SUPPORTED_LANGUAGES) {
     const tc = LOCALES[lang].prompt.turnControl;

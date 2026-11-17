@@ -215,10 +215,6 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       inbound: "[Der Anrufer ist in der Leitung. Begruesse ihn.]",
     },
     silentTurn: "[Es kam keine Antwort.]",
-    endCallWait: "Dein Gegenüber hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
-    takeMessageResult: "Nachricht ist notiert.",
-    takeMessageDuplicateResult: "Diese Nachricht ist bereits notiert. Nimm sie nicht noch einmal auf.",
-    unknownTool: "Unbekanntes Tool.",
     consultDeclined:
       "Rückfrage jetzt nicht möglich. Entscheide im Rahmen deines Mandats oder nimm das " +
       "Anliegen über take_message auf.",

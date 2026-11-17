@@ -1518,7 +1518,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
   assert.equal(ist.voice.sendSmsSummary, true);
   assert.equal(ist.voice.dailySmsCap, 20);
   assert.equal(ist.voice.sttSpeechTimeoutSec, 2);
-  assert.equal(ist.voice.maxEmptyTurns, 3);
   assert.equal(ist.voice.callerSubstanceMinLen, 2);
   assert.equal(ist.voice.thinkingSignalEnabled, false);
   assert.equal(ist.voice.toolFollowUpEnabled, false);
@@ -1570,7 +1569,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   SEND_SMS_SUMMARY: "false",
   DAILY_SMS_CAP: "7",
   STT_SPEECH_TIMEOUT_SEC: "5",
-  MAX_EMPTY_TURNS: "4",
   CALLER_SUBSTANCE_MIN_LEN: "3",
   THINKING_SIGNAL_ENABLED: "true",
   TOOL_FOLLOW_UP_ENABLED: "true",
@@ -1632,7 +1630,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
   assert.equal(ist.voice.sendSmsSummary, false);
   assert.equal(ist.voice.dailySmsCap, 7);
   assert.equal(ist.voice.sttSpeechTimeoutSec, 5);
-  assert.equal(ist.voice.maxEmptyTurns, 4);
   assert.equal(ist.voice.callerSubstanceMinLen, 3);
   assert.equal(ist.voice.thinkingSignalEnabled, true);
   assert.equal(ist.voice.toolFollowUpEnabled, true);
@@ -1660,7 +1657,6 @@ const SICHERHEIT_STIMME_GRENZEN = [
   ["EL_BRIDGE_START_DEADLINE_MS", ["voice", "elevenLabsOutbound", "bridgeStartDeadlineMs"], 100, 30000],
   ["DAILY_SMS_CAP", ["voice", "dailySmsCap"], 0, 20],
   ["STT_SPEECH_TIMEOUT_SEC", ["voice", "sttSpeechTimeoutSec"], 1, 2],
-  ["MAX_EMPTY_TURNS", ["voice", "maxEmptyTurns"], 2, 3],
   ["CALLER_SUBSTANCE_MIN_LEN", ["voice", "callerSubstanceMinLen"], 1, 2],
 ];
 

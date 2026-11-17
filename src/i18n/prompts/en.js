@@ -239,10 +239,6 @@ At the end, say goodbye in one sentence and then call end_call.`,
       inbound: "[The caller is on the line. Greet them.]",
     },
     silentTurn: "[There was no reply.]",
-    endCallWait: "The other person hasn't said anything yet. Don't hang up - wait for their reply.",
-    takeMessageResult: "Message noted.",
-    takeMessageDuplicateResult: "This message is already noted. Do not record it again.",
-    unknownTool: "Unknown tool.",
     consultDeclined:
       "A follow-up question is not possible right now. Decide within your mandate or " +
       "record the request via take_message.",
