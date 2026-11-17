@@ -66,7 +66,7 @@ ohne die Var bricht der Build ab).
      Merge eines Pull Requests, dessen Pflicht-Checks gruen waren; der Commit
      ist neuer als der, den die Produktion unter `/healthz` meldet.
      Danach vergleicht der **Gespraechsabdruck** Produktion und Kandidat:
-     Anrufstart-Koerper, Eingangs-Antwort, Prompt-Texte, Sprach-Bausteine,
+     Init-Inhalt des ausgehenden Anrufs, Eingangs-Antwort, Prompt-Texte, Sprach-Bausteine,
      Stimmen-Tabelle und die besessenen Felder der Agent-Vorlage.
    - **Gespraech unveraendert:** Job `deploy` (Environment `produktion`;
      ohne Reviewer und ohne Wartezeit, also ohne Freigabe von Hand) weckt die
