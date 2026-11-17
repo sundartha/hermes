@@ -32,7 +32,7 @@ export function hashEmail(value: string | number | null | undefined): string {
   return sha256Hex(s).slice(0, EMAIL_HASH_LEN);
 }
 
-export function audit(action: string, req?: { ip?: string | undefined } | null, details = ""): void {
+export function audit(action: string, req?: { ip?: string | undefined } | null, details?: string): void {
   console.log(`[audit] ${action} ip=${req?.ip ?? "system"}${details ? " " + details : ""}`);
 }
 
