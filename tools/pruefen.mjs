@@ -134,8 +134,16 @@ function lauf(befehl, args, optionen = {}) {
   return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
 }
 
+function zeileDesBefunds(befund) {
+  try {
+    return readFileSync(befund.path, "utf8").split("\n")[befund.start.line - 1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function semgrepOhneAusnahme(befunde) {
-  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel || !befund.extra?.lines?.includes(SEMGREP_AUSNAHME.zeile));
+  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel || !zeileDesBefunds(befund).includes(SEMGREP_AUSNAHME.zeile));
 }
 
 export function basisAus(argv) {

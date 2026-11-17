@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -11,7 +11,9 @@ const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const REGEL = "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack";
 const DATEI = "src/tts/directive-synth.js";
 
-const befund = (path, check_id, line = 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer", lines: "if (token === null) {" } });
+const AUSNAHME_ZEILE = readFileSync(DATEI, "utf8").split("\n").findIndex((zeile) => zeile.includes("token === null")) + 1;
+
+const befund = (path, check_id, line = path === DATEI ? AUSNAHME_ZEILE : 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer", lines: "requires login" } });
 
 test("Die Ausnahme gilt nur fuer die Datei der Ablage und die Timing-Regel", () => {
   assert.equal(pruefen.SEMGREP_AUSNAHME.datei, DATEI);
