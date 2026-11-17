@@ -5,7 +5,7 @@ import express from "express";
 
 import { KOSTENART, KOSTENPROFIL, pflichtTraegerFuerProfil } from "../../src/billing/kostenarten.js";
 import { nachlaufPolitikFuer } from "../../src/elevenlabs/nachlauf-politik.ts";
-import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { hangup } from "../../src/telephony/directives.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "../helpers.js";

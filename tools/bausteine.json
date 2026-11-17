@@ -311,7 +311,7 @@
         "src/mail-not-placed.ts",
         "src/mail-summary.ts",
         "src/turn-budget.ts",
-        "src/routes/voice.js",
+        "src/routes/voice.ts",
         "src/routes/webhooks-elevenlabs-init.ts",
         "src/routes/webhooks-elevenlabs.ts",
         "src/routes/api-calls.ts",

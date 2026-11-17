@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import zeitgeber from "node:timers/promises";
 import { normNum } from "../begriffe/rufnummern.js";
@@ -6,13 +7,14 @@ import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
+import type { VoiceProfile } from "../telephony/directives.ts";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
 import { localeFor } from "../i18n/locales.js";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { BUDGET_AXIS } from "../budget-gate.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.ts";
-import { persistEndWithReason } from "../telephony/call-termination.ts";
+import { billThunk, persistEndWithReason, terminateAndBillCall } from "../telephony/call-termination.ts";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.ts";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
@@ -39,14 +41,189 @@ import { sleep } from "../utils/timer.js";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
-const RUNNING_DOCUMENT_UNTOUCHED = [];
+type Gesetzt<T> = { [Schluessel in keyof T]-?: NonNullable<T[Schluessel]> };
+type InboundKonfiguration = Parameters<typeof inboundPfadEntscheidung>[0]["config"]["voice"]["elevenLabsInbound"];
+type Diagnose = NonNullable<Parameters<typeof callFailureReason>[0]>["diagnostics"];
 
-function repeatDeliveryXml(call, deps) {
+interface Anruf {
+  id: string;
+  tenantId: string;
+  to: string;
+  provider: string;
+  status?: string;
+  language?: string;
+  answeredAt?: string | undefined;
+  elBoundAt?: string;
+  maxDurationS?: number;
+  costProfile?: unknown;
+  elFallbackAt?: unknown;
+  elevenlabsConversationId?: string | null;
+  streamToken?: string;
+}
+
+type AnrufOderLeer = Anruf | null | undefined;
+type AnrufTeil = Partial<Anruf>;
+
+interface Wiederanbindung {
+  call?: AnrufOderLeer;
+  fehlgeschlagen?: boolean;
+}
+
+interface Lebenszyklus {
+  reattachActiveCall: (callId: string) => Promise<Wiederanbindung>;
+  armMaxDurationTimer: (call: Anruf, sid: string | undefined) => unknown;
+}
+
+interface Konfiguration {
+  billing: unknown;
+  safety: { skipTwilioSignatureCheck: boolean };
+  server: { publicUrl: string };
+  voice: {
+    inboundOwnerGreetingEnabled: unknown;
+    inboundOwnerGreetingTenantIds: unknown;
+    elevenLabsInbound: InboundKonfiguration & Gesetzt<InboundKonfiguration> & { begruessungslautEnabled: boolean };
+  };
+}
+
+type NummernBeleg = NonNullable<Parameters<typeof inboundPfadEntscheidung>[0]["numberRecord"]> & { tenantId: string };
+
+interface Speicher {
+  getCall: (callId: unknown) => AnrufOderLeer;
+  leseCall?: (callId: string) => Promise<AnrufOderLeer>;
+  leseCallUngebunden?: (callId: string) => Promise<AnrufOderLeer>;
+  anrufHierBewacht: (callId: string) => boolean;
+  tenantContext: (tenantId: string | undefined) => { ownerName: unknown };
+  tenantPrivateNumber: (tenantId: string) => unknown;
+  tenantBudgetSnapshot: (tenantId: string, billing: unknown) => { remainingCents: number };
+  budgetExceeded: (tenantId: string, billing: unknown) => boolean;
+  einstellungenNachladen?: (tenantId: string) => Promise<unknown>;
+  createCall: (felder: object) => Anruf;
+  markAnswered: (callId: string) => unknown;
+  endCallRecord: (callId: string, status: string) => unknown;
+  recordFailureReason: (callId: string, grund: string | null) => unknown;
+  markInboundElFallback: (callId: string, zeitpunkt: string) => unknown;
+  recordWebhookAnchors: (callId: unknown, anchors: string[]) => unknown;
+  leitungsplaetze: {
+    belegenEingehend: (anfrage: { callId: string; tenantId: string; weg: string; maxDauerS: number }) => unknown;
+  };
+}
+
+interface Bereiche {
+  anrufe: {
+    numberRecordByE164: (e164: string) => Promise<NummernBeleg | null | undefined>;
+    resolveCallLanguage: (anfrage: { tenantId: string; numberRecord: NummernBeleg }) => Promise<string>;
+  };
+  mandant: { tenantContext: (tenantId: string) => Promise<{ ownerName: unknown }> };
+  einstellungen: { recordCostProfile: (callId: string, profil: string) => Promise<unknown> };
+}
+
+interface Ereignisse {
+  parseLifecycleEvent: (body: unknown) => { status: string; diagnostics: Diagnose };
+  parseSpeakOutcome: (body: unknown) => { outcome: string; reason: unknown };
+  parseCallControlEvent: (body: unknown) => object;
+  parseWiedergabeStatus: (body: unknown) => unknown;
+}
+
+interface Bruecken {
+  armDeadlines: (callId: string) => unknown;
+  armBindingDeadline: (callId: string) => unknown;
+  clearDeadlines: (callId: string) => unknown;
+}
+
+interface Synthese {
+  synthesizeDirectiveAudio: (call: Anruf, directives: unknown[], eingangMs: unknown) => Promise<unknown[]>;
+}
+
+interface VorspannAblauf {
+  behandle: (anfrage: { call: Anruf; ereignis: object; zugang: Zugang }) => Promise<unknown>;
+}
+
+interface Zugang {
+  username: string;
+  password: string;
+}
+
+type Render = (directives: unknown[], provider: string | undefined) => string;
+type SendeXml = (res: Antwort, call: Anruf, directives: unknown[]) => Promise<void>;
+interface Aufruf {
+  query: { callId?: unknown; quelle?: unknown };
+  body: unknown;
+  headers: Request["headers"];
+}
+
+type Protokoll = (aktion: string, req: Aufruf, detail: string) => unknown;
+
+interface VoiceDeps {
+  store: Speicher;
+  bereiche: Bereiche;
+  config: Konfiguration;
+  lifecycle: Lebenszyklus;
+  webhookEvents: (provider: string | undefined) => Ereignisse;
+  inboundBridges: Bruecken;
+  directiveSynth: Synthese;
+  render: Render;
+  sendVoiceXml: SendeXml;
+  vorspannAblauf: VorspannAblauf;
+}
+
+interface Anfrage extends Request {
+  rawBody?: Buffer;
+}
+
+type Antwort = Response & { locals: { eingangMs?: number } };
+
+interface Sprachtexte {
+  budgetExhaustedHangup: string;
+  turnErrorSpeech: string;
+  voiceProfile: VoiceProfile;
+  inboundFehlersatz: (ownerName: unknown) => string;
+}
+
+const minutenTarifFuer: (leg: InboundLeg) => number = callTariffCentsPerMin;
+
+const sprachtexteFuer: (language: string | undefined) => Sprachtexte = localeFor;
+
+interface Vermerkfall {
+  call: Anruf;
+  nowMs: number;
+}
+
+interface Antwortfall extends Vermerkfall {
+  res: Antwort;
+}
+
+interface InboundLeg {
+  direction: string;
+  from: string;
+  to: string;
+  twilioSid: string | undefined;
+  tenantId: string;
+  provider: string;
+  language: string;
+  costProfile: string;
+}
+
+interface InboundPfad {
+  kostenprofil: string;
+  weg: string;
+  antworte: (fall: { res: Antwort; call: Anruf; locale: Sprachtexte }, deps: VoiceDeps) => Promise<void>;
+}
+
+interface RueckfallWeg {
+  entscheide: (anfrage: { call: AnrufOderLeer; nowMs: number }) => string;
+  antworten: Readonly<Record<string, (fall: Antwortfall, deps: VoiceDeps) => unknown>>;
+  vermerkNachFehler: Readonly<Record<string, ((fall: Vermerkfall, deps: VoiceDeps) => unknown) | undefined>>;
+  antworteNachFehler: (fall: { res: Antwort; call: AnrufOderLeer }, deps: VoiceDeps) => void;
+}
+
+const RUNNING_DOCUMENT_UNTOUCHED: unknown[] = [];
+
+function repeatDeliveryXml(call: AnrufTeil, deps: VoiceDeps): string {
   if (inboundAbgewiesen(call)) return fehlersatzOhneAufloesungXml({ call }, deps);
   return deps.render(RUNNING_DOCUMENT_UNTOUCHED, call.provider);
 }
 
-const queryText = (wert) => z.string().catch("").parse(wert);
+const queryText = (wert: unknown): string => z.string().catch("").parse(wert);
 
 const VOICE_KOERPER = z.object({
   To: z.string().optional().catch(undefined),
@@ -58,7 +235,7 @@ const STATUS_LOG_PREFIX = "[voice/status]";
 const STATUS_WIEDERANBINDUNG_VERSUCHE = 3;
 const STATUS_WIEDERANBINDUNG_ABSTAND_MS = 500;
 
-async function wiederanbindenMitWiederholung(callId, lifecycle) {
+async function wiederanbindenMitWiederholung(callId: string, lifecycle: Lebenszyklus): Promise<Wiederanbindung> {
   let reattached = await lifecycle.reattachActiveCall(callId);
   for (let versuch = 1; versuch <= STATUS_WIEDERANBINDUNG_VERSUCHE; versuch += 1) {
     if (!reattached.fehlgeschlagen) return reattached;
@@ -72,11 +249,11 @@ async function wiederanbindenMitWiederholung(callId, lifecycle) {
   return reattached;
 }
 
-function statusLifecycleFuer(call, lifecycle) {
-  if (!call) return { reattachActiveCall: (id) => wiederanbindenMitWiederholung(id, lifecycle) };
+function statusLifecycleFuer(call: AnrufOderLeer, lifecycle: Lebenszyklus): Pick<Lebenszyklus, "reattachActiveCall"> {
+  if (!call) return { reattachActiveCall: (id: string) => wiederanbindenMitWiederholung(id, lifecycle) };
   return {
-    reattachActiveCall: (id) =>
-      Promise.resolve(lifecycle.reattachActiveCall(id)).catch((err) => {
+    reattachActiveCall: (id: string) =>
+      Promise.resolve(lifecycle.reattachActiveCall(id)).catch((err: unknown) => {
         console.error(`${STATUS_LOG_PREFIX} Wiederanbindung abgelehnt (callId=${id}): ${fehlerText(err)}`);
         throw err;
       }),
@@ -90,12 +267,15 @@ const VORSPANN_LOG_PREFIX = "[vorspann]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 const ABHEBEN_LOG_PREFIX = "[voice] abheben schreiben fehlgeschlagen";
 
-const elZugangVon = (config) => ({
+const elZugangVon = (config: Konfiguration): Zugang => ({
   username: config.voice.elevenLabsInbound.sipUser,
   password: config.voice.elevenLabsInbound.sipPassword,
 });
 
-async function sendElDial({ res, call, did, wartetonUrl }, { config, inboundBridges, sendVoiceXml }) {
+async function sendElDial(
+  { res, call, did, wartetonUrl }: { res: Antwort; call: Anruf; did: string; wartetonUrl: string | undefined },
+  { config, inboundBridges, sendVoiceXml }: VoiceDeps,
+): Promise<void> {
   inboundBridges.armDeadlines(call.id);
   await sendVoiceXml(
     res,
@@ -110,34 +290,40 @@ async function sendElDial({ res, call, did, wartetonUrl }, { config, inboundBrid
   );
 }
 
-function eingehenderWartetonUrl(config) {
+function eingehenderWartetonUrl(config: Konfiguration): string | undefined {
   return config.voice.elevenLabsInbound.begruessungslautEnabled ? elBegruessungslautUrl(config.server.publicUrl) : undefined;
 }
 
-async function sendElUebergabe({ res, call }, deps) {
+async function sendElUebergabe({ res, call }: { res: Antwort; call: Anruf }, deps: VoiceDeps): Promise<void> {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
   await sendElDial({ res, call, did: call.to, wartetonUrl: eingehenderWartetonUrl(deps.config) }, deps);
 }
 
-const INBOUND_PFAD = Object.freeze({
+const INBOUND_PFAD: Readonly<Record<string, InboundPfad>> = Object.freeze({
   [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, weg: ANBIETER.ELEVENLABS, antworte: sendElUebergabe }),
   [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendAbweisung }),
 });
-function inboundPfadFuer({ config, tenantId, numberRecord }) {
+function inboundPfadFuer({ config, tenantId, numberRecord }: { config: Konfiguration; tenantId: string; numberRecord: NummernBeleg }): InboundPfad {
   const pfad = INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
   if (!pfad) throw new Error("unbekannter Eingangspfad");
   return pfad;
 }
 
-function sendKostendeckeAbweisung({ res, provider, locale, to }, { render }) {
+function sendKostendeckeAbweisung(
+  { res, provider, locale, to }: { res: Antwort; provider: string; locale: Sprachtexte; to: string },
+  { render }: VoiceDeps,
+): void {
   console.log(`${INBOUND_LOG_PREFIX} kostendecke to=${e164Endung(to)}`);
   zaehleAnrufAbgelehnt(BUDGET_AXIS.TENANT);
   const ansage = sayD(locale.budgetExhaustedHangup, locale.voiceProfile);
   res.type("text/xml").send(render([ansage, hangupD()], provider));
 }
 
-async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, render }) {
-  const locale = localeFor(call?.language);
+async function sendTechnischesEnde(
+  { res, call, provider }: { res: Antwort; call: AnrufOderLeer; provider: string },
+  { directiveSynth, render }: VoiceDeps,
+): Promise<void> {
+  const locale = sprachtexteFuer(call?.language);
   const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
   const outDirectives = call
     ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives, res.locals.eingangMs)
@@ -145,13 +331,17 @@ async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, re
   res.type("text/xml").send(render(outDirectives, provider));
 }
 
-const hierBewacht = (store, call) => call?.status === "active" && store.anrufHierBewacht(call.id);
+const hierBewacht = (store: Speicher, call: AnrufOderLeer): boolean => call?.status === "active" && store.anrufHierBewacht(call.id);
 
-const brauchtWiederanbindung = (store, call) => call.status === "active" && !hierBewacht(store, call);
+const brauchtWiederanbindung = (store: Speicher, call: Anruf): boolean => call.status === "active" && !hierBewacht(store, call);
 
-const wiederanbindungsKennung = (req, call) => queryText(req.query.callId) || call?.id;
+const wiederanbindungsKennung = (req: Aufruf, call: AnrufOderLeer): string | undefined => queryText(req.query.callId) || call?.id;
 
-async function wiederanbinden({ store, lifecycle }, call, callId) {
+async function wiederanbinden(
+  { store, lifecycle }: { store: Speicher; lifecycle: Pick<Lebenszyklus, "reattachActiveCall"> },
+  call: AnrufOderLeer,
+  callId: string,
+): Promise<Wiederanbindung> {
   if (hierBewacht(store, call)) return { call };
   if (call?.status === "active") {
     Promise.resolve(lifecycle.reattachActiveCall(callId)).catch(() => undefined);
@@ -160,18 +350,18 @@ async function wiederanbinden({ store, lifecycle }, call, callId) {
   return lifecycle.reattachActiveCall(callId);
 }
 
-async function aktiverCallFuer(callId, deps) {
+async function aktiverCallFuer(callId: string, deps: VoiceDeps): Promise<AnrufOderLeer> {
   const call = deps.store.getCall(callId);
   return (await wiederanbinden(deps, call, callId)).call;
 }
 
-function sendAuflegen({ res, call }, { render }) {
+function sendAuflegen({ res, call }: { res: Antwort; call: AnrufOderLeer }, { render }: VoiceDeps): void {
   res.type("text/xml").send(render([hangupD()], call?.provider));
 }
 
-async function fehlersatzFuer({ call }, { store, config, bereiche }) {
+async function fehlersatzFuer({ call }: { call: Anruf }, { store, config, bereiche }: VoiceDeps) {
   const aufloesung = inboundElLocaleOf({ store, config, call });
-  const bundle = localeFor(aufloesung.language);
+  const bundle = sprachtexteFuer(aufloesung.language);
   return {
     text: bundle.inboundFehlersatz((await bereiche.mandant.tenantContext(call.tenantId)).ownerName),
     voiceProfile: bundle.voiceProfile,
@@ -179,26 +369,26 @@ async function fehlersatzFuer({ call }, { store, config, bereiche }) {
   };
 }
 
-function vermerkeElGescheitert({ call, nowMs }, deps) {
+function vermerkeElGescheitert({ call, nowMs }: Vermerkfall, deps: VoiceDeps): void {
   vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
 }
 
-async function beendeElGescheitert({ call, nowMs }, deps) {
+async function beendeElGescheitert({ call, nowMs }: Vermerkfall, deps: VoiceDeps): Promise<void> {
   await deps.store.endCallRecord(call.id, "failed");
   vermerkeElGescheitert({ call, nowMs }, deps);
 }
 
-async function legeGescheitertAuf({ res, call, nowMs }, deps) {
+async function legeGescheitertAuf({ res, call, nowMs }: Antwortfall, deps: VoiceDeps): Promise<void> {
   await beendeElGescheitert({ call, nowMs }, deps);
   sendAuflegen({ res, call }, deps);
 }
 
-async function sprecheFehlersatz({ res, call, nowMs }, deps) {
+async function sprecheFehlersatz({ res, call, nowMs }: Antwortfall, deps: VoiceDeps): Promise<void> {
   vermerkeElGescheitert({ call, nowMs }, deps);
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(await fehlersatzFuer({ call }, deps)));
 }
 
-async function sendAbweisung({ res, call }, deps) {
+async function sendAbweisung({ res, call }: { res: Antwort; call: Anruf }, deps: VoiceDeps): Promise<void> {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ABGEWIESEN });
   const grund = INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG;
   vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, deps);
@@ -206,7 +396,10 @@ async function sendAbweisung({ res, call }, deps) {
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(await fehlersatzFuer({ call }, deps)));
 }
 
-async function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
+async function vermerkeNachFehlerBestEffort(
+  { call, nowMs, weg }: { call: AnrufOderLeer; nowMs: number; weg: RueckfallWeg },
+  deps: VoiceDeps,
+): Promise<void> {
   const vermerke = weg.vermerkNachFehler[weg.entscheide({ call, nowMs })];
   if (!call || !vermerke) return;
   try {
@@ -216,7 +409,7 @@ async function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
   }
 }
 
-function ownerNameBestEffort({ call }, { store }) {
+function ownerNameBestEffort({ call }: { call: AnrufTeil | null | undefined }, { store }: VoiceDeps): unknown {
   if (!call) return "";
   try {
     return store.tenantContext(call.tenantId).ownerName;
@@ -225,17 +418,17 @@ function ownerNameBestEffort({ call }, { store }) {
   }
 }
 
-function fehlersatzOhneAufloesungXml({ call }, deps) {
-  const bundle = localeFor(call?.language);
+function fehlersatzOhneAufloesungXml({ call }: { call: AnrufTeil | null | undefined }, deps: VoiceDeps): string {
+  const bundle = sprachtexteFuer(call?.language);
   const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
   return deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER);
 }
 
-function sendFehlersatzOhneAufloesung({ res, call }, deps) {
+function sendFehlersatzOhneAufloesung({ res, call }: { res: Antwort; call: AnrufOderLeer }, deps: VoiceDeps): void {
   res.type("text/xml").send(fehlersatzOhneAufloesungXml({ call }, deps));
 }
 
-const EINGEHENDER_RUECKFALL = Object.freeze({
+const EINGEHENDER_RUECKFALL: RueckfallWeg = Object.freeze({
   entscheide: rueckfallEntscheidungFuer,
   antworten: Object.freeze({
     [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
@@ -245,7 +438,7 @@ const EINGEHENDER_RUECKFALL = Object.freeze({
   antworteNachFehler: sendFehlersatzOhneAufloesung,
 });
 
-const AUSGEHENDER_RUECKFALL = Object.freeze({
+const AUSGEHENDER_RUECKFALL: RueckfallWeg = Object.freeze({
   entscheide: ausgehendeRueckfallEntscheidungFuer,
   antworten: Object.freeze({
     [AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
@@ -255,10 +448,10 @@ const AUSGEHENDER_RUECKFALL = Object.freeze({
   antworteNachFehler: sendAuflegen,
 });
 
-const rueckfallWegFuer = (call) => (istOutboundElProfil(call) ? AUSGEHENDER_RUECKFALL : EINGEHENDER_RUECKFALL);
+const rueckfallWegFuer = (call: AnrufOderLeer): RueckfallWeg => (istOutboundElProfil(call) ? AUSGEHENDER_RUECKFALL : EINGEHENDER_RUECKFALL);
 
-async function antworteAufElRueckfall(req, res, deps) {
-  let call = null;
+async function antworteAufElRueckfall(req: Aufruf, res: Antwort, deps: VoiceDeps): Promise<void> {
+  let call: AnrufOderLeer = null;
   try {
     call = await aktiverCallFuer(queryText(req.query.callId), deps);
     const nowMs = Date.now();
@@ -288,15 +481,19 @@ async function antworteAufElRueckfall(req, res, deps) {
   }
 }
 
-function beinAngenommen({ call, status }) {
+function beinAngenommen({ call, status }: { call: Anruf; status: string }): boolean {
   return ANGENOMMEN_STATUS.includes(status) && call.status === "active" && bridgeStateOf(call) === BRIDGE_STATE.WARTET;
 }
 
-const leseCall = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
-const leseCallUngebunden = (store, callId) =>
+const leseCall = (store: Speicher, callId: string): AnrufOderLeer | Promise<AnrufOderLeer> => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
+const leseCallUngebunden = (store: Speicher, callId: string): AnrufOderLeer | Promise<AnrufOderLeer> =>
   store.leseCallUngebunden ? store.leseCallUngebunden(callId) : store.getCall(callId);
 
-async function lesenMitFehler(lesen, callId, logPrefix) {
+async function lesenMitFehler(
+  lesen: (callId: string) => AnrufOderLeer | Promise<AnrufOderLeer>,
+  callId: string,
+  logPrefix: string,
+): Promise<{ call?: AnrufOderLeer; fehler?: true }> {
   try {
     return { call: await lesen(callId) };
   } catch (err) {
@@ -305,19 +502,19 @@ async function lesenMitFehler(lesen, callId, logPrefix) {
   }
 }
 
-const leseCallMitFehler = (store, callId, logPrefix) => lesenMitFehler((id) => leseCall(store, id), callId, logPrefix);
+const leseCallMitFehler = (store: Speicher, callId: string, logPrefix: string) => lesenMitFehler((id: string) => leseCall(store, id), callId, logPrefix);
 
-const leseCallBestEffort = async (store, callId, logPrefix) => (await leseCallMitFehler(store, callId, logPrefix)).call;
+const leseCallBestEffort = async (store: Speicher, callId: string, logPrefix: string): Promise<AnrufOderLeer> => (await leseCallMitFehler(store, callId, logPrefix)).call;
 
-const leseCallUngebundenBestEffort = async (store, callId, logPrefix) =>
-  (await lesenMitFehler((id) => leseCallUngebunden(store, id), callId, logPrefix)).call;
+const leseCallUngebundenBestEffort = async (store: Speicher, callId: string, logPrefix: string): Promise<AnrufOderLeer> =>
+  (await lesenMitFehler((id: string) => leseCallUngebunden(store, id), callId, logPrefix)).call;
 
-const statusCallFinden = (req, store) => {
+const statusCallFinden = (req: Aufruf, store: Speicher): Promise<{ call?: AnrufOderLeer; fehler?: true }> | { call: Anruf } => {
   const gespiegelt = store.getCall(VOICE_KOERPER.parse(req.body).CallSid);
   return gespiegelt ? { call: gespiegelt } : leseCallMitFehler(store, queryText(req.query.callId), STATUS_LOG_PREFIX);
 };
 
-async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
+async function vermerkeElBein(req: Aufruf, res: Antwort, { store, inboundBridges, webhookEvents }: VoiceDeps): Promise<void> {
   res.sendStatus(HTTP_OK);
   const callId = queryText(req.query.callId);
   const gespiegelt = store.getCall(callId);
@@ -329,7 +526,11 @@ async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }
   if (angenommen && gespiegelt) inboundBridges.armBindingDeadline(call.id);
 }
 
-async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
+async function antworteAufVorspannEreignis(
+  req: Aufruf,
+  res: Antwort,
+  { store, config, webhookEvents, vorspannAblauf }: VoiceDeps,
+): Promise<void> {
   res.sendStatus(HTTP_OK);
   const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
   if (!call) return;
@@ -338,7 +539,7 @@ async function antworteAufVorspannEreignis(req, res, { store, config, webhookEve
   await vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
 }
 
-function ownerTonFuer({ from, tenantId }, { store, config }) {
+function ownerTonFuer({ from, tenantId }: { from: string; tenantId: string }, { store, config }: VoiceDeps): boolean {
   return callerIsOwnerGranted({
     from: normNum(from),
     ownNumber: store.tenantPrivateNumber(tenantId),
@@ -348,7 +549,7 @@ function ownerTonFuer({ from, tenantId }, { store, config }) {
   });
 }
 
-function erzeugeInboundCall({ leg, maxDurationS }, deps) {
+function erzeugeInboundCall({ leg, maxDurationS }: { leg: InboundLeg; maxDurationS: number }, deps: VoiceDeps): Anruf {
   const call = deps.store.createCall({
     ...leg,
     maxDurationS,
@@ -356,6 +557,32 @@ function erzeugeInboundCall({ leg, maxDurationS }, deps) {
   });
   zaehleAnrufGestartet("inbound");
   return call;
+}
+
+interface VoiceRoutenParameter {
+  store: Speicher;
+  config: Konfiguration;
+  audit: Protokoll;
+  voiceRender: { render: Render };
+  directiveSynth: Synthese;
+  ttsStore: { takeOnce: (token: string | undefined) => Promise<{ contentType: string; bytes: Buffer } | null | undefined> };
+  lifecycle: Lebenszyklus;
+  finishCall: (call: unknown) => unknown;
+  webhookEvents: VoiceDeps["webhookEvents"];
+  providerFromHeaders: (headers: Request["headers"]) => string | null | undefined;
+  inboundSignatureVerifier: () => {
+    verifyInboundSignature: (anfrage: {
+      headers: Request["headers"];
+      rawBody: Buffer | undefined;
+      url: string;
+      params: unknown;
+    }) => boolean;
+  };
+  terminateAndBillCall: typeof terminateAndBillCall;
+  billThunk: typeof billThunk;
+  startInboundNachlauf: (callId: string) => unknown;
+  inboundBridges: Bruecken;
+  vorspannAblauf: VorspannAblauf;
 }
 
 export function makeVoiceRoutes({
@@ -375,24 +602,24 @@ export function makeVoiceRoutes({
   startInboundNachlauf,
   inboundBridges,
   vorspannAblauf,
-}) {
+}: VoiceRoutenParameter): Router {
   const { render } = voiceRender;
-  const bereiche = speicherBereiche(store);
+  const bereiche: Bereiche = speicherBereiche(store);
 
-  async function sendVoiceXml(res, call, directives) {
+  async function sendVoiceXml(res: Antwort, call: Anruf, directives: unknown[]): Promise<void> {
     const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives, res.locals.eingangMs);
     res.type("text/xml").send(render(audio, call.provider));
   }
 
-  const voiceDeps = {
+  const voiceDeps: VoiceDeps = {
     store, bereiche, config, lifecycle, webhookEvents, inboundBridges, directiveSynth,
     render, sendVoiceXml, vorspannAblauf,
   };
 
-  function brakeSecondsFor(leg) {
+  function brakeSecondsFor(leg: InboundLeg): number {
     return emergencyBrakeSeconds({
       remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,
-      tariffCentsPerMin: callTariffCentsPerMin(leg),
+      tariffCentsPerMin: minutenTarifFuer(leg),
     });
   }
 
@@ -406,7 +633,7 @@ export function makeVoiceRoutes({
     pause: (ms) => zeitgeber.setTimeout(ms),
   });
 
-  const liefereTts = async (req, res) => {
+  const liefereTts = async (req: Request<{ token: string }>, res: Antwort): Promise<void> => {
     try {
       const audio = await ttsStore.takeOnce(req.params.token);
       if (!audio) {
@@ -419,11 +646,11 @@ export function makeVoiceRoutes({
       res.status(HTTP_NOT_FOUND).end();
     }
   };
-  router.get("/voice/tts/:token", (req, res, next) => {
+  router.get("/voice/tts/:token", (req: Request<{ token: string }>, res: Antwort, next: NextFunction): void => {
     liefereTts(req, res).catch(next);
   });
 
-  router.use("/voice", (req, res, next) => {
+  router.use("/voice", (req: Anfrage, res: Antwort, next: NextFunction): void => {
     if (config.safety.skipTwilioSignatureCheck) {
       next();
       return;
@@ -444,9 +671,9 @@ export function makeVoiceRoutes({
     next();
   });
 
-  const nimmEingehendAn = async (req, res) => {
+  const nimmEingehendAn = async (req: Aufruf, res: Antwort): Promise<void> => {
     const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
-    let call;
+    let call: Anruf | undefined;
     try {
       const body = VOICE_KOERPER.parse(req.body);
       const to = normNum(body.To);
@@ -459,7 +686,7 @@ export function makeVoiceRoutes({
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
       const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
-      const locale = localeFor(language);
+      const locale = sprachtexteFuer(language);
 
       if (store.budgetExceeded(tenantId, config.billing)) {
         sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);
@@ -483,7 +710,7 @@ export function makeVoiceRoutes({
       store.leitungsplaetze.belegenEingehend({ callId: angelegt.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
       const abheben = Promise.resolve(store.markAnswered(angelegt.id));
       const abgehobenUm = angelegt.answeredAt;
-      abheben.catch((fehler) => {
+      abheben.catch((fehler: unknown) => {
         angelegt.answeredAt = abgehobenUm;
         console.error(ABHEBEN_LOG_PREFIX, angelegt.id, fehlerText(fehler));
       });
@@ -509,13 +736,13 @@ export function makeVoiceRoutes({
     antworteAufVorspannEreignis(req, res, voiceDeps).catch(next);
   });
 
-  const statusAnruf = async (req, gefunden) => {
+  const statusAnruf = async (req: Aufruf, gefunden: AnrufOderLeer): Promise<AnrufOderLeer> => {
     const callId = wiederanbindungsKennung(req, gefunden);
     if (gefunden && !brauchtWiederanbindung(store, gefunden)) return gefunden;
     if (!callId) return null;
     return (await wiederanbinden({ store, lifecycle: statusLifecycleFuer(gefunden, lifecycle) }, gefunden, callId)).call;
   };
-  const verarbeiteStatus = async (req, res) => {
+  const verarbeiteStatus = async (req: Aufruf, res: Antwort): Promise<void> => {
     res.sendStatus(HTTP_OK);
     const call = await statusAnruf(req, (await statusCallFinden(req, store)).call);
     if (!call) return;

@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { test } from "node:test";
 import express from "express";
 import { config } from "../../src/config.js";
-import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { inboundSignatureVerifier } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { FESTE_UHR_MS, makeTelnyxSigner, mitFesterUhr } from "../helpers.js";
