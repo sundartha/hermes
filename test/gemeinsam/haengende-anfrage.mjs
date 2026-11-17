@@ -24,5 +24,5 @@ export function haengendeAnfrage(srv, anruf = "call_haengend") {
     anfrage.on("error", () => fertig("abgebrochen"));
   });
   anfrage.write(ERSTER_TEIL);
-  return { ausgang, vervollstaendige: () => anfrage.end(REST) };
+  return { ausgang, vervollstaendige: () => anfrage.end(REST), abbrechen: () => anfrage.destroy() };
 }
