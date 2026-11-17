@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
-import { LOCALES } from "../../src/i18n/locales.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
@@ -11,7 +10,8 @@ const ZIEL = "+12722205602";
 const AUFTRAGGEBER = "Probe GmbH";
 const VORNAME = "Anna";
 const JETZT = Date.parse("2026-11-17T10:00:00.000Z");
-const GRUSS = LOCALES.de.inboundEroeffnung(AUFTRAGGEBER);
+const GRUSS =
+  "Hallo, hier ist der KI-Assistent von Probe GmbH. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?";
 
 function uhrBauen() {
   const uhr = { zeit: JETZT, jetzt: () => uhr.zeit, warte: async (ms) => (uhr.zeit += ms) };
