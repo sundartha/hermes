@@ -134,16 +134,16 @@ function lauf(befehl, args, optionen = {}) {
   return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
 }
 
-function zeileDesBefunds(befund) {
+function zeileDesBefunds(befund, lies) {
   try {
-    return readFileSync(befund.path, "utf8").split("\n")[befund.start.line - 1] ?? "";
+    return lies(befund.path).split("\n")[befund.start.line - 1] ?? "";
   } catch {
     return "";
   }
 }
 
-export function semgrepOhneAusnahme(befunde) {
-  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel || !zeileDesBefunds(befund).includes(SEMGREP_AUSNAHME.zeile));
+export function semgrepOhneAusnahme(befunde, lies = (pfad) => readFileSync(pfad, "utf8")) {
+  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel || !zeileDesBefunds(befund, lies).includes(SEMGREP_AUSNAHME.zeile));
 }
 
 export function basisAus(argv) {
