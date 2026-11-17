@@ -13,7 +13,14 @@ function paar(eintrag) {
 }
 
 function regelWerte(selektor) {
-  const treffer = [...CSS.matchAll(new RegExp("(?:^|\\n)\\s*" + selektor.split(".").join("\\.") + "\\{([^}]*)\\}", "g"))];
+  const treffer = [];
+  for (const zeile of CSS.split("\n")) {
+    const text = zeile.trim();
+    if (!text.startsWith(selektor + "{")) continue;
+    const anfang = selektor.length + 1;
+    const ende = text.indexOf("}", anfang);
+    treffer.push([text, text.slice(anfang, ende)]);
+  }
   assert.notEqual(treffer.length, 0, "Regel " + selektor + " fehlt");
   const eintraege = treffer.flatMap((m) => m[1].split(";").filter(Boolean));
   return Object.fromEntries(eintraege.map(paar));
