@@ -53,6 +53,37 @@ function gegenseitenText(zeile) {
   return vorspann === undefined ? undefined : zeile.slice(vorspann.length);
 }
 
+function ueberlappung(bisher, fenster) {
+  for (let laenge = Math.min(bisher.length, fenster.length); laenge > 0; laenge -= 1) {
+    if (bisher.slice(-laenge).every((zeile, index) => zeile === fenster[index])) return laenge;
+  }
+  return 0;
+}
+
+function verlaufNeu() {
+  return { zeilen: [], eroeffnungMs: undefined, naechsteMs: undefined };
+}
+
+function verlaufAufnehmen(verlauf, fenster, jetzt) {
+  const zeilen = [...verlauf.zeilen, ...fenster.slice(ueberlappung(verlauf.zeilen, fenster))];
+  const index = zeilen.findIndex((zeile) => gegenseitenText(zeile) !== undefined);
+  if (index < 0) return { ...verlauf, zeilen };
+  return {
+    zeilen,
+    eroeffnungMs: verlauf.eroeffnungMs ?? jetzt,
+    naechsteMs: verlauf.naechsteMs ?? (zeilen.length > index + 1 ? jetzt : undefined),
+  };
+}
+
+function verlaufErgebnis(verlauf, endeMs) {
+  const gegenseite = verlauf.zeilen.map(gegenseitenText).filter((text) => text !== undefined);
+  const stillstandSekunden =
+    verlauf.eroeffnungMs === undefined
+      ? undefined
+      : ((verlauf.naechsteMs ?? endeMs) - verlauf.eroeffnungMs) / MS_JE_SEKUNDE;
+  return { gegenseite, begruessung: gegenseite[0], stillstandSekunden };
+}
+
 function startMs(stand) {
   const ms = Date.parse(stand.started_at);
   if (!Number.isFinite(ms)) throw new Error("probe_startzeit_unlesbar");
@@ -73,14 +104,15 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
 
   async function beobachten(callId) {
     const beginn = uhr.jetzt();
-    const gegenseite = [];
+    let verlauf = verlaufNeu();
     for (;;) {
       const stand = await ruf("get_call_status", { call_id: callId });
-      gegenseite.push(...stand.last_transcript_lines.map(gegenseitenText).filter((text) => text !== undefined));
-      if (ENDSTATUS.includes(stand.status)) return { stand, begruessung: gegenseite[0] };
-      if (uhr.jetzt() - beginn >= DAUER_GRENZE_S * MS_JE_SEKUNDE) {
+      const jetzt = uhr.jetzt();
+      verlauf = verlaufAufnehmen(verlauf, stand.last_transcript_lines, jetzt);
+      if (ENDSTATUS.includes(stand.status)) return { stand, ...verlaufErgebnis(verlauf, jetzt) };
+      if (jetzt - beginn >= DAUER_GRENZE_S * MS_JE_SEKUNDE) {
         await abbrechen(callId);
-        return { stand: await ruf("get_call_status", { call_id: callId }), begruessung: gegenseite[0] };
+        return { stand: await ruf("get_call_status", { call_id: callId }), ...verlaufErgebnis(verlauf, jetzt) };
       }
       await uhr.warte(TAKT_MS);
     }
@@ -126,10 +158,12 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
         await abbrechen(platziert.call_id).catch(() => undefined);
         throw fehler;
       }
-      const { stand, begruessung } = beobachtet;
+      const { stand, begruessung, gegenseite, stillstandSekunden } = beobachtet;
       return {
         annahmeSekunden: (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
         begruessung,
+        gegenseite,
+        stillstandSekunden,
         sprache,
         auftraggeber,
         vorname,
