@@ -287,7 +287,8 @@ async function istUpdatePull(anderer, { quellen, lesen }, imZweifel) {
   if (basis === undefined || kopf === undefined) return istUpdate({ pakete: [], node: [], branch });
   try {
     const dateien = (await quellen.dateienVon(anderer.number)).map((pfad) => ({ pfad }));
-    return istUpdate(updateRoh({ branch, titel: anderer.title, dateien, basis, kopf, lesen }));
+    const abzweig = quellen.abzweig ? await quellen.abzweig(basis, kopf) : basis;
+    return istUpdate(updateRoh({ branch, titel: anderer.title, dateien, basis: abzweig, kopf, lesen }));
   } catch {
     return imZweifel;
   }
@@ -481,6 +482,7 @@ export function echteQuellen(pull, gruppenKopf) {
     queueEintraege: () => queueEintraege(pull.base.ref),
     liegtVor: async (sha) => VORAUS_STATUS.has((await api(`/compare/${sha}...${gruppenKopf}`)).status),
     pull: (nummer) => api(`/pulls/${nummer}`),
+    abzweig: async (basis, kopf) => (await api(`/compare/${basis}...${kopf}`)).merge_base_commit.sha,
     offenePRs: () => alleSeiten("/pulls?state=open"),
     dateienVon: async (nummer) => (await alleSeiten(`/pulls/${nummer}/files`)).map(({ filename }) => filename),
     notAus: () => api(`/${NOT_AUS_ABFRAGE}`),
