@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { ausgelieferteWidgets } from "./ausgelieferte-widgets.js";
 
 const KARTE = (await ausgelieferteWidgets()).call;
-const CSS = [...KARTE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
+const STILBLOECKE = [...KARTE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
+const CSS = STILBLOECKE.map((treffer) => treffer[1]).join("\n");
 
 function paar(eintrag) {
   const trenner = eintrag.indexOf(":");
@@ -14,7 +15,8 @@ function paar(eintrag) {
 function regelWerte(selektor) {
   const treffer = [...CSS.matchAll(new RegExp("(?:^|\\n)\\s*" + selektor.replace(/\./g, "\\.") + "\\{([^}]*)\\}", "g"))];
   assert.notEqual(treffer.length, 0, "Regel " + selektor + " fehlt");
-  return Object.fromEntries(treffer.flatMap((m) => m[1].split(";").filter(Boolean).map(paar)));
+  const eintraege = treffer.flatMap((m) => m[1].split(";").filter(Boolean));
+  return Object.fromEntries(eintraege.map(paar));
 }
 
 function innerhalbInhalt() {
