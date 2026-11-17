@@ -361,7 +361,6 @@
     { "von": "anmeldung", "nach": "selbstbedienung" },
     { "von": "anmeldung", "nach": "start" },
     { "von": "anrufe", "nach": "posteingang" },
-    { "von": "anrufe", "nach": "selbstbedienung" },
     { "von": "basis", "nach": "konfiguration" },
     { "von": "basis", "nach": "sperrdaten" },
     { "von": "konfiguration", "nach": "abrechnung" },

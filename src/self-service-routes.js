@@ -43,12 +43,12 @@ import { CHECKOUT_RETURN, subscriptionReturnPath } from "./portal-paths.js";
 import {
   planAddNewsletterRecipient,
   newNewsletterTokens,
-  newsletterConfirmUrl,
   hashNewsletterToken,
   normalizeEmail,
   publicNewsletterRecipients,
   renderNewsletterPage,
 } from "./newsletter-recipients.ts";
+import { newsletterConfirmUrl } from "./begriffe/newsletter-links.ts";
 import { hashEmail } from "./util.ts";
 import {
   HTTP_BAD_GATEWAY,
