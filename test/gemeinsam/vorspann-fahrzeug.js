@@ -60,7 +60,9 @@ const INIT_TOKEN_KOPF = "x-hermes-init-token";
 const HTTP_OK = 200;
 let ereignisZaehler = 0;
 
-export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}` }) {
+const ANNAHME_WARTEZEIT_MS = 60_000;
+
+export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}`, signal = AbortSignal.timeout(ANNAHME_WARTEZEIT_MS) }) {
   const { EL_INBOUND_ACCESS_BOOT_ENV } = await import("../helpers.js");
   const { calleeVon } = await import("../anrufe/el-bein-attrappe.js");
   const { initBindungsKoerper } = await import("../_iel-inbound-harness.js");
@@ -73,7 +75,10 @@ export async function initInhaltFuer(srv, { callId, agentId = `agent_${KENNUNG}`
     body: JSON.stringify(ereignis),
   });
   assert.equal(angenommen.status, HTTP_OK);
-  while (!anruf()?.answeredAt) await new Promise(setImmediate);
+  while (!anruf()?.answeredAt) {
+    signal.throwIfAborted();
+    await new Promise(setImmediate);
+  }
   const { streamToken, from } = anruf();
   const koerper = { ...initBindungsKoerper({ bindung: streamToken, agentId, conversationId: `conv_${callId}` }), called_number: from };
   const antwort = await abrufMitFrist(`${srv.localUrl}${INIT_PFAD}`, {
