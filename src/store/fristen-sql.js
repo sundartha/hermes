@@ -1,5 +1,6 @@
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
+import { mitZeitgrenze } from "./webhook-zustellung.js";
 
 const FEHLER = "[fristen] faellige Fristen lesen fehlgeschlagen:";
 const ABGEHOBEN_PLUS_DAUER = `(answered_at::timestamptz + COALESCE(NULLIF(max_duration_s, 0), $4::int) * interval '1 second')`;
@@ -115,7 +116,12 @@ export function macheFristenSql({ runner, einreihen }) {
     setzeReserve: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_RESERVE_SQL, [tenantId, callId, faelligAt]])),
     setzeAbfrage: ({ callId, tenantId, faelligAt }) =>
-      einreihen((client) => imMandanten(client, tenantId, [SETZEN_ABFRAGE_SQL, [tenantId, callId, faelligAt]])),
+      mitZeitgrenze(runner, {
+        arbeit: async (anweisung) => {
+          await anweisung.query(KONTEXT_SQL, [tenantId]);
+          return (await anweisung.query(SETZEN_ABFRAGE_SQL, [tenantId, callId, faelligAt])).rows;
+        },
+      }),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const eintrag = frist(art);
       const sql = holenSql(eintrag);

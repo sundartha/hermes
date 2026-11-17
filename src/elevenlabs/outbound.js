@@ -729,14 +729,13 @@ async function finishFromConversationOnce({ store, terminateAndBillCall, billThu
   store.leitungsplaetze?.freigeben(callId);
 }
 
-async function startInboundNachlauf({ store, abfrageFrist, laufendeInboundPolls, pollConversationResult, callId }) {
+async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
   const beanspruchen = store.beanspruecheInboundElNachlauf ?? store.markInboundElNachlaufStarted;
   const { call, changed } = await beanspruchen(callId, new Date().toISOString());
   if (!changed) return;
   console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
   if (laufendeInboundPolls.has(callId)) return;
   laufendeInboundPolls.add(callId);
-  await abfrageFrist.schreibe(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
   void pollConversationResult(callId, call.elevenlabsConversationId, { tenantId: call.tenantId });
 }
 
@@ -1011,7 +1010,7 @@ export function makeElevenLabsOutbound({
     endActiveCall,
     pollFrist: (callId, tenantId) => frageFrist({ abfrageFrist, pollConversationResult }, callId, tenantId),
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, abfrageFrist, pollConversationResult, laufendeInboundPolls }),
-    startInboundNachlauf: (callId) => startInboundNachlauf({ store, abfrageFrist, laufendeInboundPolls, pollConversationResult, callId }),
+    startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
     awaitAndPersistInboundElResult: (callId) =>
       awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs: settings().resultPollMs, callId }),
   };

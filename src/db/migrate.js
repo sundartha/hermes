@@ -149,6 +149,8 @@ const MIGRATION_READERS = [
   {
     name: ANRUF_ZAEHLER_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_ZAEHLER_NAME), "utf8"),
+  },
+  {
     name: ANRUF_FRIST_ABFRAGE_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_FRIST_ABFRAGE_NAME), "utf8"),
   },
