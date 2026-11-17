@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
 import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } from "../pg-helpers.js";
 
 const BEENDEN_SQL = "UPDATE call SET status = 'completed' WHERE id = $1";
@@ -19,6 +20,16 @@ async function zweiteInstanz(runner) {
   const store = makePgStore(runner);
   await store.init();
   return store;
+}
+
+function mitHaengen(runner) {
+  const schalter = { haengt: false };
+  return {
+    schalter,
+    runner: {
+      withClient: (fn) => (schalter.haengt ? new Promise(() => {}) : runner.withClient(fn)),
+    },
+  };
 }
 
 function mitAusfall(runner) {
@@ -135,4 +146,55 @@ test("H7c2b3-8: getCall ueber die Anbieter-ID liefert fuer eine Fremdkopie keine
   assert.equal(b.getCall(ANBIETER_ID), null);
   const eigen = await legeAnrufAn(b, { twilioSid: `${ANBIETER_ID}_eigen` });
   assert.equal(b.getCall(`${ANBIETER_ID}_eigen`), eigen);
+});
+
+test("H7c2b3-10: haengt eine Lesung und gelingt eine zweite, zaehlt activeCallsFor weiter den fremden Anruf des gemerkten Stands", async () => {
+  const { store: a, runner } = await makePgTestStore();
+  const haengen = mitHaengen(runner);
+  const b = makePgStore(haengen.runner);
+  await b.init();
+  const fremd = await legeAnrufAn(a);
+  await b.activeCallsForSql(BOOTSTRAP_TENANT_ID);
+  haengen.schalter.haengt = true;
+  b.activeCallsForSql(BOOTSTRAP_TENANT_ID);
+  haengen.schalter.haengt = false;
+  assert.deepEqual(ids(await b.activeCallsForSql(BOOTSTRAP_TENANT_ID)), [fremd.id]);
+  assert.deepEqual(ids(b.activeCallsFor(BOOTSTRAP_TENANT_ID)), [fremd.id]);
+});
+
+test("H7c2b3-11: der Reserve-Lauf dieser Instanz gibt fuer einen von der anderen Instanz beendeten Anruf nur Anruf und Mandant frei, nicht die veraltete Fremdkopie", async () => {
+  const { store: a, db, runner } = await makePgTestStore();
+  const fremd = await legeAnrufAn(a, { reserveCents: 40 });
+  const b = await zweiteInstanz(runner);
+  await db.query(BEENDEN_SQL, [fremd.id]);
+  const treffer = { callId: fremd.id, tenantId: BOOTSTRAP_TENANT_ID, faelligAt: new Date(Date.now() - 60_000).toISOString(), versuche: 0 };
+  const freigegeben = [];
+  const lauf = makeFristenLauf({
+    store: {
+      getCall: b.getCall,
+      faelligeFristen: async () => [treffer],
+      setzeReserveFrist: async () => {},
+    },
+    beende: async () => {},
+    limitJeMandant: 5,
+    leaseMs: 15_000,
+    reserve: { freigeben: async (call) => freigegeben.push(call) },
+  });
+  assert.deepEqual(await lauf.reserveTakt(), { beendet: 1, offen: 0, gelesen: true });
+  assert.deepEqual(freigegeben, [{ id: fremd.id, tenantId: BOOTSTRAP_TENANT_ID }]);
+});
+
+test("H7c2b3-12: nach einer gescheiterten und einer folgenden gelungenen Lesung zaehlt activeCallsFor einen von der anderen Instanz beendeten Anruf nicht mehr", async () => {
+  const { store: a, db, runner } = await makePgTestStore();
+  const ausfall = mitAusfall(runner);
+  const b = makePgStore(ausfall.runner);
+  await b.init();
+  const fremd = await legeAnrufAn(a);
+  ausfall.schalter.aus = true;
+  await assert.rejects(b.activeCallsForSql(BOOTSTRAP_TENANT_ID));
+  ausfall.schalter.aus = false;
+  assert.deepEqual(ids(await b.activeCallsForSql(BOOTSTRAP_TENANT_ID)), [fremd.id]);
+  await db.query(BEENDEN_SQL, [fremd.id]);
+  assert.deepEqual(ids(await b.activeCallsForSql(BOOTSTRAP_TENANT_ID)), []);
+  assert.deepEqual(b.activeCallsFor(BOOTSTRAP_TENANT_ID), []);
 });

@@ -19,25 +19,33 @@ export function macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }) {
   const standVon = (state, tenantId) => {
     if (!staende.has(state)) staende.set(state, new Map());
     const je = staende.get(state);
-    if (!je.has(tenantId)) je.set(tenantId, { aktive: [], gelesen: false });
+    if (!je.has(tenantId)) je.set(tenantId, { aktive: [], offen: 0, zuletztGelesen: false });
     return je.get(tenantId);
   };
   return {
     async fuer(state, tenantId) {
       const stand = standVon(state, tenantId);
-      stand.gelesen = false;
-      const zeilen = await ausDatenbank(tenantId);
+      stand.offen += 1;
+      let zeilen;
+      try {
+        zeilen = await ausDatenbank(tenantId);
+      } catch (err) {
+        stand.offen -= 1;
+        stand.zuletztGelesen = false;
+        throw err;
+      }
       const gelesen = zeilenZuAnrufen(zeilen, [], []);
       const inDatenbank = new Set(gelesen.map((call) => call.id));
       const nurHier = ops.activeCallsFor(state, tenantId).filter((call) => !inDatenbank.has(call.id));
       stand.aktive = [...gelesen, ...nurHier];
-      stand.gelesen = true;
+      stand.offen -= 1;
+      stand.zuletztGelesen = true;
       return stand.aktive;
     },
     zaehlung(state, tenantId) {
       const hier = ops.activeCallsFor(state, tenantId).filter((call) => eigene.has(call.id));
       const stand = standVon(state, tenantId);
-      const gemerkt = stand.gelesen ? [] : stand.aktive.filter((call) => !eigene.has(call.id));
+      const gemerkt = stand.offen === 0 && stand.zuletztGelesen ? [] : stand.aktive.filter((call) => !eigene.has(call.id));
       return [...hier, ...gemerkt];
     },
   };
