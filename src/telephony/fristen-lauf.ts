@@ -31,6 +31,7 @@ interface ReserveAbhaengigkeiten {
 
 interface AbfrageAbhaengigkeiten {
   poll: (callId: string, tenantId: string) => Promise<unknown>;
+  schreibeFristen?: () => Promise<unknown>;
 }
 
 interface FristenLaufAbhaengigkeiten {
@@ -140,7 +141,11 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
     takt: async () => runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende)),
     geldTakt: async () => (geld ? runde(GELD, async (treffer) => bearbeite(treffer, geldFaellig(geld), geld.beende)) : nichts),
     reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
-    abfrageTakt: async () => (abfrage ? runde(ABFRAGE, async (treffer) => frageAb(abfrage, treffer)) : nichts),
+    abfrageTakt: async () => {
+      if (!abfrage) return nichts;
+      await abfrage.schreibeFristen?.();
+      return runde(ABFRAGE, async (treffer) => frageAb(abfrage, treffer));
+    },
   };
 }
 

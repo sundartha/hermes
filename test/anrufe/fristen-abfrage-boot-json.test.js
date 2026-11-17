@@ -11,6 +11,7 @@ const EL_BASIS = "https://el.abfrage-boot.invalid";
 const MANDANT = "t_geld_boot_json";
 
 const abgefragt = [];
+const haengende = [];
 const { store } = await geldBootJsonStarten({
   ELEVENLABS_API_BASE: EL_BASIS,
   ELEVENLABS_API_KEY: "el-abfrage-boot-signierwert",
@@ -19,7 +20,11 @@ const { store } = await geldBootJsonStarten({
 globalThis.fetch = async (url) => {
   const ziel = new URL(String(url));
   if (ziel.origin !== EL_BASIS) throw new Error(`Testaufbau: kein Zugriff nach außen (${ziel.origin})`);
-  abgefragt.push(ziel.pathname.split("/").at(-1));
+  const kennung = ziel.pathname.split("/").at(-1);
+  abgefragt.push(kennung);
+  if (kennung === "conv_langsam" && abgefragt.filter((k) => k === kennung).length > 1) {
+    await new Promise((weiter) => haengende.push(weiter));
+  }
   const gespraech = { conversation_id: "x", status: "in-progress", transcript: [], metadata: { call_duration_secs: 0 } };
   return new Response(JSON.stringify(gespraech), { status: 200, headers: { "content-type": "application/json" } });
 };
@@ -65,7 +70,23 @@ test("Kriterium 5: ein Anruf in der Rueckfall-Uebergabe wird nicht abgefragt, se
   assert.equal(abgefragt.includes("conv_rueckfall"), false);
 });
 
+test("Kriterium 5: haengt eine Abfrage laenger als die Uebernahmezeit, startet der Boot-Takt keine zweite Abfrage desselben Anrufs", async () => {
+  const id = elAnruf("langsam");
+  elAnruf("marke");
+  const anzahl = (kennung) => abgefragt.filter((k) => k === kennung).length;
+  await waitUntil(() => anzahl("conv_langsam") >= 2, { timeoutMs: FRIST_BIS_ABFRAGE_MS });
+  const markeEnde = anzahl("conv_marke") + 5;
+  await waitUntil(() => anzahl("conv_marke") >= markeEnde, { timeoutMs: FRIST_BIS_ABFRAGE_MS });
+  const call = store.getCall(id);
+  call.fristAbfrageAt = new Date(Date.parse(call.fristAbfrageAt) - UEBERNAHME_MS - 1000).toISOString();
+  store.save();
+  const markeVorher = anzahl("conv_marke");
+  await waitUntil(() => anzahl("conv_marke") >= markeVorher + 5, { timeoutMs: FRIST_BIS_ABFRAGE_MS });
+  assert.equal(anzahl("conv_langsam"), 2);
+});
+
 after(() => {
+  for (const weiter of haengende) weiter();
   for (const call of store.load().calls) call.status = "completed";
   store.save();
 });
