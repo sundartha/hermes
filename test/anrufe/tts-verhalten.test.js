@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 import { FAKE_FIRST_CHUNK, FAKE_REST_CHUNK } from "../helpers/fake-tts-stream.mjs";
-import { startServer, seedWithTelnyxNumber, postTelnyxIncoming, waitForLog } from "../helpers.js";
+import { startServer, seedWithTelnyxNumber, postTelnyxIncoming, postElRueckfall, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { playTtsEnv } from "../gemeinsam/play-tts-server.mjs";
 
@@ -68,7 +68,10 @@ const vollstaendig = (contentType) => (res) => {
 async function eingang(srv) {
   const res = await postTelnyxIncoming(srv, { callSid: "CAttsverhalten" });
   assert.equal(res.status, HTTP_OK);
-  return res.text();
+  assert.match(await res.text(), /<Dial/);
+  const rueckfall = await postElRueckfall(srv);
+  assert.equal(rueckfall.status, HTTP_OK);
+  return rueckfall.text();
 }
 
 test("Anfrage an ElevenLabs: POST auf den Stream-Pfad der Stimme mit Schluessel, JSON, Ausgabeformat, Modell und gesprochenem Text", async () => {

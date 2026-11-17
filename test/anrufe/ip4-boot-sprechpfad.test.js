@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { inboundSprechpfadBannerLine } from "../../src/boot.js";
 import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.ts";
-import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
+import { startServer, seedWithTelnyxNumber, postTelnyxIncoming, postElRueckfall } from "../helpers.js";
 
 const HTTP_OK = 200;
 const RUECKFALL_HINWEIS =
@@ -45,7 +45,8 @@ test("IP4-4: die Boot-Zeile stimmt mit dem TeXML ueberein, das derselbe Server r
   try {
     const res = await postTelnyxIncoming(srv, { callSid: "CAip4boot" });
     assert.equal(res.status, HTTP_OK);
-    const texml = await res.text();
+    assert.match(await res.text(), /<Dial/);
+    const texml = await (await postElRueckfall(srv)).text();
 
     const treffer = srv.stdout.match(new RegExp(SPRECHPFAD_ZEILE, "g"));
     assert.equal(treffer?.length, 1, `genau EINE Sprechpfad-Zeile erwartet:\n${srv.stdout}`);

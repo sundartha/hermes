@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { classifySprechpfad, SPRECHPFAD } from "../../src/telephony/sprechpfad.ts";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { say, gather, VOICE_PROFILE } from "../../src/telephony/directives.ts";
-import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
+import { startServer, seedWithTelnyxNumber, postTelnyxIncoming, postElRueckfall } from "../helpers.js";
 
 const HTTP_OK = 200;
 
@@ -36,7 +36,8 @@ test("Integration: Repo-Defaults rendern azure_say/Katja (IP3/IP4-Regressionsfan
   try {
     const res = await postTelnyxIncoming(srv, { callSid: "CAip2test" });
     assert.equal(res.status, HTTP_OK);
-    const xml = await res.text();
+    assert.match(await res.text(), /<Dial/);
+    const xml = await (await postElRueckfall(srv)).text();
     assert.equal(classifySprechpfad(xml), SPRECHPFAD.AZURE_SAY);
     assert.match(xml, /voice="Azure\.de-DE-KatjaNeural"/);
   } finally {

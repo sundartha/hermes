@@ -5,6 +5,7 @@ import {
   seedState,
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_NUMBER,
+  postElRueckfall,
 } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -36,7 +37,8 @@ test("Inbound auf Tenant-B-Nummer -> Begruessung nennt B's ownerName", async () 
       body: new URLSearchParams({ CallSid: "CAb", From: "+4915112345678", To: B_NUMBER }),
     });
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), /Maria/);
+    assert.match(await res.text(), /<Dial/);
+    assert.match(await (await postElRueckfall(srv)).text(), /Maria/);
   } finally {
     await srv.stop();
   }
@@ -54,7 +56,8 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
       }),
     });
     assert.equal(res.status, HTTP_OK);
-    assert.match(await res.text(), new RegExp(OWNER_TEST_FIRST_NAME));
+    assert.match(await res.text(), /<Dial/);
+    assert.match(await (await postElRueckfall(srv)).text(), new RegExp(OWNER_TEST_FIRST_NAME));
   } finally {
     await srv.stop();
   }
@@ -68,7 +71,8 @@ async function inbound(srv, { callSid }) {
     body: new URLSearchParams({ CallSid: callSid, From: "+4915112345678", To: B_NUMBER }),
   });
   assert.equal(res.status, HTTP_OK);
-  return res.text();
+  assert.match(await res.text(), /<Dial/);
+  return (await postElRueckfall(srv)).text();
 }
 
 test("Ohne ElevenLabs-Env: Telnyx-Inbound bleibt byte-identisch auf dem Azure-Bestand", async () => {

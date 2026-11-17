@@ -171,7 +171,7 @@ test("Inbound nicht minuten-gegated: erschoepfte Minuten -> normale Begruessung 
       body: new URLSearchParams({ CallSid: "CAtest", From: "+4915199999999", To: NUM_A }),
     });
     assert.equal(res.status, 200, "Inbound trotz erschoepfter Minuten erreichbar");
-    assert.match(await res.text(), /Alice/, "normale Begruessung mit A's ownerName, kein Budget-Hangup");
+    assert.match(await res.text(), /<Dial[^>]*><Sip /, "Uebergabe an ElevenLabs, kein Budget-Hangup");
   } finally {
     await srv.stop();
   }

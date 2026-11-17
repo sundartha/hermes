@@ -29,7 +29,8 @@ const ALTE_REALTIME_SCHALTER_AN = Object.freeze({
 function normalizeTexml(xml) {
   return xml
     .replaceAll(/callId=call_[a-zA-Z0-9_]+/g, "callId=call_X")
-    .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
+    .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X")
+    .replaceAll(/X-Hermes-Call-Binding=[a-f0-9]+/g, "X-Hermes-Call-Binding=X");
 }
 
 function requestWebSocketUpgrade(srv, pfad) {
@@ -87,10 +88,10 @@ test("IE6-S2-2: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     assert.doesNotMatch(xmlAlt, /<Connect/);
     assert.doesNotMatch(xmlAlt, /<Stream/);
     assert.doesNotMatch(xmlAlt, /stream_token/);
-    assert.match(xmlAlt, /<Hangup\/>/);
+    assert.match(xmlAlt, /<Dial[^>]*><Sip /);
 
     const callAlt = srvAlt.readStore().calls.find((eintrag) => eintrag.twilioSid === "v3:ie6s2");
-    assert.equal(callAlt.costProfile, "telnyx_inbound_budget");
+    assert.equal(callAlt.costProfile, "telnyx_inbound_el_convai");
   } finally {
     await srvAlt.stop();
     await srvClean.stop();
