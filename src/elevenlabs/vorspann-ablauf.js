@@ -157,6 +157,7 @@ export function makeVorspannAblauf({
   billThunk,
   finishCall,
   now,
+  setTimer,
 }) {
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now });
@@ -186,7 +187,7 @@ export function makeVorspannAblauf({
     }
     zustand.stand.set(STAND.ABGEHOBEN, now());
     const beineAuf = () => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
-    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }) });
+    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }), setTimer });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([
