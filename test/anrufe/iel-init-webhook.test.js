@@ -703,3 +703,10 @@ test("IEL-B6-4c: leere called_number bei eingehendem Anruf gilt als fehlend -> 2
   const leer = await einzelFall({ zustand, body: initBody({ bindung: zustand.call.streamToken, extra: { called_number: "" } }) });
   assert.equal(leer.status, HTTP_OK);
 });
+
+test("IEL-B6-6d: today der Init-Antwort stammt aus der Uhr der Route, in der Zone des Auftraggebers", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1, 23, 30) });
+  const ergebnis = await einzelFall();
+  assert.equal(ergebnis.status, HTTP_OK);
+  assert.equal(JSON.parse(ergebnis.text).dynamic_variables.today, "Friday, 2 January 2026");
+});

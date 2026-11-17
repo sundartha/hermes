@@ -567,3 +567,9 @@ describe("EROEFFNUNG-3735: Variable eroeffnung am Anrufstart", () => {
   );
   });
 });
+
+it("Anrufstart: today stammt aus der Uhr, in der Zone des Auftraggebers", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1, 23, 30) });
+  const daten = rumpfVon(await koerperFuer({ call: fremdZiel() }));
+  assert.equal(daten.dynamic_variables.today, "Friday, 2 January 2026");
+});
