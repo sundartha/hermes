@@ -286,17 +286,21 @@ const leseCall = (store, callId) => (store.leseCall ? store.leseCall(callId) : s
 const leseCallUngebunden = (store, callId) =>
   store.leseCallUngebunden ? store.leseCallUngebunden(callId) : store.getCall(callId);
 
-async function leseCallMitFehler(store, callId, logPrefix, leser = leseCall) {
+async function lesenMitFehler(lesen, callId, logPrefix) {
   try {
-    return { call: await leser(store, callId) };
+    return { call: await lesen(callId) };
   } catch (err) {
     console.error(logPrefix, `Anruf lesen fehlgeschlagen (callId=${callId || "-"}):`, err.message);
     return { fehler: true };
   }
 }
 
-const leseCallBestEffort = async (store, callId, logPrefix, leser) =>
-  (await leseCallMitFehler(store, callId, logPrefix, leser)).call;
+const leseCallMitFehler = (store, callId, logPrefix) => lesenMitFehler((id) => leseCall(store, id), callId, logPrefix);
+
+const leseCallBestEffort = async (store, callId, logPrefix) => (await leseCallMitFehler(store, callId, logPrefix)).call;
+
+const leseCallUngebundenBestEffort = async (store, callId, logPrefix) =>
+  (await lesenMitFehler((id) => leseCallUngebunden(store, id), callId, logPrefix)).call;
 
 const statusCallFinden = (req, store) => {
   const gespiegelt = store.getCall(req.body.CallSid);
@@ -307,7 +311,7 @@ async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }
   res.sendStatus(HTTP_OK);
   const callId = req.query.callId || "";
   const gespiegelt = store.getCall(callId);
-  const call = gespiegelt || (await leseCallBestEffort(store, callId, EL_BEIN_LOG_PREFIX, leseCallUngebunden));
+  const call = gespiegelt || (await leseCallUngebundenBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
