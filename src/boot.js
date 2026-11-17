@@ -623,6 +623,7 @@ async function heileUnterSperre({ config, store, messaging }) {
     prefix: BOOTSTRAP_HEAL_SMS_PREFIX,
     detail: "leerer Store beim Boot aus den Deploy-Parametern geheilt",
     logTag: "bootstrap-heal",
+    jetzt: () => new Date(),
   });
   return true;
 }

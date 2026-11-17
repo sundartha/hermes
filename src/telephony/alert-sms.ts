@@ -110,9 +110,9 @@ export async function sendeVorfall({ adresse, anlass, schluessel, status, meldez
   }
 }
 
-function einmalSchluessel(logTag: string, meldezeile: string): string {
+function einmalSchluessel(logTag: string, meldezeile: string, jetzt: () => Date): string {
   const kurzHash = createHash("sha256").update(meldezeile).digest("hex").slice(0, KURZ_HASH_ZEICHEN);
-  return `${logTag}:${new Date().toISOString()}:${kurzHash}`;
+  return `${logTag}:${jetzt().toISOString()}:${kurzHash}`;
 }
 
 export function sendBootstrapAlertSms({
@@ -120,14 +120,16 @@ export function sendBootstrapAlertSms({
   prefix,
   detail,
   logTag,
+  jetzt,
 }: {
   config: unknown;
   prefix: string;
   detail: string;
   logTag: string;
+  jetzt: () => Date;
 }): void {
   const meldezeile = prefix + detail;
-  const schluessel = einmalSchluessel(logTag, meldezeile);
+  const schluessel = einmalSchluessel(logTag, meldezeile, jetzt);
   sendeVorfall({
     adresse: alarmAdresse(config),
     anlass: logTag,

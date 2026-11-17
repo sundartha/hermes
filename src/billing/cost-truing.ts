@@ -707,7 +707,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const detail = driftLine(entry);
     console.warn(`[cost-truing] Tarif-Drift ${detail}`);
     audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail);
-    sendBootstrapAlertSms({ config, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing" });
+    sendBootstrapAlertSms({ config, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing", jetzt: () => new Date(nowMs) });
   }
 
   async function reportTariffDrift(state: Zustand, nowMs: number): Promise<void> {

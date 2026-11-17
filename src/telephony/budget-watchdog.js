@@ -1,11 +1,9 @@
-import { defaultSetTimer } from "../utils/timer.js";
-
 export function makeBudgetWatchdog({
   intervalMs,
   activeCallById,
   blockingAxisFor,
   terminate,
-  setTimer = defaultSetTimer,
+  setTimer,
 }) {
   const enabled = Number.isFinite(intervalMs) && intervalMs > 0;
   const armed = new Set();

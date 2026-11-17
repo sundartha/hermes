@@ -166,7 +166,7 @@ async function meldeUndWarte({ platformAlertSmsTo, numbers, prefix, detail, logT
   const { messaging, calls } = makeMessagingStub();
   const config = { billing: { platformAlertSmsTo, betterstackAlertUrl: attrappe.url } };
   try {
-    sendBootstrapAlertSms({ messaging, config, store: makeStoreStub(numbers), prefix, detail, logTag });
+    sendBootstrapAlertSms({ messaging, config, store: makeStoreStub(numbers), prefix, detail, logTag, jetzt: () => new Date() });
     const meldungen = await attrappe.aufMeldungen(1);
     return { meldungen, smsCalls: calls };
   } finally {
@@ -296,7 +296,7 @@ test("alert-sms: sendeVorfall loggt den HTTP-Status einer Ablehnung", async () =
 test("alert-sms: sendBootstrapAlertSms meldet an die Adresse der Konfiguration", async () => {
   const attrappe = await starteBetterStackAttrappe();
   try {
-    sendBootstrapAlertSms({ config: { billing: { betterstackAlertUrl: attrappe.url } }, prefix: "p ", detail: "d", logTag: "tag" });
+    sendBootstrapAlertSms({ config: { billing: { betterstackAlertUrl: attrappe.url } }, prefix: "p ", detail: "d", logTag: "tag", jetzt: () => new Date() });
     const meldungen = await attrappe.aufMeldungen(1);
     assert.equal(meldungen[0].text, "p d");
     assert.match(meldungen[0].id, /^tag:/);
@@ -312,12 +312,12 @@ for (const billing of ADRESSEN_TABELLE) {
     const abruf = mock.method(globalThis, "fetch", async () => {
       throw new Error("darf nicht gerufen werden");
     });
-    assert.doesNotThrow(() => sendBootstrapAlertSms({ config: { billing }, prefix: "p", detail: "d", logTag: "t" }));
+    assert.doesNotThrow(() => sendBootstrapAlertSms({ config: { billing }, prefix: "p", detail: "d", logTag: "t", jetzt: () => new Date() }));
     assert.equal(abruf.mock.callCount(), 0);
     abruf.mock.restore();
   });
 }
 
 test("alert-sms: sendBootstrapAlertSms ohne billing in der Konfiguration wirft", () => {
-  assert.throws(() => sendBootstrapAlertSms({ config: {}, prefix: "p", detail: "d", logTag: "t" }));
+  assert.throws(() => sendBootstrapAlertSms({ config: {}, prefix: "p", detail: "d", logTag: "t", jetzt: () => new Date() }));
 });
