@@ -7,7 +7,7 @@ import {
   ELEVENLABS_INIT_PATH,
   INIT_TOKEN_HEADER,
   istInitWebhookAnfrage,
-} from "../../src/routes/webhooks-elevenlabs-init.js";
+} from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV, seedCall, startServer, waitForLog } from "../helpers.js";
 import { INBOUND_TO, elInboundInitSpawnEnv, spawnSeedWartenderElCall } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

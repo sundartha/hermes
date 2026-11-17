@@ -13,7 +13,7 @@ import {
   renderDienstZiel,
   zielUrteil,
 } from "../src/elevenlabs/init-webhook-ziel.js";
-import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
+import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.ts";
 
 import {
   AGENTEN_PFAD_PREFIX,

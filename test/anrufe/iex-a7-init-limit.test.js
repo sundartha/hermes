@@ -13,7 +13,7 @@ import {
   initTokenSchranke,
   istInitWebhookAnfrage,
   makeElevenLabsInitWebhookRoutes,
-} from "../../src/routes/webhooks-elevenlabs-init.js";
+} from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.js";
 import { captureConsole, startServer, waitForStoreState } from "../helpers.js";
 import { elInboundInitSpawnEnv, initBindungsKoerper, spawnSeedWartenderElCall } from "../_iel-inbound-harness.js";

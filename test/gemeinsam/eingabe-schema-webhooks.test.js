@@ -11,7 +11,7 @@ import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from 
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
-import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.js";
+import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";
 import { baueInitZustand, initBindungsKoerper } from "../_iel-inbound-harness.js";
