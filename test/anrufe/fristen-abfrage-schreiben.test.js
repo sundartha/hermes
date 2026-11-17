@@ -159,3 +159,17 @@ test("Abfrage-Frist: die Abfrage liest den Anruf ohne ihn an diesen Prozess zu b
   });
   assert.equal(gelesen.ungebunden, 2);
 });
+
+test("Abfrage-Frist schreiben: die Abfrage nach dem Intervall kennt den Mandanten und leert die Frist unter seiner Kennung", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: JETZT_MS });
+  const { call, geschrieben, el } = betrieb();
+  const antworten = [laeuft, fertig];
+  await withFetch(async () => antworten.shift()(), async () => {
+    await el.pollFrist(ANRUF, MANDANT);
+    await abwarten();
+    t.mock.timers.tick(POLL_MS);
+    await abwarten();
+  });
+  assert.notEqual(call.status, "active");
+  assert.deepEqual(geschrieben.at(-1), { callId: ANRUF, tenantId: MANDANT, faelligAt: null });
+});
