@@ -64,10 +64,10 @@ async function mitFehlerzeilen(t, body) {
 }
 
 test("Geld-Lauf: ist die Kostendecke nicht erreicht, bleibt der Anruf und die naechste Pruefung steht eine Wache-Frist spaeter an der Zeile", async () => {
-  const { betrieb, call, lauf } = makeBetrieb();
+  const { betrieb, lauf } = makeBetrieb();
   assert.deepEqual(await lauf().geldTakt(), { beendet: 0, offen: 0, gelesen: true });
   assert.deepEqual(betrieb.geholt, [{ art: "geld", limitJeMandant: LIMIT, leaseMs: TAKT_MS }]);
-  assert.deepEqual(betrieb.gefragt, [call]);
+  assert.deepEqual(betrieb.gefragt, [{ tenantId: MANDANT }]);
   assert.deepEqual(betrieb.beendet, []);
   assert.deepEqual(betrieb.gesetzt, [
     { callId: ANRUF, tenantId: MANDANT, faelligAt: new Date(JETZT_MS + WACHE_MS).toISOString() },
@@ -95,11 +95,10 @@ test("Geld-Lauf: ohne Geld-Verdrahtung liest der Takt keine Geld-Fristen", async
   assert.deepEqual(betrieb.geholt, []);
 });
 
-test("Geld-Lauf: ein in der Datenbank schon beendeter Anruf wird weder geprueft noch beendet", async () => {
+test("Geld-Lauf: ein in der Datenbank schon beendeter Anruf wird nicht beendet", async () => {
   const { betrieb, lauf } = makeBetrieb({ gesperrt: true });
   betrieb.status = "completed";
   assert.deepEqual(await lauf().geldTakt(), { beendet: 0, offen: 0, gelesen: true });
-  assert.deepEqual(betrieb.gefragt, []);
   assert.deepEqual(betrieb.beendet, []);
   assert.deepEqual(betrieb.gesetzt, []);
 });

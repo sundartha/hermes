@@ -19,7 +19,7 @@ interface Treffer {
 interface GeldAbhaengigkeiten {
   intervalMs: number;
   jetzt: () => number;
-  blockingAxisFor: (call: Anruf) => unknown;
+  blockingAxisFor: (mandant: { tenantId: string }) => unknown;
   beende: (call: Anruf) => Promise<unknown>;
 }
 
@@ -51,30 +51,26 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
     return "offen";
   }
 
-  async function hoechstdauerFaellig(call: Anruf): Promise<boolean> {
-    await beende(call);
-    return true;
-  }
+  const hoechstdauerFaellig = (): Promise<boolean> => Promise.resolve(true);
 
-  const geldFaellig = (wache: GeldAbhaengigkeiten) => async (call: Anruf, { tenantId }: Treffer): Promise<boolean> => {
-    if (await wache.blockingAxisFor(call)) {
-      await wache.beende(call);
-      return true;
-    }
+  const geldFaellig = (wache: GeldAbhaengigkeiten) => async ({ callId, tenantId }: Treffer): Promise<boolean> => {
+    if (await wache.blockingAxisFor({ tenantId })) return true;
     const faelligAt = new Date(wache.jetzt() + wache.intervalMs).toISOString();
-    await store.setzeGeldFrist({ callId: call.id, tenantId, faelligAt });
+    await store.setzeGeldFrist({ callId, tenantId, faelligAt });
     return false;
   };
 
   async function bearbeite(
     treffer: Treffer,
-    faellig: (call: Anruf, treffer: Treffer) => Promise<boolean>,
+    faellig: (treffer: Treffer) => Promise<boolean>,
+    beendeAnruf: (call: Anruf) => Promise<unknown>,
   ): Promise<"beendet" | "offen" | "weg"> {
     const { callId, versuche } = treffer;
     try {
+      if (!(await faellig(treffer))) return "weg";
       const call = await uebernehmeOhneArmierung(callId, store.attachActiveCall);
       if (!call) return "weg";
-      if (!(await faellig(call, treffer))) return "weg";
+      await beendeAnruf(call);
     } catch (fehler) {
       console.error(`[fristen] Beenden fehlgeschlagen: ${callId}`, String(fehler));
       return offen(callId, versuche);
@@ -91,10 +87,14 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
     }
   }
 
-  async function runde(art: string, faellig: (call: Anruf, treffer: Treffer) => Promise<boolean>): Promise<TaktErgebnis> {
+  async function runde(
+    art: string,
+    faellig: (treffer: Treffer) => Promise<boolean>,
+    beendeAnruf: (call: Anruf) => Promise<unknown>,
+  ): Promise<TaktErgebnis> {
     const treffer = await lies(art);
     if (!treffer) return { beendet: 0, offen: 0, gelesen: false };
-    const ergebnisse = await Promise.all(treffer.map(async (eintrag) => bearbeite(eintrag, faellig)));
+    const ergebnisse = await Promise.all(treffer.map(async (eintrag) => bearbeite(eintrag, faellig, beendeAnruf)));
     return {
       beendet: ergebnisse.filter((ergebnis) => ergebnis === "beendet").length,
       offen: ergebnisse.filter((ergebnis) => ergebnis === "offen").length,
@@ -103,8 +103,8 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
   }
 
   return {
-    takt: async () => runde(HOECHSTDAUER, hoechstdauerFaellig),
-    geldTakt: async () => (geld ? runde(GELD, geldFaellig(geld)) : { beendet: 0, offen: 0, gelesen: true }),
+    takt: async () => runde(HOECHSTDAUER, hoechstdauerFaellig, beende),
+    geldTakt: async () => (geld ? runde(GELD, geldFaellig(geld), geld.beende) : { beendet: 0, offen: 0, gelesen: true }),
   };
 }
 

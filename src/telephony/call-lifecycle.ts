@@ -105,7 +105,7 @@ interface CallLifecycle {
   rearmBudgetWatchdogs: () => void | Promise<void>;
   terminateExpiredCall: (call: Call) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
-  blockingAxisFor: (call: Call) => unknown;
+  blockingAxisFor: (mandant: { tenantId: string }) => unknown;
 }
 
 function callMaxDurationMs(call: Call): number {
@@ -179,8 +179,8 @@ function withActiveCalls(store: Store, use: (calls: Call[]) => void): void | Pro
 function makeBudgetAxisSeam({
   store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
 }: BudgetAxisSeamDeps) {
-  function blockingAxisFor(call: Call): unknown {
-    return blockingBudgetAxis({ store, billing, tenantId: call.tenantId });
+  function blockingAxisFor({ tenantId }: { tenantId: string }): unknown {
+    return blockingBudgetAxis({ store, billing, tenantId });
   }
 
   async function terminateOverBudgetCall(
