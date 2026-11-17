@@ -67,6 +67,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           BETTER_STACK_ALERT_URL: ${{ secrets.BETTER_STACK_ALERT_URL }}
+          SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node tools/deploy-weg.mjs hoertest --anlass nachtlauf --commit "$GITHUB_SHA" --teile ""
 
       - name: Roten Staging-Deploy melden
@@ -74,6 +75,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           BETTER_STACK_ALERT_URL: ${{ secrets.BETTER_STACK_ALERT_URL }}
+          SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node tools/deploy-weg.mjs hoertest --anlass staginglauf --commit "$GITHUB_SHA" --teile ""
 
       - name: Heartbeat Nachtlauf

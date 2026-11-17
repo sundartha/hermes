@@ -8,7 +8,8 @@ import { probeLaufen } from "./wiederholung.mjs";
 const MAX_ERSTVERSUCHE = 5;
 const MAX_ANRUFE = 10;
 const ANRUFE_JE_PROBE = 2;
-const PFLICHT = ["BETTER_STACK_ALERT_URL", "STAGING_PROBE_ZIEL", "STAGING_PROBE_TELNYX_KEY"];
+const ALARMWEGE = ["SLACK_ALERT_URL", "BETTER_STACK_ALERT_URL"];
+const PFLICHT = ["STAGING_PROBE_ZIEL", "STAGING_PROBE_TELNYX_KEY"];
 const COMMIT = /^[0-9a-f]{40}$/;
 const EXIT_ROT = 1;
 const ECHTE_UHR = Object.freeze({
@@ -28,12 +29,13 @@ function zeile(text) {
 }
 
 function fehlenderName() {
+  if (!ALARMWEGE.some((name) => env[name])) return "BETTER_STACK_ALERT_URL";
   return PFLICHT.find((name) => !env[name]);
 }
 
 function kindUmgebung() {
   const eigene = Object.entries(env).filter(
-    ([name]) => name === "PATH" || name === "BETTER_STACK_ALERT_URL" || name.startsWith("GITHUB_"),
+    ([name]) => name === "PATH" || ALARMWEGE.includes(name) || name.startsWith("GITHUB_"),
   );
   return Object.fromEntries(eigene);
 }

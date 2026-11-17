@@ -234,3 +234,31 @@ test("Schlüssel, Zielnummer und Alarmadresse stehen nur in Maskierungszeilen, n
     assert.ok(!JSON.stringify(schreibend).includes(geheim));
   }
 });
+
+test("Alarmweg Slack allein genügt: die Probe läuft", async () => {
+  const { sichtbar, code, vorfaelle } = await aufrufen({
+    ohneAdresse: true,
+    umgebung: { SLACK_ALERT_URL: "http://127.0.0.1:1/x" },
+  });
+  assert.equal(code, 0);
+  assert.equal(anrufe(sichtbar), 1);
+  assert.equal(vorfaelle.length, 0);
+});
+
+test("Slack-Adresse erreicht den Kindprozess: beide rote Versuche melden an Slack", async () => {
+  const empfangen = [];
+  const slack = await dienstStarten((anfrage, roh, rueckgabe) => {
+    empfangen.push(JSON.parse(roh));
+    rueckgabe.writeHead(200);
+    rueckgabe.end();
+  });
+  const { code, sichtbar } = await aufrufen({
+    ohneAdresse: true,
+    fall: { messungen: [ROT, ROT] },
+    umgebung: { SLACK_ALERT_URL: `http://127.0.0.1:${slack}/s` },
+  });
+  assert.equal(code, 1);
+  assert.match(sichtbar, /Slack: Vorfall gesendet/);
+  assert.equal(empfangen.length, 1);
+  assert.match(empfangen[0].text, /Staging-Anrufprobe rot/);
+});

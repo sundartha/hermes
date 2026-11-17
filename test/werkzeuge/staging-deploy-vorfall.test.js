@@ -127,7 +127,105 @@ test("Die Adresse steht nie im sichtbaren Lauf-Log", async () => {
 test("Workflow: der Schritt für den Staging-Deploy läuft nur bei failure() auf push und bekommt das Secret allein", () => {
   assert.match(
     WORKFLOW,
-    /- name: Roten Staging-Deploy melden\n {8}if: failure\(\) && github\.event_name == 'push'\n {8}env:\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n {10}BETTER_STACK_ALERT_URL: \$\{\{ secrets\.BETTER_STACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs hoertest --anlass staginglauf --commit "\$GITHUB_SHA" --teile ""\n/,
+    /- name: Roten Staging-Deploy melden\n {8}if: failure\(\) && github\.event_name == 'push'\n {8}env:\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n {10}BETTER_STACK_ALERT_URL: \$\{\{ secrets\.BETTER_STACK_ALERT_URL \}\}\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs hoertest --anlass staginglauf --commit "\$GITHUB_SHA" --teile ""\n/,
   );
   assert.equal(WORKFLOW.match(/BETTER_STACK_ALERT_URL/g).length, 4);
+});
+
+async function mitSlack({ slack = true, betterStack = false, slackAntwort = 200, offene = [], anlass = "staginglauf" } = {}) {
+  const empfangen = [];
+  const dienst = (name, antwort) =>
+    dienstStarten((anfrage, roh, rueckgabe) => {
+      empfangen.push({ name, methode: anfrage.method, pfad: anfrage.url, koerper: JSON.parse(roh) });
+      rueckgabe.writeHead(antwort);
+      rueckgabe.end();
+    });
+  const slackPort = await dienst("slack", slackAntwort);
+  const betterPort = await dienst("better", 200);
+  const github = await dienstStarten((anfrage, roh, rueckgabe) => {
+    rueckgabe.writeHead(anfrage.method === "POST" ? 201 : 200, { "content-type": "application/json" });
+    rueckgabe.end(JSON.stringify(anfrage.method === "GET" ? offene : { number: 9 }));
+  });
+  const slackAdresse = `http://127.0.0.1:${slackPort}/slack-geheim`;
+  const env = {
+    PATH: process.env.PATH,
+    GITHUB_TOKEN: "t",
+    GITHUB_REPOSITORY: "sundartha/hermes",
+    GITHUB_RUN_ID: "78",
+    GITHUB_API_URL: `http://127.0.0.1:${github}`,
+    ...(slack ? { SLACK_ALERT_URL: slackAdresse } : {}),
+    ...(betterStack ? { BETTER_STACK_ALERT_URL: `http://127.0.0.1:${betterPort}/bs` } : {}),
+  };
+  const kind = spawn("node", ["tools/deploy-weg.mjs", "hoertest", "--anlass", anlass, "--commit", COMMIT, "--teile", ""], { env });
+  let ausgabe = "";
+  kind.stdout.on("data", (stueck) => (ausgabe += stueck));
+  kind.stderr.on("data", (stueck) => (ausgabe += stueck));
+  const code = await new Promise((fertig) => kind.on("close", fertig));
+  const sichtbar = ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::")).join("\n");
+  return { empfangen, ausgabe, sichtbar, code, slackAdresse };
+}
+
+for (const anlass of ["nachtlauf", "staginglauf", "probe"]) {
+  test(`Slack allein (${anlass}): genau ein POST mit Körper {text}, Ausgabe „Slack: Vorfall gesendet“`, async () => {
+    const { empfangen, sichtbar, code } = await mitSlack({ anlass });
+    assert.equal(code, 0);
+    assert.equal(empfangen.length, 1);
+    assert.equal(empfangen[0].name, "slack");
+    assert.equal(empfangen[0].methode, "POST");
+    assert.equal(empfangen[0].pfad, "/slack-geheim");
+    assert.deepEqual(Object.keys(empfangen[0].koerper), ["text"]);
+    assert.match(empfangen[0].koerper.text, new RegExp(COMMIT));
+    assert.match(empfangen[0].koerper.text, /actions\/runs\/78/);
+    assert.match(empfangen[0].koerper.text, /Umgebung: Staging/);
+    assert.match(sichtbar, /Slack: Vorfall gesendet/);
+    assert.doesNotMatch(sichtbar, /Better Stack: Vorfall gesendet/);
+  });
+}
+
+test("Beide Wege: je ein POST, Slack zuerst, Better Stack bekommt den bisherigen Körper", async () => {
+  const { empfangen, code } = await mitSlack({ betterStack: true });
+  assert.equal(code, 0);
+  assert.deepEqual(empfangen.map((eintrag) => eintrag.name), ["slack", "better"]);
+  assert.deepEqual(Object.keys(empfangen[1].koerper), ["incident", "text"]);
+  assert.deepEqual(empfangen[1].koerper.incident, { id: "deploy-staging", status: "alert" });
+  assert.equal(empfangen[1].koerper.text, empfangen[0].koerper.text);
+});
+
+test("Ohne beide Secrets: Slack und Better Stack übersprungen, Exit 0, kein POST", async () => {
+  const { empfangen, sichtbar, code } = await mitSlack({ slack: false });
+  assert.equal(code, 0);
+  assert.equal(empfangen.length, 0);
+  assert.match(sichtbar, /Slack: übersprungen \(SLACK_ALERT_URL fehlt\)/);
+  assert.match(sichtbar, /Better Stack: übersprungen \(BETTER_STACK_ALERT_URL fehlt\)/);
+});
+
+test("Nimmt Slack nicht an (HTTP 300), bleibt Exit 0, nur der Status steht im Log, nie die Adresse", async () => {
+  const { empfangen, ausgabe, sichtbar, code, slackAdresse } = await mitSlack({ slackAntwort: 300, betterStack: true });
+  assert.equal(code, 0);
+  assert.match(sichtbar, /Slack: nicht zugestellt \(HTTP 300\)/);
+  assert.equal(empfangen.length, 2);
+  assert.ok(ausgabe.includes("::add-mask::" + slackAdresse));
+  assert.ok(!sichtbar.includes(slackAdresse));
+  assert.ok(!sichtbar.includes("slack-geheim"));
+});
+
+test("Slack: HTTP 299 gilt als zugestellt", async () => {
+  const { sichtbar } = await mitSlack({ slackAntwort: 299 });
+  assert.match(sichtbar, /Slack: Vorfall gesendet/);
+});
+
+test("Entprellen gilt für beide Wege: Issue vor 59 Minuten geändert, kein POST, beide melden es", async () => {
+  const gesperrt = await mitSlack({ betterStack: true, offene: [deployIssue(59)] });
+  assert.equal(gesperrt.empfangen.length, 0);
+  assert.match(gesperrt.sichtbar, /Slack: kein neuer Vorfall/);
+  assert.match(gesperrt.sichtbar, /Better Stack: kein neuer Vorfall/);
+  const frei = await mitSlack({ betterStack: true, offene: [deployIssue(61)] });
+  assert.equal(frei.empfangen.length, 2);
+});
+
+test("Workflow: beide Melde-Schritte reichen SLACK_ALERT_URL aus den Secrets durch", () => {
+  const schritte = WORKFLOW.split("- name: ").filter((teil) => /^Roten (Staging-Deploy|Nachtlauf) melden/.test(teil));
+  assert.equal(schritte.length, 2);
+  for (const schritt of schritte) assert.match(schritt, /\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n/);
+  assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 4);
 });
