@@ -4,6 +4,7 @@ import express from "express";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, normalizeIncomingTexml, postTelnyxIncoming } from "../helpers.js";
@@ -425,4 +426,51 @@ test("3403 Eingehender EL-Anruf ohne Begruessungslaut-Schalter: der Dial traegt 
 test("3403 Eingehender EL-Anruf mit Begruessungslaut-Schalter: der Dial traegt die audioUrl", async () => {
   const texml = await eingehendeDialAntwort("true");
   assert.match(texml, /audioUrl="[^"]+"/);
+});
+
+test("3403 Eingehender Anruf ohne EL-Zugang: die Notbremse-Frist folgt dem Minutentarif und dem Restguthaben", async () => {
+  const angelegt = [];
+  const store = {
+    numberRecordByE164: async () => ({ tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" }),
+    resolveCallLanguage: async () => "de",
+    budgetExceeded: () => false,
+    tenantBudgetSnapshot: () => ({ remainingCents: 60 }),
+    createCall: (leg) => {
+      angelegt.push(leg);
+      throw new Error("Abbruch nach dem Anlegen");
+    },
+    getCall: () => null,
+    tenantPrivateNumber: () => null,
+  };
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(
+    makeVoiceRoutes({
+      store,
+      config: withConfigNamespaces({ ...OHNE_EL_ZUGANG, skipTwilioSignatureCheck: true }),
+      audit: () => {},
+      voiceRender: { render: () => "<Response/>", turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
+      directiveSynth: { synthesizeDirectiveAudio: async (_call, direktiven) => direktiven },
+      ttsStore: { takeOnce: async () => null },
+      lifecycle: {},
+      finishCall: () => {},
+      webhookEvents,
+      providerFromHeaders: () => null,
+      inboundSignatureVerifier: () => ({ verifyInboundSignature: () => true }),
+      terminateAndBillCall: async () => {},
+      billThunk: () => () => {},
+      startInboundNachlauf: () => {},
+    }),
+  );
+  const fehler = mock.method(console, "error", () => {});
+  try {
+    await mitApp(app, async (basis) => {
+      await (await abrufMitFrist(`${basis}/voice/incoming`, { method: "POST", headers: FORMULAR, body: "From=%2B4915100000001&To=%2B4915100000002&CallSid=CA3403bremse" })).text();
+    });
+  } finally {
+    fehler.mock.restore();
+  }
+  assert.deepEqual(fehler.mock.calls.map((a) => a.arguments.join(" ")), ["[incoming] Abbruch nach dem Anlegen"]);
+  assert.equal(angelegt.length, 1);
+  assert.equal(angelegt[0].maxDurationS, 660);
 });
