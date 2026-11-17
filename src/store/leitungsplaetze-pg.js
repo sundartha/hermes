@@ -19,12 +19,13 @@ const BELEGEN_SQL = `
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
-  const transaktion = (arbeit) =>
+  const transaktion = (arbeit, abbruch) =>
     runner.withClient(async (client) => {
       await client.query("BEGIN");
       try {
         await client.query(FRIST_SQL, [String(LEITUNGSPLATZ_DB_FRIST_MS)]);
         const ergebnis = await arbeit(client);
+        if (abbruch.abgelaufen) throw new Error("Frist abgelaufen, Transaktion zurueckgerollt");
         await client.query("COMMIT");
         return ergebnis;
       } catch (fehler) {
@@ -35,13 +36,14 @@ export function makePostgresLeitungsplaetze(runner) {
 
   const inTransaktion = (arbeit) => {
     let timer;
+    const abbruch = { abgelaufen: false };
     const frist = new Promise((aufgeloest, abgelehnt) => {
-      timer = setTimeout(
-        () => abgelehnt(new Error(`Frist von ${LEITUNGSPLATZ_DB_FRIST_MS} ms ueberschritten`)),
-        LEITUNGSPLATZ_DB_FRIST_MS,
-      );
+      timer = setTimeout(() => {
+        abbruch.abgelaufen = true;
+        abgelehnt(new Error(`Frist von ${LEITUNGSPLATZ_DB_FRIST_MS} ms ueberschritten`));
+      }, LEITUNGSPLATZ_DB_FRIST_MS);
     });
-    const lauf = transaktion(arbeit);
+    const lauf = transaktion(arbeit, abbruch);
     lauf.catch(() => {});
     return Promise.race([lauf, frist]).finally(() => clearTimeout(timer));
   };
