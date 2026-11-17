@@ -20,7 +20,7 @@ function baueApp({ store, lifecycle, optionen = {} }) {
     makeVoiceRoutes({
       store,
       config: withConfigNamespaces({ skipTwilioSignatureCheck: optionen.pruefeSignatur !== true, machineDetection: { enabled: false, timeoutS: 25 } }),
-      audit: () => {},
+      audit: optionen.audit ?? (() => {}),
       voiceRender: { render: () => "<Response/>", turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
       directiveSynth: { synthesizeDirectiveAudio: async (_call, direktiven) => direktiven },
       ttsStore: { takeOnce: optionen.entnimm ?? (async () => null) },
@@ -247,4 +247,40 @@ test("3403 Sprachausgabe-Abruf mit Eintrag: Audio mit Inhaltstyp und Bytes", asy
     assert.equal(antwort.headers.get("content-type"), "audio/wav");
     assert.equal(await antwort.text(), "ton-xyz");
   });
+});
+
+const postEingang = (basis, koerper) =>
+  abrufMitFrist(`${basis}/voice/incoming`, { method: "POST", headers: FORMULAR, body: new URLSearchParams(koerper).toString() });
+
+test("3403 Eingehender Anruf ohne gewaehlte Nummer: Audit nennt to=- und die Antwort legt auf", async () => {
+  const audits = [];
+  const store = { ...statusStore(seedCall()), numberRecordByE164: async () => null };
+  const optionen = { audit: (...args) => audits.push(args.filter((teil) => typeof teil === "string")) };
+  await mitApp(baueApp({ store, lifecycle: {}, optionen }), async (basis) => {
+    const antwort = await postEingang(basis, { From: "+491" });
+    assert.equal(antwort.status, HTTP_OK);
+    assert.match(antwort.headers.get("content-type"), /^text\/xml/);
+  });
+  assert.deepEqual(audits, [["inbound_unrouted", "to=-"]]);
+});
+
+test("3403 Eingehender Anruf mit Fehler in der Verarbeitung: Log beginnt mit [incoming] und nennt den Fehlertext", async () => {
+  const fehler = mock.method(console, "error", () => {});
+  try {
+    const store = {
+      ...statusStore(seedCall()),
+      numberRecordByE164: async () => {
+        throw new Error("Nummernliste kaputt");
+      },
+    };
+    await mitApp(baueApp({ store, lifecycle: {} }), async (basis) => {
+      await postEingang(basis, { To: "+491", From: "+492" });
+    });
+    assert.deepEqual(
+      fehler.mock.calls.map((aufruf) => aufruf.arguments.join(" ")),
+      ["[incoming] Nummernliste kaputt"],
+    );
+  } finally {
+    fehler.mock.restore();
+  }
 });
