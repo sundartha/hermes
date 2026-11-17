@@ -45,6 +45,13 @@ const SCHLUESSEL_MANDANT_SQL = `SELECT tenant_id FROM anruf_schluessel WHERE cal
 const SCHLUESSEL_ARTEN = { streamToken: "stream_token", twilioSid: "twilio_sid" };
 const schluesselHash = (wert) => createHash("sha256").update(String(wert)).digest("hex");
 
+async function schluesselZu(client, id) {
+  const nachId = (await client.query(SCHLUESSEL_MANDANT_SQL, [id])).rows;
+  if (nachId.length > 0) return { callId: id, tenantId: nachId[0].tenant_id };
+  const nachSid = (await client.query(SCHLUESSEL_SUCHEN_SQL, [SCHLUESSEL_ARTEN.twilioSid, schluesselHash(id)])).rows;
+  return nachSid.length > 0 ? { callId: nachSid[0].call_id, tenantId: nachSid[0].tenant_id } : null;
+}
+
 async function mitStartFrist(client, arbeit) {
   const { anheben, zuruecksetzen } = startFrist();
   await client.query(anheben.text, anheben.params);
@@ -244,10 +251,10 @@ function macheAnrufSuche({ runner, requireState, gebunden }) {
     if (bekannt) return bekannt;
     try {
       return await runner.withClient(async (client) => {
-        const mandanten = (await client.query(SCHLUESSEL_MANDANT_SQL, [id])).rows;
-        if (mandanten.length === 0) return null;
-        await setTenant(client, mandanten[0].tenant_id);
-        const rows = (await client.query(CALL_ZEILE_SQL, [id])).rows;
+        const schluessel = await schluesselZu(client, id);
+        if (!schluessel) return null;
+        await setTenant(client, schluessel.tenantId);
+        const rows = (await client.query(CALL_ZEILE_SQL, [schluessel.callId])).rows;
         return rows.length > 0 ? await verarbeite(client, state, rows[0]) : null;
       });
     } catch (err) {
