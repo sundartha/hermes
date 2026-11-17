@@ -5,7 +5,9 @@ import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testdatenbank.js";
 
 const MANDANT = "t_geld_boot";
+const MANDANT_ZWEI = "t_geld_boot_zwei";
 const ANRUF = "call_geld_boot";
+const ANRUF_ZWEI = "call_geld_boot_zwei";
 const CARRIER_ID = "CA_geld_boot";
 const TELNYX_BASIS = "https://telnyx.geld-boot.invalid";
 const KONTO = "AC_geld_boot";
@@ -53,15 +55,15 @@ function aussenweltAbfangen() {
   return auflegen;
 }
 
-async function mandantAnlegen(store) {
-  store.load().tenants.push({ id: MANDANT, status: "active", kycLevel: "card", ownerName: "Geld Boot" });
+async function mandantAnlegen(store, { id, nummer }) {
+  store.load().tenants.push({ id, status: "active", kycLevel: "card", ownerName: "Geld Boot" });
   store.load().numbers.push({
-    id: "num_geld_boot",
-    tenantId: MANDANT,
-    e164: "+4915799990051",
+    id: `num_${id}`,
+    tenantId: id,
+    e164: nummer,
     provider: "telnyx",
     status: "active",
-    providerNumberId: "pnum_geld_boot",
+    providerNumberId: `pnum_${id}`,
     country: "DE",
     language: "de",
     paymentIntentId: null,
@@ -70,23 +72,23 @@ async function mandantAnlegen(store) {
   await store.drainFlushes();
 }
 
-async function fremderAnruf(db, { id = ANRUF, carrierId = CARRIER_ID }) {
+async function fremderAnruf(db, { id = ANRUF, carrierId = CARRIER_ID, mandant = MANDANT, laeuftSeitS = 600 }) {
   await db.transaction(async (tx) => {
-    await tx.query("SELECT set_config('app.current_tenant', $1, true)", [MANDANT]);
+    await tx.query("SELECT set_config('app.current_tenant', $1, true)", [mandant]);
     await tx.query(
       `INSERT INTO call (id, tenant_id, stream_token, twilio_sid, direction, status, started_at, answered_at,
          provider, max_duration_s, frist_hoechstdauer_at)
-       VALUES ($1, $2, $3, $4, 'inbound', 'active', (now() - interval '10 minutes')::text, to_char((now() - interval '10 minutes') at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+       VALUES ($1, $2, $3, $4, 'inbound', 'active', (now() - $6 * interval '1 second')::text, to_char((now() - $6 * interval '1 second') at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
          'telnyx', $5, now() + interval '1 hour')`,
-      [id, MANDANT, `tok_${id}`, carrierId, MAX_DAUER_S],
+      [id, mandant, `tok_${id}`, carrierId, MAX_DAUER_S, laeuftSeitS],
     );
   });
 }
 
-async function zeile(db, id = ANRUF) {
+async function zeile(db, id = ANRUF, mandant = MANDANT) {
   return db.transaction(async (tx) => {
-    await tx.query("SELECT set_config('app.current_tenant', $1, true)", [MANDANT]);
-    const { rows } = await tx.query("SELECT status, failure_reason, billed_at FROM call WHERE id = $1", [id]);
+    await tx.query("SELECT set_config('app.current_tenant', $1, true)", [mandant]);
+    const { rows } = await tx.query("SELECT status, failure_reason, billed_at, frist_geld_at FROM call WHERE id = $1", [id]);
     return rows[0];
   });
 }
@@ -103,7 +105,8 @@ console.error = (...teile) => {
 };
 store = await import("../../src/store.js");
 await store.oeffneSpeicher();
-await mandantAnlegen(store);
+await mandantAnlegen(store, { id: MANDANT, nummer: "+4915799990051" });
+await mandantAnlegen(store, { id: MANDANT_ZWEI, nummer: "+4915799990055" });
 const server = await serverImportieren();
 after(() => {
   server.closeAllConnections();
@@ -120,4 +123,25 @@ test("Kriterium 3: ein vom Boot-Takt gefundener Anruf, dessen Mandant die Kosten
   assert.equal(ende.failure_reason, BUDGET_FAILURE_REASON);
   assert.notEqual(ende.billed_at, null);
   assert.deepEqual(auflegen, [CARRIER_ID]);
+});
+
+test("Kriterium 3: ein fremder Anruf unter der Kostendecke bleibt nach der Pruefung im Spiegel dieses Prozesses ungebunden, und endet sein Besitzer ihn, zaehlt er hier nicht mehr", async () => {
+  await fremderAnruf(db, { id: ANRUF_ZWEI, carrierId: "CA_geld_boot_zwei", mandant: MANDANT_ZWEI, laeuftSeitS: 10 });
+  let geprueft = false;
+  await waitUntil(
+    () => {
+      zeile(db, ANRUF_ZWEI, MANDANT_ZWEI).then((gelesen) => {
+        geprueft = gelesen.frist_geld_at !== null;
+      });
+      return geprueft;
+    },
+    { timeoutMs: FRIST_BIS_BEENDET_MS },
+  );
+  assert.equal(store.getCall(ANRUF_ZWEI), null);
+  await db.transaction(async (tx) => {
+    await tx.query("SELECT set_config('app.current_tenant', $1, true)", [MANDANT_ZWEI]);
+    await tx.query("UPDATE call SET status = 'completed' WHERE id = $1", [ANRUF_ZWEI]);
+  });
+  assert.deepEqual(store.activeCallsFor(MANDANT_ZWEI), []);
+  assert.equal((await zeile(db, ANRUF_ZWEI, MANDANT_ZWEI)).status, "completed");
 });
