@@ -15,7 +15,7 @@ import { DISCLOSURE_JONAS, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
-import { elVon } from "./el-bein-attrappe.js";
+import { calleeVon, elVon } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -40,6 +40,10 @@ async function aufDemElWeg({ env = {}, seed = seedState() } = {}, lauf) {
     beendetGespraech: (callId) => {
       assert.ok(callId, "ohne Anruf-ID laesst sich das Beenden keinem Anruf zuordnen");
       return srv.vorspannAttrappe.anfragen.some((a) => a.methode === "POST" && a.pfad === `/v2/calls/${elVon(callId)}/actions/hangup`);
+    },
+    legtUnangenommenenAnrufAuf: (callId) => {
+      assert.ok(callId, "ohne Anruf-ID laesst sich das Beenden keinem Anruf zuordnen");
+      return srv.vorspannAttrappe.anfragen.some((a) => a.methode === "POST" && a.pfad === `/v2/calls/${calleeVon(callId)}/actions/hangup`);
     },
   };
   try {
@@ -247,12 +251,11 @@ test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterd
     assert.equal(lang.status, HTTP_OK);
     await initInhaltFuer(srv, { callId: anrufAn(srv, LANGES_ZIEL).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
-    await initInhaltFuer(srv, { callId: auftragsAnruf(srv.readStore()).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
     assert.ok(Date.parse(anruf.endedAt) - Date.parse(anruf.startedAt) >= 2000);
-    await waitUntil(() => anbieter.beendetGespraech(anruf.id), { timeoutMs: 3000 });
+    await waitUntil(() => anbieter.legtUnangenommenenAnrufAuf(anruf.id), { timeoutMs: 3000 });
     const langerAnruf = anrufAn(srv, LANGES_ZIEL);
     assert.equal(langerAnruf.status, "active");
     assert.equal(anbieter.beendetGespraech(langerAnruf.id), false);
