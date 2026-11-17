@@ -458,8 +458,11 @@ function versionsUnterschied(links, rechts) {
 }
 
 function liegtInSpanne(version, spanne) {
+  if (typeof spanne !== "string") return false;
   return spanne.split(",").every((teil) => {
-    const [, vergleich = "=", grenze] = SPANNEN_GRENZE.exec(teil.trim());
+    const treffer = SPANNEN_GRENZE.exec(teil.trim());
+    if (treffer === null) return false;
+    const [, vergleich = "=", grenze] = treffer;
     return SPANNEN_PRUEFUNG[vergleich](versionsUnterschied(version, grenze));
   });
 }
