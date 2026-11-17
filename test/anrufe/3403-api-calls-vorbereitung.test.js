@@ -356,7 +356,7 @@ const ORIGINATE_FEHLER = [
 test("3403-B2: Anrufstart scheitert - Status und Text folgen dem Anbieter-Status", async () => {
   for (const [name, fehler, status, text] of ORIGINATE_FEHLER) {
     const abhaengigkeiten = {
-      originateElevenLabsCall: async () => {
+      beschaffeAbsender: async () => {
         throw fehler;
       },
     };
@@ -379,7 +379,7 @@ test("3403-B3: Fehlerzeile des Anrufstarts nennt die Nachricht, bei leerer Nachr
   ];
   for (const [fehler, erwartet] of faelle) {
     const abhaengigkeiten = {
-      originateElevenLabsCall: async () => {
+      beschaffeAbsender: async () => {
         throw fehler;
       },
     };
