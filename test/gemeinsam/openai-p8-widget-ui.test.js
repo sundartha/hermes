@@ -30,9 +30,9 @@ const EXPECTED_RESOURCE_META = {
   "openai/widgetDomain": EXPECTED_WIDGET_DOMAIN,
 };
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_HTTP =
-  "84fcbd30112b85c9c5287648536fa6cb72b9a70d0ddd7dfed7e85ad08d3df21f";
+  "6b5abf0bf3d5663b2b60bba883ce5aff975ecccf027d7ecf523fd0adb6c82b2c";
 const EXPECTED_TOOLS_RESOURCES_READS_HASH_STDIO =
-  "84fcbd30112b85c9c5287648536fa6cb72b9a70d0ddd7dfed7e85ad08d3df21f";
+  "6b5abf0bf3d5663b2b60bba883ce5aff975ecccf027d7ecf523fd0adb6c82b2c";
 
 const ANY = z.object({}).passthrough();
 
