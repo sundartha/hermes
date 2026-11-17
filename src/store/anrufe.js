@@ -42,6 +42,22 @@ const ENDE_FELDER = ["status", "endedAt", "consults"];
 const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
 const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null];
 
+const ZAEHLER = {
+  noSpeech: {
+    feld: "noSpeechStreak",
+    sql: `UPDATE call SET no_speech_streak = no_speech_streak + 1 WHERE tenant_id = $1 AND id = $2 RETURNING no_speech_streak AS wert`,
+    spiegel: ops.countNoSpeechTurn,
+  },
+  lookups: {
+    feld: "lookups",
+    sql: `UPDATE call SET lookups = lookups + 1 WHERE tenant_id = $1 AND id = $2 RETURNING lookups AS wert`,
+    spiegel: ops.countCallLookup,
+  },
+};
+const STILLE_ZURUECK_SQL = `UPDATE call SET no_speech_streak = 0 WHERE tenant_id = $1 AND id = $2`;
+const ABFRAGE_SQL = `UPDATE call SET consult_polled_at_ms = $3 WHERE tenant_id = $1 AND id = $2`;
+const ABFRAGE_FEHLER = "[pg] Rueckfrage-Abfrage notieren fehlgeschlagen:";
+
 const LEBENSLAUF = {
   answered: {
     felder: ["answeredAt"],
@@ -137,7 +153,7 @@ async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetention
 
 export const unbestaetigteZeilen = new WeakSet();
 
-export function macheAnrufeSql({ runner, einreihen }) {
+export function macheAnrufeSql({ runner, einreihen, lese }) {
   const schreibart = (tabelle, art) => async (state, callId, ...args) => {
     const { felder, sql, werte, aendern } = tabelle[art];
     const vorher = ops.getCall(state, callId);
@@ -155,6 +171,22 @@ export function macheAnrufeSql({ runner, einreihen }) {
     }
     return call;
   };
+  const zeileAendern = (tenantId, sql, werte) =>
+    einreihen(async (client) => {
+      await client.query(KONTEXT_SQL, [tenantId]);
+      return client.query(sql, werte);
+    });
+  const zaehler = (art) => async (state, callId) => {
+    const { feld, sql, spiegel } = ZAEHLER[art];
+    const call = await lese(callId);
+    if (!call) return 0;
+    const { rows } = await zeileAendern(call.tenantId, sql, [call.tenantId, callId]);
+    if (rows.length === 0) return spiegel(state, callId);
+    const wert = Number(rows[0].wert);
+    const eigene = ops.getCall(state, callId);
+    if (eigene) eigene[feld] = wert;
+    return wert;
+  };
   const lebenslauf = (art) => schreibart(LEBENSLAUF, art);
   const feld = (art) => schreibart(FELDER, art);
 
@@ -168,6 +200,24 @@ export function macheAnrufeSql({ runner, einreihen }) {
     recordCallEstimatedCostCents: feld("geschaetzteKosten"),
     recordCallCostTruingResult: feld("kostenAbgleich"),
     recordElDetectorCounts: feld("detektorZaehlung"),
+    countNoSpeechTurn: zaehler("noSpeech"),
+    countCallLookup: zaehler("lookups"),
+    clearNoSpeechStreak: async (state, callId) => {
+      const call = await lese(callId);
+      if (!call) return;
+      await zeileAendern(call.tenantId, STILLE_ZURUECK_SQL, [call.tenantId, callId]);
+      const eigene = ops.getCall(state, callId);
+      if (eigene) eigene.noSpeechStreak = 0;
+    },
+    noteConsultPoll: async (state, callId, nowMs = Date.now()) => {
+      ops.noteConsultPoll(state, callId, nowMs);
+      try {
+        const call = await lese(callId);
+        if (call) await zeileAendern(call.tenantId, ABFRAGE_SQL, [call.tenantId, callId, nowMs]);
+      } catch (err) {
+        console.error(ABFRAGE_FEHLER, err.message);
+      }
+    },
     markAnswered: lebenslauf("answered"),
     trueUpAnsweredAt: lebenslauf("answeredNachziehen"),
     recordAnsweredUnclearReason: lebenslauf("unklarerGrund"),

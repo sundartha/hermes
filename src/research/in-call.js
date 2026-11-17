@@ -49,7 +49,7 @@ export async function performLookupRequest({ call, toolUses, loopContinues }) {
     logLookupBlocked(call.id);
     return declined;
   }
-  store.countCallLookup(call.id);
+  await store.countCallLookup(call.id);
   bookLookupSearchFee({ tenantId: call.tenantId });
   const startedAt = Date.now();
   const res = await provider.searchFacts({ query, timeoutMs: LOOKUP_TIMEOUT_MS });
