@@ -15,7 +15,7 @@
       "interface": {
         "displayName": "Hermes by Sundartha",
         "shortDescription": "A phone number for your AI",
-        "longDescription": "Hermes gives your AI assistant its own phone number. Ask it to call a business for you, for example to book or reschedule an appointment, ask a question or make a complaint, and Hermes places the call, speaks for you and reports the outcome back in the conversation. Hermes also answers calls to your Hermes number and keeps a summary and open follow-ups for each call.\n\nWho it is for: people who already have a Hermes account at sundartha.com and want their assistant to handle phone calls.\n\nLimitations: you sign in with your existing Hermes account; without one the tools are not available. Hermes always says at the start of a call that an AI is speaking. It places calls only on your request, for yourself or someone you act for, and not for telemarketing, unsolicited sales, political campaigning or mass dialling. Outgoing calls are limited to supported countries and to an hourly limit. Audio is never sent to ChatGPT, only call status, summaries and short transcript excerpts.",
+        "longDescription": "Hermes gives your AI assistant its own phone number. Ask it to call a business for you, for example to book or reschedule an appointment, ask a question or make a complaint, and Hermes places the call, speaks for you and reports the outcome back in the conversation. Hermes also answers calls to your Hermes number and keeps a summary of each call and any open follow-ups.\n\nWho it is for: people who already have a Hermes account at sundartha.com and want their assistant to handle phone calls.\n\nLimitations: you sign in with your existing Hermes account; without one, every tool returns a sign-in error and no call can be placed. Hermes always says at the start of a call that an AI is speaking. Hermes is for calls you ask for, for yourself or someone you act for, such as booking, rescheduling, enquiring or complaining. It is not for telemarketing, unsolicited sales, political campaigning or mass dialling. Outgoing calls are limited to supported countries and to an hourly limit. Audio is never sent to ChatGPT, only call status, summaries and short transcript excerpts.",
         "developerName": "Sundartha",
         "category": "Productivity",
         "capabilities": [
@@ -31,7 +31,7 @@
         "defaultPrompt": [
           "Show me my recent Hermes calls.",
           "Which follow-ups from my calls are still open?",
-          "Call the dentist and ask for an appointment next week."
+          "Check my Hermes inbox for new calls."
         ],
         "composerIcon": "./assets/logo.png",
         "logo": "./assets/logo.png"
@@ -53,9 +53,9 @@
             },
             {
               "description": "Read the result of a finished call",
-              "prompt": "What did the caller want in my most recent call?",
+              "prompt": "What did the bike repair shop want when they called?",
               "tools_triggered": "list_calls, get_call_result",
-              "expected_behavior": "Finds the most recent sample call and summarises its result from the stored call summary."
+              "expected_behavior": "Finds the sample call from the bike repair shop and says the repair is finished and the bike can be picked up until 6 pm."
             },
             {
               "description": "List open follow-ups",
@@ -66,8 +66,8 @@
             {
               "description": "Place a call to the review test number and report the status",
               "prompt": "Call the test number from the review instructions and ask whether they are open on Saturday.",
-              "tools_triggered": "place_call, get_call_status",
-              "expected_behavior": "Places one call to the test number, the agent first says that an AI is speaking, and the assistant reports the call status and the answer once the call has ended."
+              "tools_triggered": "place_call, get_call_status, get_call_result",
+              "expected_behavior": "Places one call to the test number; the agent's first sentence says that an AI is speaking; the assistant tracks the call with get_call_status and, once it has ended, reports the answer from get_call_result."
             }
           ],
           "negative": [
@@ -93,7 +93,7 @@
         "translations": {
           "de-DE": {
             "subtitle": "Telefonnummer für deine KI",
-            "description": "Hermes gibt deinem KI-Assistenten eine eigene Telefonnummer. Bitte ihn, ein Unternehmen für dich anzurufen, etwa um einen Termin zu buchen oder zu verschieben, etwas zu fragen oder dich zu beschweren: Hermes führt den Anruf, spricht für dich und meldet das Ergebnis im Gespräch zurück. Hermes nimmt außerdem Anrufe auf deiner Hermes-Nummer an und hält je Anruf eine Zusammenfassung und offene Aufgaben fest.\n\nVoraussetzung ist ein bestehendes Hermes-Konto bei sundartha.com. Hermes sagt zu Beginn jedes Anrufs, dass eine KI spricht, ruft nur auf deinen Auftrag an und nicht für Telefonwerbung, Wahlkampf oder Massenanrufe. Audio geht nie an ChatGPT, nur Status, Zusammenfassungen und kurze Transkript-Auszüge."
+            "description": "Hermes gibt deinem KI-Assistenten eine eigene Telefonnummer. Bitte ihn, ein Unternehmen für dich anzurufen, etwa um einen Termin zu buchen oder zu verschieben, etwas zu fragen oder dich zu beschweren: Hermes führt den Anruf, spricht für dich und meldet das Ergebnis im Gespräch zurück. Hermes nimmt außerdem Anrufe auf deiner Hermes-Nummer an und hält je Anruf eine Zusammenfassung und gegebenenfalls offene Aufgaben fest.\n\nVoraussetzung ist ein bestehendes Hermes-Konto bei sundartha.com. Hermes sagt zu Beginn jedes Anrufs, dass eine KI spricht, ist für Anrufe in deinem Auftrag gedacht, nicht für Telefonwerbung, Wahlkampf oder Massenanrufe. Audio geht nie an ChatGPT, nur Status, Zusammenfassungen und kurze Transkript-Auszüge."
           }
         }
       }
