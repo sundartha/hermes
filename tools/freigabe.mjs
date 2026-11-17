@@ -301,6 +301,7 @@ async function paketAlterBefund(paket, { quellen, jetzt }) {
   const tage = wartetageVon(paket);
   const zeiten = [];
   for (const stand of String(paket.neu).split(" ")) zeiten.push(Date.parse(await quellen.veroeffentlicht(paket.oekosystem, paket.name, stand)));
+  if (paket.oekosystem === "actions") zeiten.push(Date.parse(await quellen.kopfGepusht()));
   if (tage === undefined || zeiten.some(Number.isNaN)) return [`Update-PR: Alter von ${paket.name} ${paket.neu} nicht bestimmbar.`];
   if (jetzt - Math.max(...zeiten) >= tage * TAG_MS || (await quellen.ersterFix(paket))) return [];
   return [`Update-PR: ${paket.name} ${paket.neu} ist jünger als ${tage} Tage.`];
@@ -476,6 +477,7 @@ async function ersterFix({ oekosystem, name, alt, neu }) {
 export function echteQuellen(pull, gruppenKopf) {
   return {
     veroeffentlicht: (oekosystem, name, stand) => (oekosystem === "actions" ? actionZeit(name, stand) : npmZeit(name, stand)),
+    kopfGepusht: async () => (await api(`/activity?ref=${encodeURIComponent(pull.head.ref)}&per_page=${FREMD_SEITE}`)).find(({ after }) => after === pull.head.sha)?.timestamp,
     ersterFix,
     nodeLtsSeit: async (haupt) => nodeLtsSeit(await nodeListeLesen(), haupt),
     queueEintraege: () => queueEintraege(pull.base.ref),
