@@ -5,6 +5,7 @@ import { mock } from "node:test";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../../src/begriffe/speicher.js";
 
 const OWNER = "Jonas Beispiel";
 const SUBSTANTIAL = "Ja, Donnerstag passt gut";
@@ -203,4 +204,15 @@ test("Turn-Kostendecke: rechtzeitige Antwort der Datenbank gilt, ohne Meldung", 
   const gelesen = await turnMitLesevorgang("call_gqp1_6", async () => [store.getCall("call_gqp1_6")], () => []);
   assert.equal(gelesen.turn.stopReason, BUDGET_ACHSE_TENANT);
   assert.deepEqual(gelesen.meldungen, []);
+});
+
+test("Turn-Kostendecke: rechtzeitige Antwort der Datenbank gibt die Fristuhr frei", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const gesetzt = t.mock.method(globalThis, "setTimeout");
+  const geloescht = t.mock.method(globalThis, "clearTimeout");
+  await turnMitLesevorgang("call_gqp1_6", async () => [store.getCall("call_gqp1_6")], () => []);
+  const fristUhren = gesetzt.mock.calls.filter((aufruf) => aufruf.arguments[1] === NUTZUNG_AUFFRISCHEN_FRIST_MS);
+  assert.ok(fristUhren.length >= 1, "die Fristuhr wurde gestartet");
+  const freigegeben = geloescht.mock.calls.map((aufruf) => aufruf.arguments[0]);
+  for (const uhr of fristUhren) assert.ok(freigegeben.includes(uhr.result), "jede Fristuhr wurde freigegeben");
 });
