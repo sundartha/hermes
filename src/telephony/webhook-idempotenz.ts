@@ -1,4 +1,4 @@
-import { HTTP_OK } from "../utils/http.ts";
+import { HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";
@@ -79,6 +79,7 @@ interface Anruf {
 interface WebhookStore {
   webhookZustellung?: Ablage | null;
   getCall: (id: unknown) => Anruf | null | undefined;
+  leseCallUngebunden?: (id: string) => Promise<Anruf | null | undefined>;
   recordWebhookAnchors: (callId: unknown, anchors: Anker) => unknown;
 }
 
@@ -90,8 +91,8 @@ interface IdempotenzAbhaengigkeiten {
 
 interface WachParameter {
   weg: string;
-  anchorsOf: (req: Anfrage) => Anker;
-  seenBefore: (req: Anfrage, anchors: Anker) => Anruf | null | undefined;
+  anchorsOf: (req: Anfrage) => Anker | Promise<Anker>;
+  seenBefore: (req: Anfrage, anchors: Anker) => Anruf | null | undefined | Promise<Anruf | null | undefined>;
   remember: (req: Anfrage, anchors: Anker) => unknown;
   ablage?: Ablage | null;
   geheimnis: Geheimnis;
@@ -145,6 +146,7 @@ const REPLAY_ART = Object.freeze({
 const FREIGABE_GRUND = Object.freeze({
   ABBRUCH: "abbruch",
   ABLEGEN_FEHLGESCHLAGEN: "ablegen_fehlgeschlagen",
+  LESEFEHLER: "lesefehler",
   SPAET: "spaet",
 });
 
@@ -213,6 +215,24 @@ const logFreigabe = (weg: string, grund: string): void => {
 const logOhneErkennung = (weg: string, err: unknown): void => {
   logWiederholung(weg, REPLAY_ART.OHNE_ERKENNUNG, Reflect.get(Object(err), "frist") ? REPLAY_GRUND.FRIST : REPLAY_GRUND.FEHLER);
 };
+
+async function versuche<T>(arbeit: () => T | Promise<T>): Promise<{ wert: T } | { fehler: unknown }> {
+  try {
+    return { wert: await arbeit() };
+  } catch (fehler) {
+    return { fehler };
+  }
+}
+
+const LESEFEHLER_PRAEFIX: Record<string, string> = { "el-uebergabe": "[voice/outbound]", incoming: "[incoming]" };
+
+function antworteMitLesefehler({ weg, req, res, err }: { weg: string; req: Anfrage; res: Antwortkanal; err: unknown }): unknown {
+  const praefix = LESEFEHLER_PRAEFIX[weg];
+  const callId = ankerTeil(req.query?.callId) || "-";
+  console.error(praefix, `Anruf lesen fehlgeschlagen (callId=${callId}):`, Reflect.get(Object(err), "message"));
+  res.status(HTTP_SERVER_ERROR);
+  return res.send("");
+}
 
 interface WartendeParameter {
   pending: Wartende;
@@ -392,7 +412,9 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
   function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis }: WachParameter): Wache {
     return async function webhookIdempotenzGuard(req, res, next) {
       const ankunft = Date.now();
-      const anchors = anchorsOf(req);
+      const gelesenAnker = await versuche(() => anchorsOf(req));
+      if ("fehler" in gelesenAnker) return antworteMitLesefehler({ weg, req, res, err: gelesenAnker.fehler });
+      const anchors = gelesenAnker.wert;
       if (!anchors.length) return next();
       const pending = pendingFor(anchors);
       if (pending) return beantworteWartende({ pending, weg, res, next });
@@ -404,12 +426,19 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
       const { angenommen, antwort: gefunden } = await wartenAufFremdeAntwort(warten);
       const fremdeAntwort = gefunden && geheimnisEin(gefunden, geheimnis);
       if (fremdeAntwort) return liefereAusAblage({ deferred, weg, res, antwort: fremdeAntwort });
-      const known = seenBefore(req, anchors);
+      const freigeben = freigabeFuer({ ablage, weg, angenommen, bindung });
+      const gelesenBekannt = await versuche(() => seenBefore(req, anchors));
+      if ("fehler" in gelesenBekannt) {
+        releaseAnchors(anchors, deferred.answer);
+        deferred.settle(null);
+        freigeben(FREIGABE_GRUND.LESEFEHLER);
+        return antworteMitLesefehler({ weg, req, res, err: gelesenBekannt.fehler });
+      }
+      const known = gelesenBekannt.wert;
       if (known) {
         releaseAnchors(anchors, deferred.answer);
         return liefereKeepAlive({ deferred, weg, res, xml: keepAliveXml(known) });
       }
-      const freigeben = freigabeFuer({ ablage, weg, angenommen, bindung });
       const ablegen = antwortAblegen({ ablage, weg, angenommen, bindung, geheimnis, freigeben });
       const verwerfen = () => {
         if (angenommen?.eigen) releaseAnchors(anchors, deferred.answer);
@@ -419,12 +448,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     };
   }
 
+  const leseAnruf = (id: string): Anruf | null | undefined | Promise<Anruf | null | undefined> =>
+    store.leseCallUngebunden ? store.leseCallUngebunden(id) : store.getCall(id);
+
   const forIncoming = makeGuard({
     weg: "incoming",
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
     anchorsOf: incomingAnchors,
-    seenBefore: (req) => store.getCall(signierterCallSid(req)),
+    seenBefore: (req) => leseAnruf(signierterCallSid(req)),
     remember: () => undefined,
   });
 
@@ -436,15 +468,15 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     anchorsOf: elRueckfallAnchors,
     ...ohneNeustartSchicht,
   });
-  const uebergabeLaeuftOderEndete = (req: Anfrage): Anruf | null | undefined => {
-    const call = store.getCall(ankerTeil(req.query?.callId));
+  const uebergabeLaeuftOderEndete = async (req: Anfrage): Promise<Anruf | null | undefined> => {
+    const call = await leseAnruf(ankerTeil(req.query?.callId));
     return UEBERGABE_ZUSTAENDE.includes(bridgeStateOf(call)) ? call : null;
   };
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
-    anchorsOf: (req) => (istOutboundElProfil(store.getCall(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
+    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
   });
