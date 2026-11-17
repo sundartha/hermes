@@ -2,6 +2,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {
@@ -73,6 +74,22 @@ async function starteAttrappe() {
   };
 }
 
+const ABSENDER = "+15005550006";
+const verwaist = (nummer, extra) =>
+  seedCall({
+    id: `call_5183_${nummer}`,
+    from: ABSENDER,
+    to: extra.to,
+    provider: "telnyx",
+    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+    answeredAt: new Date().toISOString(),
+    callControlId: calleeVon(`call_5183_${nummer}`),
+    elCallControlId: elVon(`call_5183_${nummer}`),
+    streamToken: String(nummer).padStart(12, "0"),
+    ...extra,
+  });
+const VERWAISTE = { gleicheSprache: verwaist(1, { to: "+491737250001" }), andereSprache: verwaist(2, { to: "+33142685300" }) };
+
 const umgebung = {};
 
 async function starteDienst() {
@@ -99,6 +116,7 @@ async function starteDienst() {
   };
   const seed = seedState({
     tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME, privateNumber: EIGENE_NUMMER }],
+    calls: Object.values(VERWAISTE),
   });
   umgebung.srv = await startServer({ env, seed });
 }
@@ -199,3 +217,15 @@ for (const [fall, extra] of FAELLE) {
     await beendeAnruf(callId);
   });
 }
+
+test("5183-K3: ohne Vorspann traegt die Variable die Eroeffnung, first_message bleibt wie bisher und die Offenlegung steht vorn", async () => {
+  const gleiche = await init(VERWAISTE.gleicheSprache);
+  assert.equal(gleiche.dynamic_variables.eroeffnung_gesagt, undefined);
+  assert.match(gleiche.dynamic_variables.eroeffnung, /^Hallo, .*KI-Assistent von Jonas Beispiel/);
+  assert.equal(gleiche.conversation_config_override.agent.first_message, undefined);
+  const andere = await init(VERWAISTE.andereSprache);
+  assert.equal(andere.dynamic_variables.eroeffnung_gesagt, undefined);
+  assert.ok(andere.dynamic_variables.eroeffnung.length > 0);
+  assert.equal(andere.conversation_config_override.agent.first_message, andere.dynamic_variables.eroeffnung);
+  assert.ok(andere.conversation_config_override.agent.first_message.startsWith("Bonjour, ceci est un assistant IA"));
+});
