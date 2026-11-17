@@ -1,4 +1,5 @@
 import { Router } from "express";
+import zeitgeber from "node:timers/promises";
 import { normNum } from "../begriffe/rufnummern.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
@@ -392,6 +393,8 @@ export function makeVoiceRoutes({
     store,
     keepAliveXml: (call) => repeatDeliveryXml(call, voiceDeps),
     elPasswort: () => elZugangVon(config).password,
+    jetzt: () => Date.now(),
+    pause: (ms) => zeitgeber.setTimeout(ms),
   });
 
   router.get("/voice/tts/:token", async (req, res) => {
