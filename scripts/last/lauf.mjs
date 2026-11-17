@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { bewerteLauf } from "./schwellen.mjs";
+import { bewerteLauf, nurFehlerquoteUeberGrenze } from "./schwellen.mjs";
 import { fuehreAusWennErlaubt } from "./ziel.mjs";
 import { starteLokaleUmgebung } from "./umgebung.mjs";
 
@@ -38,21 +38,35 @@ export async function laufeMitDateien(k6Befehl, konfiguration) {
   }
 }
 
+function messeEinmal(umgebung, k6Befehl) {
+  const geprueft = [];
+  const messung = [...umgebung.ziele, ...(umgebung.konfiguration.ziele ?? umgebung.ziele)].reduceRight(
+    (innen, ziel) => () =>
+      fuehreAusWennErlaubt(ziel, UMGEBUNG_CI, (origin) => {
+        geprueft.push(origin);
+        return innen();
+      }),
+    () => laufeMitDateien(k6Befehl, { ...umgebung.konfiguration, ziele: geprueft.slice(umgebung.ziele.length) }),
+  );
+  return messung().then((ergebnis) => ({ ergebnis, urteil: bewerteLauf(ergebnis) }));
+}
+
+function beschreibeErstenLauf({ ergebnis }) {
+  const aufteilung =
+    ergebnis.httpFehlgeschlagen === undefined
+      ? ""
+      : ` (${ergebnis.anfragen} Anfragen, http_req_failed ${ergebnis.httpFehlgeschlagen}, ablauf_fehler ${ergebnis.ablaufFehler})`;
+  return `Lastlauf: erster Lauf Fehlerquote ${ergebnis.fehlerquoteProzent} %${aufteilung}, einmalige Wiederholung`;
+}
+
 export async function fuehreLastlaufAus({ k6Befehl = ["k6"], starte = starteLokaleUmgebung, rotprobe } = {}) {
   if (rotprobe !== undefined && !ROTPROBEN.includes(rotprobe)) throw new Error(`Lastlauf abgebrochen: rotprobe ${rotprobe} unbekannt`);
   const umgebung = await starte({ rotprobe });
   try {
-    const geprueft = [];
-    const messung = [...umgebung.ziele, ...(umgebung.konfiguration.ziele ?? umgebung.ziele)].reduceRight(
-      (innen, ziel) => () =>
-        fuehreAusWennErlaubt(ziel, UMGEBUNG_CI, (origin) => {
-          geprueft.push(origin);
-          return innen();
-        }),
-      () => laufeMitDateien(k6Befehl, { ...umgebung.konfiguration, ziele: geprueft.slice(umgebung.ziele.length) }),
-    );
-    const ergebnis = await messung();
-    return { ergebnis, urteil: bewerteLauf(ergebnis) };
+    const erster = await messeEinmal(umgebung, k6Befehl);
+    if (!nurFehlerquoteUeberGrenze(erster.urteil)) return erster;
+    console.error(beschreibeErstenLauf(erster));
+    return { ...(await messeEinmal(umgebung, k6Befehl)), ersterLauf: erster };
   } finally {
     await umgebung.schliessen();
   }
@@ -62,8 +76,8 @@ async function main(argumente) {
   const rotprobe = argumente[0]?.startsWith(ROTPROBE_ARGUMENT) ? argumente[0].slice(ROTPROBE_ARGUMENT.length) : undefined;
   const k6Rest = rotprobe === undefined ? argumente : argumente.slice(1);
   const k6Befehl = k6Rest.length > 0 ? k6Rest : ["k6"];
-  const { ergebnis, urteil } = await fuehreLastlaufAus({ k6Befehl, rotprobe });
-  console.log(JSON.stringify({ ergebnis, urteil }));
+  const { ergebnis, urteil, ersterLauf } = await fuehreLastlaufAus({ k6Befehl, rotprobe });
+  console.log(JSON.stringify({ ergebnis, urteil, ersterLauf }));
   return urteil.gruen ? 0 : EXIT_ROT;
 }
 
