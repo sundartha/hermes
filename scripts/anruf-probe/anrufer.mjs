@@ -28,7 +28,7 @@ function leseRpc(text) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
-async function werkzeug({ abfrage, basis, token, name, argumente }) {
+async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
   const antwort = await abfrage(`${basis}/mcp`, {
     method: "POST",
     redirect: "error",
@@ -42,7 +42,9 @@ async function werkzeug({ abfrage, basis, token, name, argumente }) {
   });
   if (!antwort.ok) throw new Error(`mcp_http_${antwort.status}`);
   const ergebnis = leseRpc(await antwort.text())?.result;
-  if (!ergebnis || ergebnis.isError || !ergebnis.structuredContent) throw new Error(`mcp_${name}_fehlgeschlagen`);
+  if (!ergebnis || ergebnis.isError || (!ohneStruktur && !ergebnis.structuredContent)) {
+    throw new Error(`mcp_${name}_fehlgeschlagen`);
+  }
   return ergebnis.structuredContent;
 }
 
@@ -66,6 +68,8 @@ function wiederholungen(starts) {
 
 export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
   const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
+  const abbrechen = (callId) =>
+    werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
   async function beobachten(callId) {
     const beginn = uhr.jetzt();
@@ -75,7 +79,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       gegenseite.push(...stand.last_transcript_lines.map(gegenseitenText).filter((text) => text !== undefined));
       if (ENDSTATUS.includes(stand.status)) return { stand, begruessung: gegenseite[0] };
       if (uhr.jetzt() - beginn >= DAUER_GRENZE_S * MS_JE_SEKUNDE) {
-        await ruf("cancel_call", { call_id: callId });
+        await abbrechen(callId);
         return { stand: await ruf("get_call_status", { call_id: callId }), begruessung: gegenseite[0] };
       }
       await uhr.warte(TAKT_MS);
@@ -105,7 +109,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       const offene = calls.filter(
         (anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel && !ENDSTATUS.includes(anruf.status),
       );
-      for (const anruf of offene) await ruf("cancel_call", { call_id: anruf.id });
+      for (const anruf of offene) await abbrechen(anruf.id);
       return offene.length;
     },
     anrufen: async ({ ziel: nummer }) => {
@@ -119,7 +123,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       try {
         beobachtet = await beobachten(platziert.call_id);
       } catch (fehler) {
-        await ruf("cancel_call", { call_id: platziert.call_id }).catch(() => undefined);
+        await abbrechen(platziert.call_id).catch(() => undefined);
         throw fehler;
       }
       const { stand, begruessung } = beobachtet;
