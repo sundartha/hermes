@@ -148,21 +148,17 @@ export function makeAnrufstartAuftrag({
     return grund !== null;
   }
 
-  async function wartePlatz(call: Anruf): Promise<AnrufstartAusgang | null> {
-    const fristEnde = Date.parse(call.startedAt ?? "") + wartefristMs;
-    let aktuell = call;
-    for (;;) {
-      if (await sperreVorDemStart(aktuell)) return ANRUFSTART_AUSGANG.ABGESPERRT;
-      if (!platz || (await platz.belege(aktuell))) return null;
-      if (!(jetztMs() < fristEnde)) {
-        await platz.beendeNachWartefrist(call.id);
-        return ANRUFSTART_AUSGANG.ABGELAUFEN;
-      }
-      await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
-      const neu = await store.leseCall(call.id);
-      if (!neu) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
-      aktuell = neu;
+  async function wartePlatz(aktuell: Anruf, fristEnde: number): Promise<AnrufstartAusgang | null> {
+    if (await sperreVorDemStart(aktuell)) return ANRUFSTART_AUSGANG.ABGESPERRT;
+    if (!platz || (await platz.belege(aktuell))) return null;
+    if (!(jetztMs() < fristEnde)) {
+      await platz.beendeNachWartefrist(aktuell.id);
+      return ANRUFSTART_AUSGANG.ABGELAUFEN;
     }
+    await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
+    const neu = await store.leseCall(aktuell.id);
+    if (!neu) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
+    return wartePlatz(neu, fristEnde);
   }
 
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
@@ -172,7 +168,7 @@ export function makeAnrufstartAuftrag({
     if (call.elevenlabsConversationId) return ANRUFSTART_AUSGANG.GESTARTET;
     const versuchtIso = await store.anrufstartMarker.lies(call.id);
     if (versuchtIso) return gleicheMitAnbieterAb(call, versuchtIso);
-    const ohnePlatz = await wartePlatz(call);
+    const ohnePlatz = await wartePlatz(call, Date.parse(call.startedAt ?? "") + wartefristMs);
     if (ohnePlatz) return ohnePlatz;
     await markiereVorAnbieterAufruf(call);
     await starte(call);
