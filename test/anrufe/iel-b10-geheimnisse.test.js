@@ -298,12 +298,6 @@ function schreibendeAufrufe(aufrufe) {
   return aufrufe.filter((aufruf) => aufruf.methode !== METHODE_GET);
 }
 
-function konfigSchreibAufrufe(aufrufe) {
-  return schreibendeAufrufe(aufrufe).filter(
-    (aufruf) => aufruf.adresse !== initWebhookUrl() && !TTS_MUSTER.test(aufruf.adresse),
-  );
-}
-
 function aufrufeAn(aufrufe, praefix) {
   return aufrufe.filter((aufruf) => aufruf.adresse.startsWith(praefix));
 }
@@ -461,10 +455,7 @@ describe("IEL-B10 Render-Listen-Endpunkt", () => {
     const laeufe = [
       [ARG_SETZEN_AUSFUEHREN],
       [["beleg-init"]],
-      [["allowlist-uebernehmen", "--ausfuehren"]],
       [["stimmen-beleg"]],
-      [["scope", "--registrierte-dids", "--ausfuehren"]],
-      [["scope", "--allowlist", "--ausfuehren"]],
       [["setzen", ARG_REG, "--ausfuehren"]],
     ];
     for (const [argv] of laeufe) {
@@ -531,33 +522,7 @@ describe("IEL-B10 beleg-init", () => {
   });
 });
 
-describe("IEL-B10 allowlist-uebernehmen und schalter", () => {
-  it("IEL-B10-9: allowlist - nur genau ein Eintrag wird uebernommen, nie eine Tenant-ID in der Ausgabe", async () => {
-    const ohneOwner = renderEnvGruen();
-    delete ohneOwner.OWNER_SELF_CALL_TENANT_IDS;
-    const rot = [
-      { renderEnv: { ...renderEnvGruen(), OWNER_SELF_CALL_TENANT_IDS: "" } },
-      { renderEnv: { ...renderEnvGruen(), OWNER_SELF_CALL_TENANT_IDS: `${TENANT_ID},tenant-zwei` } },
-      { renderEnv: ohneOwner },
-    ];
-    for (const felder of rot) {
-      const { code, ausgabe, aufrufe } = await laufe(["allowlist-uebernehmen", "--ausfuehren"], felder);
-      assert.equal(code, 1, ausgabe);
-      assert.deepEqual(schreibendeAufrufe(aufrufe), []);
-    }
-    const trocken = await laufe(["allowlist-uebernehmen"]);
-    assert.equal(trocken.code, 0, trocken.ausgabe);
-    assert.deepEqual(schreibendeAufrufe(trocken.aufrufe), []);
-
-    const { code, ausgabe, aufrufe } = await laufe(["allowlist-uebernehmen", "--ausfuehren"]);
-    assert.equal(code, 0, ausgabe);
-    const schreibend = schreibendeAufrufe(aufrufe);
-    assert.deepEqual(schreibend.map((aufruf) => aufruf.adresse), [`${RENDER_DIENST}/env-vars/ELEVENLABS_INBOUND_TENANT_IDS`]);
-    assert.equal(JSON.parse(schreibend[0].koerper).value, TENANT_ID);
-    assert.ok(!ausgabe.includes(TENANT_ID));
-    assert.match(ausgabe, /gleich OWNER_SELF_CALL_TENANT_IDS: ja/);
-  });
-
+describe("IEL-B10 schalter", () => {
   it("IEL-B10-10: der Unterbefehl schalter ist unbekannt und schreibt nichts auf Render", async () => {
     for (const argv of [["schalter", "--an", "--ausfuehren"], ["schalter", "--aus", "--ausfuehren"]]) {
       const { code, ausgabe, aufrufe } = await laufe(argv);
@@ -577,8 +542,6 @@ const REG_ZWEI_MIT_ZUGANG = Object.freeze({
   inbound_trunk: { has_auth_credentials: true, username: "alter-user", allowed_numbers: [DID_ZWEI] },
 });
 const REIHENFOLGE_SCHRITTE_EINE_REGISTRIERUNG = 5;
-const SCOPE_ENV = "ELEVENLABS_INBOUND_SCOPE";
-const ARG_SCOPE_DIDS_AUSFUEHREN = Object.freeze(["scope", "--registrierte-dids", "--ausfuehren"]);
 const FREMDER_AGENT = Object.freeze({ agent_id: "agent_fremd" });
 
 function ohneFeld(objekt, feld) {
@@ -671,61 +634,12 @@ describe("IEX-A11 setzen per Registrierung", () => {
   });
 });
 
-describe("IEX-A11 scope und Argumente", () => {
-  it("IEX-A11-6: scope --registrierte-dids schreibt nur nach GRUENEM Inventar und beleg-init", async () => {
-    const rot = {
-      inventar: { registrierungen: [REG_DID, REG_OFFEN] },
-      belegInit: { initStatus: { ohneToken: HTTP_NOT_FOUND, mitToken: HTTP_NOT_FOUND } },
-      zielUrteil: { renderEnv: { ...renderEnvGruen(), PUBLIC_URL: TUNNEL } },
-    };
-    for (const [fall, felder] of Object.entries(rot)) {
-      const { code, ausgabe, aufrufe } = await laufe(ARG_SCOPE_DIDS_AUSFUEHREN, felder);
-      assert.equal(code, 1, `${fall}\n${ausgabe}`);
-      assert.deepEqual(konfigSchreibAufrufe(aufrufe), [], fall);
-      assert.match(ausgabe, /SCOPE ROT - ELEVENLABS_INBOUND_SCOPE unveraendert/, fall);
-    }
-
-    const trocken = await laufe(["scope", "--registrierte-dids"]);
-    assert.equal(trocken.code, 0, trocken.ausgabe);
-    assert.deepEqual(konfigSchreibAufrufe(trocken.aufrufe), []);
-    assert.match(trocken.ausgabe, /TROCKENLAUF - wuerde ELEVENLABS_INBOUND_SCOPE=registrierte_dids setzen/);
-
-    const gruen = await laufe(ARG_SCOPE_DIDS_AUSFUEHREN);
-    assert.equal(gruen.code, 0, gruen.ausgabe);
-    const [put, ...mehr] = konfigSchreibAufrufe(gruen.aufrufe);
-    assert.deepEqual(mehr, []);
-    assert.equal(put.adresse, `${RENDER_DIENST}/env-vars/${SCOPE_ENV}`);
-    assert.deepEqual(JSON.parse(put.koerper), { value: "registrierte_dids" });
-    assert.equal(gruen.zustand.env.get(SCOPE_ENV), "registrierte_dids");
-    assert.ok(!gruen.ausgabe.includes(LESE_TOKEN), gruen.ausgabe);
-  });
-
-  it("IEX-A11-7: scope --allowlist schreibt bedingungslos und braucht nur RENDER_API_KEY", async () => {
-    const allesRot = {
-      registrierungen: [REG_DID, REG_OFFEN],
-      renderEnv: { ...renderEnvGruen(), PUBLIC_URL: TUNNEL },
-      initStatus: { ohneToken: HTTP_NOT_FOUND, mitToken: HTTP_NOT_FOUND },
-    };
-    const ohneElKonto = { elKonto: { apiKey: "", apiBase: EL_BASIS, agentId: "" } };
-    const { code, ausgabe, aufrufe } = await laufe(["scope", "--allowlist", "--ausfuehren"], allesRot, ohneElKonto);
-    assert.equal(code, 0, ausgabe);
-    assert.deepEqual(
-      konfigSchreibAufrufe(aufrufe).map((aufruf) => [aufruf.adresse, JSON.parse(aufruf.koerper)]),
-      [[`${RENDER_DIENST}/env-vars/${SCOPE_ENV}`, { value: "allowlist" }]],
-    );
-    assert.deepEqual(aufrufeAn(aufrufe, EL_BASIS), []);
-    assert.deepEqual(aufrufeAn(aufrufe, initWebhookUrl()), []);
-
-    const trocken = await laufe(["scope", "--allowlist"], allesRot, ohneElKonto);
-    assert.equal(trocken.code, 0, trocken.ausgabe);
-    assert.deepEqual(schreibendeAufrufe(trocken.aufrufe), []);
-  });
-
-  it("IEX-A11-8: kaputte scope-/setzen-Argumente und fehlender EL-Schluessel brechen vor jedem fetch ab", async () => {
+describe("IEX-A11 Argumente", () => {
+  it("IEX-A11-8: abgeschaffte scope-/allowlist-Befehle, kaputte setzen-Argumente und fehlender EL-Schluessel brechen vor jedem fetch ab", async () => {
     const faelle = [
-      ["scope"],
-      ["scope", "--registrierte-dids", "--allowlist"],
-      ["scope", "--registrierte-dids", `--nummer=${DID}`],
+      ["scope", "--registrierte-dids", "--ausfuehren"],
+      ["scope", "--allowlist", "--ausfuehren"],
+      ["allowlist-uebernehmen", "--ausfuehren"],
       ["setzen", ARG_REG, ARG_REG],
       ["schalter", "--an", "--registrierte-dids"],
     ];
@@ -735,7 +649,7 @@ describe("IEX-A11 scope und Argumente", () => {
       assert.equal(aufrufe.length, 0, argv.join(" "));
       assert.ok(leseArgumente(argv).fehler, argv.join(" "));
     }
-    const ohneElKey = await laufe(["scope", "--registrierte-dids"], {}, { elKonto: { apiKey: "", apiBase: EL_BASIS, agentId: AGENT_ID } });
+    const ohneElKey = await laufe(["setzen", ARG_REG], {}, { elKonto: { apiKey: "", apiBase: EL_BASIS, agentId: AGENT_ID } });
     assert.equal(ohneElKey.code, 1, ohneElKey.ausgabe);
     assert.match(ohneElKey.ausgabe, /ELEVENLABS_API_KEY fehlt/);
     assert.equal(ohneElKey.aufrufe.length, 0);

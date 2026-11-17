@@ -20,7 +20,6 @@ import {
   RUECKFALL_ENTSCHEIDUNG,
   elUebergabeDirektiven,
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { LOCALES } from "../../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../../src/routes/voice.js";
@@ -679,7 +678,7 @@ test("IEL-B8-22: Neustart waehrend WARTET, abgelaufene Frist - Umleitung scheite
   }
 });
 
-const EL_REGISTRIERT_ENV = Object.freeze({ ...EL_AN_ENV, ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
+const EL_REGISTRIERT_ENV = Object.freeze({ ...EL_AN_ENV });
 const ABGEWIESEN_SONDE = '"path":"abgewiesen"';
 
 test("IEX-A9-13: registrierte_dids, Tenant-Decke erschoepft - die Kostendecke greift VOR der Abweisung", async () => {

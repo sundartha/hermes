@@ -3,23 +3,18 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { EL_INBOUND_SCOPE_FINDING, elInboundScopeFindings } from "../../src/boot-guard.js";
 import { inboundAbgewiesen } from "../../src/elevenlabs/inbound-bridge-state.ts";
 import * as pfad from "../../src/elevenlabs/inbound-path-decision.ts";
 import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.ts";
-import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
 import { INBOUND_PATH } from "../../src/telephony/inbound-path.ts";
-import { startServerExpectExit } from "../helpers.js";
 
 const SIP_USER = "iex-a9-sip-benutzer";
 const ALTER_SIP_USER = "iex-a9-alter-benutzer";
 const GEPINNT = "tenant_iex_a9_gepinnt";
 const FREMD = "tenant_iex_a9_fremd";
 const FP_HEX = 16;
-const SCOPE_SENTINEL = "alle_iexa9_sentinel";
 const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
 const MARKER_ZEITPUNKT = "2026-09-15T09:00:00.000Z";
-const EXIT_ABBRUCH = 1;
 
 function fpReferenz(sipUser) {
   const hexDigest = crypto.createHash("sha256").update(sipUser).digest("hex");
@@ -28,7 +23,7 @@ function fpReferenz(sipUser) {
 
 function weicheConfig({
   enabled = true,
-  scope = INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
+  scope = "registrierte_dids",
   tenantIds = [GEPINNT],
   sipUser = SIP_USER,
   sipPassword = "p".repeat(pfad.SIP_PASSWORD_MIN_LENGTH),
@@ -51,17 +46,8 @@ function nummer({ belegtAt = BELEG_ZEITPUNKT, fp = fpReferenz(SIP_USER) } = {}) 
   return { e164: "+4915255555555", tenantId: GEPINNT, elInboundTrunkBelegtAt: belegtAt, elInboundTrunkZugangFp: fp };
 }
 
-test("IEX-A9-1: Scope-Enum hat genau zwei Werte, Default allowlist, kein Wildcard, strikte Gleichheit", () => {
-  assert.deepEqual({ ...INBOUND_EL_SCOPE }, { ALLOWLIST: "allowlist", REGISTRIERTE_DIDS: "registrierte_dids" });
-  assert.equal(DEFAULT_INBOUND_EL_SCOPE, "allowlist");
-  assert.equal(isInboundElScope("allowlist"), true);
-  assert.equal(isInboundElScope("registrierte_dids"), true);
-  for (const unbekannt of ["alle", "*", "", "ALLOWLIST", undefined, null])
-    assert.equal(isInboundElScope(unbekannt), false, JSON.stringify(unbekannt));
-});
-
 const { ELEVENLABS, ABGEWIESEN } = INBOUND_PATH;
-const ALLOWLIST = INBOUND_EL_SCOPE.ALLOWLIST;
+const ALLOWLIST = "allowlist";
 
 const WEICHE_FAELLE = [
   { name: "1 Schalter aus, allowlist, gepinnt", config: { enabled: false, scope: ALLOWLIST }, erwartet: ELEVENLABS },
@@ -119,20 +105,6 @@ test("IEX-A9-4: der Zugangs-Fingerabdruck lebt an der Zugangs-Definition, nicht 
   assert.equal("ZUGANG_FP_HEX_ZEICHEN" in beleg, false);
 });
 
-test("IEX-A9-5: elInboundScopeFindings - gueltig leer, unbekannt genau ein fataler Befund ohne den Wert", () => {
-  for (const gueltig of Object.values(INBOUND_EL_SCOPE)) assert.deepEqual(elInboundScopeFindings(gueltig), [], gueltig);
-  for (const unbekannt of [SCOPE_SENTINEL, "*", "", "ALLOWLIST", undefined]) {
-    const befunde = elInboundScopeFindings(unbekannt);
-    assert.equal(befunde.length, 1, JSON.stringify(unbekannt));
-    const [befund] = befunde;
-    assert.equal(befund.code, EL_INBOUND_SCOPE_FINDING.UNKNOWN);
-    assert.equal(befund.fatal, true);
-    assert.ok(befund.message.includes("ELEVENLABS_INBOUND_SCOPE"));
-    assert.ok(befund.message.includes("allowlist|registrierte_dids"));
-    assert.ok(!befund.message.includes(SCOPE_SENTINEL));
-  }
-});
-
 const ABGEWIESEN_FAELLE = [
   { name: "Budget-Profil mit Marker", call: { costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, elFallbackAt: MARKER_ZEITPUNKT }, erwartet: true },
   { name: "Budget-Profil ohne Marker", call: { costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, elFallbackAt: null }, erwartet: false },
@@ -148,10 +120,3 @@ for (const fall of ABGEWIESEN_FAELLE) {
   });
 }
 
-test("IEX-A9-7: unbekannter ELEVENLABS_INBOUND_SCOPE bei Schalter aus - Boot-Refusal, Wert nicht im Log", async () => {
-  const { code, output } = await startServerExpectExit({ env: { ELEVENLABS_INBOUND_SCOPE: SCOPE_SENTINEL } });
-  assert.equal(code, EXIT_ABBRUCH);
-  assert.match(output, /Start abgebrochen/);
-  assert.match(output, /ELEVENLABS_INBOUND_SCOPE ist unbekannt/);
-  assert.ok(!output.includes(SCOPE_SENTINEL), "der eingegebene Wert steht nie im Boot-Log");
-});

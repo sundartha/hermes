@@ -399,7 +399,7 @@ test("IEX-A8-10: Ergebniszeile - 0 aktiv", async () => {
   const { logger, laeuft } = lauf({ store: fakeStore([]), elRead: fakeElRead({}) });
   await laeuft;
   assert.deepEqual(logger.zeilen, [
-    { stufe: "log", zeile: "[el-trunk] sweep fertig scope=allowlist aktiv=0 belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
+    { stufe: "log", zeile: "[el-trunk] sweep fertig aktiv=0 belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
   ]);
 });
 
@@ -408,7 +408,7 @@ test("IEX-A8-10: Ergebniszeile - 1 belegt ohne Endungsteil", async () => {
   const elRead = fakeElRead({ [eine.providerAgentPhoneNumberId]: () => passendeRegistrierung(eine.e164) });
   const { logger, laeuft } = lauf({ store: fakeStore([eine]), elRead });
   await laeuft;
-  assert.equal(logger.text(), "[el-trunk] sweep fertig scope=allowlist aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0");
+  assert.equal(logger.text(), "[el-trunk] sweep fertig aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0");
 });
 
 function mischfall() {
@@ -437,7 +437,7 @@ test("IEX-A8-10: Ergebniszeile - n gemischt, Endungen sortiert", async () => {
   await laeuft;
   assert.equal(
     logger.text(),
-    "[el-trunk] sweep fertig scope=allowlist aktiv=6 belegt=1 repariert=0 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
+    "[el-trunk] sweep fertig aktiv=6 belegt=1 repariert=0 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
       "ohne_beleg_endungen=…0002,…0003,…0004,…0005,…0006",
   );
 });
@@ -453,7 +453,7 @@ test("IEX-A8-10: Ergebniszeile - Kappung auf SONDE_MAX_ENDUNGEN plus Rest", asyn
   const sichtbar = numbers.slice(0, beleg.SONDE_MAX_ENDUNGEN).map((eintrag) => pfad.e164Endung(eintrag.e164));
   assert.equal(
     logger.text(),
-    `[el-trunk] sweep fertig scope=allowlist aktiv=${anzahl} belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
+    `[el-trunk] sweep fertig aktiv=${anzahl} belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
       `ohne_beleg_endungen=${sichtbar.join(",")},+${KAPPUNG_UEBERHANG}`,
   );
   assert.ok(logger.text().includes("…0110,+2"), "Positiv-Kontrolle: zehnte Endung ist …0110");
@@ -584,17 +584,6 @@ test("IEX-A8-15: Log-Hygiene ueber einen Voll-Lauf - kein sipUser, kein Fingerab
   assert.equal(text.includes("num_"), false);
 });
 
-test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-gleich und nennt keine Beleg-Zahlen", () => {
-  const ohne = { numbers: [nummer({ index: 1 })] };
-  const mit = { numbers: [nummer({ index: 1, elInboundTrunkBelegtAt: T0_ISO, elInboundTrunkZugangFp: "fp" })] };
-  const tenantIds = ["tenant_a8"];
-  const zeileOhne = pfad.inboundElAllowlistProbeLine({ state: ohne, tenantIds });
-  const zeileMit = pfad.inboundElAllowlistProbeLine({ state: mit, tenantIds });
-  assert.equal(zeileMit, zeileOhne);
-  assert.ok(zeileMit.includes("…0001"), "Positiv-Kontrolle: die Sonde sieht die Nummer");
-  for (const wort of ["belegt", "abweichung", "unbekannt"]) assert.equal(zeileMit.includes(wort), false, wort);
-});
-
 async function startFakeEl(body) {
   const zurueckgehalten = [];
   const empfangen = { anzahl: 0 };
@@ -657,7 +646,7 @@ test("IEX-A8-19: Spawn E2E - Dienst laeuft waehrend des GET, Ergebniszeile und B
     fakeEl.freigeben();
     await waitForLog(
       srv,
-      /\[el-trunk\] sweep fertig scope=allowlist aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0/,
+      /\[el-trunk\] sweep fertig aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0/,
       E2E_TIMEOUT_MS,
     );
     const gespeichert = srv.readStore().numbers.find((eintrag) => eintrag.id === "num_telnyx");

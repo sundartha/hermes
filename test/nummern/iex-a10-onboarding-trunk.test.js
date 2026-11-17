@@ -15,7 +15,6 @@ import {
   SIP_PASSWORD_MIN_LENGTH,
   zugangsFingerabdruck,
 } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import {
@@ -65,8 +64,6 @@ const EL_OUTBOUND = Object.freeze({
 });
 const EL_INBOUND = Object.freeze({
   enabled: true,
-  scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
-  tenantIds: Object.freeze([TENANT]),
   sipUser: SIP_USER,
   sipPassword: SIP_PASSWORT,
   initWebhookToken: INIT_TOKEN,
@@ -245,7 +242,7 @@ async function drainDeps(voice) {
 test("IEX-A10-3: Produktionspfad - runProvisioningDrain injiziert den Schreiber unabhaengig vom Scope", async () => {
   const allowlist = await drainDeps({
     elevenLabsOutbound: EL_OUTBOUND,
-    elevenLabsInbound: { ...EL_INBOUND, scope: INBOUND_EL_SCOPE.ALLOWLIST },
+    elevenLabsInbound: { ...EL_INBOUND },
   });
   assert.equal(typeof allowlist.inboundTrunkSchreiber?.ensureInboundTrunk, "function");
   assert.equal(typeof allowlist.sipRegistrar?.ensureRegistration, "function", "Registrierung bleibt unberuehrt");
@@ -280,7 +277,7 @@ test("IEX-A10-4: Onboarding Erfolg - PATCH, Nach-GET, Beleg mit laufendem Finger
 test("IEX-A10-5: Onboarding unter allowlist - Schreiber da, ein PATCH, Beleg gesetzt", async () => {
   const el = fakeEl();
   const logger = fakeLogger();
-  const inboundTrunkSchreiber = schreiberFuer({ fetchImpl: el.fetchImpl, logger, inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } });
+  const inboundTrunkSchreiber = schreiberFuer({ fetchImpl: el.fetchImpl, logger, inbound: {} });
   const { aktiviert, gespeichert } = await onboarde({ el, inboundTrunkSchreiber, logger });
   assert.equal(aktiviert.status, NUMBER_STATUS.ACTIVE);
   assert.equal(el.patches().length, EINMAL);
@@ -435,7 +432,7 @@ test("IEX-A10-10: Onboarding-Rennen - alter Fingerabdruck am Datensatz, alter Be
   assert.equal(el.patches().length, EINMAL);
   assert.equal(
     ergebnisZeile,
-    "[el-trunk] sweep fertig scope=registrierte_dids aktiv=1 belegt=1 repariert=1 abweichung=0 unbekannt=0 ohne_registrierung=0",
+    "[el-trunk] sweep fertig aktiv=1 belegt=1 repariert=1 abweichung=0 unbekannt=0 ohne_registrierung=0",
   );
   assert.equal(nummer.elInboundTrunkZugangFp, zugangsFingerabdruck(SIP_USER));
 });

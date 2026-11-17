@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -20,7 +19,6 @@ function konfig(overrides = {}) {
     voice: {
       elevenLabsInbound: {
         tenantIds: [GEPINNT],
-        scope: INBOUND_EL_SCOPE.ALLOWLIST,
         sipUser: "u",
         sipPassword: "p".repeat(32),
         initWebhookToken: "t".repeat(32),

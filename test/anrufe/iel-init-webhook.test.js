@@ -15,7 +15,6 @@ import {
   sipHeadersFormOf,
 } from "../../src/elevenlabs/inbound-initiation.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { LOCALES, localeFor } from "../../src/i18n/locales.js";
 import {
@@ -74,14 +73,12 @@ function baueConfig({
   tenantIds = [BOOTSTRAP_TENANT_ID],
   initWebhookToken = INIT_TOKEN,
   agentId = AGENT_ID,
-  scope = INBOUND_EL_SCOPE.ALLOWLIST,
 } = {}) {
   return {
     voice: {
       elevenLabsInbound: {
         enabled,
         tenantIds,
-        scope,
         sipUser: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER,
         sipPassword: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD,
         initWebhookToken,
@@ -534,7 +531,7 @@ test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die W
   assert.ok(zeilen.includes(`[el-init] wiederholung call=${call.id}`), alsLog(zeilen));
 });
 
-const REGISTRIERT_CONFIG = baueConfig({ scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
+const REGISTRIERT_CONFIG = baueConfig();
 const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
 
 function angerufeneNummer({ state, call }) {

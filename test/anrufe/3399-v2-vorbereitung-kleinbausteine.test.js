@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.ts";
-import { isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
 import { isSttProfile } from "../../src/telephony/stt-profile.ts";
 
 const NUMMER = "+4915112345678";
@@ -27,12 +26,8 @@ test("3399-v2: fehlendes oder kein Text als Bindungs-Token wird abgelehnt", () =
   }
 });
 
-test("3399-v2: Bereich und Sprachprofil erkennen nur ihre bekannten Werte", () => {
+test("3399-v2: Sprachprofil erkennt nur ihre bekannten Werte", () => {
   const tabelle = [
-    [isInboundElScope, "allowlist", true],
-    [isInboundElScope, "registrierte_dids", true],
-    [isInboundElScope, "alle", false],
-    [isInboundElScope, undefined, false],
     [isSttProfile, "accurate", true],
     [isSttProfile, "fast", false],
     [isSttProfile, undefined, false],

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { INBOUND_PATH } from "../telephony/inbound-path.ts";
 
 interface InboundZugang {
@@ -8,18 +7,13 @@ interface InboundZugang {
   initWebhookToken?: unknown;
 }
 
-interface InboundKonfiguration extends InboundZugang {
-  scope?: unknown;
-  tenantIds?: unknown;
-}
-
 interface NummernBeleg {
   elInboundTrunkBelegtAt?: unknown;
   elInboundTrunkZugangFp?: unknown;
 }
 
 interface Entscheidungsfall {
-  config: { voice: { elevenLabsInbound: InboundKonfiguration } };
+  config: { voice: { elevenLabsInbound: InboundZugang } };
   tenantId: unknown;
   numberRecord: NummernBeleg | null | undefined;
 }
@@ -33,7 +27,6 @@ export const SIP_PASSWORD_MIN_LENGTH = 32;
 export const INIT_WEBHOOK_TOKEN_MIN_LENGTH = 32;
 export const DID_ENDUNG_ZIFFERN = 4;
 const DID_ENDUNG_PRAEFIX = "…";
-const KEINE_AKTIVE_DID = "keine aktive DID";
 
 export const ZUGANG_MANGEL = Object.freeze({ FEHLT: "fehlt", ZU_KURZ: "zu kurz" });
 
@@ -60,10 +53,6 @@ export function e164Endung(e164: string): string {
   return `${DID_ENDUNG_PRAEFIX}${e164.slice(-DID_ENDUNG_ZIFFERN)}`;
 }
 
-function didEndung(number: { e164: string }): string {
-  return e164Endung(number.e164);
-}
-
 export function inboundElAccessDefects({ sipUser, sipPassword, initWebhookToken }: InboundZugang): Mangel[] {
   const pruefungen = [
     { envKey: "ELEVENLABS_INBOUND_SIP_USER", mangel: istNichtLeererString(sipUser) ? null : ZUGANG_MANGEL.FEHLT },
@@ -73,7 +62,7 @@ export function inboundElAccessDefects({ sipUser, sipPassword, initWebhookToken 
   return pruefungen.filter((pruefung) => pruefung.mangel !== null);
 }
 
-function inboundWegBereit(inbound: InboundKonfiguration): boolean {
+function inboundWegBereit(inbound: InboundZugang): boolean {
   return inboundElAccessDefects(inbound).length === 0;
 }
 
@@ -84,24 +73,4 @@ export function inboundPfadEntscheidung({ config }: Entscheidungsfall): string {
 
 export function inboundElPathFor({ config, tenantId, numberRecord }: Entscheidungsfall): boolean {
   return inboundPfadEntscheidung({ config, tenantId, numberRecord }) === INBOUND_PATH.ELEVENLABS;
-}
-
-export function inboundElPinnedTenantCount(tenantIds: Iterable<unknown>): number {
-  return new Set(tenantIds).size;
-}
-
-export function inboundElAllowlistProbeLine({
-  state,
-  tenantIds,
-}: {
-  state: { numbers: { tenantId: unknown; status: unknown; e164: string }[] };
-  tenantIds: Iterable<unknown>;
-}): string {
-  const gepinnt = new Set(tenantIds);
-  const aktiveGepinnte = state.numbers.filter(
-    (number) => gepinnt.has(number.tenantId) && number.status === NUMBER_STATUS.ACTIVE,
-  );
-  const endungen = aktiveGepinnte.map(didEndung).sort();
-  const didTeil = endungen.length > 0 ? `aktive DIDs ${endungen.join(", ")}` : KEINE_AKTIVE_DID;
-  return `Inbound-EL-Allowlist: ${String(inboundElPinnedTenantCount(tenantIds))} Tenants, ${didTeil}`;
 }
