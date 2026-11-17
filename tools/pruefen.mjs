@@ -27,6 +27,7 @@ const SEMGREP_PUFFER = 268435456;
 export const SEMGREP_AUSNAHME = {
   datei: "src/tts/directive-synth.js",
   regel: "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack",
+  zeile: "token === null",
   grund: "token === null vergleicht mit dem Rückgabewert null bei Fristablauf von ergebnisOderNull, kein Geheimnis",
 };
 export const BESTAENDE = [
@@ -134,7 +135,7 @@ function lauf(befehl, args, optionen = {}) {
 }
 
 export function semgrepOhneAusnahme(befunde) {
-  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel);
+  return befunde.filter((befund) => befund.path !== SEMGREP_AUSNAHME.datei || befund.check_id !== SEMGREP_AUSNAHME.regel || !befund.extra?.lines?.includes(SEMGREP_AUSNAHME.zeile));
 }
 
 export function basisAus(argv) {
