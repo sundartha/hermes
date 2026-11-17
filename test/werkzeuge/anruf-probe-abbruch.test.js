@@ -8,7 +8,7 @@ const BASIS = "https://hermes-staging-erpv.onrender.com";
 const ZIEL = "+12722205602";
 const JETZT = Date.parse("2026-11-17T10:00:00.000Z");
 
-function echteAntwort(name, argumente, calls, abgebrochen, uhr) {
+function echteAntwort({ name, argumente }, { calls, abgebrochen, uhr }) {
   if (name === "cancel_call") {
     abgebrochen.push({ id: argumente.call_id, zeit: uhr.zeit });
     return { content: [{ type: "text", text: JSON.stringify({ call_id: argumente.call_id, status: "cancelled" }) }] };
@@ -32,7 +32,7 @@ function anruferMitEchtenAntworten(calls = []) {
   const abgebrochen = [];
   const abfrage = async (_url, optionen) => {
     const { name, arguments: argumente } = JSON.parse(optionen.body).params;
-    const rpc = { jsonrpc: "2.0", id: 1, result: echteAntwort(name, argumente, calls, abgebrochen, uhr) };
+    const rpc = { jsonrpc: "2.0", id: 1, result: echteAntwort({ name, argumente }, { calls, abgebrochen, uhr }) };
     return { ok: true, status: 200, text: async () => JSON.stringify(rpc) };
   };
   const anrufer = anruferBauen({
