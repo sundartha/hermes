@@ -57,6 +57,8 @@ export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 export const INBOUND_NACHLAUF_FRIST_MS = ELEVENLABS_PROVIDER_MAX_DURATION_S * MS_PER_SECOND;
 
 const FOLGETAKT_GEPLANT = Symbol("folgetakt-geplant");
+const ABFRAGE_UEBERNAHME_MS = 30_000;
+const ABFRAGE_FRIST_FEHLER = "[fristen] Abfrage-Frist schreiben fehlgeschlagen:";
 
 function callUnderProviderCap(call) {
   const eigeneFrist = call.maxDurationS || ELEVENLABS_PROVIDER_MAX_DURATION_S;
@@ -734,7 +736,7 @@ async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversat
   console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
   if (laufendeInboundPolls.has(callId)) return;
   laufendeInboundPolls.add(callId);
-  void pollConversationResult(callId, call.elevenlabsConversationId);
+  void pollConversationResult(callId, call.elevenlabsConversationId, call.tenantId);
 }
 
 async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
@@ -793,7 +795,7 @@ function rearmActiveConversationPolls({ store, pollConversationResult, laufendeI
     .calls.filter((call) => call.elevenlabsConversationId && pollDarfWirken(call));
   for (const call of activeElCalls) {
     if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) laufendeInboundPolls.add(call.id);
-    void pollConversationResult(call.id, call.elevenlabsConversationId);
+    void pollConversationResult(call.id, call.elevenlabsConversationId, call.tenantId);
   }
   if (activeElCalls.length)
     console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
@@ -880,6 +882,27 @@ function makeInitInhalt(inhaltsAnfrageFor) {
   };
 }
 
+function makeAbfrageFrist(store) {
+  const lese = (callId) => (store.leseCallUngebunden ? store.leseCallUngebunden(callId) : store.leseCall(callId));
+  const schreibe = (call, inMs) => {
+    Promise.resolve()
+      .then(() => {
+        const faelligAt = inMs === null ? null : new Date(Date.now() + inMs).toISOString();
+        return store.setzeAbfrageFrist?.({ callId: call.id, tenantId: call.tenantId, faelligAt });
+      })
+      .catch((fehler) => {
+        console.error(ABFRAGE_FRIST_FEHLER, call.id, String(fehler));
+      });
+  };
+  return { lese, schreibe };
+}
+
+async function frageFrist({ abfrageFrist, pollConversationResult }, callId, tenantId) {
+  const call = await abfrageFrist.lese(callId);
+  if (!call?.elevenlabsConversationId) return abfrageFrist.schreibe({ id: callId, tenantId }, null);
+  await pollConversationResult(callId, call.elevenlabsConversationId, tenantId);
+}
+
 export function makeElevenLabsOutbound({
   store,
   config,
@@ -896,8 +919,12 @@ export function makeElevenLabsOutbound({
   const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });
   const initInhaltFor = makeInitInhalt(inhaltsAnfrageFor);
 
-  function scheduleResultPoll(callId, conversationId) {
-    setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
+  const abfrageFrist = makeAbfrageFrist(store);
+
+  function scheduleResultPoll(call, conversationId) {
+    const { resultPollMs } = settings();
+    abfrageFrist.schreibe(call, resultPollMs + ABFRAGE_UEBERNAHME_MS);
+    setTimeout(() => void pollConversationResult(call.id, conversationId, call.tenantId), resultPollMs);
   }
 
   const meldeMedienweg = makeMedienwegWache(() => settings().erwarteterMedienweg);
@@ -911,17 +938,18 @@ export function makeElevenLabsOutbound({
   const permanentErrorStreaks = new Map();
   const laufendeInboundPolls = new Set();
 
-  async function pollConversationResult(callId, conversationId) {
+  async function pollConversationResult(callId, conversationId, tenantId) {
     let ausgang;
     try {
       ausgang = await pollTakt(callId, conversationId);
+      if (ausgang !== FOLGETAKT_GEPLANT) abfrageFrist.schreibe({ id: callId, tenantId }, null);
     } finally {
       if (ausgang !== FOLGETAKT_GEPLANT) laufendeInboundPolls.delete(callId);
     }
   }
 
   async function pollTakt(callId, conversationId) {
-    const call = await store.leseCall(callId);
+    const call = await abfrageFrist.lese(callId);
     if (!pollDarfWirken(call)) return;
     const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
@@ -934,7 +962,7 @@ export function makeElevenLabsOutbound({
     if (!anbieterErgebnisFertig(conversation)) {
       if (conversation && nichtErreichtNachFrist({ call, conversation, nowMs })) return finishNichtErreicht(finishDeps);
       if (conversation) await schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
-      scheduleResultPoll(callId, conversationId);
+      scheduleResultPoll(call, conversationId);
       return FOLGETAKT_GEPLANT;
     }
     await finishFromConversation({ ...finishDeps, conversation });
@@ -965,7 +993,7 @@ export function makeElevenLabsOutbound({
   async function haltAnrufStartFest(call, conversationId) {
     store.recordElevenlabsConversationId(call.id, conversationId);
     await store.markAnswered(call.id);
-    scheduleResultPoll(call.id, conversationId);
+    scheduleResultPoll(call, conversationId);
   }
 
   async function originateCall(call) {
@@ -979,6 +1007,7 @@ export function makeElevenLabsOutbound({
     beschaffeAbsenderOderBrichAb,
     initInhaltFor,
     endActiveCall,
+    pollFrist: (callId, tenantId) => frageFrist({ abfrageFrist, pollConversationResult }, callId, tenantId),
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
     awaitAndPersistInboundElResult: (callId) =>

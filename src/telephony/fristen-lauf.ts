@@ -3,6 +3,7 @@ import { uebernehmeOhneArmierung } from "./reattach.ts";
 const HOECHSTDAUER = "hoechstdauer";
 const GELD = "geld";
 const RESERVE = "reserve";
+const ABFRAGE = "abfrage";
 const MAX_VERSUCHE = 3;
 
 interface Anruf {
@@ -28,6 +29,10 @@ interface ReserveAbhaengigkeiten {
   freigeben: (call: { id: string; tenantId: string }) => unknown;
 }
 
+interface AbfrageAbhaengigkeiten {
+  poll: (callId: string, tenantId: string) => Promise<unknown>;
+}
+
 interface FristenLaufAbhaengigkeiten {
   store: {
     faelligeFristen: (anfrage: { art: string; limitJeMandant: number; leaseMs: number }) => Promise<Treffer[]>;
@@ -39,6 +44,7 @@ interface FristenLaufAbhaengigkeiten {
   beende: (call: Anruf) => Promise<unknown>;
   geld?: GeldAbhaengigkeiten;
   reserve?: ReserveAbhaengigkeiten;
+  abfrage?: AbfrageAbhaengigkeiten;
   limitJeMandant: number;
   leaseMs: number;
 }
@@ -49,10 +55,11 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
-export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve }: FristenLaufAbhaengigkeiten): {
+export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage }: FristenLaufAbhaengigkeiten): {
   takt: () => Promise<TaktErgebnis>;
   geldTakt: () => Promise<TaktErgebnis>;
   reserveTakt: () => Promise<TaktErgebnis>;
+  abfrageTakt: () => Promise<TaktErgebnis>;
 } {
   function offen(callId: string, versuche: number): "offen" {
     if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
@@ -97,6 +104,16 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
     return "beendet";
   }
 
+  async function frageAb(wache: AbfrageAbhaengigkeiten, { callId, tenantId, versuche }: Treffer): Promise<"beendet" | "offen"> {
+    try {
+      await wache.poll(callId, tenantId);
+    } catch (fehler) {
+      console.error(`[fristen] Abfrage fehlgeschlagen: ${callId}`, String(fehler));
+      return offen(callId, versuche);
+    }
+    return "beendet";
+  }
+
   async function lies(art: string): Promise<Treffer[] | null> {
     try {
       return await store.faelligeFristen({ art, limitJeMandant, leaseMs });
@@ -123,6 +140,7 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
     takt: async () => runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende)),
     geldTakt: async () => (geld ? runde(GELD, async (treffer) => bearbeite(treffer, geldFaellig(geld), geld.beende)) : nichts),
     reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
+    abfrageTakt: async () => (abfrage ? runde(ABFRAGE, async (treffer) => frageAb(abfrage, treffer)) : nichts),
   };
 }
 
@@ -140,6 +158,7 @@ async function alleRunden(lauf: {
   takt: () => Promise<unknown>;
   geldTakt: () => Promise<unknown>;
   reserveTakt: () => Promise<unknown>;
+  abfrageTakt: () => Promise<unknown>;
 }): Promise<void> {
   try {
     await lauf.takt();
@@ -147,7 +166,11 @@ async function alleRunden(lauf: {
     try {
       await lauf.geldTakt();
     } finally {
-      await lauf.reserveTakt();
+      try {
+        await lauf.reserveTakt();
+      } finally {
+        await lauf.abfrageTakt();
+      }
     }
   }
 }

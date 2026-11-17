@@ -41,12 +41,25 @@ const FRISTEN = Object.freeze({
     faelligUm: "frist_reserve_at",
     parameter: [],
   },
+  abfrage: {
+    feld: "fristAbfrageAt",
+    leaseFeld: "fristAbfrageLeaseBis",
+    versucheFeld: "fristAbfrageVersuche",
+    leaseSpalte: "frist_abfrage_lease_bis",
+    versucheSpalte: "frist_abfrage_versuche",
+    bedingung: "status = 'active' AND frist_abfrage_at IS NOT NULL",
+    offen: (call) => istAktiv(call) && Boolean(call.fristAbfrageAt),
+    faelligUm: "frist_abfrage_at",
+    parameter: [],
+  },
 });
 const SETZEN_SQL = "UPDATE call SET frist_hoechstdauer_at = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const SETZEN_GELD_SQL =
   "UPDATE call SET frist_geld_at = $3, frist_geld_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const SETZEN_RESERVE_SQL =
   "UPDATE call SET frist_reserve_at = $3, frist_reserve_versuche = 0 WHERE tenant_id = $1 AND id = $2";
+const SETZEN_ABFRAGE_SQL =
+  "UPDATE call SET frist_abfrage_at = $3, frist_abfrage_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
 const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
@@ -101,6 +114,8 @@ export function macheFristenSql({ runner, einreihen }) {
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_GELD_SQL, [tenantId, callId, faelligAt]])),
     setzeReserve: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_RESERVE_SQL, [tenantId, callId, faelligAt]])),
+    setzeAbfrage: ({ callId, tenantId, faelligAt }) =>
+      einreihen((client) => imMandanten(client, tenantId, [SETZEN_ABFRAGE_SQL, [tenantId, callId, faelligAt]])),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const eintrag = frist(art);
       const sql = holenSql(eintrag);
@@ -161,4 +176,11 @@ export function setzeReserveImSpiegel(state, { callId, faelligAt }) {
   if (!call) return;
   call.fristReserveAt = faelligAt;
   call.fristReserveVersuche = 0;
+}
+
+export function setzeAbfrageImSpiegel(state, { callId, faelligAt }) {
+  const call = state.calls.find((eintrag) => eintrag.id === callId);
+  if (call?.status !== "active") return;
+  call.fristAbfrageAt = faelligAt;
+  call.fristAbfrageVersuche = 0;
 }
