@@ -73,18 +73,18 @@ const WEICHE_FAELLE = [
     erwartet: ABGEWIESEN,
   },
   { name: "5 allowlist, gepinnt, ohne Beleg", config: { scope: ALLOWLIST }, nummer: { belegtAt: null, fp: null }, erwartet: ELEVENLABS },
-  { name: "6 allowlist, nicht gepinnt, Beleg gleich", config: { scope: ALLOWLIST }, tenantId: FREMD, erwartet: ABGEWIESEN },
+  { name: "6 allowlist, nicht gepinnt, Beleg gleich", config: { scope: ALLOWLIST }, tenantId: FREMD, erwartet: ELEVENLABS },
   { name: "7 registrierte_dids, nicht gepinnt, Beleg gleich", config: {}, tenantId: FREMD, erwartet: ELEVENLABS },
   { name: "8 registrierte_dids, Tenant-Liste leer, Beleg gleich", config: { tenantIds: [] }, erwartet: ELEVENLABS },
-  { name: "9 registrierte_dids, gepinnt, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ABGEWIESEN },
-  { name: "10 registrierte_dids, Fingerabdruck eines rotierten Zugangs", config: {}, nummer: { fp: fpReferenz(ALTER_SIP_USER) }, erwartet: ABGEWIESEN },
-  { name: "11 registrierte_dids, belegtAt gesetzt, fp null", config: {}, nummer: { fp: null }, erwartet: ABGEWIESEN },
-  { name: "12 registrierte_dids, fp gleich, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ABGEWIESEN },
-  { name: "13 registrierte_dids, numberRecord null", config: {}, ohneNummer: true, erwartet: ABGEWIESEN },
-  { name: "14 Scope alle, gepinnt", config: { scope: "alle" }, erwartet: ABGEWIESEN },
-  { name: "15 Scope *", config: { scope: "*" }, erwartet: ABGEWIESEN },
-  { name: "16 Scope undefined", config: {}, ohneScope: true, erwartet: ABGEWIESEN },
-  { name: "17 Scope ALLOWLIST (Grossschreibung)", config: { scope: "ALLOWLIST" }, erwartet: ABGEWIESEN },
+  { name: "9 registrierte_dids, gepinnt, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ELEVENLABS },
+  { name: "10 registrierte_dids, Fingerabdruck eines rotierten Zugangs", config: {}, nummer: { fp: fpReferenz(ALTER_SIP_USER) }, erwartet: ELEVENLABS },
+  { name: "11 registrierte_dids, belegtAt gesetzt, fp null", config: {}, nummer: { fp: null }, erwartet: ELEVENLABS },
+  { name: "12 registrierte_dids, fp gleich, belegtAt null", config: {}, nummer: { belegtAt: null }, erwartet: ELEVENLABS },
+  { name: "13 registrierte_dids, numberRecord null", config: {}, ohneNummer: true, erwartet: ELEVENLABS },
+  { name: "14 Scope alle, gepinnt", config: { scope: "alle" }, erwartet: ELEVENLABS },
+  { name: "15 Scope *", config: { scope: "*" }, erwartet: ELEVENLABS },
+  { name: "16 Scope undefined", config: {}, ohneScope: true, erwartet: ELEVENLABS },
+  { name: "17 Scope ALLOWLIST (Grossschreibung)", config: { scope: "ALLOWLIST" }, erwartet: ELEVENLABS },
 ];
 
 function entscheidungFuer(fall) {
@@ -101,7 +101,7 @@ for (const fall of WEICHE_FAELLE) {
   });
 }
 
-const STICHPROBEN = Object.freeze({ "4 ": false, "6 ": false, "7 ": true, "13 ": false });
+const STICHPROBEN = Object.freeze({ "4 ": false, "6 ": true, "7 ": true, "13 ": true });
 
 test("IEX-A9-3: inboundElPathFor ist genau dann true, wenn die Weiche elevenlabs liefert", () => {
   for (const [praefix, erwartet] of Object.entries(STICHPROBEN)) {

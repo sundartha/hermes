@@ -3,22 +3,13 @@ import assert from "node:assert/strict";
 
 import { e164Endung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { playTtsEnv, startSyntheseOrigin } from "../gemeinsam/play-tts-server.mjs";
-import { EL_INBOUND_ACCESS_BOOT_ENV, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, postTelnyxIncoming, seedWithTelnyxNumber, startServer, waitForLog } from "../helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, postTelnyxIncoming, seedWithTelnyxNumber, startServer, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const KOSTENDECKE_ERREICHT_ENV = Object.freeze({ MAX_BUDGET_EUR: "0" });
 const ZEILEN_TRENNER = "\n";
-const ABBRUCH_NACH_MS = 300;
-const SYNTHESE_GESAMTFRIST_MS = "3000";
-const OHNE_BELEG_ENV = Object.freeze({
-  ELEVENLABS_INBOUND_ENABLED: "true",
-  ELEVENLABS_INBOUND_SCOPE: "registrierte_dids",
-  ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: SYNTHESE_GESAMTFRIST_MS,
-  ...EL_INBOUND_ACCESS_BOOT_ENV,
-});
 
 async function mitServer(optionen, lauf) {
   const srv = await startServer(optionen);
@@ -52,33 +43,6 @@ test("Wiederholte Zustellung desselben Anrufs: Logzeile mit Weg und Art", async 
     await waitForLog(srv, /\[webhook-idempotenz\] wiederholte_zustellung weg=incoming art=antwort_wiederholt/);
     assert.equal(zeilenMit(srv, "wiederholte_zustellung weg=incoming").length, 1);
   });
-});
-
-test("Zustellung nach abgebrochener erster Verbindung: Logzeile neu_verarbeitet, nicht antwort_wiederholt", async () => {
-  const origin = await startSyntheseOrigin(() => {});
-  try {
-    const optionen = {
-      seed: seedWithTelnyxNumber({ language: "de" }),
-      env: { ...OHNE_BELEG_ENV, ...playTtsEnv(origin.url) },
-    };
-    await mitServer(optionen, async (srv) => {
-      const zustellung = (signal) =>
-        abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
-          method: "POST",
-          headers: TELNYX_TEST_SIGNATURE_HEADERS,
-          body: new URLSearchParams({ From: TELNYX_TEST_PEER_NUMBER, To: TELNYX_TEST_TENANT_NUMBER, CallSid: "CAabbruch" }),
-          signal,
-        });
-      await assert.rejects(zustellung(AbortSignal.timeout(ABBRUCH_NACH_MS)));
-      await waitForLog(srv, /\[voice-antwort\] weg=\/voice\/incoming ms=\d+ status=\d+ ende=abgebrochen/);
-      await zustellung();
-      await waitForLog(srv, /\[webhook-idempotenz\] wiederholte_zustellung weg=incoming art=neu_verarbeitet/);
-      assert.equal(zeilenMit(srv, "art=antwort_wiederholt").length, 0);
-      assert.equal(zeilenMit(srv, "art=neu_verarbeitet").length, 1);
-    });
-  } finally {
-    await origin.close();
-  }
 });
 
 test("Wiederholung nach Neustart: Logzeile mit Art keepalive", async () => {

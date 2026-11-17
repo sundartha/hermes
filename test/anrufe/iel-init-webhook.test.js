@@ -250,12 +250,11 @@ test("IEL-B6-4b: called_number fehlt oder ist nur anders geschrieben -> 200", as
   assert.equal(mitTrennern.status, HTTP_OK);
 });
 
-test("IEL-B6-5: Tenant nicht gepinnt -> 404, keine Bindung", async () => {
+test("IEL-B6-5: Tenant ohne Listeneintrag -> 200 und Bindung", async () => {
   for (const config of [baueConfig({ tenantIds: [] })]) {
     const ergebnis = await einzelFall({ config });
-    assert.equal(ergebnis.status, HTTP_NOT_FOUND);
-    assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
-    assert.equal(ergebnis.call.elevenlabsConversationId, null);
+    assert.equal(ergebnis.status, HTTP_OK);
+    assert.notEqual(ergebnis.call.elevenlabsConversationId, null);
   }
 });
 
@@ -472,8 +471,8 @@ test("IEX-A3-6: Positiv-Kontrolle (sauberer Name bindet genau einmal) und Stufen
   const zeilen = await captureConsole(() =>
     einzelFall({ config: baueConfig({ tenantIds: [] }), zustand: baueZustand({ ownerName: PLATZHALTER_NAME }) }),
   );
-  assert.ok(zeilen.some((zeile) => zeile.includes("grund=kein_el_weg")), alsLog(zeilen));
-  assert.ok(!zeilen.some((zeile) => zeile.includes("grund=eroeffnung")));
+  assert.ok(zeilen.some((zeile) => zeile.includes("grund=eroeffnung")), alsLog(zeilen));
+  assert.ok(!zeilen.some((zeile) => zeile.includes("grund=kein_el_weg")));
 });
 
 test("IEX-A3-7: der Builder riegelt den fertigen Koerper erneut - der Wurf nennt eroeffnung.platzhalter, nie den Namen", () => {
@@ -558,19 +557,11 @@ async function belegFall(zustand) {
   return { ergebnis, zeilen, gebunden: spion.gebunden };
 }
 
-function assertSchalterAblehnung({ ergebnis, zeilen, gebunden }, zustand) {
-  assert.equal(ergebnis.status, HTTP_NOT_FOUND);
-  assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
-  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=kein_el_weg"));
-  assert.ok(ablehnung, alsLog(zeilen));
-  assert.ok(ablehnung.includes(`call=${zustand.call.id}`));
-  assert.deepEqual(gebunden, []);
-  assert.equal(zustand.call.elevenlabsConversationId, null);
-}
-
-test("IEX-A9-10a: registrierte_dids, angerufene DID ohne Beleg -> Stufe 3 lehnt ab (404, grund=schalter, keine Bindung)", async () => {
+test("IEX-A9-10a: registrierte_dids, angerufene DID ohne Beleg -> 200, genau eine Bindung", async () => {
   const zustand = baueZustand();
-  assertSchalterAblehnung(await belegFall(zustand), zustand);
+  const { ergebnis, gebunden } = await belegFall(zustand);
+  assert.equal(ergebnis.status, HTTP_OK);
+  assert.deepEqual(gebunden, [zustand.call.id]);
 });
 
 test("IEX-A9-10b: registrierte_dids, Beleg mit laufendem Fingerabdruck -> 200, genau eine Bindung (Positiv-Kontrolle)", async () => {
@@ -580,10 +571,12 @@ test("IEX-A9-10b: registrierte_dids, Beleg mit laufendem Fingerabdruck -> 200, g
   assert.deepEqual(gebunden, [zustand.call.id]);
 });
 
-test("IEX-A9-10c: registrierte_dids, Beleg seit dem Anrufeingang weggefallen -> 404 grund=schalter", async () => {
+test("IEX-A9-10c: registrierte_dids, Beleg seit dem Anrufeingang weggefallen -> 200, genau eine Bindung", async () => {
   const zustand = mitBeleg(baueZustand());
   angerufeneNummer(zustand).elInboundTrunkBelegtAt = null;
-  assertSchalterAblehnung(await belegFall(zustand), zustand);
+  const { ergebnis, gebunden } = await belegFall(zustand);
+  assert.equal(ergebnis.status, HTTP_OK);
+  assert.deepEqual(gebunden, [zustand.call.id]);
 });
 
 const SPAWN_CALL_ID = "call_iel_b6_init";

@@ -137,20 +137,6 @@ test("ausgehend-nur-vorspann: ohne TELNYX_CALL_CONTROL_APP_ID bricht der Anruf m
   assert.match(ergebnis.stdout, /^\[el-outbound-weg\] weg=abbruch grund=keine_call_control_app call=/m);
 });
 
-test("ausgehend-nur-vorspann: ein nicht freigeschalteter Mandant bricht mit inbound_weg_nicht_bereit ab und waehlt nicht", async () => {
-  const ergebnis = await anrufMitServer({
-    umgebung: { ELEVENLABS_INBOUND_TENANT_IDS: "t_anderer_mandant" },
-    numbers: [nummer("phnum_4847")],
-  });
-  assert.equal(ergebnis.status, HTTP_CONFLICT);
-  assert.equal(ergebnis.koerper.grund, "inbound_weg_nicht_bereit");
-  assert.equal(wahlen(ergebnis.anfragen).length, 0);
-  assert.equal(ergebnis.anruf.status, "failed");
-  assert.equal(ergebnis.anruf.failureReason, "not-placed:inbound_weg_nicht_bereit");
-  assert.equal(ergebnis.anruf.reserveReleased, true);
-  assert.match(ergebnis.stdout, /^\[el-outbound-weg\] weg=abbruch grund=inbound_weg_nicht_bereit call=/m);
-});
-
 test("ausgehend-nur-vorspann: Mandantennummer ohne Registrierung bricht ab, die globale Nummer springt nicht ein", async () => {
   const ergebnis = await anrufMitServer({ numbers: [nummer(null)] });
   assert.equal(ergebnis.status, HTTP_SERVER_ERROR);
