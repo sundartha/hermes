@@ -179,11 +179,9 @@
       "quellen": [
         "src/inbox-entry.ts",
         "src/sms-summary.ts",
-        "src/mail-summary.ts",
-        "src/mail-not-placed.ts",
         "src/routes/api-inbox.ts"
       ],
-      "eingaenge": ["src/mail-not-placed.ts", "src/mail-summary.ts"],
+      "eingaenge": [],
       "nutzt": []
     },
     {
@@ -310,6 +308,8 @@
         "src/call-result.ts",
         "src/callee-is-owner.ts",
         "src/diagnostic-retention.ts",
+        "src/mail-not-placed.ts",
+        "src/mail-summary.ts",
         "src/turn-budget.ts",
         "src/routes/voice.js",
         "src/routes/webhooks-elevenlabs-init.ts",
@@ -360,7 +360,6 @@
     { "von": "anmeldung", "nach": "nummern" },
     { "von": "anmeldung", "nach": "selbstbedienung" },
     { "von": "anmeldung", "nach": "start" },
-    { "von": "anrufe", "nach": "posteingang" },
     { "von": "basis", "nach": "konfiguration" },
     { "von": "basis", "nach": "sperrdaten" },
     { "von": "konfiguration", "nach": "abrechnung" },
