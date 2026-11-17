@@ -51,29 +51,23 @@ function aufrufen({ umgebung = {}, argumente = [], fall = {} } = {}) {
   return new Promise((fertig) => kind.on("close", (code) => fertig({ code, ausgabe })));
 }
 
-test("Zeitplan: vier Proben-Zeitpläne neben dem Nachtlauf, der Nachtlauf läuft nur zu seiner Zeit", () => {
+test("Zeitplan: ein Zeitplan, die Probe läuft im Staging-Job und damit bei Push, Zeitplan und Handstart ohne Lastlauf", () => {
   const zeitplaene = [...WORKFLOW.matchAll(/^\s+- cron: "([^"]+)"/gm)].map((treffer) => treffer[1]);
-  assert.equal(zeitplaene.length, 5);
-  assert.ok(zeitplaene.includes("17 2 * * *"));
-  const staging = job("staging");
-  assert.match(staging, /github\.event\.schedule == '17 2 \* \* \*'/);
-  assert.match(job("probe"), /github\.event\.schedule != '17 2 \* \* \*'/);
+  assert.deepEqual(zeitplaene, ["17 2 * * *"]);
+  assert.ok(!/^ {2}probe:/m.test(WORKFLOW));
+  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && !inputs\.lastlauf\)$/m);
 });
 
-test("Probe-Job: nach dem Staging-Abwarten bei Push, Zeitplan und Handstart ohne Lastlauf, nie bei Lastlauf", () => {
-  const probe = job("probe");
-  assert.match(probe, /needs: staging/);
-  assert.match(probe, /github\.event_name == 'push'/);
-  assert.match(probe, /github\.event_name == 'workflow_dispatch' && !inputs\.lastlauf/);
-  assert.match(probe, /needs\.staging\.result == 'success'/);
-  assert.match(probe, /needs\.staging\.result == 'skipped'/);
-  assert.match(probe, /inputs\.absichtlich_rot/);
-  assert.match(probe, /timeout-minutes: 10/);
-  assert.match(probe, /issues: write/);
+test("Probe-Schritt: läuft nach dem grünen Abwarten, bei absichtlich_rot trotzdem, und vor dem Heartbeat", () => {
+  const text = job("staging");
+  const probeSchritt = schritt(text, "Anrufprobe");
+  assert.match(probeSchritt, /if: \$\{\{ success\(\) \|\| inputs\.absichtlich_rot \}\}/);
+  assert.ok(text.indexOf("- name: Anrufprobe") < text.indexOf("- name: Heartbeat Nachtlauf"));
+  assert.ok(text.indexOf("- name: Heartbeat Nachtlauf") < text.indexOf("- name: Offene Probe-Anrufe beenden"));
 });
 
 test("Probe-Schritt: ruft probe.mjs mit Anrufer-Modul, Token, Ziel, absichtlich_rot und beiden Alarmwegen auf", () => {
-  const probeSchritt = schritt(job("probe"), "Anrufprobe");
+  const probeSchritt = schritt(job("staging"), "Anrufprobe");
   assert.match(probeSchritt, /run: node scripts\/anruf-probe\/probe\.mjs\s*$/m);
   for (const name of [
     "STAGING_URL: https://hermes-staging-erpv.onrender.com",
@@ -93,7 +87,7 @@ test("Probe-Schritt: ruft probe.mjs mit Anrufer-Modul, Token, Ziel, absichtlich_
 });
 
 test("Auflegen-Schritt: läuft auch bei Abbruch und Fehler und beendet offene Probe-Anrufe", () => {
-  const auflegen = schritt(job("probe"), "Offene Probe-Anrufe beenden");
+  const auflegen = schritt(job("staging"), "Offene Probe-Anrufe beenden");
   assert.match(auflegen, /if: always\(\)/);
   assert.match(auflegen, /run: node scripts\/anruf-probe\/probe\.mjs auflegen\s*$/m);
   assert.match(auflegen, /STAGING_TEST_TOKEN: \$\{\{ secrets\.STAGING_TEST_TOKEN \}\}/);

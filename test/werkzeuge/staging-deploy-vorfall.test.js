@@ -129,7 +129,7 @@ test("Workflow: der Schritt für den Staging-Deploy läuft nur bei failure() auf
     WORKFLOW,
     /- name: Roten Staging-Deploy melden\n {8}if: failure\(\) && github\.event_name == 'push'\n {8}env:\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n {10}BETTER_STACK_ALERT_URL: \$\{\{ secrets\.BETTER_STACK_ALERT_URL \}\}\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs hoertest --anlass staginglauf --commit "\$GITHUB_SHA" --teile ""\n/,
   );
-  assert.equal(WORKFLOW.match(/BETTER_STACK_ALERT_URL/g).length, 4);
+  assert.equal(WORKFLOW.match(/BETTER_STACK_ALERT_URL/g).length, 6);
 });
 
 async function mitSlack({ slack = true, betterStack = false, slackAntwort = 200, offene = [], anlass = "staginglauf" } = {}) {
@@ -227,5 +227,5 @@ test("Workflow: beide Melde-Schritte reichen SLACK_ALERT_URL aus den Secrets dur
   const schritte = WORKFLOW.split("- name: ").filter((teil) => /^Roten (Staging-Deploy|Nachtlauf) melden/.test(teil));
   assert.equal(schritte.length, 2);
   for (const schritt of schritte) assert.match(schritt, /\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n/);
-  assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 4);
+  assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 6);
 });
