@@ -166,8 +166,8 @@ for (const [spalte, wert] of MARKEN_UND_KOSTEN) {
     await a.save();
     await a.drainFlushes();
     await setzeKontext(db, KUNDE);
-    const danach = (await db.query(`SELECT ${spalte} AS wert FROM call WHERE id = $1`, [call.id])).rows[0].wert;
-    assert.notEqual(danach, null);
+    const { rows } = await db.query(`SELECT ${spalte} AS wert FROM call WHERE id = $1`, [call.id]);
+    assert.notEqual(rows[0].wert, null);
   });
 }
 
