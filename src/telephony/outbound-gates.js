@@ -18,7 +18,7 @@ import { resolvePeriodStartIso } from "../billing/period.ts";
 import { includedMinutesFor } from "../billing/plan-caps.ts";
 import { deniedPrefix, isDenied } from "./number-denylist.ts";
 import { localeFor } from "../i18n/locales.js";
-import { anrufpauseGilt } from "../utils/anrufpause.js";
+import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
 import { KEINE_DB_RESERVIERUNG, LEITUNGSPLATZ_ENTSCHEIDUNG, RESERVIERUNG_GRUND } from "../store.js";
 import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.js";
