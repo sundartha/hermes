@@ -18,6 +18,7 @@ const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
 const HTTP_NICHT_OK_AB = 300;
 const SEITE = 100;
+const HEARTBEAT_FRIST_MS = 5000;
 const OHNE_NAMEN = "(der Abgleich hat keine Namen gemeldet)";
 
 function issueText({ commit, teile, laufUrl }) {
@@ -154,6 +155,22 @@ async function vorfallMelden({ einstellungen, commit, vorher, ausgabe }) {
     return;
   }
   ausgabe.melde("vorfall_gesendet");
+}
+
+export async function heartbeatNachtlauf({ einstellungen, ausgabe }) {
+  if (einstellungen.heartbeatNachtlaufUrl === null) {
+    ausgabe.melde("heartbeat_uebersprungen");
+    return true;
+  }
+  const { status } = await anfrage(einstellungen.heartbeatNachtlaufUrl, {
+    fristMs: HEARTBEAT_FRIST_MS,
+  });
+  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
+    ausgabe.melde("heartbeat_nicht_zugestellt", { http: status });
+    return true;
+  }
+  ausgabe.melde("heartbeat_gemeldet");
+  return true;
 }
 
 function laufAdresse({ serverUrl, repository, runId }) {
