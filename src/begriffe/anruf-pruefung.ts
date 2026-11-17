@@ -65,7 +65,7 @@ function validateSubObject({
   name: string;
   raw: unknown;
   fields: readonly string[];
-  checkFields: (v: Felder) => string | null;
+  checkFields: (felder: Felder) => string | null;
 }): Teilobjekt {
   if (raw == null) return { value: null };
   if (typeof raw !== "object" || Array.isArray(raw)) return { error: `${name} muss ein Objekt sein` };
@@ -90,11 +90,11 @@ export function validateAssistantContext(raw: unknown): Teilobjekt {
     raw,
     fields: CONTEXT_FIELDS,
     checkFields: (felder) =>
-      invalidText("context.summary", v["summary"]) ??
-      invalidText("context.recipient_relationship", v["recipient_relationship"]) ??
-      invalidText("context.desired_outcome", v["desired_outcome"]) ??
-      invalidStringArray("context.key_facts", v["key_facts"], KEY_FACTS_LIMITS) ??
-      invalidStringArray("context.open_questions", v["open_questions"], OPEN_QUESTIONS_LIMITS),
+      invalidText("context.summary", felder["summary"]) ??
+      invalidText("context.recipient_relationship", felder["recipient_relationship"]) ??
+      invalidText("context.desired_outcome", felder["desired_outcome"]) ??
+      invalidStringArray("context.key_facts", felder["key_facts"], KEY_FACTS_LIMITS) ??
+      invalidStringArray("context.open_questions", felder["open_questions"], OPEN_QUESTIONS_LIMITS),
   });
 }
 
@@ -104,8 +104,8 @@ export function validateMandate(raw: unknown): Teilobjekt {
     raw,
     fields: MANDATE_FIELDS,
     checkFields: (felder) =>
-      invalidText("mandate.decide_freely", v["decide_freely"]) ??
-      invalidText("mandate.fallback_order", v["fallback_order"]) ??
-      invalidEnum("mandate.on_out_of_scope", v["on_out_of_scope"], MANDATE_OUT_OF_SCOPE_VALUES),
+      invalidText("mandate.decide_freely", felder["decide_freely"]) ??
+      invalidText("mandate.fallback_order", felder["fallback_order"]) ??
+      invalidEnum("mandate.on_out_of_scope", felder["on_out_of_scope"], MANDATE_OUT_OF_SCOPE_VALUES),
   });
 }
