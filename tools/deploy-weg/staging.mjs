@@ -26,13 +26,14 @@ export function skriptStarten(pfad, argumente, ausgabe) {
       stdio: ["ignore", "pipe", "pipe"],
       env: { PATH: env.PATH ?? "" },
     });
-    const teile = [];
-    kind.stdout.on("data", (stueck) => teile.push(stueck));
-    kind.stderr.on("data", (stueck) => teile.push(stueck));
+    const standard = [];
+    const fehler = [];
+    kind.stdout.on("data", (stueck) => standard.push(stueck));
+    kind.stderr.on("data", (stueck) => fehler.push(stueck));
     kind.on("error", () => fertig(EXIT_NICHT_GESTARTET));
     kind.on("close", (code) => {
       const exit = code ?? EXIT_NICHT_GESTARTET;
-      if (exit !== EXIT_OK && ausgabe !== undefined) fremdeZeilenMelden(ausgabe, Buffer.concat(teile).toString());
+      if (exit !== EXIT_OK && ausgabe !== undefined) fremdeZeilenMelden(ausgabe, Buffer.concat([...standard, ...fehler]).toString());
       fertig(exit);
     });
   });
