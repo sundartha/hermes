@@ -9,7 +9,10 @@ const ROH_SCHLUESSEL = z.string();
 function ed25519Schluessel(raw: string | undefined): crypto.KeyObject | null {
   if (!raw) return null;
   try {
-    if (raw.includes("BEGIN")) return crypto.createPublicKey(raw);
+    if (raw.includes("BEGIN")) {
+      const schluessel = crypto.createPublicKey(raw);
+      return schluessel.asymmetricKeyType === "ed25519" ? schluessel : null;
+    }
     const rawKey = Buffer.from(raw, "base64");
     if (rawKey.length !== ED25519_RAW_KEY_LEN) return null;
     const spki = Buffer.concat([SPKI_ED25519_PREFIX, rawKey]);
