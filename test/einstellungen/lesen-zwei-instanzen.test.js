@@ -9,7 +9,7 @@ import {
 } from "../pg-helpers.js";
 import { makeReadRoutes } from "../../src/routes/api-read.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
-import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.js";
+import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
