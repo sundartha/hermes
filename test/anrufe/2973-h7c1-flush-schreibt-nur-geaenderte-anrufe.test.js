@@ -111,3 +111,15 @@ test("H7c1-6: ein Anruf einer anderen Instanz, den diese Instanz erst per leseCa
   await a.drainFlushes();
   assert.equal((await zeileVon(db, spaeter.id)).failure_reason, "von B");
 });
+
+test("H7c1-7: eine noch unbestaetigte Transkriptzeile macht den Anruf fuer den Flush nicht zum geaenderten Anruf", async () => {
+  const { db, a, callId } = await mitGeladenemAnruf();
+  await setzeKontext(db, KUNDE);
+  await db.query("UPDATE call SET failure_reason = 'von B' WHERE id = $1", [callId]);
+  const flush = a.save();
+  const anhaengen = a.addTranscript(callId, "callee", "gerade eben");
+  await Promise.all([flush, anhaengen]);
+  await a.drainFlushes();
+  assert.equal((await zeileVon(db, callId)).failure_reason, "von B");
+  assert.deepEqual(await transkriptVon(db, callId), ["Guten Tag", "gerade eben"]);
+});
