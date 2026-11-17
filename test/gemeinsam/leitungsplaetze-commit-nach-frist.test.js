@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.js";
-import { makePostgresLeitungsplaetze } from "../../src/store/leitungsplaetze-pg.js";
+import { makePostgresLeitungsplaetze } from "../../src/store.js";
 
 const CALL_ID = "call_commit_nach_frist";
 const BELEGEN = Object.freeze({ callId: CALL_ID, tenantId: "tenant_cnf", weg: "elevenlabs", maxDauerS: 60, hoechstzahlKunde: 2 });
