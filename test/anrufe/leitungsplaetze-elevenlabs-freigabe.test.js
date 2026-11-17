@@ -35,7 +35,6 @@ const EL_ENV = Object.freeze({
 const kundeVon = (index) => `t_elf_${index}`;
 const zielVon = (nummer) => `+1202555${String(6000 + nummer).padStart(4, "0")}`;
 
-const RESTBUDGET_CENT = 210;
 const LAUFENDER_ANRUF_MS = (9 * 60 + 5) * 1000;
 
 function laufenderAnruf(kunde) {
@@ -139,18 +138,35 @@ test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt d
   });
 });
 
-test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den Platz nicht frei", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: seedKunden({ 0: KOSTENDECKE_CENT - RESTBUDGET_CENT }) }, async ({ srv, anbieter }) => {
-    const ersterAuftrag = (s) => s.calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);
-    await fuelleElPlaetze(srv, {
-      nachErstem: () => initInhaltFuer(srv, { callId: ersterAuftrag(srv.readStore()).id, agentId: EL_ENV.ELEVENLABS_AGENT_ID }),
-    });
+const WACHE_TAKT_MS = 200;
+const VERZOEGERUNG_VOR_ABHEBEN_MS = 500;
+const VERBRAUCH_UNTER_DECKE_CENT = 765;
+
+async function s22Lauf({ verzoegerungMs }) {
+  const env = { ...WACHE_ENV, BUDGET_WATCHDOG_INTERVAL_MS: String(WACHE_TAKT_MS) };
+  await aufDemElWeg({ env, seed: seedKunden({ 0: VERBRAUCH_UNTER_DECKE_CENT }) }, async ({ srv, anbieter }) => {
+    assert.equal((await rufeAn(srv, 0, 1)).status, HTTP_OK);
+    const erster = srv.readStore().calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);
+    const ersterAuftrag = (s) => s.calls.find((call) => call.id === erster.id);
+    const platziertUm = Date.now();
+    await waitUntil(() => Date.now() - platziertUm >= verzoegerungMs, { timeoutMs: verzoegerungMs + 3000 });
+    await initInhaltFuer(srv, { callId: erster.id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
+    assert.equal(ersterAuftrag(srv.readStore()).status, "active", "vor dem Ueberschreiten der Kostendecke laeuft der Anruf");
+    assert.equal((await rufeAn(srv, 0, 2)).status, HTTP_OK);
+    for (let index = 1; index < EL_PLAETZE_NUTZBAR - 1; index += 1) {
+      assert.equal((await rufeAn(srv, index, index + 2)).status, HTTP_OK);
+    }
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(beendet.id), { timeoutMs: 3000 });
     await assertAusgelastet(srv, 902);
   });
-});
+}
+
+test("S22: das Ende durch die Budget-Wache bei einem ElevenLabs-Anruf gibt den Platz nicht frei", () => s22Lauf({ verzoegerungMs: 0 }));
+
+test("S22: das Ende durch die Budget-Wache kommt nie vor dem Abheben, auch wenn das Abheben laenger als ein Wache-Takt dauert", () =>
+  s22Lauf({ verzoegerungMs: VERZOEGERUNG_VOR_ABHEBEN_MS }));
 
 const START_MS = 1_800_000_000_000;
 const SEKUNDE_MS = 1000;
