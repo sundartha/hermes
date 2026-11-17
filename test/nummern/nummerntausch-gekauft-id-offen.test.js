@@ -1,13 +1,44 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makePgTestStore } from "../pg-helpers.js";
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
-import { NummerGekauftIdOffen } from "../../src/telephony/provisioning-geo.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { mitKurzerFrist, antwortetNie } from "../gemeinsam/kurze-antwortfrist.mjs";
+import { withFetch } from "../helpers.js";
+
+process.env.TELNYX_API_BASE = "https://telnyx.test";
+process.env.TELNYX_API_KEY = "KEYtest-tausch-id-offen";
+
+const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
+const { makePgTestStore } = await import("../pg-helpers.js");
+const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { numberProvisioning } = await import("../../src/telephony/registry.js");
 
 const TENANT = "t_tausch_id_offen";
 const GEKAUFT = "+12025550177";
+const HTTP_OK = 200;
 const LOGZEILE = /ergebnis=(\S+)$/;
+
+function antwort(body) {
+  return Promise.resolve({
+    ok: true,
+    status: HTTP_OK,
+    headers: new Headers(),
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  });
+}
+
+function telnyxMitOffenerId() {
+  const bestellungen = [];
+  const fetchImpl = (url, init = {}) => {
+    const pfad = String(url);
+    if (pfad.includes("/v2/available_phone_numbers")) return antwort({ data: [{ phone_number: GEKAUFT }] });
+    if (pfad.includes("/v2/number_orders")) {
+      bestellungen.push(init.method);
+      return antwort({ data: { phone_numbers: [{ phone_number: GEKAUFT }] } });
+    }
+    return antwortetNie(url, init);
+  };
+  return { fetchImpl, bestellungen };
+}
 
 function anbieter(bestellung) {
   const spur = { bestellungen: [] };
@@ -60,17 +91,21 @@ const ersatz = (state) => state.numbers.find((nummer) => nummer.id !== `num_${TE
 
 test("Kriterium 1: gekauft, ID offen -> naechster Tausch-Lauf kauft nicht erneut, Ergebnis manuell, Nummer bleibt provisioning", async () => {
   const { store, state } = await mitAlterNummer();
-  const telnyx = anbieter((_anzahl, e164) => {
-    throw new NummerGekauftIdOffen(e164, new Error("Zeitueberschreitung"));
-  });
-  await lauf(store, telnyx);
-  assert.equal(ersatz(state).status, "provisioning");
-  assert.equal(ersatz(state).e164, GEKAUFT);
-
-  const ergebnisse = await lauf(store, telnyx);
+  const telnyx = telnyxMitOffenerId();
+  let ergebnisse;
+  await mitKurzerFrist(() =>
+    withFetch(telnyx.fetchImpl, async () => {
+      const provider = numberProvisioning();
+      const wrapper = { searchNumbers: (...a) => provider.searchNumbers(...a), orderNumber: (...a) => provider.orderNumber(...a), releaseNumber: (...a) => provider.releaseNumber(...a) };
+      await lauf(store, wrapper);
+      assert.equal(ersatz(state).status, "provisioning");
+      assert.equal(ersatz(state).e164, GEKAUFT);
+      ergebnisse = await lauf(store, wrapper);
+    }),
+  );
 
   assert.deepEqual(ergebnisse, ["manuell"]);
-  assert.equal(telnyx.spur.bestellungen.length, 1);
+  assert.equal(telnyx.bestellungen.length, 1);
   assert.equal(ersatz(state).status, "provisioning");
 });
 
