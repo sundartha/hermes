@@ -19,7 +19,7 @@ const BELEGEN_SQL = `
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
-  const transaktion = (arbeit, abbruch) =>
+  const transaktion = (arbeit, abbruch, callId) =>
     runner.withClient(async (client) => {
       await client.query("BEGIN");
       try {
@@ -27,6 +27,7 @@ export function makePostgresLeitungsplaetze(runner) {
         const ergebnis = await arbeit(client);
         if (abbruch.abgelaufen) throw new Error("Frist abgelaufen, Transaktion zurueckgerollt");
         await client.query("COMMIT");
+        if (abbruch.abgelaufen) await spaetFreigeben(client, callId);
         return ergebnis;
       } catch (fehler) {
         await client.query("ROLLBACK").catch(() => {});
@@ -34,7 +35,12 @@ export function makePostgresLeitungsplaetze(runner) {
       }
     });
 
-  const inTransaktion = (arbeit) => {
+  const spaetFreigeben = (client, callId) =>
+    client.query(FREIGEBEN_SQL, [callId]).catch((fehler) => {
+      console.error("[leitungsplaetze] Platz nach spaetem COMMIT nicht freigegeben, bleibt bis zum Ablauf belegt:", fehler.message);
+    });
+
+  const inTransaktion = (arbeit, callId) => {
     let timer;
     const abbruch = { abgelaufen: false };
     const frist = new Promise((aufgeloest, abgelehnt) => {
@@ -43,7 +49,7 @@ export function makePostgresLeitungsplaetze(runner) {
         abgelehnt(new Error(`Frist von ${LEITUNGSPLATZ_DB_FRIST_MS} ms ueberschritten`));
       }, LEITUNGSPLATZ_DB_FRIST_MS);
     });
-    const lauf = transaktion(arbeit, abbruch);
+    const lauf = transaktion(arbeit, abbruch, callId);
     lauf.catch(() => {});
     return Promise.race([lauf, frist]).finally(() => clearTimeout(timer));
   };
@@ -72,7 +78,7 @@ export function makePostgresLeitungsplaetze(runner) {
         if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
           await client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.AUSGEHEND]);
         return { entscheidung };
-      });
+      }, callId);
     } catch (fehler) {
       return imZweifelVoll(fehler);
     }
@@ -82,6 +88,7 @@ export function makePostgresLeitungsplaetze(runner) {
     try {
       await inTransaktion((client) =>
         client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.EINGEHEND]),
+        callId,
       );
     } catch (fehler) {
       console.error("[leitungsplaetze] Eingehend nicht gezaehlt:", fehler.message);
