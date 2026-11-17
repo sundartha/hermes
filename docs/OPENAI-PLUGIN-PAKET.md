@@ -6,11 +6,11 @@ https://developers.openai.com/plugins/build/plugins (Abschnitt "Configure MCP au
 
 ## Inhalt von `openai-plugin/`
 
-| Datei | Zweck |
-|---|---|
-| `plugin.json` | Agent-Plugins-Manifest: Listing (`extensions.com.openai.interface`), Review-Testfälle (5 positiv, 3 negativ), `publication` (Release Notes, de-DE-Übersetzung) |
-| `mcp.json` | genau ein Remote-Server `hermes`, `streamable-http`, URL = `MCP_URL` aus `apps/web/src/lib/agent-docs.js`, OAuth mit CIMD-Registrierung (DCR als Rückfall laut Quelle) |
-| `assets/logo.png` | Kopie von `public/brand/hermes-icon.png` (quadratisch, 1024 px); dient als `logo` und `composerIcon` |
+| Datei             | Zweck                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin.json`     | Agent-Plugins-Manifest: Listing (`extensions.com.openai.interface`), Review-Testfälle (5 positiv, 3 negativ), `publication` (Release Notes, de-DE-Übersetzung)         |
+| `mcp.json`        | genau ein Remote-Server `hermes`, `streamable-http`, URL = `MCP_URL` aus `apps/web/src/lib/agent-docs.js`, OAuth mit CIMD-Registrierung (DCR als Rückfall laut Quelle) |
+| `assets/logo.png` | Kopie von `public/brand/hermes-icon.png` (quadratisch, 1024 px); dient als `logo` und `composerIcon`                                                                   |
 
 Bewusst nicht im Paket:
 
