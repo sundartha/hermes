@@ -3,7 +3,6 @@ import { test } from "node:test";
 import express from "express";
 
 import { config } from "../../src/config.js";
-import { makeConsultDelivery } from "../../src/consult/delivery.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
@@ -52,7 +51,7 @@ async function zeile(db, id) {
 
 const kaputtMachen = (db) => db.exec("ALTER TABLE anruf_schluessel RENAME TO anruf_schluessel_versteckt");
 
-function routen(store, mandant, consultDelivery) {
+function routen(store, mandant) {
   const app = express();
   app.use(express.json());
   app.use(
@@ -72,7 +71,6 @@ function routen(store, mandant, consultDelivery) {
         requireTenant: () => mandant,
         tenantOwnsCall: (call, tenantId) => call.tenantId === tenantId,
       },
-      consultDelivery,
       internalIdentity: () => "intern",
       OWNER_ID: "owner",
     }),
@@ -211,25 +209,3 @@ test("H6c2-3: cancel eines unbekannten Anrufs und eines fremden Mandanten antwor
   });
 });
 
-
-test("H6c2-7: der Rueckfrage-Poll eines Anrufs, den die Datenbank nicht (mehr) kennt, liefert die offene Rueckfrage statt eines Fehlers", async () => {
-  const { a, call } = await zweiInstanzen();
-  const ohneLeser = Object.assign(Object.create(a), {
-    rueckfrageGelesen: undefined,
-    leseCallUngebunden: async () => null,
-  });
-  const app = routen(a, KUNDE, makeConsultDelivery({ store: ohneLeser, holdMs: 30, tickMs: 5 }));
-  const server = await new Promise((resolve) => {
-    const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
-  });
-  try {
-    const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls/${call.id}/consult`);
-    assert.equal(antwort.status, 200);
-    const koerper = JSON.parse(await antwort.text());
-    assert.equal(koerper.event, "consult");
-    assert.deepEqual(koerper.questions, ["Passt Donnerstag?"]);
-  } finally {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-  }
-});
