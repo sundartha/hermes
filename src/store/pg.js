@@ -89,6 +89,17 @@ export function anrufpauseSetzen(speicher, an) {
 }
 
 const mandantJeZustand = new WeakMap();
+const geschriebeneAnrufe = new WeakMap();
+
+function anrufAbdruck(call, tenantId) {
+  const zeilen = call.transcript.filter((zeile) => !unbestaetigteZeilen.has(zeile));
+  return JSON.stringify([callRowValues(call, tenantId), zeilen]);
+}
+
+function anrufAlsGelesen(call) {
+  geschriebeneAnrufe.set(call, anrufAbdruck(call, call.tenantId));
+  return call;
+}
 
 function anbinden(zustand, { einstellungen, anrufpause, mandant, nutzung }) {
   nutzungJeZustand.set(zustand, nutzung);
@@ -196,7 +207,7 @@ async function anrufAusZeile(client, row) {
 }
 
 async function anrufAnhaengen(client, state, row) {
-  const call = await anrufAusZeile(client, row);
+  const call = anrufAlsGelesen(await anrufAusZeile(client, row));
   const raced = ops.getCall(state, call.id);
   if (raced) return raced;
   state.calls.push(call);
@@ -1171,7 +1182,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   }
   Object.assign(state.calendar, { [tenantId]: rows.calRows.map(rowToCalendarEvent) });
   state.calls.push(
-    ...rows.callRows.map((zeile) => rowToCall(zeile, segmentsByCall, itemIdsByCall)),
+    ...rows.callRows.map((zeile) => anrufAlsGelesen(rowToCall(zeile, segmentsByCall, itemIdsByCall))),
   );
   state.actionItems.push(...rows.itemRows.map(rowToActionItem));
   state.notifications.push(...rows.notifRows.map(rowToNotification));
@@ -1470,18 +1481,20 @@ async function flush(client, state, preFlush) {
     await client.query(frist.text, frist.params);
     if (preFlush) await preFlush(client);
     const geschrieben = [];
+    const abdruecke = [];
     await flushTenants(client, state.tenants);
     await flushPlatformNumberUse(client, state.platformNumberUse);
     await flushOutageAlerts(client, state.outageAlerts);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
-      await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben });
+      await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke });
     }
     await flushProfiles(client, state.profiles);
     await flushPlatformTtsUsage(client, state);
     await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
     inDatenbankMerken(geschrieben);
+    for (const [call, abdruck] of abdruecke) geschriebeneAnrufe.set(call, abdruck);
     nutzungBestaetigen(state);
   } catch (err) {
     nutzungVerwerfen(state);
@@ -1490,9 +1503,9 @@ async function flush(client, state, preFlush) {
   }
 }
 
-async function flushTenantScope(client, state, { tenantId, geschrieben }) {
+async function flushTenantScope(client, state, { tenantId, geschrieben, abdruecke }) {
   const { calls, callIds } = ops.tenantCallScope(state, tenantId);
-  await flushCalls(client, tenantId, calls);
+  await flushCalls(client, tenantId, calls, abdruecke);
   geschrieben.push(
     ...(await ausstehendeSchreiben(client, tenantId, {
       punkte: state.actionItems.filter((item) => callIds.has(item.callId)),
@@ -1692,10 +1705,13 @@ function callRowValues(call, tenantId) {
   ];
 }
 
-async function flushCalls(client, tenantId, calls) {
+async function flushCalls(client, tenantId, calls, abdruecke) {
   for (const c of calls) {
+    const abdruck = anrufAbdruck(c, tenantId);
+    if (geschriebeneAnrufe.get(c) === abdruck) continue;
     await schreibeAnrufZeile(client, tenantId, c);
     await flushTranscript(client, tenantId, c);
+    abdruecke.push([c, abdruck]);
   }
 }
 
