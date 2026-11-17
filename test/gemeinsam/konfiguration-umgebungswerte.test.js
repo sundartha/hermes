@@ -1000,8 +1000,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ohne Umgebung gelten die St
     telnyxCallControlAppId: "",
     telnyxAccountSid: "",
     machineDetection: { enabled: false, timeoutS: 5 },
-    telnyxSipTrunkUsername: "",
-    telnyxSipTrunkPassword: "",
   });
   assert.deepEqual(ist.tenancy, {
     multiTenant: false,
@@ -1045,8 +1043,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     TELNYX_CONNECTION_ID: "c1",
     TELNYX_CALL_CONTROL_APP_ID: "  app1  ",
     TELNYX_ACCOUNT_SID: "sid1",
-    TELNYX_SIP_TRUNK_USERNAME: "  nutzer  ",
-    TELNYX_SIP_TRUNK_PASSWORD: " pw ",
     MACHINE_DETECTION_ENABLED: "true",
     MACHINE_DETECTION_TIMEOUT_S: "9",
     MULTI_TENANT: "true",
@@ -1087,8 +1083,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     telnyxCallControlAppId: "app1",
     telnyxAccountSid: "sid1",
     machineDetection: { enabled: true, timeoutS: 9 },
-    telnyxSipTrunkUsername: "nutzer",
-    telnyxSipTrunkPassword: " pw ",
   });
   assert.deepEqual(ist.tenancy, {
     multiTenant: true,
@@ -1501,7 +1495,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
     agentId: "",
-    numberRegistrationEnabled: false,
     resultPollMs: 5000,
     vorspannWiedergabeFristMs: 20000,
     bridgeStartDeadlineMs: 30000,
@@ -1555,7 +1548,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   ELEVENLABS_TOOL_TOKEN: " werkzeug ",
   ELEVENLABS_TENANT_TOKEN_REQUIRED: "true",
   ELEVENLABS_AGENT_ID: " agent ",
-  ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "true",
   ELEVENLABS_RESULT_POLL_MS: "200",
   VORSPANN_WIEDERGABE_FRIST_MS: "300",
   EL_BRIDGE_START_DEADLINE_MS: "400",
@@ -1609,7 +1601,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
     agentId: "agent",
-    numberRegistrationEnabled: true,
     resultPollMs: 200,
     vorspannWiedergabeFristMs: 300,
     bridgeStartDeadlineMs: 400,
@@ -1710,7 +1701,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "FAKE_ORIGINATE_ELEVENLABS",
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
-    "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
     "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
     "SEND_SMS_SUMMARY",
     "THINKING_SIGNAL_ENABLED",

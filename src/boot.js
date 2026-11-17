@@ -282,26 +282,12 @@ function meldeElNummernregistrierung(config) {
   if (!sipRegistrarWennAktiv(config)) {
     console.warn(
       "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
-        "(PROVISIONING_ENABLED und " +
-        "ELEVENLABS_NUMBER_REGISTRATION_ENABLED muessen alle true sein) - neue DIDs werden nicht " +
+        "(PROVISIONING_ENABLED muss true sein) - neue DIDs werden nicht " +
         "bei ElevenLabs registriert, ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
     );
     return;
   }
-  const { telnyxSipTrunkUsername, telnyxSipTrunkPassword } = config.telephony;
-  if (!telnyxSipTrunkUsername || !telnyxSipTrunkPassword) return;
   console.log("[boot] ElevenLabs-Nummernregistrierung: eingehaengt (neue DIDs werden registriert)");
-}
-
-function warnElRegistrationSipCredsMissing(config) {
-  if (!config.voice.elevenLabsOutbound.numberRegistrationEnabled) return;
-  if (config.telephony.telnyxSipTrunkUsername && config.telephony.telnyxSipTrunkPassword) return;
-  console.warn(
-    "[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne " +
-      "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD - das Anlegen neuer " +
-      "ElevenLabs-Nummernregistrierungen schlaegt fail-closed fehl (benannte Log-Zeile je " +
-      "DID), ausgehende Anrufe von DIDs ohne Registrierung brechen ab.",
-  );
 }
 
 function assertLatentCostPaths(config) {
@@ -392,7 +378,6 @@ function assertBootGates(config, store, durableAudit) {
   assertLatentCostPaths(config);
   assertElInboundAccess(config);
   assertElInboundScope(config);
-  warnElRegistrationSipCredsMissing(config);
   meldeElNummernregistrierung(config);
 }
 

@@ -86,3 +86,5 @@ export const EL_OUTBOUND_AGENT_ID_BEISPIEL = "agent_el_outbound_erfunden";
 export const PLATFORM_ALERT_SMS_TO_BEISPIEL = "+4915100000000";
 
 export const PROBE_TELNYX_SCHLUESSEL = "KEYtest-probe-schluessel-erfunden";
+
+export const EL_REGISTRIERUNG_BOOT_SCHLUESSEL = "el-registrierung-boot-erfunden";

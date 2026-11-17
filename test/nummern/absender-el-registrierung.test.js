@@ -265,17 +265,6 @@ test("ANR: Boot meldet woertlich, ob die Nummernregistrierung eingehaengt ist", 
     await waitForLog(srv, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
     assert.match(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
   }, REGISTRIERUNG_NACHHOLEN_ENV);
-  await withElevenLabs(
-    async ({ srv }) => {
-      await waitForLog(srv, /Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne TELNYX_SIP_TRUNK_USERNAME/);
-      assert.match(
-        srv.stdout,
-        /Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne TELNYX_SIP_TRUNK_USERNAME/,
-      );
-      assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
-    },
-    { ...REGISTRIERUNG_NACHHOLEN_ENV, TELNYX_SIP_TRUNK_USERNAME: "", TELNYX_SIP_TRUNK_PASSWORD: "" },
-  );
 });
 
 const ZWEITES_ZIEL = "+4915005559100";
@@ -321,37 +310,11 @@ test("ANR: Boot nennt bei nicht eingehaengter Registrierung die drei Schalter un
     await waitForLog(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
     const zeile = stdoutZeile(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
     assert.ok(zeile, "keine Boot-Warnung");
-    for (const schalter of ["PROVISIONING_ENABLED", "ELEVENLABS_NUMBER_REGISTRATION_ENABLED"]) {
+    for (const schalter of ["PROVISIONING_ENABLED"]) {
       assert.ok(zeile.includes(schalter), `${schalter} fehlt in der Warnung`);
     }
     assert.match(zeile, /ausgehende Anrufe von DIDs ohne Registrierung brechen ab/);
   });
-});
-
-test("ANR: Boot meldet NICHT eingehaengt und nie zugleich eingehaengt, auch wenn die Zugangsdaten gesetzt sind", async () => {
-  await withElevenLabs(
-    async ({ srv }) => {
-      await waitForLog(srv, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
-      assert.match(srv.stdout, /ElevenLabs-Nummernregistrierung NICHT eingehaengt/);
-      assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/);
-    },
-    { ...REGISTRIERUNG_NACHHOLEN_ENV, ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false" },
-  );
-});
-
-test("ANR: Boot meldet eingehaengt nur mit Benutzer UND Passwort des SIP-Zugangs", async () => {
-  for (const fehlend of ["TELNYX_SIP_TRUNK_USERNAME", "TELNYX_SIP_TRUNK_PASSWORD"]) {
-    await withElevenLabs(
-      async ({ srv }) => {
-        await waitForLog(srv, /ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne/);
-        assert.doesNotMatch(srv.stdout, /\[boot\] ElevenLabs-Nummernregistrierung: eingehaengt/, fehlend);
-        const zeile = stdoutZeile(srv, /ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne/);
-        assert.ok(zeile, `${fehlend}: keine Warnung zum fehlenden Zugang`);
-        assert.match(zeile, /ausgehende Anrufe von DIDs ohne Registrierung brechen ab/);
-      },
-      { ...REGISTRIERUNG_NACHHOLEN_ENV, [fehlend]: "" },
-    );
-  }
 });
 
 test("ANR: scheitert das Nachholen, steht die Nummer und der Grund in einer benannten Log-Zeile", async () => {

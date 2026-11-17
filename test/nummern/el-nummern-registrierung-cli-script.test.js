@@ -92,27 +92,6 @@ test("el-nummern-registrierung.mjs: ohne ELEVENLABS_API_KEY -> Exit 1, KEIN Netz
   }
 });
 
-test("el-nummern-registrierung.mjs: --anlegen mit ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false -> Exit 1, KEIN Netzzugriff", async () => {
-  const { server, treffer } = await startStubServer();
-  try {
-    const { port } = server.address();
-    const { code, output } = await runElNummern(["--anlegen", "--ja-wirklich"], {
-      ELEVENLABS_API_KEY: "stub-key",
-      ELEVENLABS_API_BASE: `http://127.0.0.1:${port}`,
-      ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false",
-      TELNYX_SIP_TRUNK_USERNAME: "sip_user",
-      TELNYX_SIP_TRUNK_PASSWORD: "sip_pass",
-      DATA_DIR: tempDataDir(),
-    });
-    assert.equal(code, 1, `Output:\n${output}`);
-    assert.match(output, /Fehler \(fail-closed\)/);
-    assert.match(output, /ELEVENLABS_NUMBER_REGISTRATION_ENABLED ist nicht "true"/);
-    assert.equal(treffer.length, 0, "es darf kein einziger Anbieter-Request gestellt worden sein");
-  } finally {
-    await stopStubServer(server);
-  }
-});
-
 test("el-nummern-registrierung.mjs: --anlegen ohne ELEVENLABS_AGENT_ID -> Exit 1, KEIN Netzzugriff (E5-03)", async () => {
   const { server, treffer } = await startStubServer();
   try {

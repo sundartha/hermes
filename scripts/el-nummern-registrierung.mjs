@@ -108,8 +108,8 @@ export async function pruefen({ state, el, nurNumberId }) {
   return ohneRegistrierung === 0 && abweichend === 0 && waisenListe.length === 0 ? 0 : 1;
 }
 
-export async function anlegen({ state, saveState, el, sipUser, sipPasswort, nurNumberId, fetchImpl }) {
-  const registrar = makeElSipRegistrar({ el, sipUser, sipPasswort, ...(fetchImpl ? { fetchImpl } : {}) });
+export async function anlegen({ state, saveState, el, nurNumberId, fetchImpl }) {
+  const registrar = makeElSipRegistrar({ el, ...(fetchImpl ? { fetchImpl } : {}) });
   const kandidaten = aktiveTelnyxNummern(state, nurNumberId).filter(
     (number) => !number.providerAgentPhoneNumberId,
   );
@@ -254,14 +254,8 @@ async function laufeStoreModus(modus) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): --anlegen verlangt zusaetzlich --ja-wirklich.`);
     return 1;
   }
-  if (modus.anlegen && !config.voice.elevenLabsOutbound.numberRegistrationEnabled) {
-    console.error(`${LOG_PREFIX} Fehler (fail-closed): ELEVENLABS_NUMBER_REGISTRATION_ENABLED ist nicht "true".`);
-    return 1;
-  }
   const el = config.voice.elevenLabsOutbound;
-  const sipUser = config.telephony.telnyxSipTrunkUsername;
-  const sipPasswort = config.telephony.telnyxSipTrunkPassword;
-  const grundZugang = modus.anlegen ? fehlendeZugangsdaten({ el, sipUser, sipPasswort }) : null;
+  const grundZugang = modus.anlegen ? fehlendeZugangsdaten({ el }) : null;
   if (grundZugang) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grundZugang}`);
     return 1;
@@ -282,8 +276,6 @@ async function laufeStoreModus(modus) {
         await store.save();
       },
       el,
-      sipUser,
-      sipPasswort,
       nurNumberId: modus.nur,
     });
   return pruefen({ state, el, nurNumberId: modus.nur });
