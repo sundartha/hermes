@@ -503,3 +503,35 @@ test("ElevenLabs-Trunk schreiben: ohne eingereichtes fetch gehen beide Anfragen 
       }),
     [REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS],
   ));
+
+const ZUGANG_MINDESTLAENGE = 32;
+
+function ohneScopeConfig({ scope, tenantIds, provisioningEnabled = true, sipUser = "u" }) {
+  return {
+    provisioning: { provisioningEnabled },
+    voice: {
+      elevenLabsOutbound: { apiKey: "k", agentId: "a" },
+      elevenLabsInbound: {
+        scope,
+        tenantIds,
+        sipUser,
+        sipPassword: "p".repeat(ZUGANG_MINDESTLAENGE),
+        initWebhookToken: "t".repeat(ZUGANG_MINDESTLAENGE),
+      },
+    },
+  };
+}
+
+const OHNE_SCOPE_FAELLE = [
+  { name: "Scope allowlist, leere Liste", config: { scope: "allowlist", tenantIds: [] }, erwartet: true },
+  { name: "ohne Scope und ohne Liste", config: {}, erwartet: true },
+  { name: "Scope registrierte_dids", config: { scope: "registrierte_dids", tenantIds: ["t_x"] }, erwartet: true },
+  { name: "Provisioning aus", config: { provisioningEnabled: false }, erwartet: false },
+  { name: "Zugang unvollstaendig", config: { sipUser: "" }, erwartet: false },
+];
+
+for (const fall of OHNE_SCOPE_FAELLE) {
+  test(`Trunk-Schreiben: ${fall.name} -> ${String(fall.erwartet)}`, () => {
+    assert.equal(inboundTrunkSchreibenErlaubt(ohneScopeConfig(fall.config)), fall.erwartet);
+  });
+}
