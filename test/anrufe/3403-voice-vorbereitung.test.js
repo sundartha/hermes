@@ -5,7 +5,8 @@ import { makeVoiceRoutes } from "../../src/routes/voice.js";
 import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { seedCall, seedWithTelnyxNumber, startServer, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, waitForStoreState } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, normalizeIncomingTexml, postTelnyxIncoming, seedCall, seedWithTelnyxNumber, startServer, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, waitForStoreState } from "../helpers.js";
 
 const CALL_ID = "s3403_voice";
 const HTTP_FORBIDDEN = 403;
@@ -398,4 +399,29 @@ test("3403 Wache bei Statusmeldung mit Zeitstempel-Header: Umschlag-Anker mit Pr
   });
   assert.equal(aufrufe.length, 1);
   assert.match(aufrufe[0][0], /^se:[0-9a-f]{64}$/);
+});
+
+async function eingehendeDialAntwort(schalter) {
+  const srv = await startServer({
+    env: { ...EL_INBOUND_ACCESS_BOOT_ENV, ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID, ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED: schalter },
+    seed: seedWithTelnyxNumber({ language: "de" }),
+  });
+  try {
+    const res = await postTelnyxIncoming(srv, { callSid: "CA3403laut" });
+    assert.equal(res.status, HTTP_OK);
+    return normalizeIncomingTexml(await res.text());
+  } finally {
+    await srv.stop();
+  }
+}
+
+test("3403 Eingehender EL-Anruf ohne Begruessungslaut-Schalter: der Dial traegt keine audioUrl", async () => {
+  const texml = await eingehendeDialAntwort("false");
+  assert.match(texml, /sip\.rtc\.elevenlabs\.io/);
+  assert.doesNotMatch(texml, /audioUrl/);
+});
+
+test("3403 Eingehender EL-Anruf mit Begruessungslaut-Schalter: der Dial traegt die audioUrl", async () => {
+  const texml = await eingehendeDialAntwort("true");
+  assert.match(texml, /audioUrl="[^"]+"/);
 });
