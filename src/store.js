@@ -151,7 +151,7 @@ function jsonBackendAufbauen() {
     beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
     ttsAblage: null,
-    faelligeFristen: async (anfrage) => faelligeAusSpiegel(jsonBackend.load(), anfrage),
+    faelligeFristen: async (anfrage) => faelligeAusSpiegel(jsonBackend.load(), { jetztMs: Date.now(), ...anfrage }),
     setzeHoechstdauerFrist: async (anfrage) => {
       setzeHoechstdauerImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
