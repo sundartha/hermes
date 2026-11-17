@@ -483,7 +483,7 @@ test("KV2-4: Fail-soft - ein Store-Fehler im Belegweg haelt Terminierung/Abrechn
   }
   assert.ok(billGerufen, "terminateAndBillCall muss trotz Store-Fehler im Belegweg laufen");
   assert.ok(
-    zeilen.some((zeile) => zeile.includes("kv2-4-test-fehler")),
+    zeilen.some((zeile) => zeile.includes("art=Error")),
     "der Fehler wird geloggt, nicht verschluckt",
   );
 });
