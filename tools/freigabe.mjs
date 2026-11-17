@@ -423,7 +423,8 @@ async function actionZeit(name, stand) {
   const [besitzer, eigenerName] = name.split("/");
   const repo = `${encodeURIComponent(besitzer)}/${encodeURIComponent(eigenerName)}`;
   const release = await actionRelease(repo, stand);
-  return release ?? (await fremdeApi(repo, `/commits/${encodeURIComponent(stand)}`)).commit?.committer?.date;
+  const commit = (await fremdeApi(repo, `/commits/${encodeURIComponent(stand)}`)).commit?.committer?.date;
+  return release && commit && Date.parse(release) < Date.parse(commit) ? commit : (release ?? commit);
 }
 
 function behebtAdvisory({ withdrawn_at: zurueckgezogen, vulnerabilities }, name, neu) {
