@@ -11,7 +11,7 @@ const NUR_EIN_ANRUF = 1;
 const HTTP_OK = 200;
 
 async function abbruchRoute({ speicher, mandant }) {
-  const { makeCallRoutes } = await import("../../src/routes/api-calls.js");
+  const { makeCallRoutes } = await import("../../src/routes/api-calls.ts");
   const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
   const app = express();
   app.use(express.json());
