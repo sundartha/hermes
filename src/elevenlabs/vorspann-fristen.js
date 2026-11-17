@@ -1,6 +1,9 @@
 import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { STAND } from "./vorspann-bruecke.js";
+import { NICHT_ERREICHT_FRIST_MS } from "./nicht-erreicht-frist.ts";
+
+export const armiereKlingelfrist = ({ setTimer, beiFrist }) => setTimer(beiFrist, NICHT_ERREICHT_FRIST_MS);
 
 export function armiereVorspannFristen({
   call,

@@ -6,6 +6,12 @@ const NICHT_ERREICHT_FRIST_S = 75;
 export const NICHT_ERREICHT_FRIST_MS = NICHT_ERREICHT_FRIST_S * MS_PER_SECOND;
 export const NICHT_ANGENOMMEN_GRUND = "no-answer";
 
+const OHNE_ABFRAGE_FRIST: ReadonlySet<unknown> = new Set([
+  KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
+  KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+  KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+]);
+
 interface Anruf {
   costProfile?: unknown;
   startedAt?: unknown;
@@ -34,7 +40,7 @@ export function nichtErreichtNachFrist({
   conversation: Gespraech;
   nowMs: number;
 }): boolean {
-  if (call.costProfile !== KOSTENPROFIL.EL_CONVAI_SIP) return false;
+  if (OHNE_ABFRAGE_FRIST.has(call.costProfile)) return false;
   const startMs = Date.parse(String(call.startedAt));
   if (!Number.isFinite(startMs) || nowMs - startMs < NICHT_ERREICHT_FRIST_MS) return false;
   return !hatGesprochen(conversation) && !hatAnbieterDauer(conversation);
