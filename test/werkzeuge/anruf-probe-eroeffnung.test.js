@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { LOCALES } from "../../src/i18n/locales.js";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
 const AUFTRAGGEBER = "Probe GmbH";
 const VORNAME = "Anna";
+
+const LOCALES = {
+  de: {
+    inboundEroeffnung: (name) => `Hallo, hier ist der KI-Assistent von ${name}. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?`,
+    inboundEroeffnungOwner: () => "Hey, hier ist Hermes, dein KI-Assistent. Wie kann ich dir helfen?",
+    disclosure: (name) => `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${name}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+  },
+  en: {
+    inboundEroeffnung: (name) => `Hello, this is ${name}'s AI assistant. This call is transcribed and summarised. How can I help?`,
+    inboundEroeffnungOwner: () => "Hey, it's Hermes, your AI assistant. How can I help you?",
+    disclosure: (name) => `Hello, this is an AI assistant calling on behalf of ${name}. This conversation will be summarised for the person I represent.`,
+  },
+  fr: {
+    inboundEroeffnung: (name) => `Bonjour, ici l'assistant IA de ${name}. Cet appel est transcrit et résumé. Comment puis-je aider ?`,
+    inboundEroeffnungOwner: () => "Salut, c'est Hermes, ton assistant IA. Comment je peux t'aider ?",
+    disclosure: (name) => `Bonjour, ceci est un assistant IA mandaté par ${name}. Cette conversation sera résumée pour mon mandant.`,
+  },
+};
 
 function messung(sprache, abweichung = {}) {
   const locale = LOCALES[sprache];
