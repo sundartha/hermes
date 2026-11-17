@@ -474,3 +474,18 @@ test("3403 Eingehender Anruf ohne EL-Zugang: die Notbremse-Frist folgt dem Minut
   assert.equal(angelegt.length, 1);
   assert.equal(angelegt[0].maxDurationS, 660);
 });
+
+test("3403 Eingehender Anruf scheitert vor dem Anlegen: die Fehlerantwort kommt trotzdem als 200 mit Ansage", async () => {
+  const store = { getCall: () => null, numberRecordByE164: async () => Promise.reject(new Error("Nummernsuche kaputt")) };
+  const fehler = mock.method(console, "error", () => {});
+  let antwort;
+  try {
+    await mitApp(baueApp({ store, lifecycle: {} }), async (basis) => {
+      antwort = await abrufMitFrist(`${basis}/voice/incoming`, { method: "POST", headers: FORMULAR, body: "From=%2B4915100000001&To=%2B4915100000002&CallSid=CA3403fehler" });
+    });
+  } finally {
+    fehler.mock.restore();
+  }
+  assert.equal(antwort.status, HTTP_OK);
+  assert.equal(await antwort.text(), "<Response/>");
+});
