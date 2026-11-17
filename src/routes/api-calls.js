@@ -21,14 +21,14 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
-import { startRejectionReason } from "../telephony/failure-reason.ts";
+import { NOT_PLACED, startRejectionReason } from "../telephony/failure-reason.ts";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
-import { KOSTENPROFIL_FUER_WEG, OUTBOUND_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
+import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
@@ -299,7 +299,6 @@ export function makeCallRoutes({
   outboundGates,
   callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
-  originateElevenLabsCall = elevenLabsCallNotWired,
   beschaffeAbsender = elevenLabsCallNotWired,
   erzeugeVorspann,
   vorspannAblauf,
@@ -323,27 +322,26 @@ export function makeCallRoutes({
     return call && tenantOwnsCall(call, tenantId) ? call : null;
   }
 
-  async function waehleUeberTelnyx({ callId, ctx }) {
-    const tw = await voiceControl(ctx.outboundProvider).originateCall({
-      from: ctx.fromNumber,
-      to: ctx.to,
-      url: `${config.server.publicUrl}/voice/outbound?callId=${callId}`,
-      statusCallback: `${config.server.publicUrl}/voice/status?callId=${callId}`,
-      statusCallbackEvent: ["answered", "completed"],
-      method: "POST",
-      timeLimit: ctx.maxDur,
-    });
-    return tw.sid;
-  }
-
   async function bereiteVorspannVor(call) {
     const vorspann = await erzeugeVorspann(call);
-    if (vorspann.rueckfall) {
-      meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
-      return undefined;
-    }
-    meldeVorspannBereit(call.id);
+    if (vorspann.rueckfall) meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
+    else meldeVorspannBereit(call.id);
     return vorspann;
+  }
+
+  async function brichVorWahlAb({ call, grund, res }) {
+    await terminateAndBillCall({
+      persistEnd: persistEndWithReason({
+        store,
+        callId: call.id,
+        reason: `${NOT_PLACED}:${grund}`,
+        endCall: () => store.endCallRecord(call.id, "failed"),
+      }),
+      hangUp: null,
+      bill: billThunk(finishCall, store, call.id),
+      callId: call.id,
+    });
+    return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
   }
 
   async function emitOpeningConsult({ req, call, context, tenantId }) {
@@ -455,26 +453,19 @@ export function makeCallRoutes({
     await emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      const vorspannEin = config.voice.elevenLabsOutbound.ueberTelnyx && config.voice.elevenLabsOutbound.vorspann;
-      if (vorspannEin) await beschaffeAbsender(call);
+      await beschaffeAbsender(call);
       const wahl = outboundWegFuer({ config, store, call });
-      meldeOutboundWeg({ config, callId: call.id, wahl });
+      meldeOutboundWeg({ callId: call.id, wahl });
+      if (!wahl.weg) return await brichVorWahlAb({ call, grund: wahl.grund, res });
       await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
-      if (wahl.weg === OUTBOUND_WEG.EL_SIP_TRUNK) {
-        await originateElevenLabsCall(call);
-        armMaxDurationTimer(call, null);
-      } else {
-        const vorspannWeg = wahl.weg === OUTBOUND_WEG.TELNYX_VORSPANN;
-        const vorspannBereit = vorspannWeg && (await bereiteVorspannVor(call));
-        if (vorspannWeg && (await vorspannAblauf.pruefe({ call })).grund)
-          return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
-        if (vorspannBereit) {
-          const gewaehlt = await vorspannAblauf.waehle({ call, vorspann: vorspannBereit });
-          call.callControlId = gewaehlt.callControlId;
-        } else call.twilioSid = await waehleUeberTelnyx({ callId: call.id, ctx });
-        store.save();
-        armMaxDurationTimer(call, call.twilioSid);
-      }
+      const vorspann = await bereiteVorspannVor(call);
+      if ((await vorspannAblauf.pruefe({ call })).grund)
+        return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
+      if (vorspann.rueckfall) return await brichVorWahlAb({ call, grund: vorspann.rueckfall, res });
+      const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
+      call.callControlId = gewaehlt.callControlId;
+      store.save();
+      armMaxDurationTimer(call, call.twilioSid);
       armReserveReleaseTimer(call);
       return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
     } catch (err) {

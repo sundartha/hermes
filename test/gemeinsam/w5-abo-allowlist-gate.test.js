@@ -1,10 +1,13 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from ".././helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from ".././gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
+const abbrechend = await starteAbbrechendeAttrappe("w5", [BOOTSTRAP_TENANT_ID]);
+after(() => abbrechend.close());
 const DENY_EMERGENCY = "112";
 const DENY_PREMIUM = "+4990012345678";
 const US = "+12025550123";
@@ -109,7 +112,7 @@ test("W5-4: aktiver Subscriber kyc<card (otp) -> 403 KYC, Lockerung greift NICHT
 });
 
 test("W5-5a: Owner ist via Boot-Seed Subscriber -> passiert OHNE ALLOWED_NUMBERS (Pfad 2, 500)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" }, seed: seed({}) });
+  const srv = await startServer({ env: abbrechend.env, seed: seed({}) });
   try {
     const res = await placeCall(srv, null);
     assert.equal(res.status, 500, "Owner als Subscriber -> Allowlist-Bypass (Pfad 2), bis Originate");

@@ -10,7 +10,7 @@ import { legeMandantAn } from "../pg-helpers.js";
 import { seedState, startServer, waitForStoreState, waitUntil, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { elVon } from "./el-bein-attrappe.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { initInhaltFuer, vorspannDiAttrappe, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { initInhaltFuer, vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUmgebung, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -156,6 +156,8 @@ const PUFFER_S = 120;
 const LANGE_DAUER_S = 1800;
 const ABLAUF_MS = (EL_ABLAUF_S + PUFFER_S) * SEKUNDE_MS;
 
+const S19_MANDANTEN = 100;
+
 const routenConfig = withConfigNamespaces({
   outboundFrozen: false,
   assistantContextEnabled: false,
@@ -169,7 +171,7 @@ const routenConfig = withConfigNamespaces({
   diagnosticRetentionDays: 0,
   ownerSelfCallEnabled: false,
   ownerSelfCallTenantIds: [],
-  elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+  ...vorspannKonfig(Array.from({ length: S19_MANDANTEN }, (_, nummer) => `T_+49171123${String(4000 + nummer)}`), EL_OUTBOUND_CONFIG),
   telnyxElevenLabs: { voiceId: "voice_elf" },
   telnyxAssistant: { enabled: false },
   voiceEngine: "budget",
@@ -177,7 +179,13 @@ const routenConfig = withConfigNamespaces({
 });
 
 async function starteElRoute(leitungsplaetze) {
-  const { store } = await makePgTestStore();
+  const { store: pgStore } = await makePgTestStore();
+  const nummern = [];
+  const store = {
+    ...pgStore,
+    numberRecordByE164: (e164) => ({ e164, providerAgentPhoneNumberId: "phnum_elf" }),
+    load: () => ({ ...pgStore.load(), numbers: nummern }),
+  };
   const outboundGates = [
     {
       name: "test",
@@ -223,7 +231,8 @@ async function starteElRoute(leitungsplaetze) {
   });
   const url = `http://127.0.0.1:${server.address().port}/api/calls`;
   const post = async (nummer) => {
-    await legeMandantAn(store, `T_+49171123${String(4000 + nummer)}`);
+    await legeMandantAn(pgStore, `T_+49171123${String(4000 + nummer)}`);
+    nummern.push(vorspannSeedNummer({ tenantId: `T_+49171123${String(4000 + nummer)}`, nummer: "+491700000000", registrierung: "phnum_elf" }));
     const res = await abrufMitFrist(url, {
       method: "POST",
       headers: { "content-type": "application/json" },

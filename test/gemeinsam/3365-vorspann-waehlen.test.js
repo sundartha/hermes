@@ -155,22 +155,6 @@ async function mitSteuerung(werte, run) {
 
 const gewaehlteAnfrage = (attrappe, to) => nachPfad(attrappe, WAHL_PFAD).find((anfrage) => anfrage.roh.includes(`"to":"${to}"`));
 
-test("3365-B1: Schalter aus oder ohne Call-Control-App -> genau ein TeXML-Aufruf, kein POST /v2/calls", async () => {
-  for (const env of [{ ELEVENLABS_OUTBOUND_VORSPANN: "false" }, { TELNYX_CALL_CONTROL_APP_ID: "" }]) {
-    const attrappe = await starteAttrappe();
-    const srv = await startServer(serverEinstellungen(attrappe, env));
-    try {
-      const antwort = await anrufStarten(naechsteNummer(), {}, srv);
-      assert.equal(antwort.status, HTTP_OK);
-      assert.equal(nachPfad(attrappe, TEXML_PFAD).length, EINMAL);
-      assert.equal(nachPfad(attrappe, WAHL_PFAD).length, 0);
-    } finally {
-      await srv.stop();
-      await attrappe.close();
-    }
-  }
-});
-
 test("3365-B2: Schalter an, Vorspann bereit -> genau ein POST /v2/calls mit allen Feldern, kein TeXML, Kennung am Anruf", async () => {
   const { attrappe } = umgebung;
   const to = naechsteNummer();

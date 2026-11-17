@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { seedState, startServer, EL_OUTBOUND_ZUGANG_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 
 const HTTP_OK = 200;
@@ -10,7 +11,7 @@ const MANDANT = "t_3394_h2";
 const ABSENDER = "+4915799990077";
 const SERVER_ENV = Object.freeze({
   ...EL_OUTBOUND_ZUGANG_BOOT_ENV,
-  FAKE_ORIGINATE_ELEVENLABS: "true",
+  ...vorspannMandantenUmgebung([MANDANT]),
   VOICE_TARIFF_DEFAULT_CENTS: "30",
   VOICE_TARIFF_DOMESTIC_CENTS: "30",
 });
@@ -51,7 +52,7 @@ test("Ausgehend: ohne Schalter-Wert startet der Anruf ueber den ElevenLabs-Weg",
   try {
     const { status, body } = await anrufen(srv, {});
     assert.equal(status, HTTP_OK);
-    assert.equal(gespeicherterAnruf(srv, body.callId).costProfile, KOSTENPROFIL.EL_CONVAI_SIP);
+    assert.equal(gespeicherterAnruf(srv, body.callId).costProfile, KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI);
   } finally {
     await srv.stop();
   }
@@ -64,7 +65,7 @@ test("Ausgehend: ein Sprachwunsch wird angenommen und gilt fuer den Anruf", asyn
     assert.equal(status, HTTP_OK);
     const anruf = gespeicherterAnruf(srv, body.callId);
     assert.equal(anruf.language, "en");
-    assert.equal(anruf.costProfile, KOSTENPROFIL.EL_CONVAI_SIP);
+    assert.equal(anruf.costProfile, KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI);
     assert.ok(anruf.openingLine.length > 0);
   } finally {
     await srv.stop();
@@ -76,7 +77,7 @@ test("Ausgehend: der frueher Schalter genannte Wert ELEVENLABS_OUTBOUND_ENABLED=
   try {
     const { status, body } = await anrufen(srv, { language: "en" });
     assert.equal(status, HTTP_OK);
-    assert.equal(gespeicherterAnruf(srv, body.callId).costProfile, KOSTENPROFIL.EL_CONVAI_SIP);
+    assert.equal(gespeicherterAnruf(srv, body.callId).costProfile, KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI);
   } finally {
     await srv.stop();
   }

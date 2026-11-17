@@ -1,10 +1,15 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAbbrechendeAttrappe, starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
+const abbrechend = await starteAbbrechendeAttrappe("briefing", [BOOTSTRAP_TENANT_ID]);
+const erfolgreich = await starteErfolgreicheAttrappe("briefing-ok", [BOOTSTRAP_TENANT_ID]);
+after(() => Promise.all([abbrechend.close(), erfolgreich.close()]));
 
 const FULL_BRIEFING_INPUT = Object.freeze({
   summary: "Kunde bittet um Verschiebung des Termins",
@@ -72,33 +77,10 @@ async function startFailingBriefingMock() {
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
 }
 
-async function startVoiceMock() {
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ success: true, conversation_id: "conv_p8_http_mock_1", sip_call_id: "sip_p8_http_mock_1" }));
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
-}
-
-const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_p8_http" };
-const telnyxEnv = (voiceMockUrl, extra = {}) => ({
-  TELNYX_API_KEY: "KEYtest-secret",
-  TELNYX_CONNECTION_ID: "conn_test",
-  TELNYX_ACCOUNT_SID: "acct_test",
-  TELNYX_API_BASE: voiceMockUrl,
-  ELEVENLABS_API_BASE: voiceMockUrl,
-  ...extra,
-});
-
 const BRIEFING_ON = {
   PRECALL_BRIEFING_ENABLED: "true",
   ASSISTANT_CONTEXT_ENABLED: "true",
   ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
-  FAKE_ORIGINATE_ELEVENLABS: "false",
 };
 
 function placeCall(srv, body = {}) {
@@ -113,11 +95,9 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("HP1 place_call ohne context + Briefing an: persistiert alle vier Kontextfelder, context_received.summary=true", async () => {
-  const voiceMock = await startVoiceMock();
   const anthropicMock = await startBriefingMock();
   const srv = await startServer({
-    env: telnyxEnv(voiceMock.url, { ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON }),
-    ownerNumber: TELNYX_OWNER,
+    env: { ...erfolgreich.env, ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
   });
   try {
     const res = await placeCall(srv);
@@ -129,7 +109,6 @@ test("HP1 place_call ohne context + Briefing an: persistiert alle vier Kontextfe
     assert.deepEqual(calls[0].context, FULL_BRIEFING_INPUT, "voller gebriefter Kontext persistiert");
   } finally {
     await srv.stop();
-    await voiceMock.close();
     await anthropicMock.close();
   }
 });
@@ -137,7 +116,7 @@ test("HP1 place_call ohne context + Briefing an: persistiert alle vier Kontextfe
 test("HP2 place_call MIT Owner-context: Mock-Request-Zaehler bleibt 0, persistierter Kontext == Owner-Eingabe (D2)", async () => {
   const anthropicMock = await startBriefingMock();
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
+    env: { ...abbrechend.env, ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
   });
   try {
     const res = await placeCall(srv, { context: OWNER_CTX });
@@ -155,7 +134,7 @@ test("HP2 place_call MIT Owner-context: Mock-Request-Zaehler bleibt 0, persistie
 test("HP3 Briefing-Mock antwortet 500: Call wird trotzdem angelegt, context===null, mandate===null (Fail-Soft)", async () => {
   const anthropicMock = await startFailingBriefingMock();
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
+    env: { ...abbrechend.env, ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
   });
   try {
     const res = await placeCall(srv);
@@ -173,7 +152,7 @@ test("HP3 Briefing-Mock antwortet 500: Call wird trotzdem angelegt, context===nu
 test("HP4 Flag PRECALL_BRIEFING_ENABLED aus: Mock-Zaehler 0, context===null (byte-identisches Bestandsverhalten)", async () => {
   const anthropicMock = await startBriefingMock();
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ASSISTANT_CONTEXT_ENABLED: "true", ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false", FAKE_ORIGINATE_ELEVENLABS: "false" },
+    env: { ...abbrechend.env, ANTHROPIC_BASE_URL: anthropicMock.url, ASSISTANT_CONTEXT_ENABLED: "true", ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false" },
   });
   try {
     const res = await placeCall(srv);
@@ -191,7 +170,7 @@ test("HP4 Flag PRECALL_BRIEFING_ENABLED aus: Mock-Zaehler 0, context===null (byt
 test("HP5 Owner-mandate + Briefing liefert eigenes Mandat: persistiert wird das Owner-Mandat (D2)", async () => {
   const anthropicMock = await startBriefingMock(BRIEFED_MANDATE_INPUT);
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
+    env: { ...abbrechend.env, ANTHROPIC_BASE_URL: anthropicMock.url, ...BRIEFING_ON },
   });
   try {
     const res = await placeCall(srv, { mandate: OWNER_MANDATE });

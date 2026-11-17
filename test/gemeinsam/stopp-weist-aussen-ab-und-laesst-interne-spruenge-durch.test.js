@@ -13,6 +13,7 @@ import {
 } from "../helpers.js";
 import { abrufMitFrist, mitAntwortfrist } from "./antwortfrist.mjs";
 import { haengendeAnfrage } from "./haengende-anfrage.mjs";
+import { starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 
 const STATUS_OK = 200;
 const STATUS_NICHT_VERFUEGBAR = 503;
@@ -141,12 +142,14 @@ function sendeAufrufMitSpaeteremRumpf(srv, token, rumpf) {
 
 test("ein vor SIGTERM begonnener place_call wird nach dem Signal zu Ende gefuehrt und der Prozess endet mit Exit 0", async (t) => {
   const idp = await startIdp();
+  const erfolgreich = await starteErfolgreicheAttrappe("stopp", [TENANT]);
   const srv = await startServer({
     env: {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ...erfolgreich.env,
       SHUTDOWN_DRAIN_TIMEOUT_MS: String(GESAMTFRIST_MS),
     },
     seed: seed(),
@@ -154,6 +157,7 @@ test("ein vor SIGTERM begonnener place_call wird nach dem Signal zu Ende gefuehr
   t.after(async () => {
     if (srv.child.exitCode === null) srv.child.kill("SIGKILL");
     await idp.close();
+    await erfolgreich.close();
   });
   const rumpf = JSON.stringify(toolCall("place_call", { to: ZIEL_NUMMER, objective: "Termin vereinbaren" }));
   const aufruf = sendeAufrufMitSpaeteremRumpf(srv, await idp.sign({ sub: SUBJEKT }), rumpf);
