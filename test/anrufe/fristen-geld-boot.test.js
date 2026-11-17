@@ -44,10 +44,11 @@ function aussenweltAbfangen() {
     const ziel = new URL(String(url));
     const methode = (optionen.method ?? "GET").toUpperCase();
     if (ziel.origin === TELNYX_BASIS && methode === "POST" && ziel.pathname.includes("/Calls/CA_geld_boot")) {
-      auflegen.push(ziel.pathname.split("/").at(-1));
+      const stellen = ziel.pathname.split("/");
+      auflegen.push(stellen.at(-1));
       return new Response("{}", { status: 200 });
     }
-    throw new Error(`Testaufbau: Zugriff nach außen gesperrt (${methode} ${ziel.origin}${ziel.pathname})`);
+    throw new Error(`Testaufbau: kein Zugriff nach außen (${methode} ${ziel.origin}${ziel.pathname})`);
   };
   return auflegen;
 }
