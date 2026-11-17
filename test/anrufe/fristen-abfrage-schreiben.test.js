@@ -5,6 +5,7 @@ import { withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "../fixtures/elevenlabs-conversations.js";
 
 const UEBERNAHME_MS = 30_000;
+const ABRUF_FRIST_MS = 120_000;
 const JETZT_MS = Date.parse("2031-03-04T05:06:07.000Z");
 const ANRUF = "call_abfrage_schreiben";
 const MANDANT = "tenant_abfrage_schreiben";
@@ -61,6 +62,12 @@ function betrieb({ schreibenScheitert = false } = {}) {
   return { call, geschrieben, el, store };
 }
 
+const vorAbruf = () => ({
+  callId: ANRUF,
+  tenantId: MANDANT,
+  faelligAt: new Date(JETZT_MS + ABRUF_FRIST_MS + UEBERNAHME_MS).toISOString(),
+});
+
 const abwarten = () => new Promise((erfuellen) => setImmediate(erfuellen));
 
 async function mitFristZeilen(t, body) {
@@ -78,6 +85,7 @@ test("Abfrage-Frist schreiben: nach einer Abfrage ohne Ergebnis steht die naechs
     await abwarten();
   });
   assert.deepEqual(geschrieben, [
+    vorAbruf(),
     { callId: ANRUF, tenantId: MANDANT, faelligAt: new Date(JETZT_MS + POLL_MS + UEBERNAHME_MS).toISOString() },
   ]);
 });
@@ -90,7 +98,7 @@ test("Abfrage-Frist schreiben: nach dem Ergebnis des Anbieters wird die Frist ge
     await abwarten();
   });
   assert.notEqual(call.status, "active");
-  assert.deepEqual(geschrieben, [{ callId: ANRUF, tenantId: MANDANT, faelligAt: null }]);
+  assert.deepEqual(geschrieben, [vorAbruf(), { callId: ANRUF, tenantId: MANDANT, faelligAt: null }]);
 });
 
 test("Abfrage-Frist schreiben: scheitert das Schreiben, steht der Fehler mit Anruf-Kennung im Log und die Abfrage laeuft nach dem Intervall weiter", async (t) => {
@@ -110,6 +118,8 @@ test("Abfrage-Frist schreiben: scheitert das Schreiben, steht der Fehler mit Anr
   });
   assert.equal(abfragen, 2);
   assert.deepEqual(zeilen, [
+    `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF} Error: schreiben verweigert`,
+    `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF} Error: schreiben verweigert`,
     `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF} Error: schreiben verweigert`,
     `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF} Error: schreiben verweigert`,
   ]);

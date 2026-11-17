@@ -884,23 +884,16 @@ function makeInitInhalt(inhaltsAnfrageFor) {
 
 function makeAbfrageFrist(store) {
   const lese = (callId) => (store.leseCallUngebunden ? store.leseCallUngebunden(callId) : store.leseCall(callId));
-  const offen = new Map();
-  const schreibe = (call, inMs) => {
-    const faelligAt = inMs === null ? null : new Date(Date.now() + inMs).toISOString();
-    offen.set(call.id, { callId: call.id, tenantId: call.tenantId, faelligAt });
-  };
-  const schreibeAus = async () => {
-    const anfragen = [...offen.values()];
-    offen.clear();
-    for (const anfrage of anfragen) {
-      try {
-        await store.setzeAbfrageFrist?.(anfrage);
-      } catch (fehler) {
-        console.error(ABFRAGE_FRIST_FEHLER, anfrage.callId, String(fehler));
-      }
-    }
-  };
-  return { lese, schreibe, schreibeAus };
+  const schreibe = (call, inMs) =>
+    Promise.resolve()
+      .then(() => {
+        const faelligAt = inMs === null ? null : new Date(Date.now() + inMs).toISOString();
+        return store.setzeAbfrageFrist?.({ callId: call.id, tenantId: call.tenantId, faelligAt });
+      })
+      .catch((fehler) => {
+        console.error(ABFRAGE_FRIST_FEHLER, call.id, String(fehler));
+      });
+  return { lese, schreibe };
 }
 
 async function frageFrist({ abfrageFrist, pollConversationResult }, callId, tenantId) {
@@ -961,7 +954,7 @@ export function makeElevenLabsOutbound({
     const nowMs = Date.now();
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
     if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
-    abfrageFrist.schreibe(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
+    await abfrageFrist.schreibe(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
@@ -1014,7 +1007,6 @@ export function makeElevenLabsOutbound({
     beschaffeAbsenderOderBrichAb,
     initInhaltFor,
     endActiveCall,
-    schreibeFristen: abfrageFrist.schreibeAus,
     pollFrist: (callId, tenantId) => frageFrist({ abfrageFrist, pollConversationResult }, callId, tenantId),
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
