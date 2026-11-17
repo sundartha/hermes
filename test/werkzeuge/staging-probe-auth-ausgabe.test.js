@@ -23,10 +23,19 @@ test("Roter Probe-Lauf: stderr und stdout kommen als erlaubte Zeilen ins Log", a
   assert.deepEqual(zeilen, ["Probe: Commit: abc (Pin erfuellt)", "Probe: ABBRUCH: /healthz meldet Commit nicht"]);
 });
 
-test("Roter Probe-Lauf: Zeilen mit Adresse, Mail, Bearer oder Telefonnummer bleiben draussen, nur die letzten 20 Zeilen", async () => {
+test("Roter Probe-Lauf: die Adresse in der Ursachenzeile wird durch <url> ersetzt, die Zeile bleibt", async () => {
+  const { zeilen } = await laufen(
+    'echo "ABBRUCH: GET https://staging.example/healthz nicht erreichbar" >&2\necho "ABBRUCH: Ziel-Pin verletzt: https://staging.example faehrt abc" >&2\nexit 2\n',
+  );
+  assert.deepEqual(zeilen, [
+    "Probe: ABBRUCH: GET <url> nicht erreichbar",
+    "Probe: ABBRUCH: Ziel-Pin verletzt: <url> faehrt abc",
+  ]);
+});
+
+test("Roter Probe-Lauf: Zeilen mit Mail, Bearer oder Telefonnummer bleiben draussen, nur die letzten 20 Zeilen", async () => {
   const { zeilen } = await laufen(
     [
-      'echo "Ziel:   https://staging.example"',
       'echo "mail a@b.de"',
       'echo "Authorization: Bearer abc"',
       'echo "ruf +49 170 1234567"',
