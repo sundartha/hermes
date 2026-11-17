@@ -45,6 +45,13 @@ const TOOL_FELDER = z.object({
 });
 const TOOL_KOERPER = TOOL_FELDER.catch(TOOL_FELDER.parse({}));
 
+function fehlerText(err) {
+  if (typeof err !== "object" || err === null) return "unbekannt";
+  const stack = "stack" in err && typeof err.stack === "string" ? err.stack : "";
+  const nachricht = "message" in err && typeof err.message === "string" ? err.message : "";
+  return stack || nachricht || "unbekannt";
+}
+
 function toolResultText(outcome, locale) {
   const control = locale.prompt.turnControl;
   if (outcome.kind === CONSULT_RESULT.REJECTED) return control.consultDeclined;
@@ -86,7 +93,7 @@ function activeCallBoundTo(store, conversationId) {
   return (
     calls.find(
       (call) => call.elevenlabsConversationId === conversationId && call.status === "active",
-    ) || null
+    ) ?? null
   );
 }
 
@@ -158,7 +165,7 @@ async function executeLookup({ store, call, provider, query, control, res }) {
     dauerMs,
   });
   console.log(
-    `[${LOOKUP_LOG_TAG}] fertig call=${call.id} ok=${result.ok === true} dauer_ms=${dauerMs} fakten=${facts.length}`,
+    `[${LOOKUP_LOG_TAG}] fertig call=${call.id} ok=${String(result.ok === true)} dauer_ms=${String(dauerMs)} fakten=${String(facts.length)}`,
   );
   if (!facts.length) {
     return lookupAnswer(res, {
@@ -176,7 +183,7 @@ async function executeLookup({ store, call, provider, query, control, res }) {
 
 async function handleLookup(req, res, { store, config }) {
   const secret = config.voice.elevenLabsToolToken;
-  if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
+  if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) ?? "", secret))
     return toolDenied({ res, tag: LOOKUP_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
   const koerper = pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body);
@@ -228,6 +235,16 @@ async function handleLookup(req, res, { store, config }) {
   return executeLookup({ store, call, provider, query: preflight.sanitized, control, res });
 }
 
+async function antworteSicher({ tag, handler, req, res }) {
+  try {
+    return await handler(req, res);
+  } catch (err) {
+    console.error(`[${tag}] fehler: ${fehlerText(err)}`);
+    if (res.headersSent) return res.end();
+    return antworteFehler(res, HTTP_SERVER_ERROR, "intern");
+  }
+}
+
 export function makeElevenLabsWebhookRoutes({
   store,
   config,
@@ -252,7 +269,7 @@ export function makeElevenLabsWebhookRoutes({
 
   async function handleConsult(req, res) {
     const secret = config.voice.elevenLabsToolToken;
-    if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
+    if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) ?? "", secret))
       return toolDenied({ res, tag: CONSULT_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
     const koerper = pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body);
@@ -312,24 +329,14 @@ export function makeElevenLabsWebhookRoutes({
     return res.json(consultResponseBody(outcome, localeFor(call.language)));
   }
 
-  router.post(ELEVENLABS_CONSULT_PATH, async (req, res) => {
-    try {
-      return await handleConsult(req, res);
-    } catch (err) {
-      console.error(`[${CONSULT_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
-      if (res.headersSent) return res.end();
-      return antworteFehler(res, HTTP_SERVER_ERROR, "intern");
-    }
+  router.post(ELEVENLABS_CONSULT_PATH, (req, res, next) => {
+    antworteSicher({ tag: CONSULT_LOG_TAG, handler: handleConsult, req, res }).catch(next);
   });
 
-  router.post(ELEVENLABS_LOOKUP_PATH, async (req, res) => {
-    try {
-      return await handleLookup(req, res, { store, config });
-    } catch (err) {
-      console.error(`[${LOOKUP_LOG_TAG}] fehler: ${err?.stack || err?.message || "unbekannt"}`);
-      if (res.headersSent) return res.end();
-      return antworteFehler(res, HTTP_SERVER_ERROR, "intern");
-    }
+
+  router.post(ELEVENLABS_LOOKUP_PATH, (req, res, next) => {
+    const handler = (rq, rs) => handleLookup(rq, rs, { store, config });
+    antworteSicher({ tag: LOOKUP_LOG_TAG, handler, req, res }).catch(next);
   });
 
   return router;
