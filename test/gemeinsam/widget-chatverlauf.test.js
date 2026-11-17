@@ -7,7 +7,8 @@ const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
 const WIDGETS = await ausgelieferteWidgets();
 const SKRIPT_I18N = skriptbloecke(WIDGETS.call).find((code) => code.includes("HermesI18n = {"));
 const SKRIPT_CALL = skriptbloecke(WIDGETS.call).find((code) => code.includes("function init()"));
-const CSS = [...WIDGETS.call.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((treffer) => treffer[1]).join("\n");
+const STILBLOECKE = [...WIDGETS.call.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
+const CSS = STILBLOECKE.map((treffer) => treffer[1]).join("\n");
 const BEREICH = /<div class="chatblock"[^>]*data-row="chat"[^>]*>[\s\S]*?<div class="fuss">/;
 
 function element() {
