@@ -88,3 +88,4 @@ export const PLATFORM_ALERT_SMS_TO_BEISPIEL = "+4915100000000";
 export const PROBE_TELNYX_SCHLUESSEL = "KEYtest-probe-schluessel-erfunden";
 
 export const EL_REGISTRIERUNG_BOOT_SCHLUESSEL = "el-registrierung-boot-erfunden";
+export const PROBE_STAGING_TEST_TOKEN = "stgtest-probe-token-erfunden";
