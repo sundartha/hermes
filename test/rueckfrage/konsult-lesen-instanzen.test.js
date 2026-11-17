@@ -32,6 +32,10 @@ const BEENDEN_SQL = "UPDATE call SET status = 'completed' WHERE id = $1";
 const ENDE_EREIGNIS = Object.freeze({ event: "done", eventId: null, questions: [] });
 const KEIN_EREIGNIS = Object.freeze({ event: "none", eventId: null, questions: [] });
 const HTTP_SERVER_ERROR = 500;
+const MELDUNGSSPRACHE_SQL = `DO $$ BEGIN
+  EXECUTE format('ALTER DATABASE %I SET lc_messages = ''C''', current_database());
+END $$`;
+const DB_FRIST_FEHLER = /canceling statement due to (lock|statement) timeout/;
 
 function adminAdresse(rollenAdresse) {
   const url = new URL(process.env[POSTGRES_VARIABLE]);
@@ -43,6 +47,7 @@ async function mitInstanzen(t, { anrufId, mitA }, lauf) {
   const db = await echteDatenbankMitRolle(t);
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();
+  await verwaltung.query(MELDUNGSSPRACHE_SQL);
   const gestartet = [];
   const starte = async () => {
     const instanz = await startServer({ env: pgStartUmgebung(db.adresse, UMGEBUNG) });
@@ -165,7 +170,7 @@ test(
         return roh;
       });
       assert.equal(antwort.status, HTTP_SERVER_ERROR);
-      assert.deepEqual(await hole(b), ENDE_EREIGNIS);
+      assert.match(b.stdout, DB_FRIST_FEHLER, b.stdout);
     });
   },
 );
@@ -179,6 +184,7 @@ test(
       await sql(BEENDEN_SQL, ["call_kl_5"]);
       const antwort = await unterSperre(sql, () => holeRoh(a));
       assert.equal(antwort.status, HTTP_SERVER_ERROR);
+      assert.match(a.stdout, DB_FRIST_FEHLER, a.stdout);
     });
   },
 );
