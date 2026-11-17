@@ -193,19 +193,31 @@ async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
   }
 }
 
-export async function heartbeatNachtlauf({ einstellungen, ausgabe }) {
-  if (einstellungen.heartbeatNachtlaufUrl === null) {
-    ausgabe.melde("heartbeat_uebersprungen");
+const HEARTBEAT_PROBE_MELDUNGEN = Object.freeze({
+  uebersprungen: "heartbeat_probe_uebersprungen",
+  gemeldet: "heartbeat_probe_gemeldet",
+  nichtZugestellt: "heartbeat_probe_nicht_zugestellt",
+});
+const HEARTBEAT_NACHTLAUF_MELDUNGEN = Object.freeze({
+  uebersprungen: "heartbeat_uebersprungen",
+  gemeldet: "heartbeat_gemeldet",
+  nichtZugestellt: "heartbeat_nicht_zugestellt",
+});
+
+export async function heartbeatMelden({ einstellungen, werte, ausgabe }) {
+  const probe = werte.get("--name") === "probe";
+  const meldungen = probe ? HEARTBEAT_PROBE_MELDUNGEN : HEARTBEAT_NACHTLAUF_MELDUNGEN;
+  const adresse = probe ? einstellungen.heartbeatProbeUrl : einstellungen.heartbeatNachtlaufUrl;
+  if (adresse === null) {
+    ausgabe.melde(meldungen.uebersprungen);
     return true;
   }
-  const { status } = await anfrage(einstellungen.heartbeatNachtlaufUrl, {
-    fristMs: HEARTBEAT_FRIST_MS,
-  });
+  const { status } = await anfrage(adresse, { fristMs: HEARTBEAT_FRIST_MS });
   if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
-    ausgabe.melde("heartbeat_nicht_zugestellt", { http: status });
+    ausgabe.melde(meldungen.nichtZugestellt, { http: status });
     return true;
   }
-  ausgabe.melde("heartbeat_gemeldet");
+  ausgabe.melde(meldungen.gemeldet);
   return true;
 }
 

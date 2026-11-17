@@ -93,6 +93,12 @@ jobs:
           SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node scripts/anruf-probe/probe.mjs
 
+      - name: Lebenszeichen Anrufprobe
+        if: success() && github.event_name == 'schedule'
+        env:
+          BETTER_STACK_HEARTBEAT_PROBE: ${{ secrets.BETTER_STACK_HEARTBEAT_PROBE }}
+        run: node tools/deploy-weg.mjs heartbeat --name probe
+
       - name: Heartbeat Nachtlauf
         if: success() && github.event_name == 'schedule'
         env:
