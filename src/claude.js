@@ -321,7 +321,8 @@ export async function summarizeCall(call) {
   const turn = await summaryLlm.complete({
     model,
     maxTokens: SUMMARY_MAX_TOKENS,
-    system: loc.summarySystem(owner) + (evidenceAllowed ? loc.summaryEvidenceClause : ""),
+    system:
+      loc.summarySystem(owner) + loc.summaryNextStepsClause + (evidenceAllowed ? loc.summaryEvidenceClause : ""),
     messages: [
       {
         role: "user",
