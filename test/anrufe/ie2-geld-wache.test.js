@@ -742,3 +742,13 @@ test("Reserve-Frist beim Anrufstart: ohne Schreib-Methode am Speicher laeuft der
   t.mock.timers.tick(1);
   assert.deepEqual(freigaben, [call]);
 });
+
+test("Reserve-Frist beim Anrufstart: die Freigabe nach Ablauf bekommt den aktuellen Stand des Anrufs aus dem Speicher", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { lifecycle, call, freigaben } = reserveHarness(undefined);
+  lifecycle.armReserveReleaseTimer({ ...call, status: "ringing" });
+  t.mock.timers.tick(90_000 + GNADE_MS);
+  assert.equal(freigaben.length, 1);
+  assert.equal(freigaben[0], call);
+  assert.equal(freigaben[0].status, "active");
+});
