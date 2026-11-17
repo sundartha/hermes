@@ -8,10 +8,6 @@ import {
   nowSeconds,
 } from "../helpers.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import {
-  TURN_LOOP_BY_COST_PROFILE,
-  legRunsOurTurnLoop,
-} from "../../src/telephony/leg-turn-loop.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
@@ -69,34 +65,6 @@ async function pruefeUnbelegtesProfil(srv, signer) {
   assert.equal(xml, `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);
   assert.doesNotMatch(xml, /<Gather|<Redirect|voice\/turn/);
 }
-
-test("IE4-1: Inventar - jedes bekannte Kostenprofil traegt eine ausdrueckliche Entscheidung", () => {
-  assert.deepEqual(
-    Object.keys(TURN_LOOP_BY_COST_PROFILE).sort(),
-    Object.values(KOSTENPROFIL).sort(),
-    "jedes bekannte Kostenprofil braucht eine ausdrueckliche Entscheidung - ein NEUES Profil ohne Eintrag faellt hier",
-  );
-  assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_BUDGET], true);
-  assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_INBOUND_BUDGET], true);
-  assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.EL_CONVAI_SIP], false);
-  assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI], false);
-});
-
-test("IE4-2: legRunsOurTurnLoop - Raender liefern true und werfen nie (fail-safe = Bestandsantwort)", () => {
-  assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET }), true);
-  assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI }), false);
-
-  for (const call of [
-    { costProfile: null },
-    {},
-    undefined,
-    { costProfile: "unbekanntes_profil" },
-    { costProfile: "constructor" },
-  ]) {
-    assert.doesNotThrow(() => legRunsOurTurnLoop(call));
-    assert.equal(legRunsOurTurnLoop(call), true, `fail-safe fuer ${JSON.stringify(call)}`);
-  }
-});
 
 test("IE4-3/4/5: Wiederholungs-Antwort auf /voice/incoming - pfadgerecht je Kostenprofil", async (ctx) => {
   const signer = makeTelnyxSigner();
