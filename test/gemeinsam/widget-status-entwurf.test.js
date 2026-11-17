@@ -143,7 +143,7 @@ test("widget-status-entwurf K7: Überschrift und Satz zur Nutzung stehen in en, 
 
 test("widget-status-entwurf K8: agent-status hat eine neue Version, die alten Pins bleiben", () => {
   const pins = widgetPins();
-  assert.equal(Object.keys(pins.calls).length, 25);
+  assert.equal(Object.keys(pins.calls).length, 26);
   assert.equal(Object.keys(pins.call).length, 38);
   assert.equal(Object.keys(pins["agent-status"]).length, NEUE_VERSION);
   assert.match(pins["agent-status"][NEUE_VERSION], /^[0-9a-f]{64}$/);
