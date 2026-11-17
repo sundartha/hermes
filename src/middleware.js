@@ -87,8 +87,11 @@ export function normalisierterOrigin(wert) {
   return url ? url.origin.toLowerCase() : null;
 }
 
-export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins = [] }) {
-  const kandidaten = [publicUrl, ...zusaetzlicheOrigins];
+export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins }) {
+  const kandidaten = [publicUrl];
+  if (zusaetzlicheOrigins !== undefined) {
+    kandidaten.push(...zusaetzlicheOrigins);
+  }
   const origins = kandidaten.flatMap((wert) => {
     const origin = normalisierterOrigin(wert);
     return origin ? [origin] : [];
