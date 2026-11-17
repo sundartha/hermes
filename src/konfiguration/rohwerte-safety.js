@@ -30,6 +30,16 @@ export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv }) {
       min: 0,
       max: 600000,
     }),
+    fristenTaktMs: numEnv("FRISTEN_TAKT_MS", env.FRISTEN_TAKT_MS, {
+      fallback: 15000,
+      min: 1,
+      max: 15000,
+    }),
+    fristenLimitJeMandant: numEnv("FRISTEN_LIMIT_JE_MANDANT", env.FRISTEN_LIMIT_JE_MANDANT, {
+      fallback: 20,
+      min: 1,
+      max: 1000,
+    }),
     rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", env.RATE_LIMIT_PER_MIN, {
       fallback: 120,
       min: 0,

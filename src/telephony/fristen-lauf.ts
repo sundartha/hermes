@@ -69,3 +69,40 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs }: Fris
 
   return { takt };
 }
+
+interface Uhr<Takt extends { unref: () => unknown }> {
+  setzeTakt: (aufgabe: () => void, ms: number) => Takt;
+  loescheTakt: (takt: Takt) => void;
+}
+
+interface FristenTaktAbhaengigkeiten<Takt extends { unref: () => unknown }> extends FristenLaufAbhaengigkeiten {
+  taktMs: number;
+  uhr: Uhr<Takt>;
+}
+
+export function starteFristenTakt<Takt extends { unref: () => unknown }>({
+  taktMs,
+  uhr,
+  ...abhaengigkeiten
+}: FristenTaktAbhaengigkeiten<Takt>): { stoppen: () => void } {
+  const lauf = makeFristenLauf(abhaengigkeiten);
+  let laeuft = false;
+  const takt = uhr.setzeTakt(() => {
+    if (laeuft) return;
+    laeuft = true;
+    lauf
+      .takt()
+      .catch((fehler: unknown) => {
+        console.error(`[fristen] Takt abgebrochen: ${String(fehler)}`);
+      })
+      .finally(() => {
+        laeuft = false;
+      });
+  }, taktMs);
+  takt.unref();
+  return {
+    stoppen: () => {
+      uhr.loescheTakt(takt);
+    },
+  };
+}
