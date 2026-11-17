@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { inboundTrunkSchreibenErlaubt } from "../../src/elevenlabs/nummern-registrierung.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -129,7 +130,7 @@ test("Init-Webhook ohne gueltiges Token bleibt abgelehnt, auch ohne Mandantenlis
   await mitServer({ env: { ...EL_INBOUND_ACCESS_BOOT_ENV }, seed: seed() }, async (srv) => {
     const url = `${srv.localUrl}${ELEVENLABS_INIT_PATH}`;
     for (const kopfzeilen of [{}, { [INIT_TOKEN_HEADER]: "x".repeat(ZUGANG_MIN) }]) {
-      const res = await fetch(url, {
+      const res = await abrufMitFrist(url, {
         method: "POST",
         headers: { "content-type": "application/json", ...kopfzeilen },
         body: JSON.stringify({}),
