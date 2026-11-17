@@ -300,3 +300,14 @@ test("Workflow: alarmprobe ist eine Eingabe mit Vorgabe false und der Schritt al
   assert.match(WORKFLOW, /- name: Staging abwarten und prüfen[^\n]*\n {8}if: github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\n/);
   assert.match(WORKFLOW, /\n {4}if: github\.event_name == 'workflow_dispatch' && inputs\.lastlauf && !inputs\.alarmprobe\n/);
 });
+
+test("Workflow: mit alarmprobe laufen weder die Anrufprobe noch das Beenden offener Probe-Anrufe", () => {
+  assert.match(
+    WORKFLOW,
+    /- name: Anrufprobe \(Kern in scripts\/anruf-probe\)\n {8}if: \$\{\{ \(success\(\) \|\| inputs\.absichtlich_rot\) && \(github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\) \}\}\n/,
+  );
+  assert.match(
+    WORKFLOW,
+    /- name: Offene Probe-Anrufe beenden\n {8}if: always\(\) && \(github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\)\n/,
+  );
+});
