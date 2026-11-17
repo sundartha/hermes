@@ -109,14 +109,13 @@ for (const [name, zustand, env, warnt] of API_SCHLUESSEL_FAELLE) {
   });
 }
 
-const RSA_PEM = crypto
-  .generateKeyPairSync("rsa", { modulusLength: 2048 })
-  .publicKey.export({ format: "pem", type: "spki" })
-  .toString();
-const EC_PEM = crypto
-  .generateKeyPairSync("ec", { namedCurve: "prime256v1" })
-  .publicKey.export({ format: "pem", type: "spki" })
-  .toString();
+function oeffentlichesPem(typ, optionen) {
+  const paar = crypto.generateKeyPairSync(typ, optionen);
+  return paar.publicKey.export({ format: "pem", type: "spki" }).toString();
+}
+
+const RSA_PEM = oeffentlichesPem("rsa", { modulusLength: 2048 });
+const EC_PEM = oeffentlichesPem("ec", { namedCurve: "prime256v1" });
 
 const ANDERER_TYP_FAELLE = [
   ["RSA-PEM", RSA_PEM],
