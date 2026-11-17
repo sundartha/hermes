@@ -13,7 +13,7 @@ interface Anfrage {
   headers?: Record<string, string | undefined>;
   rawBody?: string | Buffer;
   body?: { CallSid?: unknown; CallStatus?: unknown };
-  query: { callId?: unknown; quelle?: unknown; turnToken?: unknown };
+  query?: { callId?: unknown; quelle?: unknown; turnToken?: unknown };
 }
 
 interface Antwort {
@@ -172,22 +172,22 @@ export function incomingAnchors(req: Anfrage): Anker {
 
 function queryEreignisAnker(req: Anfrage, ereignis: { praefix: string; unterscheider: unknown }): Anker {
   const { praefix, unterscheider } = ereignis;
-  const callId = ankerTeil(req.query.callId);
+  const callId = ankerTeil(req.query?.callId);
   const anchors = callId ? [`${praefix}:${callId}:${ankerTeil(unterscheider)}`] : [];
   const envelope = envelopeAnchor(req);
   return envelope ? [...anchors, envelope] : anchors;
 }
-export const elRueckfallAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query.quelle });
+export const elRueckfallAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
 export const elUebergabeAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eu", unterscheider: "" });
 export const elBeinAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req: Anfrage): Anker {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
   return envelope ? [`s${envelope}`] : [];
 }
 
 export function vorspannAnchors(req: Anfrage): Anker {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
   return envelope ? [`v${envelope}`] : [];
 }
 
@@ -229,7 +229,7 @@ const LESEFEHLER_PRAEFIX: Record<string, string> = { "el-uebergabe": "[voice/out
 
 function antworteMitLesefehler({ weg, req, res, err }: { weg: string; req: Anfrage; res: Antwortkanal; err: unknown }): unknown {
   const praefix = LESEFEHLER_PRAEFIX[weg];
-  const callId = ankerTeil(req.query.callId) || "-";
+  const callId = ankerTeil(req.query?.callId) || "-";
   console.error(praefix, `Anruf lesen fehlgeschlagen (callId=${callId}):`, Reflect.get(Object(err), "message"));
   res.status(HTTP_SERVER_ERROR);
   return res.send("");
@@ -480,14 +480,14 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     ...ohneNeustartSchicht,
   });
   const uebergabeLaeuftOderEndete = async (req: Anfrage): Promise<Anruf | null | undefined> => {
-    const call = await leseAnruf(ankerTeil(req.query.callId));
+    const call = await leseAnruf(ankerTeil(req.query?.callId));
     return UEBERGABE_ZUSTAENDE.includes(bridgeStateOf(call)) ? call : null;
   };
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
-    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query.callId))) ? elUebergabeAnchors(req) : []),
+    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
   });
