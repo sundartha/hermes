@@ -103,7 +103,7 @@ export function elUebergabeDirektiven({
   did?: string;
   zugang: Zugang;
   publicUrl: string;
-  begruessungslautUrl?: string;
+  begruessungslautUrl?: string | undefined;
 }): unknown[] {
   return [
     dialSip({
