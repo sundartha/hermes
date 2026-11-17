@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { MCP_DENIAL_TEXTS } from "../../src/i18n/mcp-denial-texts.js";
 import { fasseFehlerZusammen } from "./ergebnis.js";
 import { bewerteLauf, nurFehlerquoteUeberGrenze } from "./schwellen.mjs";
 import { fuehreAusWennErlaubt } from "./ziel.mjs";
@@ -14,6 +15,7 @@ const UMGEBUNG_CI = "ci";
 const EXIT_ROT = 1;
 const ARGUMENTE_AB = 2;
 const ROTPROBE_ARGUMENT = "--rotprobe=";
+const BEGRENZER_SCHLUESSEL = Object.freeze(["ausgelastet", "gleichzeitig_limit"]);
 const ROTPROBEN = Object.freeze(["fehler", "verwerfen"]);
 
 function fuehreK6Aus(k6Befehl, dateien) {
@@ -36,12 +38,16 @@ function fuehreK6Aus(k6Befehl, dateien) {
   });
 }
 
+function ablehnungstexte() {
+  return Object.values(MCP_DENIAL_TEXTS).flatMap((sprache) => BEGRENZER_SCHLUESSEL.map((schluessel) => sprache[schluessel]));
+}
+
 export async function laufeMitDateien(k6Befehl, konfiguration) {
   const ordner = await mkdtemp(join(tmpdir(), "hermes-last-"));
   try {
     const konfigDatei = join(ordner, "konfiguration.json");
     const ergebnisDatei = join(ordner, "ergebnis.json");
-    await writeFile(konfigDatei, JSON.stringify(konfiguration));
+    await writeFile(konfigDatei, JSON.stringify({ ...konfiguration, ablehnungstexte: ablehnungstexte() }));
     await fuehreK6Aus(k6Befehl, { LAST_KONFIG: konfigDatei, LAST_ERGEBNIS: ergebnisDatei });
     return JSON.parse(await readFile(ergebnisDatei, "utf8"));
   } finally {
@@ -66,7 +72,7 @@ function beschreibeErstenLauf({ ergebnis }) {
   const aufteilung =
     ergebnis.httpFehlgeschlagen === undefined
       ? ""
-      : ` (${ergebnis.anfragen} Anfragen, http_req_failed ${ergebnis.httpFehlgeschlagen}, ablauf_fehler ${ergebnis.ablaufFehler})`;
+      : ` (${ergebnis.anfragen} Anfragen, http_req_failed ${ergebnis.httpFehlgeschlagen}, ablauf_fehler ${ergebnis.ablaufFehler}, abgelehnt ${ergebnis.abgelehnt})`;
   return `Lastlauf: erster Lauf Fehlerquote ${ergebnis.fehlerquoteProzent} %${aufteilung}, einmalige Wiederholung`;
 }
 

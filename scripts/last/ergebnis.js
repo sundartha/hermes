@@ -61,6 +61,7 @@ export function baueErgebnis(daten, ausgelassen = []) {
     anfragen: messwert(daten, "http_reqs", "count"),
     httpFehlgeschlagen: messwert(daten, "http_req_failed", "passes"),
     ablaufFehler: messwert(daten, "ablauf_fehler", "count"),
+    abgelehnt: messwert(daten, "abgelehnt", "count"),
     fehlerquoteProzent: fehlerquote(daten),
     verloreneAnrufe: verloreneAnrufe(daten),
     wartezeitSekunden: wartezeitSekunden(daten),

@@ -22,6 +22,7 @@ const FORMULAR = { "Content-Type": "application/x-www-form-urlencoded" };
 const JSON_KOPF = { "Content-Type": "application/json" };
 
 const ablaufFehler = new Counter("ablauf_fehler");
+const abgelehnt = new Counter("abgelehnt");
 const gestartet = new Counter("anrufe_gestartet");
 const beendet = new Counter("anrufe_beendet");
 const wartezeit = new Trend("anruf_wartezeit", true);
@@ -45,6 +46,7 @@ export const options = { scenarios: waehleSzenarien(szenarienFuerArt(SZENARIEN, 
 
 export function setup() {
   ablaufFehler.add(0);
+  abgelehnt.add(0);
   gestartet.add(0);
   beendet.add(0);
 }
@@ -84,11 +86,19 @@ function werkzeugFehlertext(antwort, ergebnis) {
   return ergebnis.content?.[0]?.text ?? "isError ohne Text";
 }
 
+function istBegrenzerAblehnung(ergebnis) {
+  return Boolean(ergebnis?.isError && konfig.ablehnungstexte?.includes(ergebnis.content?.[0]?.text));
+}
+
 function werkzeugErgebnis({ route, ziel, token, name, argumente }) {
   const nachricht = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: argumente } };
   const antwort = mcp({ route, ziel, token, nachricht });
   const rpc = antwort.status === HTTP_OK ? leseRpc(antwort) : null;
   const ergebnis = rpc ? rpc.result : null;
+  if (istBegrenzerAblehnung(ergebnis)) {
+    abgelehnt.add(1);
+    return undefined;
+  }
   if (!ergebnis || ergebnis.isError) {
     meldeFehler(route, werkzeugFehlertext(antwort, ergebnis));
     return undefined;
