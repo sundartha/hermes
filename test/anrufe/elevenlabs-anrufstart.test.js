@@ -315,7 +315,8 @@ async function gebrueckterAnruf(srv, befehle) {
   await waitUntil(() => befehle.some((befehl) => befehl.endsWith("-el")), { timeoutMs: RESULT_WAIT_MS });
   await sendeEreignis(srv, { callId, typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
   await sendeEreignis(srv, { callId, typ: "call.answered", bein: elVon(callId) });
-  await waitUntil(() => srv.readStore().calls.find((call) => call.id === callId)?.bridgedAt, { timeoutMs: RESULT_WAIT_MS });
+  const gebrueckt = () => srv.readStore().calls.some((call) => call.id === callId && call.bridgedAt);
+  await waitUntil(gebrueckt, { timeoutMs: RESULT_WAIT_MS });
   await beinLegtAuf(srv, callId);
   return callId;
 }
