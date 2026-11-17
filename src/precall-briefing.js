@@ -9,7 +9,7 @@ import {
 } from "./llm-usage.js";
 import { agentToolNames } from "./claude.js";
 import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.ts";
-import { validateAssistantContext, validateMandate } from "./begriffe/anruf-pruefung.ts";
+import { validateAssistantContext, validateMandate } from "./i18n/anruf-eingabe-texte.ts";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
