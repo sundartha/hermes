@@ -14,6 +14,8 @@ const FREMDE_ZEILE = /^[^\p{C}]{1,160}$/u;
 const LETZTE_ZEILEN = 20;
 const ZEILE_LAENGE = 160;
 const ZEILENENDE = /\r?\n|\r/;
+const ADRESSE = /\S*:\/\/\S*/g;
+const ADRESSE_ERSATZ = "<url>";
 const MASKE_ERSETZUNGEN = [
   [/%/g, "%25"],
   [/\r/g, "%0D"],
@@ -338,10 +340,15 @@ export function zeileBauen(schluessel, werte = {}) {
   return text;
 }
 
+function zeileKuerzen(zeile) {
+  const ohneAdresse = zeile.replace(ADRESSE, ADRESSE_ERSATZ);
+  return ohneAdresse.trim().slice(0, ZEILE_LAENGE);
+}
+
 export function fremdeZeilenMelden(ausgabe, text) {
   const zeilen = text
     .split(ZEILENENDE)
-    .map((zeile) => zeile.trim().slice(0, ZEILE_LAENGE))
+    .map(zeileKuerzen)
     .filter((zeile) => zeile !== "" && FREMDE_ZEILE.test(zeile) && zeileErlaubt(zeile));
   for (const zeile of zeilen.slice(-LETZTE_ZEILEN)) ausgabe.melde("probe_auth_zeile", { zeile });
 }
