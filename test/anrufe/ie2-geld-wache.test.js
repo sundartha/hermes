@@ -455,3 +455,215 @@ test("Frist-Ende: hat ein anderer Prozess den Anruf beendet, steht er beim Besit
   assert.notEqual(besitzer.store.getCall("call_ende").status, "active");
   assert.equal(betrieb.hangups.length, 1);
 });
+
+const RETRY_MS = 10000;
+const LANGE_HER_MS = 900000;
+
+function neuerAnruf(id, tenantId, startedMsAgo = RECENTLY_STARTED_MS) {
+  return {
+    id,
+    tenantId,
+    status: "active",
+    provider: "telnyx",
+    twilioSid: `CA_${id}`,
+    direction: "inbound",
+    startedAt: new Date(Date.now() - startedMsAgo).toISOString(),
+    maxDurationS: MAX_DURATION_S,
+  };
+}
+
+function lesefehlerHarness({ lese, storeErgaenzung = {}, calls = [neuerAnruf("call_lf", "tenant_lf")] }) {
+  const [call] = calls;
+  const order = [];
+  const budgetTimers = [];
+  const capTimers = [];
+  let settleBill;
+  const billed = new Promise((resolve) => {
+    settleBill = resolve;
+  });
+  const store = {
+    load: () => ({ calls: [], tenants: [] }),
+    getCall: () => call,
+    leseCall: lese(call),
+    attachActiveCall: async () => call,
+    setCallEndedAt: (_id, status) => {
+      order.push("setCallEndedAt");
+      call.status = status;
+    },
+    recordFailureReason: (_id, reason) => {
+      order.push("recordFailureReason");
+      call.failureReason ??= reason;
+    },
+    activeCallsFor: () => [],
+    liveBudgetExceeded: () => true,
+    ...storeErgaenzung,
+  };
+  const lifecycle = makeCallLifecycle({
+    store,
+    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: TAKT_MS }),
+    finishCall: () => {
+      order.push("bill");
+      settleBill();
+    },
+    releaseReserve: () => {},
+    voiceControl: () => ({
+      async endCall() {
+        order.push("endCall");
+      },
+    }),
+    terminateAndBillCall,
+    hangUpAction,
+    billThunk,
+    reattachActiveCallCore,
+    cappedEndedAtMs,
+    classifyCallTime,
+    blockingBudgetAxis: () => "budget_tenant",
+    setBudgetWatchTimer: (fn, ms) => {
+      budgetTimers.push({ fn, ms });
+      return { unref() {} };
+    },
+  });
+  return { lifecycle, call, order, budgetTimers, capTimers, billed };
+}
+
+async function mitErfasstenFristenUndFehlern(harness, body) {
+  const echtesError = console.error;
+  const fehlerzeilen = [];
+  console.error = (...teile) => fehlerzeilen.push(teile.join(" "));
+  try {
+    await withCapturedCapTimers(harness, () => body(fehlerzeilen));
+  } finally {
+    console.error = echtesError;
+  }
+}
+
+test("Hoechstdauer: wirft der Leser, bleibt der Anruf bewacht und die naechste Frist steht nach MAX_DURATION_RETRY_MS", async () => {
+  let versuche = 0;
+  const harness = lesefehlerHarness({
+    lese: (call) => async () => {
+      versuche += 1;
+      if (versuche === 1) throw new Error("Datenbank nicht erreichbar");
+      return call;
+    },
+  });
+  await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
+    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
+    await fireLatest(harness.capTimers);
+    assert.equal(harness.call.status, "active", "ein Lesefehler gibt den Anruf nicht frei");
+    assert.deepEqual(harness.order, [], "nichts beendet, nichts gebucht");
+    assert.equal(harness.capTimers.length, 1, "die naechste Frist ist geplant");
+    assert.equal(harness.capTimers[0].ms, RETRY_MS);
+    assert.equal(fehlerzeilen.length, 1);
+    assert.equal(
+      fehlerzeilen[0],
+      "[max-duration] Anruf nicht lesbar, neuer Versuch geplant: call_lf Datenbank nicht erreichbar",
+    );
+    await fireLatest(harness.capTimers);
+    await harness.billed;
+  });
+  assert.equal(harness.call.status, "completed", "der zweite Versuch beendet den Anruf");
+  assert.equal(versuche, 2);
+});
+
+test("Hoechstdauer: liest der Leser den Anruf als nicht aktiv, endet die Frist still ohne neuen Versuch", async () => {
+  const harness = lesefehlerHarness({ lese: () => async () => null });
+  await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
+    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
+    await fireLatest(harness.capTimers);
+    assert.deepEqual(harness.capTimers, [], "kein neuer Versuch");
+    assert.deepEqual(fehlerzeilen, []);
+  });
+  assert.deepEqual(harness.order, []);
+  assert.equal(harness.call.status, "active");
+});
+
+test("Geld-Wache: wirft der Leser, plant die Wache den naechsten Takt und der Anruf bleibt aktiv", async () => {
+  let versuche = 0;
+  const harness = lesefehlerHarness({
+    lese: (call) => async () => {
+      versuche += 1;
+      if (versuche === 1) throw new Error("Lesen kaputt");
+      return call;
+    },
+  });
+  await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
+    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
+    await fireLatest(harness.budgetTimers);
+    assert.equal(harness.call.status, "active");
+    assert.deepEqual(harness.order, []);
+    assert.equal(harness.budgetTimers.length, 1, "der naechste Wachen-Tick ist geplant");
+    assert.equal(harness.budgetTimers[0].ms, TAKT_MS);
+    assert.match(fehlerzeilen.join("\n"), /Geld-Wache: Runde fehlgeschlagen \(call=call_lf\): Lesen kaputt/);
+    await fireLatest(harness.budgetTimers);
+    await harness.billed;
+  });
+  assert.equal(harness.call.status, "completed");
+  assert.equal(harness.call.failureReason, BUDGET_FAILURE_REASON);
+});
+
+test("Geld-Wache: bei langsamem Leser beendet sie den Anruf ueber der Kostendecke trotzdem und prueft nicht doppelt", async () => {
+  let lesevorgaenge = 0;
+  let oeffne;
+  const offen = new Promise((resolve) => {
+    oeffne = resolve;
+  });
+  const harness = lesefehlerHarness({
+    lese: (call) => async () => {
+      lesevorgaenge += 1;
+      await offen;
+      return call;
+    },
+  });
+  await mitErfasstenFristenUndFehlern(harness, async () => {
+    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
+    await fireLatest(harness.budgetTimers);
+    assert.equal(lesevorgaenge, 1);
+    assert.equal(harness.call.status, "active", "solange der Zugriff offen ist, ist nichts entschieden");
+    assert.deepEqual(harness.budgetTimers, [], "keine zweite Pruefung neben der offenen");
+    oeffne();
+    await harness.billed;
+  });
+  assert.equal(lesevorgaenge, 2, "die Beendigung liest den Anruf noch einmal, genau eine Pruefung vorher");
+  assert.equal(harness.call.status, "completed");
+  assert.equal(harness.call.failureReason, BUDGET_FAILURE_REASON);
+  assert.deepEqual(harness.order, ["recordFailureReason", "setCallEndedAt", "endCall", "bill"]);
+});
+
+function neustartHarness(activeCallsForSql) {
+  const alleAnrufe = [neuerAnruf("call_t1", "tenant_1"), neuerAnruf("call_t2", "tenant_2", LANGE_HER_MS)];
+  return lesefehlerHarness({
+    lese: () => async () => null,
+    calls: alleAnrufe,
+    storeErgaenzung: {
+      load: () => ({ calls: [], tenants: [{ id: "tenant_1" }, { id: "tenant_2" }] }),
+      activeCallsForSql: activeCallsForSql(alleAnrufe),
+    },
+  });
+}
+
+test("Neustart: Fristen und Geld-Wache kommen aus der Datenbank, jeder Mandant wird gelesen", async () => {
+  const gefragt = [];
+  const harness = neustartHarness((alle) => async (tenantId) => {
+    gefragt.push(tenantId);
+    return alle.filter((call) => call.tenantId === tenantId);
+  });
+  await mitErfasstenFristenUndFehlern(harness, async () => {
+    await harness.lifecycle.rearmActiveCallTimers();
+    await harness.lifecycle.rearmBudgetWatchdogs();
+  });
+  assert.deepEqual(gefragt.sort(), ["tenant_1", "tenant_1", "tenant_2", "tenant_2"]);
+  assert.equal(harness.budgetTimers.length, 2, "beide aktiven Anrufe bekommen eine Geld-Wache");
+  assert.equal(harness.capTimers.length, 1, "der laufende Anruf bekommt seine Frist, der abgelaufene wird beendet");
+});
+
+test("Neustart: ein Lesefehler bricht das Wiederherstellen ab, es laeuft kein Anruf ohne Frist", async () => {
+  const harness = neustartHarness(() => async () => {
+    throw new Error("Start ohne Datenbank");
+  });
+  await mitErfasstenFristenUndFehlern(harness, async () => {
+    await assert.rejects(Promise.resolve(harness.lifecycle.rearmActiveCallTimers()), /Start ohne Datenbank/);
+    await assert.rejects(Promise.resolve(harness.lifecycle.rearmBudgetWatchdogs()), /Start ohne Datenbank/);
+  });
+  assert.deepEqual(harness.budgetTimers, []);
+  assert.deepEqual(harness.capTimers, []);
+});

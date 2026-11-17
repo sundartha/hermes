@@ -1,5 +1,5 @@
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.ts";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S, MAX_DURATION_RETRY_MS } from "../begriffe/anrufe.js";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
@@ -19,6 +19,8 @@ const ACTIVE_CALL_STATUS = "active";
 
 const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
 
+const LESE_FEHLER = "[max-duration] Anruf nicht lesbar, neuer Versuch geplant:";
+
 const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
 
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
@@ -33,8 +35,10 @@ interface Call {
 }
 
 interface Store {
-  load: () => { calls: Call[] };
+  load: () => { calls: Call[]; tenants: { id: string }[] };
   getCall: (callId: string) => Call | null | undefined;
+  leseCall?: (callId: string) => Promise<Call | null | undefined>;
+  activeCallsForSql?: (tenantId: string) => Promise<Call[]>;
   setCallEndedAt: (callId: string, status: string, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
   attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
@@ -97,8 +101,8 @@ interface CallLifecycle {
   armMaxDurationTimer: (call: Call, providerCallSid: string) => void;
   armReserveReleaseTimer: (call: Call) => void;
   reattachActiveCall: (callId: string) => Promise<ReattachResult>;
-  rearmActiveCallTimers: () => void;
-  rearmBudgetWatchdogs: () => void;
+  rearmActiveCallTimers: () => void | Promise<void>;
+  rearmBudgetWatchdogs: () => void | Promise<void>;
   terminateExpiredCall: (call: Call) => Promise<void>;
 }
 
@@ -130,6 +134,38 @@ function activeCallsOf(store: Store): Call[] {
   return store.load().calls.filter((call) => call.status === ACTIVE_CALL_STATUS);
 }
 
+function readCall(store: Store, callId: string): Promise<Call | null | undefined> | Call | null | undefined {
+  return store.leseCall ? store.leseCall(callId) : store.getCall(callId);
+}
+
+async function readCallOrRetry(
+  store: Store,
+  callId: string,
+  retry: () => void,
+): Promise<{ call: Call | null | undefined } | null> {
+  try {
+    return { call: await readCall(store, callId) };
+  } catch (err) {
+    console.error(LESE_FEHLER, callId, Reflect.get(Object(err), "message"));
+    setTimeout(retry, MAX_DURATION_RETRY_MS);
+    return null;
+  }
+}
+
+async function activeCallsFromDatabase(store: Store, activeCallsForSql: NonNullable<Store["activeCallsForSql"]>): Promise<Call[]> {
+  const perTenant = await Promise.all(store.load().tenants.map((tenant) => activeCallsForSql(tenant.id)));
+  return perTenant.flat();
+}
+
+function withActiveCalls(store: Store, use: (calls: Call[]) => void): void | Promise<void> {
+  const { activeCallsForSql } = store;
+  if (!activeCallsForSql) {
+    use(activeCallsOf(store));
+    return undefined;
+  }
+  return activeCallsFromDatabase(store, activeCallsForSql).then(use);
+}
+
 function makeBudgetAxisSeam({
   store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
 }: BudgetAxisSeamDeps) {
@@ -148,7 +184,7 @@ function makeBudgetAxisSeam({
 
   const watchdog = makeBudgetWatchdog({
     intervalMs,
-    activeCallById: (callId: string) => runningLeg(store.getCall(callId)),
+    activeCallById: async (callId: string) => runningLeg(await readCall(store, callId)),
     blockingAxisFor,
     terminate: (call: Call) =>
       terminateOverBudgetCall({
@@ -159,12 +195,14 @@ function makeBudgetAxisSeam({
     setTimer,
   });
 
-  function rearmWatchdogs(): void {
-    const { armedNow } = watchdog.rearm(activeCallsOf(store).map((call) => call.id));
-    if (armedNow)
-      console.log(
-        `[budget] Boot-Re-Arm der Geld-Wache: ${String(armedNow)} aktive Legs (Takt ${String(intervalMs)} ms)`,
-      );
+  function rearmWatchdogs(): void | Promise<void> {
+    return withActiveCalls(store, (calls) => {
+      const { armedNow } = watchdog.rearm(calls.map((call) => call.id));
+      if (armedNow)
+        console.log(
+          `[budget] Boot-Re-Arm der Geld-Wache: ${String(armedNow)} aktive Legs (Takt ${String(intervalMs)} ms)`,
+        );
+    });
   }
 
   return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm, rearmWatchdogs };
@@ -177,7 +215,11 @@ export function makeCallLifecycle({
 }: CallLifecycleDeps): CallLifecycle {
   async function terminateActiveCall({ callId, providerCallSid, status, failureReason }: TerminateRequest): Promise<void> {
     try {
-      const call = store.getCall(callId);
+      const gelesen = await readCallOrRetry(store, callId, () => {
+        terminateActiveCall({ callId, providerCallSid, status, failureReason }).catch(() => undefined);
+      });
+      if (!gelesen) return;
+      const { call } = gelesen;
       if (call?.status !== "active") return;
       if (await inDatenbankBeendet(callId, store.attachActiveCall)) {
         await store.setCallEndedAt(callId, status, new Date().toISOString());
@@ -249,22 +291,24 @@ export function makeCallLifecycle({
     return result;
   }
 
-  function rearmActiveCallTimers(): void {
-    const nowMs = Date.now();
-    let reArmed = 0;
-    let terminalized = 0;
-    for (const call of activeCallsOf(store)) {
-      const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
-      if (expired) {
-        terminateCappedCall(call.id, call.twilioSid, "failed").catch(() => undefined);
-        terminalized++;
-      } else {
-        scheduleMaxDurationEnd(call, call.twilioSid, remaining);
-        reArmed++;
+  function rearmActiveCallTimers(): void | Promise<void> {
+    return withActiveCalls(store, (calls) => {
+      const nowMs = Date.now();
+      let reArmed = 0;
+      let terminalized = 0;
+      for (const call of calls) {
+        const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
+        if (expired) {
+          terminateCappedCall(call.id, call.twilioSid, "failed").catch(() => undefined);
+          terminalized++;
+        } else {
+          scheduleMaxDurationEnd(call, call.twilioSid, remaining);
+          reArmed++;
+        }
       }
-    }
-    if (reArmed || terminalized)
-      console.log(`[rearm] aktive Calls beim Boot: ${String(reArmed)} re-armed, ${String(terminalized)} terminalisiert (Zombie)`);
+      if (reArmed || terminalized)
+        console.log(`[rearm] aktive Calls beim Boot: ${String(reArmed)} re-armed, ${String(terminalized)} terminalisiert (Zombie)`);
+    });
   }
 
   return {

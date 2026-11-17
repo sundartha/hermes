@@ -783,9 +783,9 @@ export async function bootServer({
     provisioning,
   );
 
-  lifecycle.rearmActiveCallTimers();
+  await lifecycle.rearmActiveCallTimers();
 
-  lifecycle.rearmBudgetWatchdogs();
+  await lifecycle.rearmBudgetWatchdogs();
 
   starteFristenTakt({ store, lifecycle, fristen: fristenEinstellungen });
 
