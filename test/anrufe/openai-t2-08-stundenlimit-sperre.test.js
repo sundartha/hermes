@@ -6,7 +6,7 @@ import express from "express";
 import { startServer, DOMESTIC_TEST_NUMBER, EL_OUTBOUND_BOOT_ENV, EL_OUTBOUND_CONFIG } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termination.ts";
 import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
