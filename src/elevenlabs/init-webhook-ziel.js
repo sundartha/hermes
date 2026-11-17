@@ -1,5 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
-import { ELEVENLABS_INIT_PATH } from "../routes/webhooks-elevenlabs-init.js";
+import { ELEVENLABS_INIT_PATH } from "../routes/webhooks-elevenlabs-init.ts";
 import { leseRenderDienst, leseRenderEnvVar, renderAnfrage, renderDienstPfad } from "../render-api.ts";
 
 export const INIT_WEBHOOK_ORIGIN = "https://app.sundartha.com";

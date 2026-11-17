@@ -6,7 +6,7 @@ import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { CONFIG_NAMESPACES } from "../../src/config.js";
 import { VORSPANN_RUECKFALL } from "../../src/elevenlabs/vorspann-pruefung.js";
-import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.js";
+import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   OWNER_TEST_FIRST_NAME,

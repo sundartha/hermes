@@ -1,5 +1,5 @@
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
-import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
+import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.ts";
 import { ANRUFE_LAUFEND_PATH } from "./routes/intern-anrufe-laufend.js";
 import { ANRUFPAUSE_PATH } from "./routes/intern-anrufpause.js";
 import { STATUS_PATH } from "./routes/intern-status.js";
