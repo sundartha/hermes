@@ -300,7 +300,7 @@
     },
     {
       "baustein": "anrufe",
-      "zweck": "Anruf führen: Telefonie, ElevenLabs, LLM, TTS, Recherche und Anruf-Routen.",
+      "zweck": "Anruf führen: Telefonie, ElevenLabs, LLM, TTS, Recherche und Anruf-Routen. Zielstruktur: Fachlogik innen (Liste fachlogik im Bereich anrufe in tools/bereiche.json), Datenbank, Netz und Uhr außen; die Regel anrufe-fachlogik-ohne-aussenwelt in .dependency-cruiser.cjs setzt das durch.",
       "quellen": [
         "src/telephony/",
         "src/elevenlabs/",

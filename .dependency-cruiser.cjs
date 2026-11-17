@@ -18,6 +18,7 @@ const TEST_ZIELE_ERLAUBT = BEREICHE.flatMap(({ eingaenge, fachlogik }) => [
   ...eingaenge,
   ...fachlogik,
 ]);
+const ANRUFE_FACHLOGIK = BEREICHE.filter(({ bereich }) => bereich === "anrufe").flatMap(({ fachlogik }) => fachlogik);
 
 module.exports = {
   forbidden: [
@@ -53,6 +54,14 @@ module.exports = {
         "Tests greifen nur über die öffentlichen Eingänge eines Bereichs zu (MCP-Werkzeug, HTTP-Route, Anbieter-Webhook, Fassade, Port, Registry, Konfiguration) oder prüfen reine Fachlogik als Tabelle. Interne Module nicht direkt importieren. Schreibe den Test über den Eingang des Bereichs (die Eingänge stehen je Bereich unter eingaenge in tools/bereiche.json). Die Liste ändert nur Engineering; hilft der Eingang nicht weiter, halte an und melde es im Issue.",
       from: { path: "^test/" },
       to: { path: "^src/", pathNot: TEST_ZIELE_ERLAUBT },
+    },
+    {
+      name: "anrufe-fachlogik-ohne-aussenwelt",
+      severity: "error",
+      comment:
+        "Fachlogik des Anrufbereichs (Liste fachlogik im Bereich anrufe in tools/bereiche.json) rechnet nur und importiert keine Datenbank, kein Netz und keinen Adapter: nicht src/store.js, src/store/, src/db/, src/utils/anfrage.js und nicht src/telephony/adapters/. Was Datenbank, Netz oder Uhr braucht, gehört in eine Datei außerhalb der Liste, die das Ergebnis an die Fachlogik übergibt.",
+      from: { path: ANRUFE_FACHLOGIK },
+      to: { path: "^src/(store\\.[jt]s$|store/|db/|utils/anfrage\\.[jt]s$|telephony/adapters/)" },
     },
     {
       name: "src-nicht-nach-apps-web",
