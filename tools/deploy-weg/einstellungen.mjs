@@ -12,6 +12,7 @@ const PFAD = /^\S.{0,1023}$/;
 const SCHLUESSEL_PEM = /^-----BEGIN PRIVATE KEY-----[\w+/=\s]{1,4000}-----END PRIVATE KEY-----\s*$/;
 const SCHLUSS_STRICH = /\/+$/;
 const HEARTBEAT_NACHTLAUF = "BETTER_STACK_HEARTBEAT_NACHTLAUF";
+const HEARTBEAT_PROBE = "BETTER_STACK_HEARTBEAT_PROBE";
 
 function muster(ausdruck) {
   return (wert) => ausdruck.test(wert);
@@ -55,6 +56,7 @@ const REGELN = new Map([
   ["BETTER_STACK_ALERT_URL", httpsOderLoopback],
   ["SLACK_ALERT_URL", httpsOderLoopback],
   [HEARTBEAT_NACHTLAUF, httpsOderLoopback],
+  [HEARTBEAT_PROBE, httpsOderLoopback],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
@@ -69,6 +71,7 @@ const GEHEIM = [
   "BETTER_STACK_ALERT_URL",
   "SLACK_ALERT_URL",
   HEARTBEAT_NACHTLAUF,
+  HEARTBEAT_PROBE,
 ];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
@@ -134,7 +137,7 @@ const BEFEHLE = new Map([
       freiwillig: NOTFALL_AKTEURE,
     },
   ],
-  ["heartbeat", { pflicht: [], freiwillig: [], tolerant: [HEARTBEAT_NACHTLAUF] }],
+  ["heartbeat", { pflicht: [], freiwillig: [], tolerant: [HEARTBEAT_NACHTLAUF, HEARTBEAT_PROBE] }],
 ]);
 
 function gueltig(name, wert) {
@@ -181,6 +184,9 @@ function werteBauen(umgebung) {
     slackUrl: umgebung.SLACK_ALERT_URL || null,
     heartbeatNachtlaufUrl: gueltig(HEARTBEAT_NACHTLAUF, umgebung[HEARTBEAT_NACHTLAUF])
       ? umgebung[HEARTBEAT_NACHTLAUF]
+      : null,
+    heartbeatProbeUrl: gueltig(HEARTBEAT_PROBE, umgebung[HEARTBEAT_PROBE])
+      ? umgebung[HEARTBEAT_PROBE]
       : null,
   };
 }
