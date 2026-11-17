@@ -3,11 +3,21 @@ import { LOCALES } from "../../src/i18n/locales.js";
 export const ANNAHME_GRENZE_S = 15;
 export const DAUER_GRENZE_S = 60;
 const STATUS_BEENDET = "completed";
+const RICHTUNG_STANDARD = "ausgehend";
+const SOLL_SAETZE = Object.freeze({
+  ausgehend: (locale, { auftraggeber }) => [locale.disclosure(auftraggeber)],
+  eingehend: (locale, { auftraggeber, vorname }) => [
+    locale.inboundEroeffnung(auftraggeber),
+    locale.inboundEroeffnungOwner(vorname),
+  ],
+});
 
-function offenlegungStimmt({ sprache, auftraggeber, begruessung }) {
-  const locale = Object.hasOwn(LOCALES, sprache) ? LOCALES[sprache] : undefined;
-  if (locale === undefined) return false;
-  return begruessung.trim().startsWith(locale.disclosure(auftraggeber));
+function offenlegungStimmt(messung) {
+  const locale = Object.hasOwn(LOCALES, messung.sprache) ? LOCALES[messung.sprache] : undefined;
+  const richtung = messung.richtung ?? RICHTUNG_STANDARD;
+  if (locale === undefined || !Object.hasOwn(SOLL_SAETZE, richtung)) return false;
+  const text = messung.begruessung.trim();
+  return SOLL_SAETZE[richtung](locale, messung).some((satz) => satz !== "" && text.startsWith(satz));
 }
 
 function begruessungText(messung) {
