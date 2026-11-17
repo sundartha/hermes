@@ -1,67 +1,109 @@
 import assert from "node:assert/strict";
+import net from "node:net";
+import { spawn } from "node:child_process";
 import test from "node:test";
 
 import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.js";
-import { makePostgresLeitungsplaetze } from "../../src/store/leitungsplaetze-pg.js";
+import { mitGestartetemHermes, pgStartUmgebung } from "./pg-start-umgebung.js";
+import { echteDatenbankMitRolle } from "./test-rolle.js";
+import { postgresVorhanden } from "../anrufe/hermes-mit-postgres.js";
 
+const ZEITGRENZE_MS = 120_000;
+const PUFFER_MS = 1_500;
 const ANFRAGE = Object.freeze({ tenantId: "tenant_frist", weg: "elevenlabs", hoechstzahlKunde: 2 });
 const BELEGEN = Object.freeze({ callId: "call_frist", tenantId: "tenant_frist", weg: "elevenlabs", maxDauerS: 60, hoechstzahlKunde: 2 });
-const SCHRITT_VOR_FRIST_MS = 1;
-const NIE = new Promise(() => {});
+const STORE_URL = new URL("../../src/store.js", import.meta.url).href;
+const KIND_SKRIPT = `
+const speicher = await import(${JSON.stringify(STORE_URL)});
+await speicher.oeffneSpeicher();
+await speicher.pruefeVerbindung();
+process.stdout.write("bereit\\n");
+const [aktion, anfrage] = [process.argv[1], JSON.parse(process.argv[2])];
+await new Promise((weiter) => process.stdin.once("data", weiter));
+if (process.argv[3] === "verworfen") await speicher.pruefeVerbindung().catch(() => {});
+const beginn = Date.now();
+const ergebnis = await speicher.leitungsplaetze[aktion](anfrage);
+process.stdout.write(JSON.stringify({ ergebnis, dauerMs: Date.now() - beginn }) + "\\n");
+process.exit(0);
+`;
 
-function clientMit(hangtBei) {
-  const aufrufe = [];
+async function starteWeiche(ziel) {
+  const sockets = new Set();
+  const zustand = { eingefroren: false };
+  const server = net.createServer((vorn) => {
+    sockets.add(vorn);
+    if (zustand.eingefroren) return;
+    const hinten = net.connect(Number(ziel.port), ziel.hostname);
+    sockets.add(hinten);
+    const leite = (von, nach) => von.on("data", (daten) => !zustand.eingefroren && nach.write(daten));
+    leite(vorn, hinten);
+    leite(hinten, vorn);
+    for (const socket of [vorn, hinten]) socket.on("error", () => socket.destroy());
+  });
+  await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
   return {
-    aufrufe,
-    query: async (text) => {
-      aufrufe.push(text);
-      if (text === hangtBei) return NIE;
-      return { rows: [] };
+    port: server.address().port,
+    einfrieren: () => {
+      zustand.eingefroren = true;
     },
-    release: () => aufrufe.push("release"),
+    abreissen: () => sockets.forEach((socket) => socket.destroy()),
+    schliessen: () => {
+      sockets.forEach((socket) => socket.destroy());
+      server.close();
+    },
   };
 }
 
-const runnerMit = (client) => ({ withClient: (arbeit) => arbeit(client) });
-const runnerOhneVerbindung = { withClient: () => NIE };
-
-async function nachFrist(t, frage) {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  let antwort;
-  const offen = frage().then((wert) => {
-    antwort = { wert };
+async function frageBeiEingefrorenerDatenbank(t, aktion, anfrage, abreissen) {
+  const db = await echteDatenbankMitRolle(t);
+  await mitGestartetemHermes(db.adresse, {}, async () => {});
+  const ziel = new URL(db.adresse);
+  const weiche = await starteWeiche(ziel);
+  t.after(() => weiche.schliessen());
+  const ueber = new URL(db.adresse);
+  ueber.hostname = "127.0.0.1";
+  ueber.port = String(weiche.port);
+  const kind = spawn(process.execPath, ["--input-type=module", "-e", KIND_SKRIPT, aktion, JSON.stringify(anfrage), abreissen ? "verworfen" : "gehalten"], {
+    env: { ...process.env, ...pgStartUmgebung(ueber.href) },
+    stdio: ["pipe", "pipe", "inherit"],
   });
-  t.mock.timers.tick(LEITUNGSPLATZ_DB_FRIST_MS - SCHRITT_VOR_FRIST_MS);
-  await Promise.resolve();
-  assert.equal(antwort, undefined, "vor Ablauf der Frist keine Antwort");
-  t.mock.timers.tick(SCHRITT_VOR_FRIST_MS);
-  await offen;
-  return antwort.wert;
+  t.after(() => kind.kill());
+  let ausgabe = "";
+  const zeile = (muster) =>
+    new Promise((fertig) => {
+      const pruefe = () => {
+        const treffer = ausgabe.split("\n").find((eintrag) => muster.test(eintrag));
+        if (treffer) fertig(treffer);
+      };
+      kind.stdout.on("data", (daten) => {
+        ausgabe += daten;
+        pruefe();
+      });
+      pruefe();
+    });
+  await zeile(/^bereit$/);
+  weiche.einfrieren();
+  if (abreissen) weiche.abreissen();
+  kind.stdin.write("los\n");
+  return JSON.parse(await zeile(/^\{/));
 }
 
-for (const [name, runner] of [
-  ["Verbindung kommt nicht zustande", runnerOhneVerbindung],
-  ["BEGIN haengt", runnerMit(clientMit("BEGIN"))],
+for (const [name, abreissen] of [
+  ["BEGIN haengt auf einer vorhandenen Verbindung", false],
+  ["Verbindungsaufbau antwortet nicht", true],
 ]) {
-  test(`${name}: Pruefen lehnt nach genau der Frist ab`, async (t) => {
-    const leitungen = makePostgresLeitungsplaetze(runner);
-    const meldung = t.mock.method(console, "error", () => {});
-    assert.equal(await nachFrist(t, () => leitungen.pruefenAusgehend(ANFRAGE)), "anbieter_voll");
-    assert.match(meldung.mock.calls[0].arguments[1], /^Frist von 5000 ms ueberschritten$/);
+  test(`${name}: Pruefen lehnt nach der Frist ab, nicht erst nach 10 Sekunden`, { timeout: ZEITGRENZE_MS }, async (t) => {
+    if (!postgresVorhanden()) return;
+    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, "pruefenAusgehend", ANFRAGE, abreissen);
+    assert.equal(ergebnis, "anbieter_voll");
+    assert.ok(dauerMs >= LEITUNGSPLATZ_DB_FRIST_MS - 500, `wartet bis zur Frist: ${dauerMs} ms`);
+    assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
   });
 
-  test(`${name}: Belegen liefert anbieter_voll nach genau der Frist`, async (t) => {
-    const leitungen = makePostgresLeitungsplaetze(runner);
-    t.mock.method(console, "error", () => {});
-    assert.deepEqual(await nachFrist(t, () => leitungen.belegenAusgehend(BELEGEN)), { entscheidung: "anbieter_voll" });
+  test(`${name}: Belegen liefert anbieter_voll nach der Frist`, { timeout: ZEITGRENZE_MS }, async (t) => {
+    if (!postgresVorhanden()) return;
+    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, "belegenAusgehend", BELEGEN, abreissen);
+    assert.deepEqual(ergebnis, { entscheidung: "anbieter_voll" });
+    assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
   });
 }
-
-test("normale Datenbank: Belegen ist frei und committet, ohne die Frist abzuwarten", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const client = clientMit(null);
-  const ergebnis = await makePostgresLeitungsplaetze(runnerMit(client)).belegenAusgehend(BELEGEN);
-  assert.deepEqual(ergebnis, { entscheidung: "frei" });
-  assert.equal(client.aufrufe.at(-1), "COMMIT");
-  assert.ok(client.aufrufe.includes("BEGIN"));
-});
