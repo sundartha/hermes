@@ -36,10 +36,20 @@ export function runSweepTick(waechter) {
   for (const { logTag, lauf } of TEILLAEUFE) void lauf(waechter).catch((err) => console.error(logTag, err.message));
 }
 
-export function starteFristenTakt({ store, lifecycle, fristen }) {
+export function starteFristenTakt({ store, lifecycle, config, fristen }) {
+  const geldWacheMs = config.safety.budgetWatchdogIntervalMs;
   return starteFristenTaktMitUhr({
     store,
     beende: lifecycle.terminateExpiredCall,
+    geld:
+      geldWacheMs > 0
+        ? {
+            intervalMs: geldWacheMs,
+            jetzt: Date.now,
+            blockingAxisFor: lifecycle.blockingAxisFor,
+            beende: lifecycle.terminateOverBudgetExpired,
+          }
+        : undefined,
     limitJeMandant: fristen.fristenLimitJeMandant,
     leaseMs: fristen.fristenTaktMs,
     taktMs: fristen.fristenTaktMs,

@@ -1,0 +1,6 @@
+SET LOCAL lock_timeout = '2s';
+SET LOCAL statement_timeout = '30s';
+
+ALTER TABLE call ADD COLUMN IF NOT EXISTS frist_geld_at TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS frist_geld_lease_bis TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS frist_geld_versuche BIGINT NOT NULL DEFAULT 0;

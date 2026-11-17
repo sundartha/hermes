@@ -10,7 +10,7 @@ import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetz
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
-import { faelligeAusSpiegel, macheFristenSql, setzeHoechstdauerImSpiegel } from "./store/fristen-sql.js";
+import { faelligeAusSpiegel, macheFristenSql, setzeGeldImSpiegel, setzeHoechstdauerImSpiegel } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 
 async function createPgBackend() {
@@ -74,6 +74,10 @@ async function createPgBackend() {
     setzeHoechstdauerFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeHoechstdauer(anfrage);
+    },
+    setzeGeldFrist: async (anfrage) => {
+      await store.drainFlushes();
+      return makePostgresFristen(runner).setzeGeld(anfrage);
     },
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
@@ -156,6 +160,10 @@ function jsonBackendAufbauen() {
       setzeHoechstdauerImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
     },
+    setzeGeldFrist: async (anfrage) => {
+      setzeGeldImSpiegel(jsonBackend.load(), anfrage);
+      jsonBackend.save();
+    },
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
@@ -221,6 +229,7 @@ export const {
   beanspruecheInboundElNachlauf,
   faelligeFristen,
   setzeHoechstdauerFrist,
+  setzeGeldFrist,
   mitStartSperre,
   nummernVorhanden,
   besitzLage,
