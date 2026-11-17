@@ -815,8 +815,10 @@ export function makeElevenLabsOutbound({
   const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });
   const initInhaltFor = makeInitInhalt(inhaltsAnfrageFor);
 
+  const resultPollMs = () => settings().resultPollMs ?? 0;
+
   function scheduleResultPoll(callId, conversationId) {
-    setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
+    setTimeout(() => void pollConversationResult(callId, conversationId), resultPollMs());
   }
 
   const meldeMedienweg = makeMedienwegWache(() => settings().erwarteterMedienweg);
@@ -846,7 +848,7 @@ export function makeElevenLabsOutbound({
   }
 
   async function schreibeAbfrageFrist(call) {
-    const faelligAt = new Date(Date.now() + REQUEST_TIMEOUT_MS + settings().resultPollMs + ABFRAGE_UEBERNAHME_MS).toISOString();
+    const faelligAt = new Date(Date.now() + REQUEST_TIMEOUT_MS + resultPollMs() + ABFRAGE_UEBERNAHME_MS).toISOString();
     try {
       await store.setzeAbfrageFrist({ callId: call.id, tenantId: call.tenantId, faelligAt });
     } catch (fehler) {
