@@ -213,14 +213,15 @@ async function elAnrufVonA() {
   return { a, b, call };
 }
 
-test("H6a-11: das EL-Bein-Ereignis auf Instanz B setzt für einen Anruf von Instanz A keine Bindungsfrist", async () => {
+test("H6a-11: das EL-Bein-Ereignis auf Instanz B setzt für einen Anruf von Instanz A die Bindungsfrist", async () => {
   const { b, call } = await elAnrufVonA();
   const protokoll = neuesProtokoll();
   await mitServer(routen(b, protokoll), async (post) => {
     const antwort = await post(`/voice/el-bein?callId=${call.id}`, { CallStatus: "in-progress" });
     assert.equal(antwort.status, 200);
   });
-  assert.deepEqual(protokoll.fristen, []);
+  await warteBis(() => protokoll.fristen.length > 0);
+  assert.deepEqual(protokoll.fristen, [call.id]);
 });
 
 test("H6a-12: das EL-Bein-Ereignis auf der bewachenden Instanz A setzt die Bindungsfrist", async () => {
