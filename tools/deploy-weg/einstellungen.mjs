@@ -53,6 +53,7 @@ const REGELN = new Map([
   ["STAGING_TELNYX_PRIVATE_KEY", muster(SCHLUESSEL_PEM)],
   ["UPDATE_WORKFLOW_TOKEN", muster(/^\S{1,1024}$/)],
   ["BETTER_STACK_ALERT_URL", httpsOderLoopback],
+  ["SLACK_ALERT_URL", httpsOderLoopback],
   [HEARTBEAT_NACHTLAUF, httpsOderLoopback],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
@@ -66,6 +67,7 @@ const GEHEIM = [
   "STAGING_STATUS_TOKEN",
   "STAGING_TELNYX_PRIVATE_KEY",
   "BETTER_STACK_ALERT_URL",
+  "SLACK_ALERT_URL",
   HEARTBEAT_NACHTLAUF,
 ];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
@@ -96,7 +98,7 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL"],
+      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL", "SLACK_ALERT_URL"],
     },
   ],
   [
@@ -176,6 +178,7 @@ function werteBauen(umgebung) {
     statusToken: umgebung.STAGING_STATUS_TOKEN,
     telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
     vorfallUrl: umgebung.BETTER_STACK_ALERT_URL || null,
+    slackUrl: umgebung.SLACK_ALERT_URL || null,
     heartbeatNachtlaufUrl: gueltig(HEARTBEAT_NACHTLAUF, umgebung[HEARTBEAT_NACHTLAUF])
       ? umgebung[HEARTBEAT_NACHTLAUF]
       : null,

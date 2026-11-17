@@ -98,6 +98,7 @@ const EINSTELLUNGEN = new Set([
   "STAGING_STATUS_TOKEN",
   "STAGING_TELNYX_PRIVATE_KEY",
   "BETTER_STACK_ALERT_URL",
+  "SLACK_ALERT_URL",
   "GITHUB_ACTIONS",
 ]);
 const AUSLIEFERN = new Set(["commit", "checksPass", "off"]);
@@ -169,6 +170,10 @@ const KATALOG = new Map([
   ["staginglauf_angelegt", "Staging-Deploy-Issue #{nummer} angelegt"],
   ["probe_ersetzt", "Probe-Issue #{nummer}: Text ersetzt"],
   ["probe_angelegt", "Probe-Issue #{nummer} angelegt"],
+  ["slack_uebersprungen", "Slack: übersprungen (SLACK_ALERT_URL fehlt)"],
+  ["slack_gesendet", "Slack: Vorfall gesendet"],
+  ["slack_entprellt", "Slack: kein neuer Vorfall (letzte Meldung vor weniger als 60 Minuten)"],
+  ["slack_nicht_zugestellt", "Slack: nicht zugestellt (HTTP {http})"],
   ["vorfall_uebersprungen", "Better Stack: übersprungen (BETTER_STACK_ALERT_URL fehlt)"],
   ["vorfall_gesendet", "Better Stack: Vorfall gesendet"],
   ["vorfall_entprellt", "Better Stack: kein neuer Vorfall (letzte Meldung vor weniger als 60 Minuten)"],

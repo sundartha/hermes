@@ -165,25 +165,32 @@ function frischGemeldet(vorher, jetzt) {
   return Number.isFinite(geaendert) && jetzt - geaendert < VORFALL_ENTPRELLEN_MS;
 }
 
-async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
-  if (einstellungen.vorfallUrl === null) {
-    ausgabe.melde("vorfall_uebersprungen");
-    return;
-  }
-  if (frischGemeldet(vorher, Date.now())) {
-    ausgabe.melde("vorfall_entprellt");
-    return;
-  }
-  const text = vorfallText({ ...vorfall, laufUrl: laufAdresse(einstellungen) });
-  const { status } = await anfrage(einstellungen.vorfallUrl, {
-    methode: "POST",
-    koerper: { incident: { id: vorfall.id, status: "alert" }, text },
-  });
+async function vorfallSenden({ adresse, koerper, vorsilbe, ausgabe }) {
+  const { status } = await anfrage(adresse, { methode: "POST", koerper });
   if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
-    ausgabe.melde("vorfall_nicht_zugestellt", { http: status });
+    ausgabe.melde(vorsilbe + "_nicht_zugestellt", { http: status });
     return;
   }
-  ausgabe.melde("vorfall_gesendet");
+  ausgabe.melde(vorsilbe + "_gesendet");
+}
+
+async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
+  const wege = [
+    { vorsilbe: "slack", adresse: einstellungen.slackUrl },
+    { vorsilbe: "vorfall", adresse: einstellungen.vorfallUrl },
+  ];
+  const aktiv = wege.filter((weg) => weg.adresse !== null);
+  for (const weg of wege) if (weg.adresse === null) ausgabe.melde(weg.vorsilbe + "_uebersprungen");
+  const entprellt = frischGemeldet(vorher, Date.now());
+  const text = vorfallText({ ...vorfall, laufUrl: laufAdresse(einstellungen) });
+  for (const weg of aktiv) {
+    if (entprellt) {
+      ausgabe.melde(weg.vorsilbe + "_entprellt");
+      continue;
+    }
+    const koerper = weg.vorsilbe === "slack" ? { text } : { incident: { id: vorfall.id, status: "alert" }, text };
+    await vorfallSenden({ adresse: weg.adresse, koerper, vorsilbe: weg.vorsilbe, ausgabe });
+  }
 }
 
 export async function heartbeatNachtlauf({ einstellungen, ausgabe }) {
