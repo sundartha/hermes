@@ -21,8 +21,8 @@ export function calleeTimezone(e164: string): string {
   return (land && ZONE_JE_LAND[land]) ?? KEINE_ZONE;
 }
 
-export function todayIn(timeZone: string): string {
-  return new Intl.DateTimeFormat(DATE_LOCALE, { ...DATE_FORMAT, timeZone }).format(new Date());
+export function todayIn(timeZone: string, jetzt: () => Date): string {
+  return new Intl.DateTimeFormat(DATE_LOCALE, { ...DATE_FORMAT, timeZone }).format(jetzt());
 }
 
 interface Zeitkontext {
@@ -32,13 +32,21 @@ interface Zeitkontext {
   today: string;
 }
 
-export function callTimeContext({ tenantTimezone, callee }: { tenantTimezone: unknown; callee: string }): Zeitkontext {
+export function callTimeContext({
+  tenantTimezone,
+  callee,
+  jetzt,
+}: {
+  tenantTimezone: unknown;
+  callee: string;
+  jetzt: () => Date;
+}): Zeitkontext {
   const ownerZone = resolveTimezone(tenantTimezone);
   const calleeZone = calleeTimezone(callee);
   return {
     ownerZone,
     calleeZone,
     calleeZoneHypothesis: calleeZone ? KEINE_ZONE : timezoneHypothesisForNumber(callee),
-    today: todayIn(ownerZone),
+    today: todayIn(ownerZone, jetzt),
   };
 }

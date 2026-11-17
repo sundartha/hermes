@@ -245,16 +245,16 @@ test("Zonenname: gesprochener Name je Zone, unbekannte Zone bleibt unveraendert"
 
 test("Zeitkontext: Datum in der Zone des Auftraggebers, Vermutung nur ohne feste Zone", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1, 23, 30) });
-  assert.equal(todayIn("Asia/Tokyo"), "Friday, 2 January 2026");
-  assert.equal(todayIn("America/Los_Angeles"), "Thursday, 1 January 2026");
-  const mitFesterZone = callTimeContext({ tenantTimezone: "Asia/Tokyo", callee: "+4915123456789" });
+  assert.equal(todayIn("Asia/Tokyo", () => new Date()), "Friday, 2 January 2026");
+  assert.equal(todayIn("America/Los_Angeles", () => new Date()), "Thursday, 1 January 2026");
+  const mitFesterZone = callTimeContext({ tenantTimezone: "Asia/Tokyo", callee: "+4915123456789", jetzt: () => new Date() });
   assert.deepEqual(mitFesterZone, {
     ownerZone: "Asia/Tokyo",
     calleeZone: "Europe/Berlin",
     calleeZoneHypothesis: "",
     today: "Friday, 2 January 2026",
   });
-  const nordamerika = callTimeContext({ tenantTimezone: "America/Los_Angeles", callee: "+15125550143" });
+  const nordamerika = callTimeContext({ tenantTimezone: "America/Los_Angeles", callee: "+15125550143", jetzt: () => new Date() });
   assert.deepEqual(nordamerika, {
     ownerZone: "America/Los_Angeles",
     calleeZone: "",

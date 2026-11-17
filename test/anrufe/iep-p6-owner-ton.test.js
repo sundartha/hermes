@@ -297,7 +297,7 @@ function initHarness() {
 const antwortFuer = (callerIsOwner) => {
   const { store, call } = initHarness();
   call.callerIsOwner = callerIsOwner;
-  return buildInitiationResponse({ store, config: INIT_CONFIG, call });
+  return buildInitiationResponse({ store, config: INIT_CONFIG, call, jetzt: () => new Date() });
 };
 
 const eroeffnungDer = (antwort) => antwort.conversation_config_override.agent.first_message;
@@ -312,7 +312,7 @@ test("IEP-P6-61: strikt === true - fehlendes Feld und Rohwerte heissen FREMD", (
   assert.ok(!("callerIsOwner" in call) || call.callerIsOwner === false, "Vorbedingung");
   for (const wert of [undefined, "true", 1, {}]) {
     call.callerIsOwner = wert;
-    const antwort = buildInitiationResponse({ store, config: INIT_CONFIG, call });
+    const antwort = buildInitiationResponse({ store, config: INIT_CONFIG, call, jetzt: () => new Date() });
     assert.equal(eroeffnungDer(antwort), EROEFFNUNG_FREMD.de, JSON.stringify(wert));
   }
 });
@@ -321,7 +321,7 @@ test("IEP-P6-62: callerIsOwner=true, aber kein Vorname -> die freigegebene Fremd
   const { store, call } = initHarness();
   store.tenantContext = () => ({ ownerName: OWNER_NAME, firstName: "", settings: {} });
   call.callerIsOwner = true;
-  const antwort = buildInitiationResponse({ store, config: INIT_CONFIG, call });
+  const antwort = buildInitiationResponse({ store, config: INIT_CONFIG, call, jetzt: () => new Date() });
   assert.equal(eroeffnungDer(antwort), EROEFFNUNG_FREMD.de);
 });
 
