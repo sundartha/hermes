@@ -111,7 +111,7 @@ async function sendElDial({ res, call, did, wartetonUrl }, { config, inboundBrid
 }
 
 function eingehenderWartetonUrl(config) {
-  return config.voice.elevenLabsInbound.begruessungslautEnabled ? elBegruessungslautUrl(config.server.publicUrl) : null;
+  return config.voice.elevenLabsInbound.begruessungslautEnabled ? elBegruessungslautUrl(config.server.publicUrl) : undefined;
 }
 
 async function sendElUebergabe({ res, call }, deps) {
@@ -124,7 +124,9 @@ const INBOUND_PFAD = Object.freeze({
   [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, weg: ANBIETER.TELNYX, antworte: sendAbweisung }),
 });
 function inboundPfadFuer({ config, tenantId, numberRecord }) {
-  return INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
+  const pfad = INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
+  if (!pfad) throw new Error("unbekannter Eingangspfad");
+  return pfad;
 }
 
 function sendKostendeckeAbweisung({ res, provider, locale, to }, { render }) {
@@ -145,7 +147,7 @@ async function sendTechnischesEnde({ res, call, provider }, { directiveSynth, re
 
 const hierBewacht = (store, call) => call?.status === "active" && store.anrufHierBewacht(call.id);
 
-const brauchtWiederanbindung = (store, call) => !call || (call.status === "active" && !hierBewacht(store, call));
+const brauchtWiederanbindung = (store, call) => call.status === "active" && !hierBewacht(store, call);
 
 const wiederanbindungsKennung = (req, call) => queryText(req.query.callId) || call?.id;
 
@@ -206,7 +208,7 @@ async function sendAbweisung({ res, call }, deps) {
 
 async function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
   const vermerke = weg.vermerkNachFehler[weg.entscheide({ call, nowMs })];
-  if (!vermerke) return;
+  if (!call || !vermerke) return;
   try {
     await vermerke({ call, nowMs }, deps);
   } catch (err) {
@@ -271,7 +273,13 @@ async function antworteAufElRueckfall(req, res, deps) {
         ms_seit_bindung: msSeitBindung(call, nowMs),
       }),
     );
-    await weg.antworten[entscheidung]({ res, call, nowMs }, deps);
+    if (!call) {
+      sendAuflegen({ res, call }, deps);
+      return;
+    }
+    const antworte = weg.antworten[entscheidung];
+    if (!antworte) throw new Error("unbekannte Rueckfallentscheidung");
+    await antworte({ res, call, nowMs }, deps);
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, fehlerText(err));
     const weg = rueckfallWegFuer(call);
@@ -501,16 +509,16 @@ export function makeVoiceRoutes({
     antworteAufVorspannEreignis(req, res, voiceDeps).catch(next);
   });
 
+  const statusAnruf = async (req, gefunden) => {
+    const callId = wiederanbindungsKennung(req, gefunden);
+    if (gefunden && !brauchtWiederanbindung(store, gefunden)) return gefunden;
+    if (!callId) return null;
+    return (await wiederanbinden({ store, lifecycle: statusLifecycleFuer(gefunden, lifecycle) }, gefunden, callId)).call;
+  };
   const verarbeiteStatus = async (req, res) => {
     res.sendStatus(HTTP_OK);
-    let call = (await statusCallFinden(req, store)).call;
-    const callId = wiederanbindungsKennung(req, call);
-    if (brauchtWiederanbindung(store, call)) {
-      if (!callId) return;
-      const reattached = await wiederanbinden({ store, lifecycle: statusLifecycleFuer(call, lifecycle) }, call, callId);
-      if (!reattached.call) return;
-      call = reattached.call;
-    }
+    const call = await statusAnruf(req, (await statusCallFinden(req, store)).call);
+    if (!call) return;
     const provider = call.provider || DEFAULT_PROVIDER;
 
     const speak = webhookEvents(provider).parseSpeakOutcome(req.body);
