@@ -8,7 +8,7 @@
 <style>
   /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  .liste{margin-top:20px;padding:4px 12px 8px;display:flex;flex-direction:column}
+  .liste{box-sizing:border-box;max-height:480px;overflow-y:auto;margin-top:20px;padding:4px 12px 8px;display:flex;flex-direction:column}
   .liste:empty{display:none}
   .liste .row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;grid-template-areas:"kreis name zeit" "kreis text zeit";column-gap:14px;align-items:start;padding:14px 0}
   .liste .row+.row{border-top:1px solid var(--hair)}
