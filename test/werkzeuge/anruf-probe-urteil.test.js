@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { LOCALES } from "../../src/i18n/locales.js";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 import { probeLaufen } from "../../scripts/anruf-probe/wiederholung.mjs";
 
+const OFFENLEGUNG =
+  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Probe GmbH. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
+
 const GUT = {
   annahmeSekunden: 15,
-  begruessung: LOCALES.de.disclosure("Probe GmbH") + " Wie kann ich helfen?",
+  begruessung: OFFENLEGUNG + " Wie kann ich helfen?",
   sprache: "de",
   auftraggeber: "Probe GmbH",
   dauerSekunden: 60,
