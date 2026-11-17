@@ -14,7 +14,6 @@ import {
   seedCall,
   seedState,
   startServer,
-  startServerExpectExit,
   waitUntil,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
@@ -309,35 +308,22 @@ test("3365-K4: Vorspann-Zeichen ueber der Warnschwelle loesen die Alarm-SMS aus"
   }
 });
 
-const FELDER = ["voice.elevenLabsOutbound.vorspann", "telephony.telnyxCallControlAppId"];
-const SCHALTER = "voice.elevenLabsOutbound.vorspann";
+const FELDER = ["telephony.telnyxCallControlAppId"];
 const APP_ID = "telephony.telnyxCallControlAppId";
 
 test("3365-Konfig: die Call-Control-App-Kennung ist im Namensraum telephony der Konfiguration eingetragen", () => {
   assert.ok(CONFIG_NAMESPACES.telephony.includes("telnyxCallControlAppId"));
 });
 
-test("3365-Konfig: ohne Variablen ist der Vorspann-Weg aus und keine Call-Control-App gesetzt", () => {
-  const ohneVariablen = { ELEVENLABS_OUTBOUND_VORSPANN: undefined, TELNYX_CALL_CONTROL_APP_ID: undefined };
-  assert.deepEqual(gebauteKonfiguration(ohneVariablen, FELDER), { [SCHALTER]: false, [APP_ID]: "" });
+test("3365-Konfig: ohne Variable ist keine Call-Control-App gesetzt", () => {
+  const ohneVariablen = { TELNYX_CALL_CONTROL_APP_ID: undefined };
+  assert.deepEqual(gebauteKonfiguration(ohneVariablen, FELDER), { [APP_ID]: "" });
 });
 
-test("3365-Konfig: der Schalter kommt aus der Umgebung, die App-Kennung wird getrimmt", () => {
-  assert.deepEqual(
-    gebauteKonfiguration({ ELEVENLABS_OUTBOUND_VORSPANN: "true", TELNYX_CALL_CONTROL_APP_ID: "  abc  " }, FELDER),
-    { [SCHALTER]: true, [APP_ID]: "abc" },
-  );
+test("3365-Konfig: die App-Kennung wird getrimmt", () => {
+  assert.deepEqual(gebauteKonfiguration({ TELNYX_CALL_CONTROL_APP_ID: "  abc  " }, FELDER), { [APP_ID]: "abc" });
 });
 
 test("3365-Konfig: eine nur aus Leerzeichen bestehende App-Kennung zaehlt als nicht gesetzt", () => {
-  assert.deepEqual(
-    gebauteKonfiguration({ ELEVENLABS_OUTBOUND_VORSPANN: "false", TELNYX_CALL_CONTROL_APP_ID: "   " }, FELDER),
-    { [SCHALTER]: false, [APP_ID]: "" },
-  );
-});
-
-test("3365-Konfig: ein ungueltiger Schalterwert verweigert den Start und nennt die Variable", async () => {
-  const { code, output } = await startServerExpectExit({ env: { ELEVENLABS_OUTBOUND_VORSPANN: "vielleicht" } });
-  assert.equal(code, 1);
-  assert.match(output, /ELEVENLABS_OUTBOUND_VORSPANN="vielleicht" ist kein gueltiger Boolean/);
+  assert.deepEqual(gebauteKonfiguration({ TELNYX_CALL_CONTROL_APP_ID: "   " }, FELDER), { [APP_ID]: "" });
 });
