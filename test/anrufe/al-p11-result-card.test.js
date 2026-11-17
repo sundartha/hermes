@@ -247,16 +247,16 @@ test("AL-P11-11: pg-Durchstich - result ueberlebt die Re-Hydrierung UND einen zw
   const { makePgStore } = await import("../../src/store/pg.js");
   const reopened1 = makePgStore(runner1);
   await reopened1.init();
-  assert.equal(reopened1.getCall(call.id).result.outcome, "Termin fest.", "result ueberlebt die erste Re-Hydrierung");
+  assert.equal((await reopened1.leseCall(call.id)).result.outcome, "Termin fest.", "result ueberlebt die erste Re-Hydrierung");
 
-  reopened1.getCall(call.id).twilioSid = "CA-al-p11";
+  (await reopened1.leseCall(call.id)).twilioSid = "CA-al-p11";
   await reopened1.save();
 
   const runner2 = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
   const reopened2 = makePgStore(runner2);
   await reopened2.init();
   assert.equal(
-    reopened2.getCall(call.id).result.outcome,
+    (await reopened2.leseCall(call.id)).result.outcome,
     "Termin fest.",
     "result ueberlebt auch den zweiten Flush (ON CONFLICT DO UPDATE SET)",
   );

@@ -48,7 +48,7 @@ test("PG1: context round-trippt ueber Re-Hydrierung (JSONB-Spalte + rowToCall)",
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.deepEqual(
-    reopened.getCall(created.id).context,
+    (await reopened.leseCall(created.id)).context,
     CTX,
     "context ueberlebt den Reopen (Spalte + hydrate/flush gemappt)",
   );
@@ -61,7 +61,7 @@ test("PG2: ohne context -> null, round-trippt als null", async () => {
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(created.id).context, null, "NULL -> null (json-Parity)");
+  assert.equal((await reopened.leseCall(created.id)).context, null, "NULL -> null (json-Parity)");
 });
 
 test("PG3: json-Backend persistiert context auf Platte (Roundtrip-Parity)", () => {

@@ -74,7 +74,7 @@ test("H7c1-2: ein Anruf, den diese Instanz aendert, wird beim Flush geschrieben"
 
 test("H7c1-3: eine direkte Aenderung am Spiegel wird beim naechsten Flush geschrieben", async () => {
   const { db, a, callId } = await mitGeladenemAnruf();
-  a.getCall(callId).summary = "direkt im Spiegel";
+  (await a.leseCall(callId)).summary = "direkt im Spiegel";
   await a.save();
   await a.drainFlushes();
   assert.equal((await zeileVon(db, callId)).summary, "direkt im Spiegel");
@@ -93,7 +93,7 @@ test("H7c1-4: nach dem Schreiben ist der Anruf nicht mehr geaendert, ein zweiter
 
 test("H7c1-5: eine neue Transkriptzeile im Spiegel wird beim Flush geschrieben", async () => {
   const { db, a, callId } = await mitGeladenemAnruf();
-  a.getCall(callId).transcript.push({ role: "callee", text: "direkt", at: new Date().toISOString() });
+  (await a.leseCall(callId)).transcript.push({ role: "callee", text: "direkt", at: new Date().toISOString() });
   await a.save();
   await a.drainFlushes();
   assert.deepEqual(await transkriptVon(db, callId), ["Guten Tag", "direkt"]);
