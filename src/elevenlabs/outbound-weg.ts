@@ -32,16 +32,13 @@ interface WegAnruf {
 
 type WegArt = keyof typeof KOSTENPROFIL_FUER_WEG;
 
-interface Wahl {
-  weg: WegArt | null;
-  grund: string | null;
-}
+type Wahl = { weg: WegArt; grund: null } | { weg: null; grund: string };
 
 const LOG_PREFIX = "[el-outbound-weg]";
 
 const vorspannWeg: Wahl = { weg: OUTBOUND_WEG.TELNYX_VORSPANN, grund: null };
 
-function abbruch(grund: string | null): Wahl {
+function abbruch(grund: string): Wahl {
   return { weg: null, grund };
 }
 
