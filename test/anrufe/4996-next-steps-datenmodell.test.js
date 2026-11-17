@@ -38,7 +38,8 @@ test("4996: Kappung auf Listenobergrenze und Textlaenge", () => {
   const texte = schritte.map((s) => s.text);
   assert.deepEqual(texte, ["s0", "s1", "s2"]);
   const lang = norm({ next_steps: [{ type: "task", text: `  ${"x".repeat(400)}  `, at: null }] });
-  assert.equal(lang.nextSteps[0].text.length, RESULT_TEXT_MAX_CHARS);
+  const [erster] = lang.nextSteps;
+  assert.equal(erster.text.length, RESULT_TEXT_MAX_CHARS);
 });
 
 test("4996: ungueltige Eintraege werden verworfen, Kappung zaehlt nur gueltige", () => {
