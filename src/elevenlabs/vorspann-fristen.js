@@ -1,4 +1,3 @@
-import { defaultSetTimer } from "../utils/timer.js";
 import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { STAND } from "./vorspann-bruecke.js";
@@ -11,6 +10,7 @@ export function armiereVorspannFristen({
   beineAuf,
   vermerkeElFrist,
   vermerkeNichtAbgespielt,
+  setTimer,
 }) {
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
   const { stand } = zustand;
@@ -24,6 +24,6 @@ export function armiereVorspannFristen({
     meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
     vermerkeNichtAbgespielt();
   };
-  defaultSetTimer(() => beiFrist(STAND.WIEDERGABE, nichtAbgespielt), vorspannWiedergabeFristMs);
-  defaultSetTimer(() => beiFrist(STAND.EL_BEIN, vermerkeElFrist), bridgeStartDeadlineMs);
+  setTimer(() => beiFrist(STAND.WIEDERGABE, nichtAbgespielt), vorspannWiedergabeFristMs);
+  setTimer(() => beiFrist(STAND.EL_BEIN, vermerkeElFrist), bridgeStartDeadlineMs);
 }
