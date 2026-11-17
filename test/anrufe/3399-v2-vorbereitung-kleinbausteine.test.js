@@ -3,9 +3,7 @@ import { test } from "node:test";
 
 import { elSipUri, elSipZiel } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { isInboundElScope } from "../../src/elevenlabs/inbound-scope.ts";
-import { legRunsOurTurnLoop } from "../../src/telephony/leg-turn-loop.ts";
 import { isSttProfile } from "../../src/telephony/stt-profile.ts";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 
 const NUMMER = "+4915112345678";
 
@@ -40,20 +38,4 @@ test("3399-v2: Bereich und Sprachprofil erkennen nur ihre bekannten Werte", () =
     [isSttProfile, undefined, false],
   ];
   for (const [pruefe, wert, erwartet] of tabelle) assert.equal(pruefe(wert), erwartet, `${wert}`);
-});
-
-test("3399-v2: eigene Gespraechsschleife je Kostenprofil, unbekannt oder fehlend laeuft mit", () => {
-  const tabelle = [
-    [{ costProfile: KOSTENPROFIL.TELNYX_BUDGET }, true],
-    [{ costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET }, true],
-    [{ costProfile: KOSTENPROFIL.EL_CONVAI_SIP }, false],
-    [{ costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI }, false],
-    [{ costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI }, false],
-    [{ costProfile: "unbekannt" }, true],
-    [{ costProfile: "toString" }, true],
-    [{}, true],
-    [null, true],
-    [undefined, true],
-  ];
-  for (const [call, erwartet] of tabelle) assert.equal(legRunsOurTurnLoop(call), erwartet, JSON.stringify(call));
 });

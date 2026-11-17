@@ -18,7 +18,7 @@
     "bereich": "abrechnung",
     "quellen": [
       "^src/billing/",
-      "^src/(plans|budget-gate|llm-usage|llm-billing-outage)\\.[jt]s$",
+      "^src/(plans|budget-gate|llm-usage)\\.[jt]s$",
       "^src/elevenlabs/kosten-beleg\\.[jt]s$",
       "^src/store/cost-evidence\\.[jt]s$",
       "^src/routes/(api-billing|stripe-webhook)\\.[jt]s$",
@@ -71,7 +71,7 @@
     "bereich": "anrufe",
     "quellen": [
       "^src/(telephony|elevenlabs|conversation|llm|tts|research)/",
-      "^src/(llm|claude|precall-briefing|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|turn-budget)\\.[jt]s$",
+      "^src/(llm|claude|precall-briefing|call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget)\\.[jt]s$",
       "^src/routes/(voice|webhooks-elevenlabs-init|webhooks-elevenlabs|api-calls|api-read|_call-request)\\.[jt]s$"
     ],
     "eingaenge": [
@@ -79,8 +79,8 @@
       "^src/telephony/fristen-lauf\\.[jt]s$"
     ],
     "fachlogik": [
-      "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|no-speech-escalation|turn-budget)\\.[jt]s$",
-      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|leg-turn-loop|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
+      "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget)\\.[jt]s$",
+      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
       "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|nicht-erreicht-frist|time-context|vorspann-pruefung|vorspann-erzeugen)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
       "^src/research/(lookup-guard|sanitize)\\.[jt]s$"

@@ -114,13 +114,11 @@ test("IE6-S1-7: eine Altzeile mit costProfile='telnyx_assistant' bleibt fail-clo
     PFLICHTTYPEN_UNGEMESSEN,
   } = await import("../../src/billing/kostenarten.js");
   const { sweepTraegerFuerProfil } = await import("../../src/billing/sweep-kostenbeleg.ts");
-  const { legRunsOurTurnLoop } = await import("../../src/telephony/leg-turn-loop.ts");
 
   assert.equal(istBekanntesKostenprofil("telnyx_assistant"), false);
   assert.equal(kostenprofilFuerAnruf({ costProfile: "telnyx_assistant" }), "telnyx_assistant");
   assert.equal(pflichttypenFuerProfil("telnyx_assistant", []), PFLICHTTYPEN_UNGEMESSEN);
   assert.equal(sweepTraegerFuerProfil("telnyx_assistant"), null);
-  assert.equal(legRunsOurTurnLoop({ costProfile: "telnyx_assistant" }), true);
 });
 
 test("IE6-S1-8: der telnyxAssistant-Namespace ist aus config.js entfernt", async () => {
