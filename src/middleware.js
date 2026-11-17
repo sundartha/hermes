@@ -1,5 +1,5 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.ts";
-import { fehlerText } from "./utils/fehler-text.ts";
+import { fehlerStapel, fehlerText } from "./utils/fehler-text.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 import {
   HTTP_FORBIDDEN,
@@ -22,7 +22,7 @@ const CSP = [
 ].join("; ");
 
 const HSTS_MAX_AGE_SECONDS = 15552000;
-export const HSTS_HEADER_VALUE = `max-age=${HSTS_MAX_AGE_SECONDS}; includeSubDomains`;
+export const HSTS_HEADER_VALUE = `max-age=${String(HSTS_MAX_AGE_SECONDS)}; includeSubDomains`;
 
 export function securityHeaders(req, res, next) {
   res.set({
@@ -55,8 +55,14 @@ export function crossOriginRequest(originHeader, host) {
 export function createSameOriginGuard({ enforce }) {
   const aktiv = enforce !== false;
   return function sameOriginOnlyMiddleware(req, res, next) {
-    if (!aktiv || SAFE_METHODS.has(req.method)) return next();
-    if (!crossOriginRequest(req.headers.origin, req.headers.host)) return next();
+    if (!aktiv || SAFE_METHODS.has(req.method)) {
+      next();
+      return;
+    }
+    if (!crossOriginRequest(req.headers.origin, req.headers.host)) {
+      next();
+      return;
+    }
     auditAuthFailed(req, AUTH_FAILED_GRUND.CROSS_ORIGIN);
     res.status(HTTP_FORBIDDEN).json({ error: CROSS_ORIGIN_ERROR });
   };
@@ -106,7 +112,10 @@ export function originLogWert(originHeader) {
 export function createMcpOriginGuard({ erlaubteOrigins, enforce, ablehnungsDrossel }) {
   const aktiv = enforce !== false;
   return function mcpOriginOnlyMiddleware(req, res, next) {
-    if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) return next();
+    if (!aktiv || mcpOriginErlaubt(req.headers.origin, erlaubteOrigins)) {
+      next();
+      return;
+    }
     if (!pruefeAblehnungsDrossel(req, res, { ablehnungsDrossel })) return;
     auditAuthFailed(
       req,
@@ -129,13 +138,22 @@ const MCP_CORS_EXPOSE_HEADERS = "Mcp-Session-Id, WWW-Authenticate";
 
 export function createMcpCors({ corsOrigins }) {
   return function mcpCorsMiddleware(req, res, next) {
-    if (req.path !== MCP_CORS_PFAD) return next();
+    if (req.path !== MCP_CORS_PFAD) {
+      next();
+      return;
+    }
     const treffer = mcpCorsOrigin(req.headers.origin, corsOrigins);
-    if (!treffer) return next();
+    if (!treffer) {
+      next();
+      return;
+    }
     res.vary("Origin");
     res.set("Access-Control-Allow-Origin", treffer);
     res.set("Access-Control-Expose-Headers", MCP_CORS_EXPOSE_HEADERS);
-    if (req.method !== "OPTIONS") return next();
+    if (req.method !== "OPTIONS") {
+      next();
+      return;
+    }
     res.set("Access-Control-Allow-Methods", MCP_CORS_ALLOW_METHODS);
     res.set("Access-Control-Allow-Headers", MCP_CORS_ALLOW_HEADERS);
     res.status(HTTP_NO_CONTENT).end();
@@ -226,7 +244,10 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
       res.set("Retry-After", String(LOGIN_BREMSE_RETRY_AFTER_S));
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
     }
-    if (treffer.anzahl <= limitPerMin) return next();
+    if (treffer.anzahl <= limitPerMin) {
+      next();
+      return;
+    }
     const verbleibendS = Math.ceil((treffer.beginnMs + RATE_WINDOW_MS - nowMs) / MS_PER_SECOND);
     const retryAfterS = Math.min(fensterS, Math.max(1, verbleibendS));
     return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
@@ -234,7 +255,10 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
 }
 
 export function errorHandler(err, _req, res, next) {
-  console.error("[error]", maskNumbersInText(err && err.stack ? err.stack : String(err)));
-  if (res.headersSent) return next(err);
+  console.error("[error]", maskNumbersInText(fehlerStapel(err)));
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
   res.status(HTTP_SERVER_ERROR).json({ error: "internal error" });
 }
