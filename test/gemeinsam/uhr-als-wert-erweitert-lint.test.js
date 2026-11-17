@@ -41,7 +41,7 @@ const ERLAUBT = [
 
 const PROBEN = [
   "src/telephony/probe-uhr.js",
-  "src/telephony/absender-registrierung.ts",
+  "src/telephony/alert-sms.ts",
   "src/elevenlabs/probe-uhr.js",
   "src/elevenlabs/opening-line.ts",
 ];

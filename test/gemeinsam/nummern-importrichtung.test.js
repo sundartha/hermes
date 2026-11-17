@@ -10,7 +10,7 @@ test("nummern-importrichtung: anrufe importiert nichts mehr aus nummern, der Bes
   assert.equal(paar, undefined);
 });
 
-for (const datei of ["src/telephony/absender-registrierung.ts", "src/telephony/adapters/telnyx/numbers.js"]) {
+for (const datei of ["src/telephony/adapters/telnyx/numbers.js"]) {
   test(`nummern-importrichtung: ${datei} gehört zu anrufe, nicht mehr zu nummern und ist kein Eingang`, () => {
     assert.equal(baustein("nummern").quellen.includes(datei), false);
     assert.equal(baustein("nummern").eingaenge.includes(datei), false);

@@ -278,10 +278,10 @@ test("publicCall zeigt den Join-Schluessel und streicht weiterhin die Kosten-Fel
   assert.equal(sicht.telnyxConversationId, undefined, "Bestandsverhalten unveraendert");
 });
 
-test("die ausgehende Anbindung startet keinen Anruf mehr am SIP-Trunk, Init-Inhalt und Absender-Beschaffung bleiben", () => {
+test("die ausgehende Anbindung startet keinen Anruf mehr am SIP-Trunk, Init-Inhalt bleibt, die Absender-Beschaffung entfaellt", () => {
   const anbindung = outboundFactory(jsonStore);
 
   assert.equal(anbindung.originateCall, undefined);
   assert.equal(typeof anbindung.initInhaltFor, "function");
-  assert.equal(typeof anbindung.beschaffeAbsenderOderBrichAb, "function");
+  assert.equal(anbindung.beschaffeAbsenderOderBrichAb, undefined);
 });

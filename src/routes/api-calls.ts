@@ -147,7 +147,6 @@ interface Konfiguration {
   voice: {
     ownerSelfCallEnabled: unknown;
     ownerSelfCallTenantIds: unknown;
-    elevenLabsOutbound: { ueberTelnyx: boolean; vorspann: boolean };
     elevenLabsInbound: WegAufruf["config"]["voice"]["elevenLabsInbound"];
   };
   telephony: { telnyxCallControlAppId: string | undefined };
@@ -220,8 +219,7 @@ interface Abhaengigkeiten {
   outboundGates: unknown;
   callQuotaDenial?: (ctx: Kontext) => Promise<Ablehnung | null | undefined>;
   voiceControl: (provider: string | undefined) => VoiceControl;
-  beschaffeAbsender?: (call: Anruf) => Promise<unknown>;
-  erzeugeVorspann: (call: Anruf) => Promise<Vorspann>;
+  erzeugeVorspann?: (call: Anruf) => Promise<Vorspann>;
   vorspannAblauf: {
     pruefe: (anfrage: { call: Anruf }) => Promise<{ grund?: string | null }>;
     waehle: (anfrage: { call: Anruf; vorspann: Vorspann }) => Promise<{ callControlId: string }>;
@@ -317,7 +315,7 @@ export function endFailedCallWithReason(store: Speicher, callId: string, provide
 
 function elevenLabsCallNotWired(): never {
   throw new Error(
-    "Der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
+    "Der Anrufstart ist nicht verdrahtet (deps.erzeugeVorspann fehlt)",
   );
 }
 
@@ -559,8 +557,7 @@ export function makeCallRoutes({
   outboundGates,
   callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
-  beschaffeAbsender = elevenLabsCallNotWired,
-  erzeugeVorspann,
+  erzeugeVorspann = elevenLabsCallNotWired,
   vorspannAblauf,
   terminateAndBillCall,
   hangUpAction,
@@ -713,7 +710,6 @@ export function makeCallRoutes({
     await emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      await beschaffeAbsender(call);
       const wahl = outboundWegFuer({ config, store, call });
       meldeOutboundWeg({ callId: call.id, wahl });
       if (!wahl.weg) return await brichVorWahlAb({ call, grund: wahl.grund, res });

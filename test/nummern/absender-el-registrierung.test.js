@@ -20,7 +20,7 @@ const AUDIO_BYTES = 200_000;
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const NACHGEHOLTE_REGISTRIERUNG = "phnum_nachgeholt_b";
-const HTTP_NOT_PLACED = 500;
+const HTTP_CONFLICT = 409;
 
 const AGENT_ID = "agent_el_test_1";
 const RUECKFALL_AGENT_PHONE_NUMBER_ID = "phnum_global_test";
@@ -187,7 +187,7 @@ test("B1: Tenant mit eigener Registrierung -> die Wahl geht von der eigenen DID 
 test("B2: Tenant-Isolation ueber die Route - Tenant B ohne Registrierung waehlt NIE von Tenant As DID und nicht mit der globalen", async () => {
   await withVorspann(async ({ srv, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_B);
-    assert.equal(res.status, HTTP_NOT_PLACED, "der Anruf wird klar abgelehnt");
+    assert.equal(res.status, HTTP_CONFLICT, "der Anruf wird klar abgelehnt");
     assert.equal(telnyx.waehlaufrufe.length, 0, "kein Anbieteraufruf, keine Kosten");
     assert.deepEqual(kennungenInAnfragen({ telnyx }), []);
     assert.ok(!telnyx.rohkoerper.join("\n").includes(NUMBER_A), "Tenant As DID in einer Anbieteranfrage");
@@ -197,27 +197,17 @@ test("B2: Tenant-Isolation ueber die Route - Tenant B ohne Registrierung waehlt 
 test("B3: der Abbruch ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", async () => {
   await withVorspann(async ({ srv }) => {
     await placeCall(srv, SUBJECT_B);
-    assert.match(srv.stdout, /Anruf ohne eigene Absendernummer abgebrochen/);
-    assert.match(srv.stdout, /grund=keine_eigene_registrierung/);
+    assert.match(srv.stdout, /\[el-outbound-weg\] weg=abbruch grund=keine_eigene_registrierung call=/);
     assert.ok(!srv.stdout.includes(NUMBER_B), "keine Rufnummer im Log");
   });
 });
 
-test("B4: Abbruch am Datensatz erkennbar - failed und fromRegistrationSource=abgebrochen:<grund>", async () => {
+test("B4: Abbruch am Datensatz erkennbar - failed und failureReason=not-placed:<grund>", async () => {
   await withVorspann(async ({ srv }) => {
     await placeCall(srv, SUBJECT_B);
     const call = ownCall(srv);
     assert.equal(call.status, "failed");
-    assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
-  });
-});
-
-test("B5: eigene DID am Datensatz erkennbar - fromRegistrationSource=tenant_did", async () => {
-  await withVorspann(async ({ srv }) => {
-    const res = await placeCall(srv, SUBJECT_A);
-    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-    const call = ownCall(srv);
-    assert.equal(call.fromRegistrationSource, "tenant_did");
+    assert.equal(call.failureReason, "not-placed:keine_eigene_registrierung");
   });
 });
 
@@ -241,18 +231,14 @@ test("ANR: Tenant mit aktiver DID ohne eigene Registrierung -> KEIN Anrufstart m
   });
 });
 
-test("ANR: fehlende Registrierung wird zur Anrufzeit nachgeholt - der Anruf startet mit der Kennung der eigenen DID", async () => {
+test("ANR: fehlende Registrierung wird zur Anrufzeit NICHT nachgeholt - der Anruf bricht ab, ohne Anlegen beim Anbieter", async () => {
   await withVorspann(async ({ srv, mock, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_B);
-    assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-    assert.equal(mock.registrierungen.length, 1, "genau eine Registrierung angelegt");
-    assert.equal(mock.registrierungen[0].phone_number, NUMBER_B);
-    assert.equal(telnyx.waehlaufrufe.length, 1);
-    const [wahl] = telnyx.waehlaufrufe;
-    assert.equal(wahl.from, NUMBER_B);
-    assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
+    assert.equal(res.status, HTTP_CONFLICT);
+    assert.equal(mock.registrierungen.length, 0, "keine Registrierung angelegt");
+    assert.equal(telnyx.waehlaufrufe.length, 0);
     const nummer = srv.readStore().numbers.find((number) => number.e164 === NUMBER_B);
-    assert.equal(nummer.providerAgentPhoneNumberId, NACHGEHOLTE_REGISTRIERUNG, "Kennung dauerhaft gespeichert");
+    assert.ok(!nummer.providerAgentPhoneNumberId, "Kennung bleibt leer");
   }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
 
@@ -267,39 +253,7 @@ test("ANR: Boot meldet woertlich, ob die Nummernregistrierung eingehaengt ist", 
   }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
 
-const ZWEITES_ZIEL = "+4915005559100";
 const REGISTRIERUNG_ABGELEHNT = 500;
-
-test("ANR: zwei gleichzeitige Anrufe derselben DID legen genau eine Registrierung an", async () => {
-  await withVorspann(
-    async ({ srv, mock, telnyx }) => {
-      const antworten = await Promise.all([
-        placeCall(srv, SUBJECT_B),
-        placeCall(srv, SUBJECT_B, ZWEITES_ZIEL),
-      ]);
-      assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
-      assert.equal(mock.registrierungen.length, 1, "ein geteilter Versuch, nicht zwei Registrierungen");
-      assert.equal(telnyx.waehlaufrufe.length, 2);
-    },
-    REGISTRIERUNG_NACHHOLEN_ENV,
-  );
-});
-
-test("ANR: scheitert das Nachholen, endet der Anruf ohne Anbieteraufruf und mit dem Grund im Datensatz", async () => {
-  await withVorspann(
-    async ({ srv, mock, telnyx }) => {
-      const res = await placeCall(srv, SUBJECT_B);
-      assert.equal(res.status, HTTP_NOT_PLACED);
-      assert.equal(mock.registrierungen.length, 1, "der Versuch fand statt");
-      assert.equal(telnyx.waehlaufrufe.length, 0, "kein Anrufstart beim Anbieter");
-      const call = ownCall(srv);
-      assert.equal(call.status, "failed");
-      assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
-    },
-    REGISTRIERUNG_NACHHOLEN_ENV,
-    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
-  );
-});
 
 function stdoutZeile(srv, muster) {
   return srv.stdout.split("\n").find((zeile) => muster.test(zeile));
@@ -317,65 +271,13 @@ test("ANR: Boot nennt bei nicht eingehaengter Registrierung die drei Schalter un
   });
 });
 
-test("ANR: scheitert das Nachholen, steht die Nummer und der Grund in einer benannten Log-Zeile", async () => {
-  await withVorspann(
-    async ({ srv }) => {
-      await placeCall(srv, SUBJECT_B);
-      assert.match(srv.stdout, /\[el-outbound\] Registrierung nachholen FEHLGESCHLAGEN number=num_b: \S/);
-      assert.ok(!srv.stdout.includes(REGISTRIERUNG_NACHHOLEN_ENV.TELNYX_SIP_TRUNK_PASSWORD), "Passwort im Log");
-    },
-    REGISTRIERUNG_NACHHOLEN_ENV,
-    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
-  );
-});
-
 test("ANR: ohne eingehaengte Registrierung wird nichts nachgeholt und der Abbruch nennt den Grund", async () => {
   await withVorspann(async ({ srv, mock }) => {
     await placeCall(srv, SUBJECT_B);
     assert.equal(mock.registrierungen.length, 0);
     assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
-    assert.match(srv.stdout, /grund=keine_eigene_registrierung \(Nummernregistrierung nicht eingehaengt/);
+    assert.match(srv.stdout, /weg=abbruch grund=keine_eigene_registrierung call=/);
   });
-});
-
-test("ANR: zwei gleichzeitige Anrufe verschiedener DIDs holen je ihre eigene Registrierung nach", async () => {
-  const ohneRegistrierung = seedZweiTenants();
-  ohneRegistrierung.numbers = ohneRegistrierung.numbers.map((nummer) => ({
-    ...nummer,
-    providerAgentPhoneNumberId: undefined,
-  }));
-  await withVorspann(
-    async ({ srv, mock, telnyx }) => {
-      const antworten = await Promise.all([placeCall(srv, SUBJECT_A), placeCall(srv, SUBJECT_B, ZWEITES_ZIEL)]);
-      assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
-      assert.deepEqual(mock.registrierungen.map((anfrage) => anfrage.phone_number).sort(), [NUMBER_A, NUMBER_B]);
-      assert.equal(telnyx.waehlaufrufe.length, 2);
-      const { numbers } = srv.readStore();
-      const gespeichert = numbers
-        .filter((nummer) => [NUMBER_A, NUMBER_B].includes(nummer.e164))
-        .map((nummer) => nummer.providerAgentPhoneNumberId);
-      assert.deepEqual(gespeichert, [NACHGEHOLTE_REGISTRIERUNG, NACHGEHOLTE_REGISTRIERUNG]);
-    },
-    REGISTRIERUNG_NACHHOLEN_ENV,
-    { seed: ohneRegistrierung },
-  );
-});
-
-function abbruchZeile(srv) {
-  return stdoutZeile(srv, /Anruf ohne eigene Absendernummer abgebrochen/);
-}
-
-test("ANR: mit eingehaengter Registrierung nennt der Abbruch den Grund ohne den Hinweis auf fehlende Einhaengung", async () => {
-  await withVorspann(
-    async ({ srv }) => {
-      await placeCall(srv, SUBJECT_B);
-      const zeile = abbruchZeile(srv);
-      assert.ok(zeile, "keine Abbruch-Zeile");
-      assert.match(zeile, /grund=keine_eigene_registrierung$/);
-    },
-    REGISTRIERUNG_NACHHOLEN_ENV,
-    { registrierungStatus: REGISTRIERUNG_ABGELEHNT },
-  );
 });
 
 test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrierung nicht erneut registriert", async () => {
@@ -407,42 +309,22 @@ test("[NIE1] +1-Mandant mit eigener Registrierung startet mit genau seiner Kennu
   await anrufPruefen({}, ({ srv, res, kennungen, call }) => {
     assert.equal(res.status, HTTP_OK);
     assert.deepEqual(kennungen, [NUMBER_A]);
-    assert.equal(call.fromRegistrationSource, "tenant_did");
+    assert.equal(call.from, NUMBER_A);
     assert.doesNotMatch(srv.stdout, RUECKFALL_ZEILE);
   });
 });
 
-test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und scheitert das, startet nichts", async () => {
-  const faelle = [
-    { registrierungStatus: HTTP_OK, status: HTTP_OK, start: [NUMBER_B], quelle: "tenant_did" },
-    {
-      registrierungStatus: REGISTRIERUNG_ABGELEHNT,
-      status: HTTP_NOT_PLACED,
-      start: [],
-      quelle: "abgebrochen:keine_eigene_registrierung",
-    },
-  ];
-  for (const { registrierungStatus, status, start, quelle } of faelle) {
+test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird nichts nachgeholt und nichts gestartet", async () => {
+  for (const registrierungStatus of [HTTP_OK, REGISTRIERUNG_ABGELEHNT]) {
     await anrufPruefen(
       { subject: SUBJECT_B, env: REGISTRIERUNG_NACHHOLEN_ENV, registrierungStatus },
       ({ res, mock, kennungen, call }) => {
-        assert.equal(res.status, status);
-        assert.deepEqual(mock.registrierungen.map((anfrage) => anfrage.phone_number), [NUMBER_B]);
-        assert.deepEqual(kennungen, start);
-        assert.equal(call.fromRegistrationSource, quelle);
+        assert.equal(res.status, HTTP_CONFLICT);
+        assert.deepEqual(mock.registrierungen, []);
+        assert.deepEqual(kennungen, []);
+        assert.equal(call.failureReason, "not-placed:keine_eigene_registrierung");
       },
     );
   }
 });
 
-test("ANR: lehnt der Anbieter den Start ab, steht die Absenderquelle tenant_did trotzdem schon am Datensatz", async () => {
-  await withVorspann(
-    async ({ srv, telnyx }) => {
-      await placeCall(srv, SUBJECT_A);
-      assert.equal(telnyx.waehlaufrufe.length, 1, "der Anbieter wurde angerufen und hat abgelehnt");
-      assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
-    },
-    {},
-    { wahlAblehnung: 422 },
-  );
-});

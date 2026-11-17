@@ -47,8 +47,8 @@ async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: fal
   app.use(
     makeCallRoutes({
       ...vorspannDiAttrappe(),
-      beschaffeAbsender: undefined,
-      store: speicher,
+      erzeugeVorspann: undefined,
+      store: { ...speicher, numberRecordByE164: () => ({ providerAgentPhoneNumberId: "phnum_verdrahtung" }) },
       leitungsplaetze: speicher.makeLeitungsplaetze(),
       budgetReservierung: { reservieren: async () => ({ reserviert: true }), freigeben: async () => {} },
       config: withConfigNamespaces({
@@ -61,6 +61,14 @@ async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: fal
         publicUrl: "http://127.0.0.1:1",
         telnyxElevenLabs: { voiceId: "" },
         elevenLabsOutbound: schalter,
+        telnyxCallControlAppId: "cc_app_verdrahtung",
+        elevenLabsInbound: {
+          scope: "allowlist",
+          tenantIds: [TENANT],
+          sipUser: "sip-user-verdrahtung",
+          sipPassword: "p".repeat(40),
+          initWebhookToken: "t".repeat(40),
+        },
       }),
       audit: () => {},
       outboundGates: freieGates,
@@ -100,12 +108,12 @@ test("Ausgehend: ohne verdrahteten Anrufstart nennt die Fehlerzeile genau diesen
   const zeile = zeilen.find((text) => text.startsWith("[place_call] originate fehlgeschlagen call=call_"));
   assert.ok(zeile, zeilen.join("\n"));
   assert.ok(
-    zeile.endsWith(": Der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)"),
+    zeile.endsWith(": Der Anrufstart ist nicht verdrahtet (deps.erzeugeVorspann fehlt)"),
     zeile,
   );
 });
 
 test("Ausgehend: auch im Vorspann-Weg nennt die Fehlerzeile den nicht verdrahteten Anrufstart", async () => {
   const zeilen = await wahlOhneAnrufstart({ ueberTelnyx: true, vorspann: true });
-  assert.match(zeilen.join("\n"), /originate fehlgeschlagen call=call_\S+: Der Anrufstart ist nicht verdrahtet \(deps\.elevenLabsOutbound fehlt\)$/m);
+  assert.match(zeilen.join("\n"), /originate fehlgeschlagen call=call_\S+: Der Anrufstart ist nicht verdrahtet \(deps\.erzeugeVorspann fehlt\)$/m);
 });

@@ -6,7 +6,6 @@ import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.ts";
-import { findActiveNumber } from "../store/views.js";
 import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
@@ -22,8 +21,6 @@ import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
-import { waehleAbsenderRegistrierung, ABSENDER_QUELLE, ABSENDER_GRUND } from "../telephony/absender-registrierung.ts";
-import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 
 const PROVIDER_DONE = "done";
@@ -345,55 +342,6 @@ export function callLocaleOf({ store, config, call, ownerName }) {
     to: call.to,
     callLanguage: call.language,
   });
-}
-
-function absenderAbbruchMeldung({ callId, grund, sipRegistrar }) {
-  return (
-    `Anruf ohne eigene Absendernummer abgebrochen (call=${callId}): grund=${grund}` +
-    (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)")
-  );
-}
-
-export function eigeneAbsenderRegistrierung({ store, call }) {
-  return waehleAbsenderRegistrierung({
-    numberRecord: findActiveNumber(store.load(), call.tenantId),
-    fromE164: call.from,
-  });
-}
-
-function makeAbsenderBeschaffung({ store, sipRegistrar }) {
-  async function registriereUndSpeichere(numberRecord) {
-    try {
-      const { phoneNumberId } = await sipRegistrar.ensureRegistration({
-        e164: numberRecord.e164,
-        numberId: numberRecord.id,
-      });
-      store.registrierungAnhaengen(numberRecord.id, phoneNumberId);
-    } catch (err) {
-      console.warn(`[el-outbound] Registrierung nachholen FEHLGESCHLAGEN number=${numberRecord.id}: ${err.message}`);
-    }
-  }
-
-  const holeRegistrierungNach = makeKeyedSingleFlight(
-    registriereUndSpeichere,
-    (numberRecord) => numberRecord.id,
-  );
-
-  return async function beschaffeAbsenderOderBrichAb(call) {
-    const eigeneNummer = () => findActiveNumber(store.load(), call.tenantId);
-    const waehle = () => eigeneAbsenderRegistrierung({ store, call });
-    let absender = waehle();
-    if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
-      await holeRegistrierungNach(eigeneNummer());
-      absender = waehle();
-    }
-    if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
-      store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
-      throw new Error(absenderAbbruchMeldung({ callId: call.id, grund: absender.grund, sipRegistrar }));
-    }
-    store.recordFromRegistrationSource(call.id, absender.quelle);
-    return absender;
-  };
 }
 
 function recordAbsenderMessung(store, callId, conversation) {
@@ -851,11 +799,9 @@ export function makeElevenLabsOutbound({
   finishCall,
   consultAllowedForCall = ohneRueckfrageTor,
   lookupAvailableFor = ohneRechercheTor,
-  sipRegistrar,
   endCarrierCall,
 }) {
   const settings = () => config.voice.elevenLabsOutbound;
-  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
   const inhaltsAnfrageFor = makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvailableFor });
   const initInhaltFor = makeInitInhalt(inhaltsAnfrageFor);
 
@@ -910,7 +856,6 @@ export function makeElevenLabsOutbound({
   }
 
   return {
-    beschaffeAbsenderOderBrichAb,
     initInhaltFor,
     endActiveCall,
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
