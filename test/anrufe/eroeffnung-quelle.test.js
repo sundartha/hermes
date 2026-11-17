@@ -78,21 +78,21 @@ async function anrufstart({ sprache, ziel, auftrag }, firstName) {
 for (const fall of FAELLE) {
   test(`Eroeffnung an Dritte (${fall.sprache}): Anlass, Hermes mit Auftraggeber, Zusammenfassung fuer den Vornamen`, async () => {
     const daten = await anrufstart(fall, "");
-    assert.equal(daten.dynamic_variables.eroeffnung, fall.mitVorname);
+    assert.equal(daten.dynamic_variables.eroeffnung_gesagt, fall.mitVorname);
     assert.equal(daten.dynamic_variables.opening_line, fall.anlass);
     assert.equal(daten.conversation_config_override.agent.first_message, "");
   });
 
   test(`Eroeffnung an Dritte (${fall.sprache}): ein Vorname mit Platzhalter wird nicht gesprochen, der Satz faellt auf den Auftraggeber zurueck`, async () => {
     const daten = await anrufstart(fall, "{{x}}");
-    assert.equal(daten.dynamic_variables.eroeffnung, fall.ohneVorname);
+    assert.equal(daten.dynamic_variables.eroeffnung_gesagt, fall.ohneVorname);
   });
 }
 
 test("Eroeffnung an Dritte: mehrere Schlusszeichen des Anlasses werden vor dem Gedankenstrich alle entfernt", async () => {
   const daten = await anrufstart({ sprache: "de", ziel: "+4915112345678", auftrag: "Termin vereinbaren!!" }, "");
   assert.equal(
-    daten.dynamic_variables.eroeffnung,
+    daten.dynamic_variables.eroeffnung_gesagt,
     "Hallo, es geht um Folgendes: Termin vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
   );
 });
@@ -144,7 +144,7 @@ test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei 
     assert.equal(res.status, HTTP_OK, antwort);
     const { dynamic_variables: variablen } = await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
     assert.equal(
-      variablen.eroeffnung,
+      variablen.eroeffnung_gesagt,
       "Hallo, ich rufe an, um einen Termin zu vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
     );
   } finally {

@@ -124,11 +124,7 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
       const inhalt = await vorspannInit(srv);
       assert.equal(inhalt.conversation_config_override.agent.language, "de");
       assert.equal(inhalt.conversation_config_override.agent.first_message, "");
-      assert.equal(
-        inhalt.dynamic_variables.eroeffnung_gesagt,
-        inhalt.dynamic_variables.eroeffnung,
-        "ohne Sprachabweichung bleibt der gesprochene Satz die Eroeffnungsvariable",
-      );
+      assert.equal(inhalt.dynamic_variables.eroeffnung, "", "nach dem Vorspann traegt die Eroeffnungsvariable keinen Satz");
     });
   });
 

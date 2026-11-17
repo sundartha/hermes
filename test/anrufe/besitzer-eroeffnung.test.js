@@ -112,21 +112,22 @@ for (const fall of FAELLE) {
     const erster = daten.dynamic_variables.eroeffnung_gesagt;
     assert.equal(daten.conversation_config_override.agent.first_message, "");
     assert.equal(erster, `${fall.kopf} ${fall.anlass}`);
-    assert.equal(daten.dynamic_variables.eroeffnung, erster);
+    assert.equal(daten.dynamic_variables.eroeffnung, "");
   });
 
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): ohne Eintrag auf der Allowlist gilt der volle Dritt-Satz`, async () => {
     const daten = await ausgehenderAnruf(fall, "t_fremd");
     assert.equal(daten.conversation_config_override.agent.first_message, "");
-    assert.equal(daten.dynamic_variables.eroeffnung, fall.drittSatz);
+    assert.equal(daten.dynamic_variables.eroeffnung, "");
+    assert.equal(daten.dynamic_variables.eroeffnung_gesagt, fall.drittSatz);
   });
 
   test(`Besitzer-Anruf ausgehend (${fall.sprache}): ein Platzhalter als Vorname fällt auf den vollen Dritt-Satz zurück`, async () => {
     const daten = await ausgehenderAnruf(fall, BOOTSTRAP_TENANT_ID, "{{owner_name}}");
     assert.equal(daten.conversation_config_override.agent.first_message, "");
-    assert.ok(!daten.dynamic_variables.eroeffnung.includes("{{"));
-    assert.match(daten.dynamic_variables.eroeffnung, /Hermes/);
-    assert.ok(daten.dynamic_variables.eroeffnung.includes("Jonas Beispiel"));
+    assert.ok(!daten.dynamic_variables.eroeffnung_gesagt.includes("{{"));
+    assert.match(daten.dynamic_variables.eroeffnung_gesagt, /Hermes/);
+    assert.ok(daten.dynamic_variables.eroeffnung_gesagt.includes("Jonas Beispiel"));
   });
 
   test(`Besitzer-Anruf eingehend (${fall.sprache}): Hermes, KI-Kennzeichnung und Frage, kein Transkriptions-Hinweis`, async () => {
