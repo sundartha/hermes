@@ -2,7 +2,7 @@ import { Router } from "express";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
-import { createRateLimiter } from "../middleware.js";
+import { createRateLimiter } from "../middleware.ts";
 import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 
 export const STATUS_PATH = "/intern/status";

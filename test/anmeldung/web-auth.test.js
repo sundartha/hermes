@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { createRateLimiter } from "../../src/middleware.js";
+import { createRateLimiter } from "../../src/middleware.ts";
 import {
   signValue,
   verifyValue,

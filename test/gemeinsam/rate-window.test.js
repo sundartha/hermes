@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeFixedWindowCounter } from "../../src/middleware.js";
+import { makeFixedWindowCounter } from "../../src/middleware.ts";
 
 test("Limit-Grenze: N Treffer erlaubt, N+1-ter abgelehnt (retryAfterS > 0)", () => {
   const hit = makeFixedWindowCounter({ windowMs: 60_000, limit: 2, sweepMs: 300_000 });

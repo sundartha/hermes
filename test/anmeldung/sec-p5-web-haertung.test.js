@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { HSTS_HEADER_VALUE } from "../../src/middleware.js";
+import { HSTS_HEADER_VALUE } from "../../src/middleware.ts";
 import { ROOT } from "../helpers.js";
 
 const SCRIPT_TAG = /<script\b[^>]*>/gi;

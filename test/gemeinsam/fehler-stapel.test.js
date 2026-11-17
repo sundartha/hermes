@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { errorHandler } from "../../src/middleware.js";
+import { errorHandler } from "../../src/middleware.ts";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 
 function fehlerMitStapel(stapel) {
