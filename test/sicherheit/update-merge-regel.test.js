@@ -41,6 +41,7 @@ function approve(body, user = ANTONIO, stand = KOPF) {
 
 const ALLES_ALT = {
   veroeffentlicht: async () => vorTagen(400),
+  kopfGepusht: async () => vorTagen(400),
   ersterFix: async () => false,
   nodeLtsSeit: async () => vorTagen(400).slice(0, 10),
   queueEintraege: async () => [],
