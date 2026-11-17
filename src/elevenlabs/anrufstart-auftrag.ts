@@ -9,12 +9,15 @@ const ABGLEICH_FRIST_MS = REQUEST_TIMEOUT_MS;
 const ABGLEICH_VORLAUF_S = 60;
 const ABGLEICH_SEITE = 50;
 
+export const ANRUFSTART_WARTE_TAKT_MS = MS_PER_SECOND;
+
 export const ANRUFSTART_AUSGANG = Object.freeze({
   GESTARTET: "gestartet",
   ABGEGLICHEN: "abgeglichen",
   OFFEN: "offen",
   UNKLAR: "unklar",
   ABGESPERRT: "abgesperrt",
+  ABGELAUFEN: "abgelaufen",
 });
 
 export const ANRUFSTART_SPERRE = Object.freeze({
@@ -28,6 +31,7 @@ interface Anruf {
   id: string;
   tenantId: string;
   to: string;
+  startedAt?: string;
   elevenlabsConversationId?: string | null;
 }
 
@@ -43,6 +47,12 @@ interface Gespraechsliste {
 interface AnbieterGespraeche {
   liste: (abfrage: Record<string, string>) => Promise<Gespraechsliste | null>;
   hole: (conversationId: string) => Promise<Gespraech | null>;
+}
+
+interface Platz {
+  belege: (call: Anruf) => Promise<boolean>;
+  beendeNachWartefrist: (callId: string) => Promise<void>;
+  warte: (ms: number) => Promise<void>;
 }
 
 interface Abhaengigkeiten {
@@ -63,6 +73,8 @@ interface Abhaengigkeiten {
     pausiert: (call: Anruf) => boolean;
     abgebrochen: (call: Anruf) => boolean;
   };
+  platz?: Platz;
+  wartefristMs?: number;
   beendeOhneWahl: (callId: string, grund: string) => Promise<void>;
   armeTimer: (call: Anruf) => void;
   mandantenToken: (tenantId: string) => string;
@@ -82,6 +94,8 @@ export function makeAnrufstartAuftrag({
   armeTimer,
   mandantenToken,
   jetztMs,
+  platz,
+  wartefristMs = 0,
 }: Abhaengigkeiten) {
   async function markiereVorAnbieterAufruf(call: Anruf): Promise<void> {
     const gesetzt = await store.anrufstartMarker.setze({
@@ -134,6 +148,23 @@ export function makeAnrufstartAuftrag({
     return grund !== null;
   }
 
+  async function wartePlatz(call: Anruf): Promise<AnrufstartAusgang | null> {
+    const fristEnde = Date.parse(call.startedAt ?? "") + wartefristMs;
+    let aktuell = call;
+    for (;;) {
+      if (await sperreVorDemStart(aktuell)) return ANRUFSTART_AUSGANG.ABGESPERRT;
+      if (!platz || (await platz.belege(aktuell))) return null;
+      if (!(jetztMs() < fristEnde)) {
+        await platz.beendeNachWartefrist(call.id);
+        return ANRUFSTART_AUSGANG.ABGELAUFEN;
+      }
+      await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
+      const neu = await store.leseCall(call.id);
+      if (!neu) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
+      aktuell = neu;
+    }
+  }
+
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
     const gelesen = AUFTRAG.safeParse(auftrag?.payload);
     const call = gelesen.success ? await store.leseCall(gelesen.data.callId) : null;
@@ -141,7 +172,8 @@ export function makeAnrufstartAuftrag({
     if (call.elevenlabsConversationId) return ANRUFSTART_AUSGANG.GESTARTET;
     const versuchtIso = await store.anrufstartMarker.lies(call.id);
     if (versuchtIso) return gleicheMitAnbieterAb(call, versuchtIso);
-    if (await sperreVorDemStart(call)) return ANRUFSTART_AUSGANG.ABGESPERRT;
+    const ohnePlatz = await wartePlatz(call);
+    if (ohnePlatz) return ohnePlatz;
     await markiereVorAnbieterAufruf(call);
     await starte(call);
     armeTimer(call);
