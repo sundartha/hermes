@@ -697,3 +697,9 @@ test("IEL-B6-12g: Store wirft ein Objekt mit message undefined oder null -> 500 
 test("IEL-B6-12h: Store wirft ein Objekt mit message als Zahl -> 500 und unbekannt im Log", async () => {
   assert.deepEqual(await fehlerZeilenBei({ message: 42 }), ["[el-init] fehler: unbekannt"]);
 });
+
+test("IEL-B6-4c: leere called_number bei eingehendem Anruf gilt als fehlend -> 200", async () => {
+  const zustand = baueZustand();
+  const leer = await einzelFall({ zustand, body: initBody({ bindung: zustand.call.streamToken, extra: { called_number: "" } }) });
+  assert.equal(leer.status, HTTP_OK);
+});
