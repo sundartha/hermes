@@ -1,4 +1,5 @@
 import { SWEEP_TRIGGER } from "./billing/cost-truing.ts";
+import { starteFristenTakt as starteFristenTaktMitUhr } from "./telephony/fristen-lauf.ts";
 import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const MINUTES_PER_HOUR = 60;
@@ -33,4 +34,15 @@ export async function starteSweepTakt(config, waechter, zeitplan) {
 
 export function runSweepTick(waechter) {
   for (const { logTag, lauf } of TEILLAEUFE) void lauf(waechter).catch((err) => console.error(logTag, err.message));
+}
+
+export function starteFristenTakt({ store, lifecycle, config }) {
+  return starteFristenTaktMitUhr({
+    store,
+    beende: lifecycle.terminateExpiredCall,
+    limitJeMandant: config.safety.fristenLimitJeMandant,
+    leaseMs: config.safety.fristenTaktMs,
+    taktMs: config.safety.fristenTaktMs,
+    uhr: { setzeTakt: setInterval, loescheTakt: clearInterval },
+  });
 }

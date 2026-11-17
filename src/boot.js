@@ -71,12 +71,12 @@ import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
 import { starteNummerntausch } from "./worker/nummerntausch.js";
 import { numberProvisioning, inboundSignatureVerifier } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
-import { starteAufbewahrung, starteSweepTakt } from "./zeitsteuerung.js";
+import { starteAufbewahrung, starteSweepTakt, starteFristenTakt } from "./zeitsteuerung.js";
 import { loeschtaktBefund } from "./queue/takt-pruefung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
-export { runSweepTick, starteSweepTakt } from "./zeitsteuerung.js";
+export { runSweepTick, starteSweepTakt, starteFristenTakt } from "./zeitsteuerung.js";
 
 const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
 const HEILUNG_WARTE_FRIST_MS = 30_000;
@@ -785,6 +785,8 @@ export async function bootServer({
   lifecycle.rearmActiveCallTimers();
 
   lifecycle.rearmBudgetWatchdogs();
+
+  starteFristenTakt({ store, lifecycle, config });
 
   const instanzTakt = await store.starteInstanzTakt();
 
