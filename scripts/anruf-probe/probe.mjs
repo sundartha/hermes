@@ -9,7 +9,7 @@ const MAX_ERSTVERSUCHE = 5;
 const MAX_ANRUFE = 10;
 const ANRUFE_JE_PROBE = 2;
 const ALARMWEGE = ["SLACK_ALERT_URL", "BETTER_STACK_ALERT_URL"];
-const PFLICHT = ["STAGING_PROBE_ZIEL", "STAGING_PROBE_TELNYX_KEY"];
+const PFLICHT = ["STAGING_PROBE_ZIEL"];
 const COMMIT = /^[0-9a-f]{40}$/;
 const EXIT_ROT = 1;
 const ECHTE_UHR = Object.freeze({
@@ -26,6 +26,12 @@ function ende(text) {
 
 function zeile(text) {
   process.stdout.write(`${text}\n`);
+}
+
+function uebersprungen(name) {
+  const text = `probe_uebersprungen_${name.toLowerCase()}_fehlt`;
+  if (env.GITHUB_EVENT_NAME === "schedule") ende(text);
+  zeile(text);
 }
 
 function fehlenderName() {
@@ -98,9 +104,20 @@ async function ausgangMelden(ergebnis) {
   throw new Ende("probe_rot");
 }
 
+async function auflegen() {
+  if (!env.STAGING_PROBE_ZIEL) return uebersprungen("STAGING_PROBE_ZIEL");
+  const modul = await modulLaden();
+  if (modul === null) {
+    ende("probe_anrufer_fehlt");
+  }
+  await zielGeprueft(modul.anrufer);
+  zeile(`probe_aufgelegt_${await modul.anrufer.offeneBeenden()}`);
+}
+
 async function hauptprogramm() {
+  if (process.argv[2] === "auflegen") return auflegen();
   const fehlt = fehlenderName();
-  if (fehlt !== undefined) return zeile(`probe_uebersprungen_${fehlt.toLowerCase()}_fehlt`);
+  if (fehlt !== undefined) return uebersprungen(fehlt);
   for (const name of PFLICHT) zeile(`::add-mask::${env[name]}`);
   if (!COMMIT.test(env.GITHUB_SHA ?? "")) {
     ende("probe_commit_unklar");

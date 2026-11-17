@@ -100,6 +100,14 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       const heutige = starts.filter((ms) => tag(ms) === heute).sort((frueher, spaeter) => frueher - spaeter);
       return { erstversuche: heutige.length - wiederholungen(heutige), anrufe: heutige.length };
     },
+    offeneBeenden: async () => {
+      const { calls } = await ruf("list_calls", {});
+      const offene = calls.filter(
+        (anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel && !ENDSTATUS.includes(anruf.status),
+      );
+      for (const anruf of offene) await ruf("cancel_call", { call_id: anruf.id });
+      return offene.length;
+    },
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
         to: nummer,
