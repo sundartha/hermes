@@ -184,7 +184,7 @@ test("@types/node wird ohne Paket-Skripte und nur aus ausreichend alten Versione
   assert.match(npm, /--package-lock-only/);
   assert.match(npm, /--save-exact/);
   assert.match(npm, /@types\/node@26(?:\s|$)/);
-  assert.match(npm, /--before=2026-11-03/);
+  assert.match(npm, /--before=2026-10-28/);
 });
 
 test("Ein NODE_VERSION-Eintrag in render.yaml wird mitgezogen", (t) => {
