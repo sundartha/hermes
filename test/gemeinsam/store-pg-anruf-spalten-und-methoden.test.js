@@ -36,6 +36,7 @@ const EINDEUTIGE_ANRUFWERTE = {
   notPlacedMailSentAt: "2026-03-01T08:20:10.000Z",
   bridgedAt: "2026-03-01T08:20:11.000Z", elCallControlId: "el-bein-eindeutig-60",
   instanz: "instanz-eindeutig-61",
+  noSpeechStreak: 6201, lookups: 6302, consultPolledAtMs: 1760000000063,
 };
 
 async function speichernUndNeuLaden() {
