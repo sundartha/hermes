@@ -46,7 +46,7 @@ async function speichernUndNeuLaden() {
   await store.save();
   await store.drainFlushes();
   await store.init();
-  const geladen = store.getCall(angelegt.id);
+  const geladen = await store.leseCall(angelegt.id);
   assert.notEqual(geladen, imSpeicher, "init baut ein neues Objekt aus den Zeilen auf");
   return geladen;
 }
@@ -144,7 +144,7 @@ test("Anruf-Spalten: der von createCall vergebene streamToken kommt nach Speiche
   await store.drainFlushes();
   await store.init();
 
-  assert.strictEqual(store.getCall(angelegt.id).streamToken, vergeben);
+  assert.strictEqual((await store.leseCall(angelegt.id)).streamToken, vergeben);
 });
 
 test("Anruf-Spalten: diagnostic, calleeIsOwner und callerIsOwner kommen mit umgekehrten Wahrheitswerten nach Speichern und Neuladen auf ihr eigenes Feld zurueck", async () => {
@@ -154,7 +154,7 @@ test("Anruf-Spalten: diagnostic, calleeIsOwner und callerIsOwner kommen mit umge
   await store.save();
   await store.drainFlushes();
   await store.init();
-  const geladen = store.getCall(angelegt.id);
+  const geladen = await store.leseCall(angelegt.id);
 
   assert.strictEqual(geladen.diagnostic, true);
   assert.strictEqual(geladen.calleeIsOwner, false);

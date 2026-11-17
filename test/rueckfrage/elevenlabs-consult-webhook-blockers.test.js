@@ -143,7 +143,7 @@ test("EL-CONSULT BL-1b: die ElevenLabs-Kennung ueberlebt Schreiben und Wiederles
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.equal(
-    reopened.getCall(created.id).elevenlabsConversationId,
+    (await reopened.leseCall(created.id)).elevenlabsConversationId,
     "conv_el_pg",
     "Kennung ueberlebt den Reopen - ohne Spalte + ON CONFLICT DO UPDATE SET + rowToCall ginge sie beim Restart verloren UND der naechste Flush schriebe NULL zurueck",
   );

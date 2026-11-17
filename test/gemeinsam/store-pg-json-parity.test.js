@@ -42,7 +42,7 @@ async function pgObjectiveRoundtrip(value) {
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  return reopened.getCall(created.id).objectiveAchieved;
+  return (await reopened.leseCall(created.id)).objectiveAchieved;
 }
 
 function jsonObjectiveRoundtrip(value) {
@@ -93,7 +93,7 @@ async function pgOpeningLookupRoundtrip() {
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   return {
     openingLine: call.openingLine,
     openingLineSha256: call.openingLineSha256,
@@ -145,7 +145,7 @@ async function pgCostProfileRoundtrip() {
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  return reopened.getCall(created.id).costProfile;
+  return (await reopened.leseCall(created.id)).costProfile;
 }
 
 function jsonCostProfileRoundtrip() {

@@ -55,7 +55,7 @@ test("billedAt round-trippt durch flush/hydrate (pg): ueberlebt den Restart", as
   await store.save();
 
   const reopened = await reopen(db);
-  const billedAt = reopened.getCall(c.id).billedAt;
+  const billedAt = (await reopened.leseCall(c.id)).billedAt;
   assert.ok(
     typeof billedAt === "string" && !Number.isNaN(Date.parse(billedAt)),
     "Bucht-Marker ist eine persistierte ISO-Zeit",
