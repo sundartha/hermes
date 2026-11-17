@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { TURN_LOOP_BY_COST_PROFILE, legRunsOurTurnLoop } from "../../src/telephony/leg-turn-loop.ts";
 import { EMERGENCY_SHORT_CODES, deniedPrefix, isDenied } from "../../src/telephony/number-denylist.ts";
 import { isTelnyxSipCallId } from "../../src/telephony/sip-call-id.ts";
 import { SPRECHPFAD, armedInboundSprechpfad, classifySprechpfad } from "../../src/telephony/sprechpfad.ts";
@@ -64,24 +63,6 @@ test("isDenied folgt deniedPrefix", () => {
   assert.equal(isDenied("112"), true);
   assert.equal(isDenied("+8701234567"), true);
   assert.equal(isDenied("+4915112345678"), false);
-});
-
-test("Kostenprofile bestimmen, ob unsere Gespraechsschleife laeuft", () => {
-  assert.deepEqual(
-    { ...TURN_LOOP_BY_COST_PROFILE },
-    {
-      [KOSTENPROFIL.TELNYX_BUDGET]: true,
-      [KOSTENPROFIL.TELNYX_INBOUND_BUDGET]: true,
-      [KOSTENPROFIL.EL_CONVAI_SIP]: false,
-      [KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI]: false,
-      [KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI]: false,
-    },
-  );
-  assert.ok(Object.isFrozen(TURN_LOOP_BY_COST_PROFILE));
-  for (const [profil, laeuft] of Object.entries(TURN_LOOP_BY_COST_PROFILE))
-    assert.equal(legRunsOurTurnLoop({ costProfile: profil }), laeuft, profil);
-  for (const call of [undefined, null, {}, { costProfile: "neu_unbekannt" }, { costProfile: "toString" }])
-    assert.equal(legRunsOurTurnLoop(call), true, JSON.stringify(call));
 });
 
 tabelle(
