@@ -839,7 +839,7 @@ export function makeElevenLabsOutbound({
   }
 
   async function schreibeAbfrageFrist(call) {
-    const faelligAt = new Date(Date.now() + REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS).toISOString();
+    const faelligAt = new Date(Date.now() + REQUEST_TIMEOUT_MS + settings().resultPollMs + ABFRAGE_UEBERNAHME_MS).toISOString();
     try {
       await store.setzeAbfrageFrist({ callId: call.id, tenantId: call.tenantId, faelligAt });
     } catch (fehler) {
