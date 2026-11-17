@@ -11,7 +11,7 @@ test("anruf-pruefung-importrichtung: anrufe importiert nichts mehr aus betrieb, 
 });
 
 test("anruf-pruefung-importrichtung: Prüfergebnisse bleiben gleich", async () => {
-  const { invalidText, validateAssistantContext, validateMandate } = await import("../../src/begriffe/anruf-pruefung.ts");
+  const { invalidText, validateAssistantContext, validateMandate } = await import("../../src/i18n/anruf-eingabe-texte.ts");
   assert.equal(invalidText("objective", "x".repeat(501)), "objective ist zu lang (max. 500 Zeichen)");
   assert.equal(invalidText("objective", "x".repeat(500)), null);
   assert.equal(invalidText("objective", 5), "objective muss ein String sein");

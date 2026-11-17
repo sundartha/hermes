@@ -1,13 +1,12 @@
 import { TEXT_LIMITS, type TextName } from "../begriffe/anruf-pruefung.ts";
+export { E164, TEXT_LIMITS } from "../begriffe/anruf-pruefung.ts";
 export {
-  E164,
-  TEXT_LIMITS,
   invalidText,
   invalidStringArray,
   invalidEnum,
   validateAssistantContext,
   validateMandate,
-} from "../begriffe/anruf-pruefung.ts";
+} from "../i18n/anruf-eingabe-texte.ts";
 export type { TextName } from "../begriffe/anruf-pruefung.ts";
 export { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 
