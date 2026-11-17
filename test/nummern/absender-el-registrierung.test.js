@@ -15,7 +15,6 @@ import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } from "../anrufe/el-bein-attrappe.js";
 
 const HTTP_OK = 200;
-const START_PATH = "/v1/convai/sip-trunk/outbound-call";
 const TTS_PATH = "/v1/text-to-speech/";
 const AUDIO_BYTES = 200_000;
 const CONVERSATION_PATH = "/v1/convai/conversations/";
@@ -55,10 +54,8 @@ function endJson(res, status, payload) {
 
 async function startElevenLabsMock({
   registrierungStatus = HTTP_OK,
-  startAblehnung = null,
   conversation = CONVERSATION_DONE_WITH_ANALYSIS,
 } = {}) {
-  const startRequests = [];
   const registrierungen = [];
   const server = http.createServer((req, res) => {
     let raw = "";
@@ -75,11 +72,6 @@ async function startElevenLabsMock({
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
-      if (req.url.startsWith(START_PATH)) {
-        startRequests.push({ body: JSON.parse(raw || "{}") });
-        if (startAblehnung) return endJson(res, startAblehnung.httpStatus, startAblehnung.body);
-        return endJson(res, HTTP_OK, { success: true, conversation_id: "conv_e5_test_1" });
-      }
       if (req.url.startsWith(CONVERSATION_PATH))
         return endJson(res, HTTP_OK, conversation);
       return endJson(res, HTTP_OK, {});
@@ -88,7 +80,6 @@ async function startElevenLabsMock({
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     url: `http://127.0.0.1:${server.address().port}`,
-    startRequests,
     registrierungen,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
@@ -146,9 +137,9 @@ async function withElevenLabs(run, extraEnv = {}, optionen = {}) {
   }
 }
 
-async function withVorspann(run, extraEnv = {}) {
-  const mock = await startElevenLabsMock();
-  const telnyx = await starteAttrappe();
+async function withVorspann(run, extraEnv = {}, { wahlAblehnung = null, seed = seedZweiTenants(), ...mockOptionen } = {}) {
+  const mock = await startElevenLabsMock(mockOptionen);
+  const telnyx = await starteAttrappe(undefined, wahlAblehnung);
   const srv = await startServer({
     env: {
       ...vorspannUmgebung({ attrappe: telnyx, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "b" }),
@@ -157,7 +148,7 @@ async function withVorspann(run, extraEnv = {}) {
       ...extraEnv,
       ELEVENLABS_API_BASE: mock.url,
     },
-    seed: seedZweiTenants(),
+    seed,
   });
   try {
     return await run({ srv, mock, telnyx });
@@ -243,24 +234,22 @@ test("B6: Bestandsschutz - call.from bleibt in BEIDEN Faellen die gebuchte Tenan
 });
 
 test("ANR: Tenant mit aktiver DID ohne eigene Registrierung -> KEIN Anrufstart mit der globalen Kennung", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+  await withVorspann(async ({ srv, telnyx }) => {
     await placeCall(srv, SUBJECT_B);
-    const mitGlobalerKennung = mock.startRequests.filter(
-      (anfrage) => anfrage.body.agent_phone_number_id === RUECKFALL_AGENT_PHONE_NUMBER_ID,
-    );
+    const mitGlobalerKennung = telnyx.rohkoerper.filter((roh) => roh.includes(RUECKFALL_AGENT_PHONE_NUMBER_ID));
     assert.equal(mitGlobalerKennung.length, 0, "der Angerufene sah die globale Ersatznummer statt der des Abonnenten");
   });
 });
 
 test("ANR: fehlende Registrierung wird zur Anrufzeit nachgeholt - der Anruf startet mit der Kennung der eigenen DID", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+  await withVorspann(async ({ srv, mock, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_B);
     assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
     assert.equal(mock.registrierungen.length, 1, "genau eine Registrierung angelegt");
     assert.equal(mock.registrierungen[0].phone_number, NUMBER_B);
-    assert.equal(mock.startRequests.length, 1);
-    const [start] = mock.startRequests;
-    assert.equal(start.body.agent_phone_number_id, NACHGEHOLTE_REGISTRIERUNG);
+    assert.equal(telnyx.waehlaufrufe.length, 1);
+    const [wahl] = telnyx.waehlaufrufe;
+    assert.equal(wahl.from, NUMBER_B);
     assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
     const nummer = srv.readStore().numbers.find((number) => number.e164 === NUMBER_B);
     assert.equal(nummer.providerAgentPhoneNumberId, NACHGEHOLTE_REGISTRIERUNG, "Kennung dauerhaft gespeichert");
@@ -293,27 +282,27 @@ const ZWEITES_ZIEL = "+4915005559100";
 const REGISTRIERUNG_ABGELEHNT = 500;
 
 test("ANR: zwei gleichzeitige Anrufe derselben DID legen genau eine Registrierung an", async () => {
-  await withElevenLabs(
-    async ({ srv, mock }) => {
+  await withVorspann(
+    async ({ srv, mock, telnyx }) => {
       const antworten = await Promise.all([
         placeCall(srv, SUBJECT_B),
         placeCall(srv, SUBJECT_B, ZWEITES_ZIEL),
       ]);
       assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
       assert.equal(mock.registrierungen.length, 1, "ein geteilter Versuch, nicht zwei Registrierungen");
-      assert.equal(mock.startRequests.length, 2);
+      assert.equal(telnyx.waehlaufrufe.length, 2);
     },
     REGISTRIERUNG_NACHHOLEN_ENV,
   );
 });
 
 test("ANR: scheitert das Nachholen, endet der Anruf ohne Anbieteraufruf und mit dem Grund im Datensatz", async () => {
-  await withElevenLabs(
-    async ({ srv, mock }) => {
+  await withVorspann(
+    async ({ srv, mock, telnyx }) => {
       const res = await placeCall(srv, SUBJECT_B);
       assert.equal(res.status, HTTP_NOT_PLACED);
       assert.equal(mock.registrierungen.length, 1, "der Versuch fand statt");
-      assert.equal(mock.startRequests.length, 0, "kein Anrufstart beim Anbieter");
+      assert.equal(telnyx.waehlaufrufe.length, 0, "kein Anrufstart beim Anbieter");
       const call = ownCall(srv);
       assert.equal(call.status, "failed");
       assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
@@ -366,7 +355,7 @@ test("ANR: Boot meldet eingehaengt nur mit Benutzer UND Passwort des SIP-Zugangs
 });
 
 test("ANR: scheitert das Nachholen, steht die Nummer und der Grund in einer benannten Log-Zeile", async () => {
-  await withElevenLabs(
+  await withVorspann(
     async ({ srv }) => {
       await placeCall(srv, SUBJECT_B);
       assert.match(srv.stdout, /\[el-outbound\] Registrierung nachholen FEHLGESCHLAGEN number=num_b: \S/);
@@ -378,7 +367,7 @@ test("ANR: scheitert das Nachholen, steht die Nummer und der Grund in einer bena
 });
 
 test("ANR: ohne eingehaengte Registrierung wird nichts nachgeholt und der Abbruch nennt den Grund", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+  await withVorspann(async ({ srv, mock }) => {
     await placeCall(srv, SUBJECT_B);
     assert.equal(mock.registrierungen.length, 0);
     assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
@@ -392,12 +381,12 @@ test("ANR: zwei gleichzeitige Anrufe verschiedener DIDs holen je ihre eigene Reg
     ...nummer,
     providerAgentPhoneNumberId: undefined,
   }));
-  await withElevenLabs(
-    async ({ srv, mock }) => {
+  await withVorspann(
+    async ({ srv, mock, telnyx }) => {
       const antworten = await Promise.all([placeCall(srv, SUBJECT_A), placeCall(srv, SUBJECT_B, ZWEITES_ZIEL)]);
       assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
       assert.deepEqual(mock.registrierungen.map((anfrage) => anfrage.phone_number).sort(), [NUMBER_A, NUMBER_B]);
-      assert.equal(mock.startRequests.length, 2);
+      assert.equal(telnyx.waehlaufrufe.length, 2);
       const { numbers } = srv.readStore();
       const gespeichert = numbers
         .filter((nummer) => [NUMBER_A, NUMBER_B].includes(nummer.e164))
@@ -414,7 +403,7 @@ function abbruchZeile(srv) {
 }
 
 test("ANR: mit eingehaengter Registrierung nennt der Abbruch den Grund ohne den Hinweis auf fehlende Einhaengung", async () => {
-  await withElevenLabs(
+  await withVorspann(
     async ({ srv }) => {
       await placeCall(srv, SUBJECT_B);
       const zeile = abbruchZeile(srv);
@@ -427,12 +416,12 @@ test("ANR: mit eingehaengter Registrierung nennt der Abbruch den Grund ohne den 
 });
 
 test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrierung nicht erneut registriert", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+  await withVorspann(async ({ srv, mock, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_A);
     assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
     assert.deepEqual(mock.registrierungen, []);
-    const [start] = mock.startRequests;
-    assert.equal(start.body.agent_phone_number_id, REGISTRIERUNG_TENANT_A);
+    const [wahl] = telnyx.waehlaufrufe;
+    assert.equal(wahl.from, NUMBER_A);
     assert.doesNotMatch(srv.stdout, /Registrierung nachholen/);
   }, REGISTRIERUNG_NACHHOLEN_ENV);
 });
@@ -440,10 +429,10 @@ test("ANR: eine DID mit eigener Registrierung wird bei eingehaengter Registrieru
 const RUECKFALL_ZEILE = /\[el-outbound\] Absender-Rueckfall global/;
 
 async function anrufPruefen({ subject = SUBJECT_A, env = {}, ...optionen }, pruefe) {
-  await withElevenLabs(
-    async ({ srv, mock }) => {
+  await withVorspann(
+    async ({ srv, mock, telnyx }) => {
       const res = await placeCall(srv, subject);
-      const kennungen = mock.startRequests.map((anfrage) => anfrage.body.agent_phone_number_id);
+      const kennungen = telnyx.waehlaufrufe.map((wahl) => wahl.from);
       await pruefe({ srv, mock, res, kennungen, call: ownCall(srv) });
     },
     env,
@@ -454,7 +443,7 @@ async function anrufPruefen({ subject = SUBJECT_A, env = {}, ...optionen }, prue
 test("[NIE1] +1-Mandant mit eigener Registrierung startet mit genau seiner Kennung als tenant_did", async () => {
   await anrufPruefen({}, ({ srv, res, kennungen, call }) => {
     assert.equal(res.status, HTTP_OK);
-    assert.deepEqual(kennungen, [REGISTRIERUNG_TENANT_A]);
+    assert.deepEqual(kennungen, [NUMBER_A]);
     assert.equal(call.fromRegistrationSource, "tenant_did");
     assert.doesNotMatch(srv.stdout, RUECKFALL_ZEILE);
   });
@@ -462,7 +451,7 @@ test("[NIE1] +1-Mandant mit eigener Registrierung startet mit genau seiner Kennu
 
 test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und scheitert das, startet nichts", async () => {
   const faelle = [
-    { registrierungStatus: HTTP_OK, status: HTTP_OK, start: [NACHGEHOLTE_REGISTRIERUNG], quelle: "tenant_did" },
+    { registrierungStatus: HTTP_OK, status: HTTP_OK, start: [NUMBER_B], quelle: "tenant_did" },
     {
       registrierungStatus: REGISTRIERUNG_ABGELEHNT,
       status: HTTP_NOT_PLACED,
@@ -484,14 +473,14 @@ test("[NIE1] fehlt die Registrierung einer +1-Nummer, wird sie nachgeholt, und s
 });
 
 test("ANR: lehnt der Anbieter den Start ab, steht die Absenderquelle tenant_did trotzdem schon am Datensatz", async () => {
-  await withElevenLabs(
-    async ({ srv, mock }) => {
+  await withVorspann(
+    async ({ srv, telnyx }) => {
       await placeCall(srv, SUBJECT_A);
-      assert.equal(mock.startRequests.length, 1, "der Anbieter wurde angerufen und hat abgelehnt");
+      assert.equal(telnyx.waehlaufrufe.length, 1, "der Anbieter wurde angerufen und hat abgelehnt");
       assert.equal(ownCall(srv).fromRegistrationSource, "tenant_did");
     },
     {},
-    { startAblehnung: { httpStatus: 422, body: { detail: "abgelehnt" } } },
+    { wahlAblehnung: 422 },
   );
 });
 

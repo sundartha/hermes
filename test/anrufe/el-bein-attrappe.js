@@ -13,7 +13,7 @@ const NUMMER_STELLEN = 3;
 export const calleeVon = (callId) => `cc_callee_${callId}`;
 export const elVon = (callId) => `cc_el_${callId}`;
 
-export async function starteAttrappe(vorElAntwort = async () => {}) {
+export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null) {
   const pfade = [];
   const anfragen = [];
   const waehlbefehle = [];
@@ -34,6 +34,10 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
       if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
       const befehl = waehlaufruf ? waehlaufruf.command_id : "";
       if (befehl) waehlbefehle.push(befehl);
+      if (waehlaufruf && wahlAblehnung) {
+        res.writeHead(wahlAblehnung, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ errors: [{ detail: "abgelehnt" }] }));
+      }
       const istEl = befehl.endsWith("-el");
       if (istEl) await vorElAntwort();
       const callId = befehl.replace(/^vorspann-/, "").replace(/-el$/, "");
