@@ -50,6 +50,7 @@ export function starteFristenTakt({ store, lifecycle, config, fristen }) {
             beende: lifecycle.terminateOverBudgetExpired,
           }
         : undefined,
+    reserve: { freigeben: lifecycle.releaseReserve },
     limitJeMandant: fristen.fristenLimitJeMandant,
     leaseMs: fristen.fristenTaktMs,
     taktMs: fristen.fristenTaktMs,

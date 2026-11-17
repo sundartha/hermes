@@ -2,6 +2,7 @@ import { uebernehmeOhneArmierung } from "./reattach.ts";
 
 const HOECHSTDAUER = "hoechstdauer";
 const GELD = "geld";
+const RESERVE = "reserve";
 const MAX_VERSUCHE = 3;
 
 interface Anruf {
@@ -23,15 +24,21 @@ interface GeldAbhaengigkeiten {
   beende: (call: Anruf) => Promise<unknown>;
 }
 
+interface ReserveAbhaengigkeiten {
+  freigeben: (call: { id: string; tenantId: string }) => unknown;
+}
+
 interface FristenLaufAbhaengigkeiten {
   store: {
     faelligeFristen: (anfrage: { art: string; limitJeMandant: number; leaseMs: number }) => Promise<Treffer[]>;
-    getCall: (callId: string) => Anruf | null | undefined;
+    getCall: (callId: string) => (Anruf & { tenantId: string }) | null | undefined;
     attachActiveCall: (callId: string) => Promise<Anruf | null | undefined>;
     setzeGeldFrist: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
+    setzeReserveFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
   };
   beende: (call: Anruf) => Promise<unknown>;
   geld?: GeldAbhaengigkeiten;
+  reserve?: ReserveAbhaengigkeiten;
   limitJeMandant: number;
   leaseMs: number;
 }
@@ -42,9 +49,10 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
-export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }: FristenLaufAbhaengigkeiten): {
+export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve }: FristenLaufAbhaengigkeiten): {
   takt: () => Promise<TaktErgebnis>;
   geldTakt: () => Promise<TaktErgebnis>;
+  reserveTakt: () => Promise<TaktErgebnis>;
 } {
   function offen(callId: string, versuche: number): "offen" {
     if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
@@ -78,6 +86,17 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
     return store.getCall(callId)?.status === "active" ? offen(callId, versuche) : "beendet";
   }
 
+  async function gibReserveFrei(wache: ReserveAbhaengigkeiten, { callId, tenantId, versuche }: Treffer): Promise<"beendet" | "offen"> {
+    try {
+      await wache.freigeben(store.getCall(callId) ?? { id: callId, tenantId });
+      await store.setzeReserveFrist({ callId, tenantId, faelligAt: null });
+    } catch (fehler) {
+      console.error(`[fristen] Reserve freigeben fehlgeschlagen: ${callId}`, String(fehler));
+      return offen(callId, versuche);
+    }
+    return "beendet";
+  }
+
   async function lies(art: string): Promise<Treffer[] | null> {
     try {
       return await store.faelligeFristen({ art, limitJeMandant, leaseMs });
@@ -87,14 +106,10 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
     }
   }
 
-  async function runde(
-    art: string,
-    faellig: (treffer: Treffer) => Promise<boolean>,
-    beendeAnruf: (call: Anruf) => Promise<unknown>,
-  ): Promise<TaktErgebnis> {
+  async function runde(art: string, bearbeiter: (treffer: Treffer) => Promise<"beendet" | "offen" | "weg">): Promise<TaktErgebnis> {
     const treffer = await lies(art);
     if (!treffer) return { beendet: 0, offen: 0, gelesen: false };
-    const ergebnisse = await Promise.all(treffer.map(async (eintrag) => bearbeite(eintrag, faellig, beendeAnruf)));
+    const ergebnisse = await Promise.all(treffer.map(bearbeiter));
     return {
       beendet: ergebnisse.filter((ergebnis) => ergebnis === "beendet").length,
       offen: ergebnisse.filter((ergebnis) => ergebnis === "offen").length,
@@ -102,9 +117,12 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld }
     };
   }
 
+  const nichts = { beendet: 0, offen: 0, gelesen: true };
+
   return {
-    takt: async () => runde(HOECHSTDAUER, hoechstdauerFaellig, beende),
-    geldTakt: async () => (geld ? runde(GELD, geldFaellig(geld), geld.beende) : { beendet: 0, offen: 0, gelesen: true }),
+    takt: async () => runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende)),
+    geldTakt: async () => (geld ? runde(GELD, async (treffer) => bearbeite(treffer, geldFaellig(geld), geld.beende)) : nichts),
+    reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
   };
 }
 
@@ -118,11 +136,19 @@ interface FristenTaktAbhaengigkeiten<Takt extends { unref: () => unknown }> exte
   uhr: Uhr<Takt>;
 }
 
-async function beideRunden(lauf: { takt: () => Promise<unknown>; geldTakt: () => Promise<unknown> }): Promise<void> {
+async function alleRunden(lauf: {
+  takt: () => Promise<unknown>;
+  geldTakt: () => Promise<unknown>;
+  reserveTakt: () => Promise<unknown>;
+}): Promise<void> {
   try {
     await lauf.takt();
   } finally {
-    await lauf.geldTakt();
+    try {
+      await lauf.geldTakt();
+    } finally {
+      await lauf.reserveTakt();
+    }
   }
 }
 
@@ -136,7 +162,7 @@ export function starteFristenTakt<Takt extends { unref: () => unknown }>({
   const takt = uhr.setzeTakt(() => {
     if (laeuft) return;
     laeuft = true;
-    beideRunden(lauf)
+    alleRunden(lauf)
       .catch((fehler: unknown) => {
         console.error(`[fristen] Takt abgebrochen: ${String(fehler)}`);
       })

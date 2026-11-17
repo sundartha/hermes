@@ -3,6 +3,8 @@ import { MS_PER_SECOND } from "../utils/timer.js";
 
 const FEHLER = "[fristen] faellige Fristen lesen fehlgeschlagen:";
 const ABGEHOBEN_PLUS_DAUER = `(answered_at::timestamptz + COALESCE(NULLIF(max_duration_s, 0), $4::int) * interval '1 second')`;
+const AKTIV_SQL = "status = 'active'";
+const istAktiv = (call) => call.status === "active";
 const FRISTEN = Object.freeze({
   hoechstdauer: {
     feld: "fristHoechstdauerAt",
@@ -10,6 +12,8 @@ const FRISTEN = Object.freeze({
     versucheFeld: "fristVersuche",
     leaseSpalte: "frist_lease_bis",
     versucheSpalte: "frist_versuche",
+    bedingung: AKTIV_SQL,
+    offen: istAktiv,
     faelligUm: `COALESCE(frist_hoechstdauer_at, ${ABGEHOBEN_PLUS_DAUER})`,
     parameter: [MAX_CALL_DURATION_CAP_S],
     dauerS: (call) => call.maxDurationS || MAX_CALL_DURATION_CAP_S,
@@ -20,7 +24,21 @@ const FRISTEN = Object.freeze({
     versucheFeld: "fristGeldVersuche",
     leaseSpalte: "frist_geld_lease_bis",
     versucheSpalte: "frist_geld_versuche",
+    bedingung: AKTIV_SQL,
+    offen: istAktiv,
     faelligUm: "COALESCE(frist_geld_at, answered_at::timestamptz)",
+    parameter: [],
+    dauerS: () => 0,
+  },
+  reserve: {
+    feld: "fristReserveAt",
+    leaseFeld: "fristReserveLeaseBis",
+    versucheFeld: "fristReserveVersuche",
+    leaseSpalte: "frist_reserve_lease_bis",
+    versucheSpalte: "frist_reserve_versuche",
+    bedingung: "frist_reserve_at IS NOT NULL",
+    offen: (call) => Boolean(call.fristReserveAt),
+    faelligUm: "frist_reserve_at",
     parameter: [],
     dauerS: () => 0,
   },
@@ -28,12 +46,14 @@ const FRISTEN = Object.freeze({
 const SETZEN_SQL = "UPDATE call SET frist_hoechstdauer_at = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const SETZEN_GELD_SQL =
   "UPDATE call SET frist_geld_at = $3, frist_geld_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
+const SETZEN_RESERVE_SQL =
+  "UPDATE call SET frist_reserve_at = $3, frist_reserve_versuche = 0 WHERE tenant_id = $1 AND id = $2";
 const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
 const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
-const holenSql = ({ faelligUm, leaseSpalte, versucheSpalte }) => `WITH faellig AS (
+const holenSql = ({ bedingung, faelligUm, leaseSpalte, versucheSpalte }) => `WITH faellig AS (
   SELECT id, ${faelligUm} AS faellig_um FROM call
-  WHERE tenant_id = $1 AND status = 'active' AND ${faelligUm} <= now()
+  WHERE tenant_id = $1 AND ${bedingung} AND ${faelligUm} <= now()
     AND (${leaseSpalte} IS NULL OR ${leaseSpalte} <= now())
   ORDER BY ${faelligUm}, id
   LIMIT $2
@@ -80,6 +100,8 @@ export function macheFristenSql({ runner, einreihen }) {
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_SQL, [tenantId, callId, faelligAt]])),
     setzeGeld: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_GELD_SQL, [tenantId, callId, faelligAt]])),
+    setzeReserve: ({ callId, tenantId, faelligAt }) =>
+      einreihen((client) => imMandanten(client, tenantId, [SETZEN_RESERVE_SQL, [tenantId, callId, faelligAt]])),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const eintrag = frist(art);
       const sql = holenSql(eintrag);
@@ -104,9 +126,9 @@ export function macheFristenSql({ runner, einreihen }) {
 const alsMs = (iso) => Date.parse(iso);
 
 export function faelligeAusSpiegel(state, { art, jetztMs, limitJeMandant, leaseMs }) {
-  const { feld, dauerS, leaseFeld, versucheFeld } = frist(art);
+  const { feld, dauerS, leaseFeld, versucheFeld, offen } = frist(art);
   const faelligMs = (call) => (call[feld] ? alsMs(call[feld]) : alsMs(call.answeredAt) + dauerS(call) * MS_PER_SECOND);
-  const frei = (call) => call.status === "active" && faelligMs(call) <= jetztMs && !(alsMs(call[leaseFeld]) > jetztMs);
+  const frei = (call) => offen(call) && faelligMs(call) <= jetztMs && !(alsMs(call[leaseFeld]) > jetztMs);
   const faellig = state.calls
     .filter(frei)
     .sort((links, rechts) => faelligMs(links) - faelligMs(rechts) || links.id.localeCompare(rechts.id));
@@ -133,4 +155,11 @@ export function setzeGeldImSpiegel(state, { callId, faelligAt }) {
   if (call?.status !== "active") return;
   call.fristGeldAt = faelligAt;
   call.fristGeldVersuche = 0;
+}
+
+export function setzeReserveImSpiegel(state, { callId, faelligAt }) {
+  const call = state.calls.find((eintrag) => eintrag.id === callId);
+  if (!call) return;
+  call.fristReserveAt = faelligAt;
+  call.fristReserveVersuche = 0;
 }

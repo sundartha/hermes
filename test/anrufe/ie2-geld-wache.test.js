@@ -683,3 +683,62 @@ test("Neustart: ohne aktiven Anruf schreibt die Geld-Wache keine Re-Arm-Zeile", 
   );
   assert.deepEqual(harness.budgetTimers, []);
 });
+
+const GNADE_MS = 45_000;
+
+function reserveHarness(setzeReserveFrist, { maxDurationS = 90 } = {}) {
+  const call = { id: "call_rf", tenantId: "tenant_rf", status: "active", twilioSid: "CA_rf", maxDurationS };
+  const freigaben = [];
+  const store = { load: () => ({ calls: [call] }), getCall: () => call, setzeReserveFrist };
+  const lifecycle = makeCallLifecycle({
+    store,
+    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: 0, reserveReleaseGraceMs: GNADE_MS }),
+    finishCall: () => {},
+    releaseReserve: (angefragt) => void freigaben.push(angefragt),
+    voiceControl: () => ({}),
+    blockingBudgetAxis: () => null,
+    setBudgetWatchTimer: () => ({ unref() {} }),
+  });
+  return { lifecycle, call, freigaben };
+}
+
+test("Reserve-Frist beim Anrufstart: armReserveReleaseTimer schreibt Anruf, Mandant und Jetzt plus Hoechstdauer plus Gnadenfrist", (t) => {
+  const geschrieben = [];
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2031-01-01T00:00:00.000Z") });
+  const { lifecycle, call } = reserveHarness(async (frist) => void geschrieben.push(frist));
+  lifecycle.armReserveReleaseTimer(call);
+  assert.deepEqual(geschrieben, [{ callId: "call_rf", tenantId: "tenant_rf", faelligAt: "2031-01-01T00:02:15.000Z" }]);
+});
+
+test("Reserve-Frist beim Anrufstart: ein Anruf ohne eigene Hoechstdauer bekommt die Kappung als Hoechstdauer", (t) => {
+  const geschrieben = [];
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2031-01-01T00:00:00.000Z") });
+  const { lifecycle, call } = reserveHarness(async (frist) => void geschrieben.push(frist), { maxDurationS: 0 });
+  lifecycle.armReserveReleaseTimer(call);
+  assert.deepEqual(geschrieben, [{ callId: "call_rf", tenantId: "tenant_rf", faelligAt: "2031-01-01T00:30:45.000Z" }]);
+});
+
+test("Reserve-Frist beim Anrufstart: scheitert das Schreiben, steht der Fehler mit Anruf-ID im Log und der Timer bleibt gestellt", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { lifecycle, call, freigaben } = reserveHarness(() => Promise.reject(new Error("schreiben verweigert")));
+  lifecycle.armReserveReleaseTimer(call);
+  await new Promise((fertig) => setImmediate(fertig));
+  assert.deepEqual(
+    zeilen.filter((zeile) => zeile.startsWith("[fristen]")),
+    ["[fristen] Reserve-Frist schreiben fehlgeschlagen: call_rf Error: schreiben verweigert"],
+  );
+  t.mock.timers.tick(90_000 + GNADE_MS);
+  assert.deepEqual(freigaben, [call]);
+});
+
+test("Reserve-Frist beim Anrufstart: ohne Schreib-Methode am Speicher laeuft der Timer wie bisher", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { lifecycle, call, freigaben } = reserveHarness(undefined);
+  lifecycle.armReserveReleaseTimer(call);
+  t.mock.timers.tick(90_000 + GNADE_MS - 1);
+  assert.deepEqual(freigaben, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(freigaben, [call]);
+});
