@@ -43,7 +43,8 @@ test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex
     assert.equal(resB.status, 200);
     assert.match(await resA.text(), /<Dial/);
     assert.match(await resB.text(), /<Dial/);
-    const callIdVon = (sid) => srv.readStore().calls.find((call) => call.twilioSid === sid).id;
+    const { calls } = srv.readStore();
+    const callIdVon = (sid) => calls.find((call) => call.twilioSid === sid).id;
     const xmlA = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02a") })).text();
     const xmlB = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02b") })).text();
     assert.match(xmlA, /KI-Assistent/, "Tenant A (DE) spricht weiterhin deutsch");

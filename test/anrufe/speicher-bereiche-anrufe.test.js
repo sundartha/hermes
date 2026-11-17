@@ -191,7 +191,7 @@ test("eingehender Anruf ohne EL-Beleg: der Fehlersatz nennt den Namen aus dem as
     const uebergabe = await posten(url, "/voice/incoming", { From: "+491700000000", To: NUMMER, CallSid: "CAanrufeb3" });
     assert.match(await uebergabe.text(), /dial_sip/);
     aufrufe.length = 0;
-    const callId = store.load().calls[0].id;
+    const [{ id: callId }] = store.load().calls;
     const antwort = await abrufMitFrist(`${url}/voice/el-rueckfall?callId=${callId}`, { method: "POST" });
     const text = await antwort.text();
     assert.equal(antwort.status, 200);

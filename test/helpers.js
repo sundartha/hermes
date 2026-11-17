@@ -1009,7 +1009,12 @@ export function callAttrappenBesitztJedenAnruf(mandant) {
   };
 }
 
-export function postElRueckfall(srv, { callId = srv.readStore().calls.at(-1).id, quelle = "dial_ende" } = {}) {
+function letzteCallId(srv) {
+  const { calls } = srv.readStore();
+  return calls.at(-1).id;
+}
+
+export function postElRueckfall(srv, { callId = letzteCallId(srv), quelle = "dial_ende" } = {}) {
   return abrufMitFrist(`${srv.localUrl}/voice/el-rueckfall?callId=${callId}&quelle=${quelle}`, {
     method: "POST",
     headers: TELNYX_TEST_SIGNATURE_HEADERS,
