@@ -29,19 +29,10 @@ function maskSecondLine(text) {
   return lines.join("\n");
 }
 
-const GOAL_OVERLENGTH_CHAR_COUNT = 200;
-const GOAL_WITHOUT_WORD_BOUNDARY = "a".repeat(GOAL_OVERLENGTH_CHAR_COUNT);
-const GOLDEN_GOAL = "Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren";
-const FREMD_ERWARTET = {
-  de: "Hallo, es geht um Folgendes: Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
-  fr: "Bonjour, voici l'objet de mon appel : Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
-  en: "Hello, here's what I'm calling about: Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
-};
-const OWNER_FRAGMENT = { de: "im Auftrag von", fr: "pour le compte de", en: "on behalf of" };
 const LANGS = ["de", "fr", "en"];
 
-let systemPrompt, openingText, disclosureSentence;
-let LOCALES, localeFor;
+let systemPrompt, disclosureSentence;
+let LOCALES;
 
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
@@ -53,85 +44,13 @@ before(async () => {
       ],
     }),
   );
-  ({ systemPrompt, openingText, disclosureSentence } = await import("../../src/claude.js"));
-  ({ LOCALES, localeFor } = await import("../../src/i18n/locales.js"));
+  ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
+  ({ LOCALES } = await import("../../src/i18n/locales.js"));
 });
 
 const ownerCall = (over = {}) =>
   seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, calleeIsOwner: true, ...over });
 const foreignCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, ...over });
-
-const OWNER_GOAL = {
-  de: "Einen Rueckruftermin fuer naechste Woche vereinbaren",
-  fr: "Convenir d'un rendez-vous de rappel la semaine prochaine",
-  en: "Arrange a callback appointment for next week",
-};
-
-for (const lang of LANGS) {
-  test(`OC-P3-A openingText Owner-Ziel ${lang} mit Anliegen: Owner-Begruessung, keine Offenlegung`, () => {
-    const call = ownerCall({ language: lang, goal: OWNER_GOAL[lang] });
-    const text = openingText(call);
-    const opening = localeFor(lang).ownerOpening(OWNER_TEST_FIRST_NAME);
-    assert.ok(text.startsWith(opening), `${lang}: Owner-Begruessung fehlt am Anfang: ${text}`);
-    assert.ok(!text.includes(disclosureSentence(call)), `${lang}: Offenlegung darf nicht vorkommen: ${text}`);
-    assert.ok(
-      !text.includes(OWNER_FRAGMENT[lang]),
-      `${lang}: Fremd-Fragment "${OWNER_FRAGMENT[lang]}" darf nicht vorkommen: ${text}`,
-    );
-  });
-}
-
-test("OC-P3-A4 openingText Owner-Ziel de, ueberlanges Anliegen: Kappe beisst wie im Bestand", () => {
-  const call = ownerCall({ language: "de", goal: GOAL_WITHOUT_WORD_BOUNDARY });
-  const text = openingText(call);
-  const opening = localeFor("de").ownerOpening(OWNER_TEST_FIRST_NAME);
-  assert.ok(text.startsWith(opening), `Owner-Begruessung fehlt: ${text}`);
-  assert.ok(!/[.!?]{2}/.test(text), `doppeltes Satz-Endzeichen: ${text}`);
-  assert.ok(text.endsWith("."), `Eroeffnung endet nicht auf genau einem Punkt: ${text}`);
-});
-
-test("OC-P3-A5 openingText Owner-Ziel de, leeres Anliegen: nur die Begruessung", () => {
-  const call = ownerCall({ language: "de", goal: "" });
-  assert.equal(openingText(call), localeFor("de").ownerOpening(OWNER_TEST_FIRST_NAME));
-});
-
-test("OC-P3-A6 openingText Owner-Ziel de, Ich-Satz-Anliegen: Passthrough-Zweig von bridgePhrase unveraendert", () => {
-  const goal = "Ich moechte wissen ob der Termin noch frei ist";
-  const call = ownerCall({ language: "de", goal });
-  const text = openingText(call);
-  const opening = localeFor("de").ownerOpening(OWNER_TEST_FIRST_NAME);
-  assert.ok(text.startsWith(`${opening} Ich`), `Ich-Satz muss woertlich direkt folgen: ${text}`);
-  assert.ok(!text.includes("Es geht um Folgendes"), `Bruecken-Floskel darf im Ich-Zweig nicht stehen: ${text}`);
-});
-
-for (const lang of LANGS) {
-  test(`OC-P3-A openingText Fremd-Ziel ${lang}: Gruss, Anlass, dann KI-Hinweis mit Namen`, () => {
-    const call = foreignCall({ language: lang, goal: GOLDEN_GOAL });
-    assert.equal(openingText(call), FREMD_ERWARTET[lang]);
-  });
-}
-
-const FAIL_CLOSED_VARIANTS = [undefined, false, "true", 1];
-for (const variant of FAIL_CLOSED_VARIANTS) {
-  test(`OC-P3-A10 fail-closed calleeIsOwner=${JSON.stringify(variant)} -> Offenlegung`, () => {
-    const over = variant === undefined ? {} : { calleeIsOwner: variant };
-    const call = seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, language: "de", goal: "", ...over });
-    assert.equal(openingText(call), "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.");
-  });
-}
-
-test("OC-P3-A11 Owner-Ziel, Tenant ohne Vornamen: kein Namens-Rueckfall, volle Offenlegung", () => {
-  const call = seedCall({
-    tenantId: NO_NAME_TENANT_ID,
-    direction: OUTBOUND,
-    calleeIsOwner: true,
-    language: "de",
-    goal: "",
-  });
-  const text = openingText(call);
-  assert.equal(text, "Hallo, ich rufe an, um ein kurzes Anliegen zu klären – ich bin Hermes, der KI-Assistent von meinem Auftraggeber, und ich fasse das Gespräch für meinen Auftraggeber zusammen.");
-  assert.ok(!text.startsWith("Hallo Jonas"), `darf keine Owner-Anrede tragen: ${text}`);
-});
 
 for (const lang of LANGS) {
   test(`OC-P3-B systemPrompt Owner-Ziel ${lang}: Owner-SITUATION ersetzt die Bestandszeile`, () => {

@@ -5,15 +5,10 @@ import { speicherBereiche } from "./store.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
 import { bookTokenUsage } from "./llm-usage.js";
-import { makeSentenceChunker } from "./speech-chunker.ts";
-import { drittEroeffnung } from "./i18n/eroeffnung.js";
 import { localeFor } from "./i18n/locales.js";
-import { verifiedOpeningLine } from "./elevenlabs/opening-line.ts";
 import { metrics } from "./metrics.js";
-import { roundFitsDeadline } from "./turn-budget.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
-import { clampAtWordBoundary } from "./utils/text.ts";
 import { GET_CONSULT_TOOL_NAME, consultAvailableFor } from "./consult/in-call.js";
 import { LOOK_UP_TOOL_NAME, lookupAvailableFor } from "./research/in-call.js";
 
@@ -211,46 +206,7 @@ export function disclosureSentence(call) {
   return localeFor(call.language).disclosure(name);
 }
 
-const OPENING_GOAL_MAX_CHARS = 75;
-
 const END_CALL_TOOL_NAME = "end_call";
-
-export function openingText(call) {
-  const owner = ownerOpeningFor(call);
-  if (owner) return ownerGoalOpening(call, owner);
-  const locale = localeFor(call.language);
-  const { ownerName, firstName } = store.tenantContext(call.tenantId);
-  return drittEroeffnung({
-    language: call.language,
-    ownerName: ownerName?.trim() || locale.disclosureOwnerFallback,
-    firstName,
-    reason: verifiedOpeningLine({ call: { ...call, goal: openingGoalFor(call.goal) }, locale }),
-  }).text;
-}
-
-function openingGoalFor(goal) {
-  return /\?[\s.!?]*$/.test(goal) ? "" : trimGoalForSpeech(goal);
-}
-
-function ownerGoalOpening(call, opening) {
-  const goal = trimGoalForSpeech(call.goal);
-  if (!goal) return opening;
-  return `${opening} ${localeFor(call.language).bridgePhrase(goal)}`;
-}
-
-function ownerOpeningFor(call) {
-  if (call.calleeIsOwner !== true) return "";
-  const firstName = store.tenantContext(call.tenantId).firstName;
-  return localeFor(call.language).ownerOpening(firstName);
-}
-
-function trimGoalForSpeech(goal) {
-  const text = (goal || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/[.!?]+$/, "");
-  return clampAtWordBoundary(text, OPENING_GOAL_MAX_CHARS).replace(/[.!?]+$/, "");
-}
 
 const TAKE_MESSAGE_TOOL_NAME = "take_message";
 
@@ -260,14 +216,6 @@ const SIDE_EFFECT_ONLY_TOOL_NAMES = Object.freeze(
 
 export function isSideEffectOnlyTool(name) {
   return SIDE_EFFECT_ONLY_TOOL_NAMES.has(name);
-}
-
-const STREAM_SAFE_TOOL_NAMES = Object.freeze(
-  new Set([END_CALL_TOOL_NAME, TAKE_MESSAGE_TOOL_NAME, LOOK_UP_TOOL_NAME, GET_CONSULT_TOOL_NAME]),
-);
-
-function isStreamSafeTool(name) {
-  return STREAM_SAFE_TOOL_NAMES.has(name);
 }
 
 export function toolDefs(language) {
@@ -329,65 +277,8 @@ function lookUpToolDef(language) {
 
 export const agentToolNames = () => toolDefs().map((t) => t.name);
 
-export async function execTool(call, name, input) {
-  const tc = localeFor(call.language).prompt.turnControl;
-  switch (name) {
-    case TAKE_MESSAGE_TOOL_NAME: {
-      const { duplicate } = await bereiche.posteingang.addActionItem(call.id, input.message, "todo");
-      return duplicate ? tc.takeMessageDuplicateResult : tc.takeMessageResult;
-    }
-    case END_CALL_TOOL_NAME:
-      return "OK";
-    default:
-      return tc.unknownTool;
-  }
-}
-
-export function endCallWaitInstruction(call) {
-  return localeFor(call.language).prompt.turnControl.endCallWait;
-}
-
 export function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.voice.callerSubstanceMinLen;
-}
-
-export function callerHasSpoken(call) {
-  return call.direction === "outbound"
-    ? call.transcript.some((t) => t.role === "caller" && isSubstantialCallerText(t.text))
-    : call.transcript.some((t) => t.role === "caller");
-}
-
-function unansweredAgentTurns(transcript) {
-  let count = 0;
-  for (let i = transcript.length - 1; i >= 0; i--) {
-    const entry = transcript[i];
-    if (entry.role === "agent") {
-      count += 1;
-      continue;
-    }
-    if (isSubstantialCallerText(entry.text)) break;
-  }
-  return count;
-}
-
-export function shouldSuppressEndCall(call) {
-  const substantialCallerSeen = callerHasSpoken(call);
-  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.voice.maxEmptyTurns;
-  return !substantialCallerSeen && !emptyTurnsReached;
-}
-
-export const TURN_STOP_DEADLINE = "deadline";
-
-export const TURN_STOP_SUPERSEDED = "superseded";
-
-export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, continuesStream }) {
-  if (!onSpeechChunk) return null;
-  if (!tools.every((t) => isStreamSafeTool(t.name))) return null;
-  if (
-    !roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs })
-  )
-    return null;
-  return makeSentenceChunker({ onChunk: onSpeechChunk, continuesStream });
 }
 
 const SUMMARY_MAX_TOKENS = 800;

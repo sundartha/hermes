@@ -17,7 +17,7 @@ import { gateRejectionTexts, mcpErrorTexts } from "../gemeinsam/ausgelieferte-ab
 
 const TENANT_EN = "t_e2e06_en";
 
-let systemPrompt, toolDefs, openingText;
+let systemPrompt, toolDefs;
 before(async () => {
   const seed = seedState({
     tenants: [
@@ -30,7 +30,7 @@ before(async () => {
   });
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../../src/config.js");
-  ({ systemPrompt, toolDefs, openingText } = await import("../../src/claude.js"));
+  ({ systemPrompt, toolDefs } = await import("../../src/claude.js"));
 });
 
 function leaksOf(label, text, leaks) {
@@ -43,7 +43,6 @@ test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-T
 
   leaksOf("systemPrompt", systemPrompt(callEn), leaks);
   leaksOf("toolDefs", JSON.stringify(toolDefs("en")), leaks);
-  leaksOf("openingText", openingText(callEn), leaks);
 
   const srv = await startServer({
     seed: seedState({

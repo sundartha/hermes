@@ -425,13 +425,13 @@
       "count": 1
     },
     "id-length": {
-      "count": 27
+      "count": 24
     },
     "no-param-reassign": {
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 5
+      "count": 4
     }
   },
   "src/db/migrate.js": {

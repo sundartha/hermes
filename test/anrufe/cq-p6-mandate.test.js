@@ -27,14 +27,14 @@ const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
-let systemPrompt, disclosureSentence, openingText, toolDefs;
+let systemPrompt, disclosureSentence, toolDefs;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
   await import("../../src/config.js");
   await import("../../src/store.js");
-  ({ systemPrompt, disclosureSentence, openingText, toolDefs } = await import("../../src/claude.js"));
+  ({ systemPrompt, disclosureSentence, toolDefs } = await import("../../src/claude.js"));
 });
 
 test("M1 kein mandate: keine SPIELRAUM-Sektion, Prompt deterministisch (reine Funktion des Calls)", () => {
@@ -152,18 +152,13 @@ test("M8 E1-Invariante: volles Mandat traegt keinen entfernten Marker, beide unb
   );
 });
 
-test("M10 Anti-Spoofing: disclosureSentence + openingText byte-identisch mit/ohne Mandat", () => {
+test("M10 Anti-Spoofing: disclosureSentence byte-identisch mit/ohne Mandat", () => {
   const withMandate = call({ language: "de", goal: "Testziel", mandate: FULL_MANDATE });
   const withoutMandate = call({ language: "de", goal: "Testziel" });
   assert.equal(
     disclosureSentence(withMandate),
     disclosureSentence(withoutMandate),
     "Mandat beruehrt die Offenlegung nie",
-  );
-  assert.equal(
-    openingText(withMandate),
-    openingText(withoutMandate),
-    "Mandat beruehrt den LLM-freien Erst-Turn nie",
   );
 });
 

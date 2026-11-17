@@ -61,35 +61,3 @@ test("GQ-P4/B1 Grenzfaelle", () => {
   assert.equal(s.actionItems.length, 1, "null/undefined/'' normalisieren auf dieselbe leere Nachricht");
   assert.equal(r.duplicate, true);
 });
-
-const { BASE_ENV, tempDataDir, seedState, seedCall } = await import("../helpers.js");
-
-Object.assign(process.env, BASE_ENV, {
-  DATA_DIR: tempDataDir(seedState({ calls: [seedCall()] })),
-});
-
-const store = await import("../../src/store.js");
-const { execTool } = await import("../../src/claude.js");
-const { localeFor } = await import("../../src/i18n/locales.js");
-
-const CALL = seedCall();
-const tc = localeFor(CALL.language).prompt.turnControl;
-
-test("GQ-P4/B2 erstes take_message -> takeMessageResult, zweites gleiches -> takeMessageDuplicateResult", async () => {
-  const first = await execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
-  const second = await execTool(CALL, "take_message", { message: "Bitte zurueckrufen" });
-
-  assert.equal(first, tc.takeMessageResult);
-  assert.equal(second, tc.takeMessageDuplicateResult);
-  assert.equal(store.load().actionItems.length, 1);
-});
-
-test("GQ-P4/B2 zwei verschiedene Nachrichten -> zweimal takeMessageResult, zwei Items", async () => {
-  const before = store.load().actionItems.length;
-  const first = await execTool(CALL, "take_message", { message: "Termin am Montag" });
-  const second = await execTool(CALL, "take_message", { message: "Termin am Dienstag" });
-
-  assert.equal(first, tc.takeMessageResult);
-  assert.equal(second, tc.takeMessageResult);
-  assert.equal(store.load().actionItems.length, before + 2);
-});

@@ -5,8 +5,6 @@ import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const OWNER = "Jonas Beispiel";
-const CONSULT = "get_consult";
-const QUESTION = "Darf ich den Termin auch auf Freitag legen?";
 
 function message(content, stopReason) {
   return {
@@ -28,7 +26,7 @@ let server;
 let queue = [];
 let bodies = [];
 
-let store, ops, claude, LOCALES, inCall, question, speechShape;
+let ops, LOCALES, inCall, question, speechShape;
 
 function answeredOutbound(id, overrides = {}) {
   const answeredAt = new Date().toISOString();
@@ -61,9 +59,7 @@ before(async () => {
     }),
   );
   await import("../../src/config.js");
-  store = await import("../../src/store.js");
   ops = await import("../../src/store/state-ops.js");
-  claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
   question = await import("../../src/consult/question.ts");
   speechShape = await import("../../src/speech-shape.ts");
@@ -87,14 +83,6 @@ test("AL-P14-8: Fueller und Halte-Satz ueberleben shapeForSpeech unveraendert", 
       `${lang}: consultHoldSpeech wird umformatiert`,
     );
   }
-});
-
-test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel)", async () => {
-  const call = store.getCall("call_alp14_12");
-  assert.equal(
-    await claude.execTool(call, CONSULT, { question: QUESTION }),
-    LOCALES.de.prompt.turnControl.unknownTool,
-  );
 });
 
 test("AL-P14-13: Anfuehrungszeichen und die zitierte Spanne werden entfernt", () => {
