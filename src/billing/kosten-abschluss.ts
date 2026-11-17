@@ -1,5 +1,5 @@
 import { REIFE } from "../begriffe/abrechnung.js";
-import { MS_PER_HOUR } from "../utils/timer.js";
+import { MS_PER_HOUR } from "../utils/timer.ts";
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
 import { sweepTraegerFuerProfil } from "./sweep-kostenbeleg.ts";
 

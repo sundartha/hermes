@@ -1,4 +1,4 @@
-import { MS_PER_HOUR } from "../utils/timer.js";
+import { MS_PER_HOUR } from "../utils/timer.ts";
 
 export const MONEY_EVENT = Object.freeze({
   DISPUTE_CREATED: "charge.dispute.created",

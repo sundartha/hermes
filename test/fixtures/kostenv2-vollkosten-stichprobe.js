@@ -2,7 +2,7 @@ import { createCall, recordCallCostEvidence, makeDefaultState } from "../../src/
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { COST_TRUING_SOURCE, REIFE } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 
 export const EL_STICHPROBE = Object.freeze([
   Object.freeze({ callId: "call_mt0ddduxuzgl", dauerS: 53, elMikroCents: 10_420_000, telnyxMikroCents: 4_010_000, eigenCent: 3, gebuchtCents: 30 }),

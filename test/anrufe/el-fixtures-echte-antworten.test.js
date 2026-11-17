@@ -13,7 +13,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.js";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
 import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, withFetch } from "../helpers.js";
 import {

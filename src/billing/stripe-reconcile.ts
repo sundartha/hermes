@@ -1,5 +1,5 @@
 import { applyStripeWebhookSerialized, SUBSCRIPTION_EVENT } from "./webhook.ts";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 interface Billing {
   retrieveSubscription: (subscriptionId: string) => Promise<{ status?: string }>;

@@ -1,4 +1,4 @@
-import { MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const RESERVE_MINUTEN = 15;
 

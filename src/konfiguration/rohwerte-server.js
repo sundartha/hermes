@@ -1,5 +1,5 @@
 import path from "path";
-import { MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.ts";
 
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
 

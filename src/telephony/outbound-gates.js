@@ -22,7 +22,7 @@ import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
 import { KEINE_DB_RESERVIERUNG, LEITUNGSPLATZ_ENTSCHEIDUNG, RESERVIERUNG_GRUND } from "../store.js";
-import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.ts";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 

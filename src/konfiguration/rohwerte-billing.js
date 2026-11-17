@@ -1,5 +1,5 @@
 import { leseBetterStackAlertUrl } from "./betterstack-alarm.js";
-import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];

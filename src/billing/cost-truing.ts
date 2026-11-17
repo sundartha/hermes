@@ -6,7 +6,7 @@ import {
   istBeweisendeHerkunft,
 } from "../begriffe/abrechnung.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
-import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { speicherBereiche } from "../store.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.ts";

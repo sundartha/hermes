@@ -32,7 +32,7 @@ import {
   PROVIDER_COST_RECORD_WINDOW_MS,
   costTruingCoveragePercent,
 } from "../../src/billing/cost-truing.ts";
-import { MS_PER_HOUR, MS_PER_MINUTE } from "../../src/utils/timer.js";
+import { MS_PER_HOUR, MS_PER_MINUTE } from "../../src/utils/timer.ts";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 
 const SCRIPT = "scripts/seed-reviewer-demo.mjs";

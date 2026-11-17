@@ -14,7 +14,7 @@ import {
   istInitWebhookAnfrage,
   makeElevenLabsInitWebhookRoutes,
 } from "../../src/routes/webhooks-elevenlabs-init.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { captureConsole, startServer, waitForStoreState } from "../helpers.js";
 import { elInboundInitSpawnEnv, initBindungsKoerper, spawnSeedWartenderElCall } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

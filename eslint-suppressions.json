@@ -766,7 +766,7 @@
       "count": 2
     }
   },
-  "src/utils/timer.js": {
+  "src/utils/timer.ts": {
     "no-magic-numbers": {
       "count": 1
     }

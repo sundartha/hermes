@@ -6,7 +6,7 @@ import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
 import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.ts";
 import { normalisierterOrigin } from "./middleware.ts";
-import { MS_PER_DAY } from "./utils/timer.js";
+import { MS_PER_DAY } from "./utils/timer.ts";
 
 export async function guardedBoot(label, fn) {
   try {

@@ -19,7 +19,7 @@ import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
 import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
 import { VOICE_ENGINE } from "../../src/config.js";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "../fixtures/elevenlabs-conversations.js";

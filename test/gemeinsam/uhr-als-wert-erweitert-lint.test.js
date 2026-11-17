@@ -24,18 +24,18 @@ const VERSTOESSE = [
   ["performance.now()", "export const a = () => performance.now();\n"],
   ["setImmediate", "export const a = () => setImmediate(() => 1);\n"],
   ["globalThis.setImmediate", "export const a = () => globalThis.setImmediate(() => 1);\n"],
-  ["Import von sleep", 'import { sleep } from "../utils/timer.js";\nexport const a = sleep;\n'],
-  ["Import von defaultSetTimer", 'import { defaultSetTimer } from "../utils/timer.js";\nexport const a = defaultSetTimer;\n'],
-  ["tiefer Import von defaultSetTimer", 'import { defaultSetTimer } from "../../../utils/timer.js";\nexport const a = defaultSetTimer;\n'],
+  ["Import von sleep", 'import { sleep } from "../utils/timer.ts";\nexport const a = sleep;\n'],
+  ["Import von defaultSetTimer", 'import { defaultSetTimer } from "../utils/timer.ts";\nexport const a = defaultSetTimer;\n'],
+  ["tiefer Import von defaultSetTimer", 'import { defaultSetTimer } from "../../../utils/timer.ts";\nexport const a = defaultSetTimer;\n'],
   ["Import von sleep ohne Endung", 'import { sleep } from "../utils/timer";\nexport const a = sleep;\n'],
 ];
 
 const ERLAUBT = [
   ["new Date(x) mit Argument", "export const a = (x) => new Date(x);\n"],
-  ["MS_PER_SECOND aus utils/timer", 'import { MS_PER_SECOND } from "../utils/timer.js";\nexport const a = MS_PER_SECOND;\n'],
+  ["MS_PER_SECOND aus utils/timer", 'import { MS_PER_SECOND } from "../utils/timer.ts";\nexport const a = MS_PER_SECOND;\n'],
   [
     "alle MS_PER-Konstanten aus utils/timer",
-    'import { MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY } from "../utils/timer.js";\nexport const a = [MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY];\n',
+    'import { MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY } from "../utils/timer.ts";\nexport const a = [MS_PER_MINUTE, MS_PER_HOUR, MS_PER_DAY];\n',
   ],
 ];
 

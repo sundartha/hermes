@@ -1,4 +1,4 @@
-import { MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 export const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 

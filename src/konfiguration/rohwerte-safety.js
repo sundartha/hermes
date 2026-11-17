@@ -1,4 +1,4 @@
-import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.ts";
 
 export function rohwerteFristen(env, { numEnv }) {
   return {

@@ -1,6 +1,6 @@
 import { TENANT_STATUS } from "../../begriffe/mandant.js";
 import { safeEqual } from "../../util.ts";
-import { MS_PER_DAY } from "../../utils/timer.js";
+import { MS_PER_DAY } from "../../utils/timer.ts";
 import { tenantsOf } from "./grundlagen.js";
 import { findTenant } from "./mandant.js";
 

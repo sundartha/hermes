@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { config } from "../../../config.js";
 import { publicKeyOrNull } from "./schluessel.ts";
-import { MS_PER_SECOND } from "../../../utils/timer.js";
+import { MS_PER_SECOND } from "../../../utils/timer.ts";
 
 const SIGNATUR_KONFIG = z.object({ telephony: z.object({ telnyxPublicKey: z.string().catch("") }) });
 

@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 export const WEBHOOK_ZUSTELLUNG_SECRET_MIN_LENGTH = 32;
 const GUELTIGKEIT_S = 300;

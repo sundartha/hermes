@@ -1,5 +1,5 @@
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const FEHLER = "[fristen] faellige Fristen lesen fehlgeschlagen:";
 const ABGEHOBEN_PLUS_DAUER = `(answered_at::timestamptz + COALESCE(NULLIF(max_duration_s, 0), $4::int) * interval '1 second')`;
