@@ -5,9 +5,6 @@ import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const QUESTION = "Darf ich den Termin auch auf Freitag legen?";
-const SUBSTANTIAL = "Ja, Donnerstag passt gut";
-const CONSULT = "get_consult";
-
 function message(content, stopReason) {
   return {
     id: "msg_gqp2",
@@ -21,13 +18,10 @@ function message(content, stopReason) {
   };
 }
 const textOnly = (text) => message([{ type: "text", text }], "end_turn");
-const toolCall = (name, input, id = "tu1") => ({ type: "tool_use", id, name, input });
-const withTools = (text, ...uses) => message([{ type: "text", text }, ...uses], "tool_use");
-
 let server;
 let queue = [];
 let bodies = [];
-let store, ops, defaults, claude, inCall, delivery, config, LOCALES, SUPPORTED_LANGUAGES;
+let store, defaults, claude, inCall, delivery, config, LOCALES, SUPPORTED_LANGUAGES;
 let callSeq = 0;
 
 before(async () => {
@@ -58,7 +52,6 @@ before(async () => {
   );
   ({ config } = await import("../../src/config.js"));
   store = await import("../../src/store.js");
-  ops = await import("../../src/store/state-ops.js");
   defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
@@ -78,13 +71,6 @@ function nextCall() {
 function inCallReadyCall() {
   const call = nextCall();
   call.answeredAt = new Date(Date.now() - 600_000).toISOString();
-  return call;
-}
-
-function turnReadyCall() {
-  const call = nextCall();
-  call.answeredAt = new Date().toISOString();
-  call.consultPolledAtMs = Date.now();
   return call;
 }
 
@@ -159,63 +145,6 @@ test("GQ-P2-2: nach Ablauf der Offen-Frist bleibt die Antwort draussen (fail-clo
   endCall(store.getCall(call.id));
   endCall(store.getCall(call2.id));
   endCall(store.getCall(call3.id));
-});
-
-test("GQ-P2-3: zwei Turns ohne Antwort toeten die Rueckfrage NICHT (Gegenbeweis zu W2)", async () => {
-  bodies = [];
-  queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
-  const call = turnReadyCall();
-  const t1 = await claude.agentTurn(call, SUBSTANTIAL);
-  assert.equal(t1.speech, LOCALES.de.consultFillerSpeech);
-
-  bodies = [];
-  queue = [textOnly("UNGEWOLLTER-ZUSATZ-ROUNDTRIP")];
-  const t2 = await claude.agentTurn(call, "Hallo?");
-  assert.equal(bodies.length, 0, "HOLD ist LLM-frei");
-  assert.equal(t2.speech, LOCALES.de.consultHoldSpeech);
-
-  bodies = [];
-  queue = [textOnly("Ich entscheide vorlaeufig.")];
-  const t3 = await claude.agentTurn(call, "Sind Sie noch da?");
-  assert.equal(bodies.length, 1, "normaler LLM-Turn, PENDING blockiert nichts");
-  assert.equal(t3.speech, "Ich entscheide vorlaeufig.");
-  assert.equal(store.getCall(call.id).consults[0].status, defaults.CONSULT_STATUS.OPEN);
-  const pendingMarked = bodies[0].messages.at(-1).content;
-  assert.ok(pendingMarked.endsWith(LOCALES.de.prompt.turnControl.consultPending));
-
-  bodies = [];
-  queue = [textOnly("Weiter im Text.")];
-  const t4 = await claude.agentTurn(call, "Also?");
-  assert.equal(store.getCall(call.id).consults[0].status, defaults.CONSULT_STATUS.OPEN);
-  const noSecondMarker = bodies[0].messages.at(-1).content;
-  assert.ok(!noSecondMarker.includes(LOCALES.de.prompt.turnControl.consultPending));
-  assert.equal(t4.speech, "Weiter im Text.");
-
-  const accepted = inCall.acceptConsultAnswer(store.getCall(call.id), {
-    eventId: store.getCall(call.id).consults[0].id,
-    facts: ["Freitag ist ok"],
-  });
-  assert.equal(accepted.outcome, defaults.CONSULT_ANSWER.ACCEPTED);
-
-  bodies = [];
-  queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
-  const call2 = turnReadyCall();
-  await claude.agentTurn(call2, SUBSTANTIAL);
-  const stored2 = store.getCall(call2.id);
-  const askedAtMs2 = Date.now() - inCall.CONSULT_OPEN_MS - 1;
-  stored2.answeredAt = new Date(askedAtMs2 - 1000).toISOString();
-  stored2.consults[0].askedAt = new Date(askedAtMs2).toISOString();
-  bodies = [];
-  queue = [textOnly("Fallback greift.")];
-  await claude.agentTurn(call2, "Und?");
-  assert.equal(store.getCall(call2.id).consults[0].status, defaults.CONSULT_STATUS.TIMED_OUT);
-  const timeoutMarked = bodies[0].messages.at(-1).content;
-  assert.ok(timeoutMarked.endsWith(LOCALES.de.prompt.turnControl.consultTimeout));
-  const rejected = inCall.acceptConsultAnswer(store.getCall(call2.id), {
-    eventId: store.getCall(call2.id).consults[0].id,
-    facts: ["Zu spaet"],
-  });
-  assert.equal(rejected.outcome, defaults.CONSULT_ANSWER.ALREADY_ANSWERED);
 });
 
 const FALSE_CAPABILITY_DENYLIST =

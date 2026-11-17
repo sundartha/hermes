@@ -102,22 +102,6 @@ test("GQ-P8-2: bereits ausgelieferte Antwort meldet KEIN ANSWERED mehr", () => {
   assert.notEqual(wait, defaults.CONSULT_WAIT.ANSWERED);
 });
 
-test("GQ-P8-3: der Turn traegt den Ankunfts-Steuertext am letzten user-Turn", async () => {
-  const call = callWithArrivedAnswer();
-  bodies = [];
-  queue = [textOnly("Es ist ein VW Golf 7, Baujahr 2017, Diesel.")];
-
-  const turn = await claude.agentTurn(call, "Und, welches Modell ist es nun?");
-
-  assert.equal(turn.speech, "Es ist ein VW Golf 7, Baujahr 2017, Diesel.");
-  assert.equal(bodies.length, 1, "normaler Modell-Turn, das Signal blockiert nichts");
-  const lastMessage = bodies[0].messages.at(-1).content;
-  assert.ok(
-    lastMessage.endsWith(arrivalMarker()),
-    "ohne diesen Marker sah das Modell dieselbe Hintergrund-Liste wie zuvor",
-  );
-});
-
 test("GQ-P8-4: der Steuertext verbietet die drei live gemessenen Fehlreaktionen", () => {
   const marker = arrivalMarker();
   assert.match(marker, /HINTERGRUND/, "verweist auf den Ort der Antwort");

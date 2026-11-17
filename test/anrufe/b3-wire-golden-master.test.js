@@ -16,14 +16,10 @@ const FIXED_NOW = Date.UTC(2026, 7, 8, 9, 30, 0);
 const SEEDED_AT = new Date(FIXED_NOW).toISOString();
 
 const OWNER = "Jonas Beispiel";
-const RAUSCH_BLIP = ".";
-const SUBSTANZIELL = "Ja, Donnerstag passt gut";
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
 
 const jsonMessage = makeJsonMessage("msg_b3a");
 const writeSse = makeWriteSse(jsonMessage);
-
-const toolUseAs = (id, name, input) => ({ ...toolUse(name, input), id });
 
 let server;
 let queue = [];
@@ -104,49 +100,6 @@ async function wire(name, blocksQueue, run) {
   const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8"));
   assert.deepEqual(recorded[name], fixture[name]);
 }
-
-const turnOf = (callId, callerText, options) =>
-  claude.agentTurn(store.getCall(callId), callerText, options);
-
-test("B3-WIRE-1 (G1): agentTurn, eine Runde, nur Text", async () => {
-  await wire("G1", [[text("Guten Tag, hier ist Hermes.")]], () =>
-    turnOf("call_b3a_g1", SUBSTANZIELL),
-  );
-});
-
-test("B3-WIRE-2 (G2): agentTurn, zwei Runden - Ruecktrage + Werkzeug-Ergebnis", async () => {
-  await wire(
-    "G2",
-    [[toolUse("take_message", { message: "Rueckruf erbeten" })], [text("Mache ich.")]],
-    () => turnOf("call_b3a_g2", SUBSTANZIELL),
-  );
-});
-
-test("B3-WIRE-3 (G3): agentTurn, zwei Werkzeuge in EINER Runde", async () => {
-  await wire(
-    "G3",
-    [
-      [
-        toolUseAs("tu_a", "take_message", { message: "Erste Notiz" }),
-        toolUseAs("tu_b", "take_message", { message: "Zweite Notiz" }),
-      ],
-      [text("Beides notiert.")],
-    ],
-    () => turnOf("call_b3a_g3", SUBSTANZIELL),
-  );
-});
-
-test("B3-WIRE-4 (G4): agentTurn, unterdruecktes end_call", async () => {
-  await wire("G4", [[toolUse("end_call", { reason: "fertig" })], [text("Ich warte.")]], () =>
-    turnOf("call_b3a_g4", RAUSCH_BLIP),
-  );
-});
-
-test("B3-WIRE-5 (G5): agentTurn gestreamt (Live-Sprechpfad)", async () => {
-  await wire("G5", [[text("Guten Tag. Wie kann ich helfen?")]], () =>
-    turnOf("call_b3a_g5", SUBSTANZIELL, { onSpeechChunk: () => {} }),
-  );
-});
 
 test("B3-WIRE-6 (G6): summarizeCall", async () => {
   await wire("G6", [[text('{"summary":"Termin bestaetigt","actionItems":[]}')]], () =>

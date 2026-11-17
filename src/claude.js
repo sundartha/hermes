@@ -1,34 +1,22 @@
-import { attemptReachedProvider, createLlmClient, createSecondaryLlmClient } from "./llm.js";
+import { createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
-import { CONSULT_WAIT } from "./begriffe/rueckfrage.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
-import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
-import { providerTurnMessage, toolResultsMessage } from "./llm/messages.ts";
+import { bookTokenUsage } from "./llm-usage.js";
 import { makeSentenceChunker } from "./speech-chunker.ts";
-import { makeThinkingSignal } from "./thinking-signal.ts";
-import { shapeForSpeech } from "./speech-shape.ts";
-import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.ts";
 import { drittEroeffnung } from "./i18n/eroeffnung.js";
 import { localeFor } from "./i18n/locales.js";
 import { verifiedOpeningLine } from "./elevenlabs/opening-line.ts";
 import { metrics } from "./metrics.js";
-import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.ts";
-import { blockingBudgetAxisFrisch } from "./budget-gate.js";
+import { roundFitsDeadline } from "./turn-budget.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
 import { clampAtWordBoundary } from "./utils/text.ts";
-import {
-  GET_CONSULT_TOOL_NAME,
-  advanceConsultWait,
-  consultAvailableFor,
-  decideConsultRequest,
-} from "./consult/in-call.js";
-import { LOOK_UP_TOOL_NAME, lookupAvailableFor, performLookupRequest } from "./research/in-call.js";
+import { GET_CONSULT_TOOL_NAME, consultAvailableFor } from "./consult/in-call.js";
+import { LOOK_UP_TOOL_NAME, lookupAvailableFor } from "./research/in-call.js";
 
-const llm = createLlmClient({ config, metrics });
 const bereiche = speicherBereiche(store);
 
 function promptInputs(call, memory) {
@@ -392,30 +380,6 @@ export const TURN_STOP_DEADLINE = "deadline";
 
 export const TURN_STOP_SUPERSEDED = "superseded";
 
-async function roundStopReason({ call, roundIndex, loopStartedAt, deadlineMs, speicher }) {
-  const axis = await blockingBudgetAxisFrisch({ store: speicher, billing: config.billing, tenantId: call.tenantId });
-  if (axis) return axis;
-  if (roundIndex === 0) return null;
-  const fits = roundFitsDeadline({
-    elapsedMs: Date.now() - loopStartedAt,
-    deadlineMs,
-    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
-  });
-  return fits ? null : TURN_STOP_DEADLINE;
-}
-
-function logTurnStop({ callId, grund, roundtrips }) {
-  console.warn(`[turn] abbruch grund=${grund} call=${callId} runden=${roundtrips}`);
-}
-
-const TURN_MAX_TOKENS = 300;
-
-function promptCharsOf({ system, tools, messages }) {
-  return (
-    JSON.stringify(system).length + JSON.stringify(tools).length + JSON.stringify(messages).length
-  );
-}
-
 export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, continuesStream }) {
   if (!onSpeechChunk) return null;
   if (!tools.every((t) => isStreamSafeTool(t.name))) return null;
@@ -424,286 +388,6 @@ export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, con
   )
     return null;
   return makeSentenceChunker({ onChunk: onSpeechChunk, continuesStream });
-}
-
-async function completeRound({ call, params, stream }) {
-  const bookReal = (usage) => bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage });
-  if (!stream) {
-    const turn = await llm.complete(params);
-    bookReal(turn.usage);
-    return turn;
-  }
-  const promptChars = promptCharsOf(params);
-  try {
-    const turn = await llm.completeStream({
-      ...params,
-      sink: stream.sink,
-      streamBudgetMs: stream.budgetMs,
-    });
-    bookReal(turn.usage);
-    return turn;
-  } catch (err) {
-    if (attemptReachedProvider(err) || stream.sink.receivedText())
-      bookReal(
-        estimatedAbortUsage({
-          promptChars,
-          maxTokens: TURN_MAX_TOKENS,
-          billingModelId: params.model,
-        }),
-      );
-    throw err;
-  }
-}
-
-async function toolResultText({ call, toolCall, consult, lookup }) {
-  if (toolCall.name === GET_CONSULT_TOOL_NAME) return consult.toolResult;
-  if (toolCall.name === LOOK_UP_TOOL_NAME) return lookup.toolResult;
-  return execTool(call, toolCall.name, toolCall.input);
-}
-
-async function toolResultEntries({ call, toolCalls, suppressEndCall, consult, lookup }) {
-  const entries = [];
-  for (const tc of toolCalls) {
-    const waitsForAnswer = tc.name === END_CALL_TOOL_NAME && suppressEndCall;
-    const text = waitsForAnswer
-      ? endCallWaitInstruction(call)
-      : await toolResultText({ call, toolCall: tc, consult, lookup });
-    entries.push({ toolCallId: tc.id, text });
-  }
-  return entries;
-}
-
-function consultTurnMarker(consultWait, turnControl) {
-  if (consultWait === CONSULT_WAIT.ANSWERED) return turnControl.consultAnswered;
-  if (consultWait === CONSULT_WAIT.PENDING) return turnControl.consultPending;
-  if (consultWait === CONSULT_WAIT.TIMED_OUT) return turnControl.consultTimeout;
-  return "";
-}
-
-export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal, speicher = store } = {}) {
-  if (callerText) {
-    await bereiche.anrufe.addTranscript(call.id, "caller", callerText);
-    await bereiche.gespraech.countCallerTurn(call.id);
-  }
-
-  const consultWait = await advanceConsultWait(call);
-  const holdSpeech =
-    consultWait === CONSULT_WAIT.HOLD ? localeFor(call.language).consultHoldSpeech : "";
-
-  const history = call.transcript.slice(-24).map((t) => ({
-    role: t.role === "agent" ? "assistant" : "user",
-    content: t.text,
-  }));
-  if (!history.length || history[history.length - 1].role !== "user") {
-    const hasAgentLine = call.transcript.some((t) => t.role === "agent");
-    const tc = localeFor(call.language).prompt.turnControl;
-    history.push({
-      role: "user",
-      content: hasAgentLine
-        ? tc.silentTurn
-        : call.direction === "outbound"
-          ? tc.openingBootstrap.outbound
-          : tc.openingBootstrap.inbound,
-    });
-  }
-
-  const consultMarker = consultTurnMarker(consultWait, localeFor(call.language).prompt.turnControl);
-  if (consultMarker) {
-    const last = history[history.length - 1];
-    last.content = `${last.content}\n${consultMarker}`;
-  }
-
-  const suppressEndCall = shouldSuppressEndCall(call);
-  const memory = await counterpartyMemoryFor(call);
-
-  let messages = history;
-  let endCall = false;
-  let suppressedEndCall = false;
-  let speech = "";
-  let speechStreamed = false;
-  let wireHasSpeech = false;
-  const thinkingSignal = makeThinkingSignal({
-    onSpeechChunk,
-    enabled: config.voice.thinkingSignalEnabled,
-  });
-  let roundtrips = 0;
-  const firedTools = [];
-  const offeredTools = new Set();
-  let streamArmedRounds = 0;
-
-  const model = config.llm.claudeModel;
-
-  const loopStartedAt = Date.now();
-  const deadlineMs = turnLoopDeadlineMs(config.voice.elevenLabsPlayTts.synthTimeoutMs);
-  let stopReason = null;
-
-  let pendingFollowUp = null;
-  let followUpUsed = false;
-
-  for (let i = 0; i < MAX_TOOL_ROUNDS_PER_TURN; i++) {
-    if (abortSignal?.aborted) {
-      stopReason = TURN_STOP_SUPERSEDED;
-      break;
-    }
-    stopReason = await roundStopReason({
-      call,
-      roundIndex: i,
-      loopStartedAt,
-      deadlineMs,
-      speicher,
-    });
-    if (stopReason) break;
-
-    if (holdSpeech) {
-      speech = holdSpeech;
-      break;
-    }
-
-    const followUp = pendingFollowUp;
-    pendingFollowUp = null;
-    const tools = followUp?.tools ?? agentTools(call);
-    for (const tool of tools) offeredTools.add(tool.name);
-    const elapsedMs = Date.now() - loopStartedAt;
-    const sink = streamSinkFor({
-      onSpeechChunk,
-      tools,
-      elapsedMs,
-      deadlineMs,
-      continuesStream: wireHasSpeech,
-    });
-    if (sink) streamArmedRounds += 1;
-    const params = {
-      model,
-      maxTokens: TURN_MAX_TOKENS,
-      system: systemPrompt(call, memory),
-      tools,
-      messages,
-      cachePrefix: true,
-      callId: call.id,
-      ...(followUp ? { toolChoice: followUp.toolChoice } : {}),
-    };
-    let turn;
-    try {
-      turn = await completeRound({
-        call,
-        params,
-        stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
-      });
-    } catch (err) {
-      if (!followUp) throw err;
-      console.warn(`[turn] nachfassen-fehlgeschlagen call=${call.id} runden=${roundtrips}`);
-      break;
-    }
-    roundtrips += 1;
-    if (sink) {
-      sink.flushRemainder();
-      if (sink.chunkCount() > 0) wireHasSpeech = true;
-    }
-
-    if (turn.text) {
-      speech = turn.text;
-      speechStreamed = Boolean(sink);
-    }
-
-    const toolCalls = turn.toolCalls;
-    firedTools.push(...toolCalls.map((tc) => tc.name));
-    if (!toolCalls.length) {
-      const followUpTools = followUpToolsFor({
-        enabled: config.voice.toolFollowUpEnabled,
-        alreadyUsed: followUpUsed,
-        text: turn.text,
-        language: call.language,
-        candidateTools: tools.filter((t) => t.name !== END_CALL_TOOL_NAME),
-      });
-      if (!followUpTools) break;
-      followUpUsed = true;
-      pendingFollowUp = {
-        tools: followUpTools,
-        toolChoice: followUpToolChoiceFor({
-          text: turn.text,
-          language: call.language,
-          candidateTools: followUpTools,
-          consultToolName: GET_CONSULT_TOOL_NAME,
-        }),
-      };
-      messages = [
-        ...messages,
-        providerTurnMessage(turn.providerTurn),
-        { role: "user", content: localeFor(call.language).prompt.followUp.nudge },
-      ];
-      continue;
-    }
-
-    const consult = await decideConsultRequest(call, toolCalls);
-    if (consult?.accepted) {
-      if (!speechStreamed) speech = consult.speech;
-      break;
-    }
-
-    if (toolCalls.some((tc) => tc.name === END_CALL_TOOL_NAME)) {
-      if (suppressEndCall) suppressedEndCall = true;
-      else endCall = true;
-    }
-    const sideEffectOnlyRound = toolCalls.every((tc) => isSideEffectOnlyTool(tc.name));
-    const loopContinues = !(speech && (endCall || suppressedEndCall || sideEffectOnlyRound));
-
-    const bridgeText = loopContinues && !speechStreamed && thinkingSignal.speakBridge(speech);
-    if (bridgeText) {
-      speech = bridgeText;
-      speechStreamed = true;
-    }
-
-    const lookup = await performLookupRequest({ call, toolUses: toolCalls, loopContinues });
-
-    messages = [
-      ...messages,
-      providerTurnMessage(turn.providerTurn),
-      toolResultsMessage(await toolResultEntries({ call, toolCalls, suppressEndCall, consult, lookup })),
-    ];
-    if (!loopContinues) break;
-  }
-
-  if (stopReason) logTurnStop({ callId: call.id, grund: stopReason, roundtrips });
-
-  metrics.logTurn({
-    callId: call.id,
-    direction: call.direction,
-    roundtrips,
-    tools: firedTools,
-  });
-
-  const turnTelemetry = () => ({
-    roundtrips,
-    toolNames: firedTools,
-    offeredToolNames: [...offeredTools],
-    streamArmedRounds,
-    stopReason,
-  });
-
-  if (abortSignal?.aborted)
-    return {
-      speech: "",
-      speechStreamed: false,
-      thinkingSignalSpoken: thinkingSignal.spoken(),
-      endCall: false,
-      superseded: true,
-      ...turnTelemetry(),
-    };
-
-  speech = shapeForSpeech(speech);
-  if (!speech) {
-    speech = localeFor(call.language).turnFallbackSpeech[call.direction];
-    speechStreamed = false;
-  }
-  await bereiche.anrufe.addTranscript(call.id, "agent", speech);
-  return {
-    speech,
-    speechStreamed,
-    thinkingSignalSpoken: thinkingSignal.spoken(),
-    endCall,
-    superseded: false,
-    ...turnTelemetry(),
-  };
 }
 
 const SUMMARY_MAX_TOKENS = 800;
