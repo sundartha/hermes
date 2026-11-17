@@ -1,6 +1,6 @@
 import { hasWidget, widgetHtml, widgetTitle, widgetVersion } from "./widget-catalog.js";
 import { config } from "../config.js";
-import { normalisierterOrigin } from "../middleware.js";
+import { normalisierterOrigin } from "../middleware.ts";
 
 export const UI_MIME = "text/html;profile=mcp-app";
 export const UI_CAPABILITY_KEY = "io.modelcontextprotocol/ui";

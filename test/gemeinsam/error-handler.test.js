@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { errorHandler } from "../../src/middleware.js";
+import { errorHandler } from "../../src/middleware.ts";
 import { fehlerausgabeVon } from "../gemeinsam/fehlerausgabe.js";
 
 function fakeRes() {

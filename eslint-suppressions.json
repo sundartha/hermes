@@ -498,7 +498,7 @@
       "count": 1
     }
   },
-  "src/middleware.js": {
+  "src/middleware.ts": {
     "id-length": {
       "count": 2
     },

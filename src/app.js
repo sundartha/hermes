@@ -7,7 +7,7 @@ import {
   makeFixedWindowCounter,
   RATE_WINDOW_MS,
   RATE_SWEEP_INTERVAL_MS,
-} from "./middleware.js";
+} from "./middleware.ts";
 import { registerWellKnown } from "./auth.js";
 import { makeMcpDrosseln } from "./mcp-rate-limit.js";
 import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";

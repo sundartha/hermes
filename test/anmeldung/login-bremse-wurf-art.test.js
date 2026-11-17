@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { createGeteilterRateLimiter, mcpErlaubteOrigins } from "../../src/middleware.js";
+import { createGeteilterRateLimiter, mcpErlaubteOrigins } from "../../src/middleware.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

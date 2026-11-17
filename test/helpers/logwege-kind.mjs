@@ -2,7 +2,7 @@ import "../../src/process-guards.js";
 import "../../src/config.js";
 import { once } from "node:events";
 import express from "express";
-import { errorHandler } from "../../src/middleware.js";
+import { errorHandler } from "../../src/middleware.ts";
 import { telnyxNumberProvisioning } from "../../src/telephony/adapters/telnyx/numbers.js";
 import { audit } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

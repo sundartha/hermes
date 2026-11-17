@@ -50,7 +50,7 @@
         "src/single-flight.ts",
         "src/log-maske.js",
         "src/metrics.js",
-        "src/middleware.js",
+        "src/middleware.ts",
         "src/config-fingerprint.js",
         "src/brand-icon-data.js",
         "src/render-api.ts"

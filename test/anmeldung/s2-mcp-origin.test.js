@@ -15,7 +15,7 @@ import {
   mcpOriginErlaubt,
   originLogWert,
   mcpCorsOrigin,
-} from "../../src/middleware.js";
+} from "../../src/middleware.ts";
 import { angekuendigterOriginFindings, kanonischeAudience } from "../../src/boot-guard.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
