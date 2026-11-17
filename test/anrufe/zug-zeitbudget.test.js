@@ -2,14 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import {
-  MAX_TOOL_ROUNDS_PER_TURN,
   PROVIDER_WEBHOOK_HARDCUT_MS,
   TURN_NETWORK_RESERVE_MS,
   llmTurnBudgetMs,
-  roundFitsDeadline,
   turnBudgetMs,
   turnBudgetOverrun,
-  turnLoopDeadlineMs,
 } from "../../src/turn-budget.ts";
 import { startServer } from "../helpers.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
@@ -17,12 +14,9 @@ import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 const DEFAULT_ZUGBUDGET_MS = 14750;
 const DREI_RETRIES_BUDGET_MS = 4700;
 const EIN_RETRY_BUDGET_MS = 2100;
-const SCHLEIFENFRIST_MS = 11500;
 const SPRECHPFAD_TIMEOUT_MS = 3500;
 const SYNTHESE_MS = 2000;
 const UEBERLANGE_SYNTHESE_MS = 9000;
-const WERKZEUGRUNDEN_JE_ZUG = 4;
-const ZU_LANGE_SYNTHESE_MS = 20000;
 const ZWEI_RETRIES_BUDGET_MS = 11250;
 
 test("llmTurnBudgetMs: Backoff-Summe ist base*(2^r-1), NICHT 2*base", () => {
@@ -108,23 +102,6 @@ test("Doku-Parity: .env.example, render.yaml und config-Fallback nennen dieselbe
       [SYNTHESE_FELD]: SYNTHESE_MS,
     },
   );
-});
-
-test("MAX_TOOL_ROUNDS_PER_TURN pinnt die Rundenzahl, die claude.js UND der Boot-Waechter teilen", () => {
-  assert.equal(MAX_TOOL_ROUNDS_PER_TURN, WERKZEUGRUNDEN_JE_ZUG);
-});
-
-test("turnLoopDeadlineMs: Hardcut minus Synthese minus Netzreserve, nie negativ", () => {
-  assert.equal(turnLoopDeadlineMs(SYNTHESE_MS), SCHLEIFENFRIST_MS);
-  assert.equal(turnLoopDeadlineMs(ZU_LANGE_SYNTHESE_MS), 0);
-});
-
-test("roundFitsDeadline: die Grenze ist inklusiv", () => {
-  const deadlineMs = 11500;
-  const requestTimeoutMs = 3500;
-  assert.equal(roundFitsDeadline({ elapsedMs: 8000, deadlineMs, requestTimeoutMs }), true);
-  assert.equal(roundFitsDeadline({ elapsedMs: 8001, deadlineMs, requestTimeoutMs }), false);
-  assert.equal(roundFitsDeadline({ elapsedMs: 0, deadlineMs, requestTimeoutMs }), true);
 });
 
 test("Boot warnt bei gesprengtem Turn-Budget", async (kontext) => {

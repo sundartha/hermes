@@ -20,12 +20,8 @@ export function llmTurnBudgetMs({
   return attempts * requestTimeoutMs + backoffSum;
 }
 
-function turnOverheadMs(synthTimeoutMs: number): number {
-  return synthTimeoutMs + TURN_NETWORK_RESERVE_MS;
-}
-
 export function turnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs, synthTimeoutMs }: Zugparameter): number {
-  return llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) + turnOverheadMs(synthTimeoutMs);
+  return llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) + synthTimeoutMs + TURN_NETWORK_RESERVE_MS;
 }
 
 export function turnBudgetOverrun(params: Zugparameter): { budgetMs: number; hardcutMs: number; overrunMs: number } | null {
@@ -37,22 +33,3 @@ export function turnBudgetOverrun(params: Zugparameter): { budgetMs: number; har
     overrunMs: budgetMs - PROVIDER_WEBHOOK_HARDCUT_MS,
   };
 }
-
-export const MAX_TOOL_ROUNDS_PER_TURN = 4;
-
-export function turnLoopDeadlineMs(synthTimeoutMs: number): number {
-  return Math.max(0, PROVIDER_WEBHOOK_HARDCUT_MS - turnOverheadMs(synthTimeoutMs));
-}
-
-export function roundFitsDeadline({
-  elapsedMs,
-  deadlineMs,
-  requestTimeoutMs,
-}: {
-  elapsedMs: number;
-  deadlineMs: number;
-  requestTimeoutMs: number;
-}): boolean {
-  return elapsedMs + requestTimeoutMs <= deadlineMs;
-}
-
