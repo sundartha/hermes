@@ -11,12 +11,15 @@ const FREMD = "s4730_fremd";
 
 async function statusEreignis(anbinden) {
   const aufrufe = [];
+  const angenommen = [];
   const call = seedCall({ id: FREMD, twilioSid: `CA_${FREMD}`, status: "active", provider: "telnyx" });
   const store = {
     getCall: (id) => (id === FREMD || id === call.twilioSid ? call : null),
     anrufHierBewacht: () => false,
     save: () => {},
-    markAnswered: async () => {},
+    markAnswered: async (id) => {
+      angenommen.push(id);
+    },
     recordWebhookAnchors: () => {},
   };
   const app = express();
@@ -63,17 +66,19 @@ async function statusEreignis(anbinden) {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
-  return { aufrufe, fehler };
+  return { aufrufe, fehler, angenommen };
 }
 
 test("Status mit Spiegeltreffer: genau ein Aufruf der Wiederanbindung, kein Verwerfen im Log", async () => {
-  const { aufrufe, fehler } = await statusEreignis(async () => ({ call: null, fehlgeschlagen: true }));
+  const { aufrufe, fehler, angenommen } = await statusEreignis(async () => ({ call: null, fehlgeschlagen: true }));
   assert.deepEqual(aufrufe, [FREMD]);
+  assert.deepEqual(angenommen, [FREMD]);
   assert.deepEqual(fehler, []);
 });
 
 test("Status mit Spiegeltreffer: abgelehnte Wiederanbindung wird mit Praefix und callId protokolliert", async () => {
-  const { aufrufe, fehler } = await statusEreignis(() => Promise.reject(new Error("Datenbank haengt")));
+  const { aufrufe, fehler, angenommen } = await statusEreignis(() => Promise.reject(new Error("Datenbank haengt")));
   assert.deepEqual(aufrufe, [FREMD]);
+  assert.deepEqual(angenommen, [FREMD]);
   assert.deepEqual(fehler, [`[voice/status] Wiederanbindung abgelehnt (callId=${FREMD}): Datenbank haengt`]);
 });
