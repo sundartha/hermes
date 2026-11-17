@@ -103,6 +103,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "markInboundElFallback", "markInboundElNachlaufStarted", "markInboxEntry", "markMeterEventsSent",
   "markNotPlacedMailSent",
   "markNumberElInboundTrunkBelegt", "markSummaryMailSent", "markSummarySmsSent", "newId", "noteConsultPoll",
+  "numberHasActiveCall",
   "numberRecordByE164", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
   "persistCall",
   "planMinutesExceeded", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
