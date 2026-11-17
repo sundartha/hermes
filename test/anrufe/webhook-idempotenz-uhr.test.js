@@ -12,7 +12,7 @@ const TAKT_MS = 200;
 const HARDCUT_MS = 15_000;
 const FREMDE_ANTWORT = "<Response>vom-anderen-Prozess</Response>";
 
-function stubAblage(alterMs) {
+function stubAblage(alterMs, eigen = true) {
   const zeiten = { lesungen: [], uebernahme: undefined };
   const ablage = {
     annehmen: async () => ({ eigen: false, kennung: "k1", alterMs }),
@@ -22,7 +22,7 @@ function stubAblage(alterMs) {
     },
     uebernehmen: async () => {
       zeiten.uebernahme = Date.now();
-      return { eigen: true, kennung: "k1", antwort: { status: 200, contentType: "text/xml", body: FREMDE_ANTWORT } };
+      return { eigen, kennung: "k1", antwort: { status: 200, contentType: "text/xml", body: FREMDE_ANTWORT } };
     },
     freigeben: async () => undefined,
     beantworten: async () => undefined,
@@ -71,9 +71,9 @@ async function bisLesungen(zeiten, anzahl) {
   await naechsteRunde();
 }
 
-async function zweiteZustellung(t, alterMs) {
+async function zweiteZustellung(t, alterMs, eigen = true) {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: START });
-  const { ablage, zeiten } = stubAblage(alterMs);
+  const { ablage, zeiten } = stubAblage(alterMs, eigen);
   const zeilen = [];
   const log = t.mock.method(console, "log", (...teile) => zeilen.push(teile.join(" ")));
   const server = await new Promise((fertig) => {
@@ -119,4 +119,12 @@ test("webhook-idempotenz-uhr: bleibt weniger als ein Takt bis zur Frist, ueberni
   assert.equal(ergebnis.zeiten.uebernahme, START);
   assert.equal(ergebnis.text, FREMDE_ANTWORT);
   assert.ok(ergebnis.zeilen.some((zeile) => zeile.includes("warte_ms=0")));
+});
+
+test("webhook-idempotenz-uhr: gewinnt ein anderer Prozess die Uebernahme, steht keine Uebernommen-Zeile im Log", async (t) => {
+  const ergebnis = await zweiteZustellung(t, HARDCUT_MS - TAKT_MS + 1, false);
+
+  assert.equal(ergebnis.zeiten.uebernahme, START);
+  assert.equal(ergebnis.text, FREMDE_ANTWORT);
+  assert.equal(ergebnis.zeilen.some((zeile) => zeile.includes("warte_ms=")), false);
 });
