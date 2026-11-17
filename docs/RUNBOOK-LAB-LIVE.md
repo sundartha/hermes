@@ -150,7 +150,15 @@ einem PR gewinnt die hoechste Art; ein Sammel-PR mit einem Major gilt als
 | `major` | wie `patch`, ein PR je Major | Prueferurteil mit Migrationspruefung muss PASS sein, dann automatisch bei Gruen |
 | `actions` | `.github/dependabot.yml` (`github-actions`), Mindestalter `ACTIONS_WARTE_TAGE` in `tools/freigabe.mjs` | wie `patch`; ein Sprung der Hauptversion zaehlt als `major` |
 | `node-hauptversion` | erst ab Active LTS plus Frist, `tools/freigabe.mjs` und `tools/mutation-laeufe.mjs` | PASS und das Ja von Antonio20045 am PR mit dem Text aus `NODE_JA_TEXT` (`tools/mutation-laeufe.mjs`), Label `node-hauptversion` |
-| `sicherheit` | keine | Prueferurteil, bei einem Major mit Migrationspruefung, dann automatisch bei Gruen |
+| `sicherheit` | keine Wartezeit in der Merge-Queue (`ersterFix` in `tools/freigabe.mjs`, nur npm); das Mindestalter aus `tools/lockfile-alter.mjs` (SG-19) gilt trotzdem, fuer einen juengeren npm-Fix geht nur ein Eintrag in `tools/basis/lieferkette-ausnahmen.json`; Actions-Fixe warten wie `actions` | Prueferurteil, bei einem Major mit Migrationspruefung, dann automatisch bei Gruen |
+
+**Sicherheitsfix vor Ablauf des Mindestalters.** Ein bestaetigter npm-Fix, der
+juenger ist als das Mindestalter, braucht einen eigenen PR mit dem Eintrag
+`{ "name", "version" }` in `tools/basis/lieferkette-ausnahmen.json`. Die
+Advisory-Nummer (GHSA oder CVE) steht im PR-Text; der PR geht durch die normale
+Pflicht-CI und das Urteil, es gibt keinen Schalter. Ein Folge-PR entfernt den
+Eintrag, sobald das Mindestalter erreicht ist. Fuer Actions gibt es keinen
+Ausnahmeweg; sie bleiben bei `ACTIONS_WARTE_TAGE` in `tools/freigabe.mjs`.
 
 Die Werte der Wartezeiten stehen nur in ihren Quellen. Gleichzeitig laeuft
 hoechstens ein Update-PR in der Merge-Queue, und solange ein offener PR
