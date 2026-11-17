@@ -525,11 +525,11 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
 
 function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
   const perCallEroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
-  const { agentFelder } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
+  const { ersteNachricht } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
   return {
     agent: {
       language: locale.language,
-      ...agentFelder,
+      ...(ersteNachricht === null ? {} : { first_message: ersteNachricht }),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
