@@ -21,7 +21,7 @@ const rueckfall = (signer, { callId, callSid, quelle = RUECKFALL_QUELLE, zusatz 
   signierteRueckfallZustellung(signer, { callId, quelle, felder: { CallSid: callSid, ...zusatz } });
 
 async function zeilenMitAntwort(sql) {
-  const { rows } = await sql(`SELECT 1 FROM ${ABLAGE_TABELLE} WHERE koerper IS NOT NULL`);
+  const { rows } = await sql(`SELECT DISTINCT kennung FROM ${ABLAGE_TABELLE} WHERE koerper IS NOT NULL`);
   return rows;
 }
 
@@ -71,8 +71,7 @@ test("S4-K2b: Rückfall mit gültiger Signatur, aber fremdem CallSid bekommt nic
       const vonB = await antwortVon(b, rueckfall(signer, { callId: "call_s4b", callSid: "CArueck99" }));
       assert.equal(vonB.status, HTTP_OK);
       assert.match(vonB.xml, LEER_ODER_AUFLEGEN);
-      await zeilenBis(() => zeilenMitAntwort(sql), (zeilen) => zeilen.length === 2);
-      assert.equal((await zeilenMitAntwort(sql)).length, 2, "fremder CallSid bekommt eine eigene Zeile, nicht die von A");
+      assert.equal((await zeilenMitAntwort(sql)).length, 1, "fremder CallSid legt keine Antwort unter der Kennung von A ab");
     },
   );
 });
