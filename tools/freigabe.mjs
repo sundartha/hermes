@@ -280,8 +280,17 @@ function hatLabel(pull, name) {
   return (pull.labels ?? []).some((label) => label.name === name);
 }
 
-function istUpdatePull(pull) {
-  return String(pull.head?.ref ?? "").startsWith(UPDATE_BRANCH) || hatLabel(pull, NODE_LABEL);
+async function istUpdatePull(anderer, { quellen, lesen }, imZweifel) {
+  if (hatLabel(anderer, NODE_LABEL)) return true;
+  const [basis, kopf] = [anderer.base?.sha, anderer.head?.sha];
+  const branch = anderer.head?.ref;
+  if (basis === undefined || kopf === undefined) return istUpdate({ pakete: [], node: [], branch });
+  try {
+    const dateien = (await quellen.dateienVon(anderer.number)).map((pfad) => ({ pfad }));
+    return istUpdate(updateRoh({ branch, titel: anderer.title, dateien, basis, kopf, lesen }));
+  } catch {
+    return imZweifel;
+  }
 }
 
 function wartetageVon(paket) {
@@ -337,9 +346,9 @@ async function nodeBefunde({ roh, pull, reviews, umfeld }) {
   return [...befunde, ...(await ltsBefunde(roh, umfeld))];
 }
 
-async function zweitesUpdateBefunde(pull, { quellen }) {
+async function zweitesUpdateBefunde(pull, { quellen }, lesen) {
   for (const { pr, sha } of await quellen.queueEintraege()) {
-    if (pr !== pull.number && (await quellen.liegtVor(sha)) && istUpdatePull(await quellen.pull(pr))) return [`Update-PR wartet: #${pr} ist noch in der Merge-Queue, höchstens ein Update zur Zeit.`];
+    if (pr !== pull.number && (await quellen.liegtVor(sha)) && (await istUpdatePull(await quellen.pull(pr), { quellen, lesen }, true))) return [`Update-PR wartet: #${pr} ist noch in der Merge-Queue, höchstens ein Update zur Zeit.`];
   }
   return [];
 }
@@ -348,12 +357,18 @@ function eigenePaketDateien(dateien) {
   return new Set(dateien.map(({ pfad }) => pfad).filter((pfad) => PAKET_DATEI.test(pfad)).map((pfad) => pfad.replace("package-lock.json", "package.json")));
 }
 
-async function ueberschneidungBefunde(pull, dateien, { quellen }) {
+async function fachPRs(pull, quellen, lesen) {
+  const offene = (await quellen.offenePRs()).filter((anderer) => anderer.number !== pull.number);
+  const fach = [];
+  for (const anderer of offene) if (!(await istUpdatePull(anderer, { quellen, lesen }, false))) fach.push(anderer);
+  return fach;
+}
+
+async function ueberschneidungBefunde(pull, dateien, { quellen }, lesen) {
   const eigene = eigenePaketDateien(dateien);
   if (eigene.size === 0) return [];
-  const andere = (await quellen.offenePRs()).filter((anderer) => anderer.number !== pull.number && !istUpdatePull(anderer));
   const befunde = [];
-  for (const { number } of andere) {
+  for (const { number } of await fachPRs(pull, quellen, lesen)) {
     const gemeinsam = (await quellen.dateienVon(number)).filter((pfad) => PAKET_JSON.test(pfad) && eigene.has(pfad));
     if (gemeinsam.length > 0) befunde.push(`Update-PR wartet: der offene PR #${number} ändert ebenfalls ${namenListe(gemeinsam)}.`);
   }
@@ -390,8 +405,8 @@ async function updateMergeBefunde({ pull, reviews, dateien, basis, kopf, lesen, 
     ...(await notAusBefunde(roh, umfeld)),
     ...(await nodeBefunde({ roh, pull, reviews, umfeld })),
     ...(await alterBefunde(roh, umfeld)),
-    ...(await zweitesUpdateBefunde(pull, umfeld)),
-    ...(await ueberschneidungBefunde(pull, dateien, umfeld)),
+    ...(await zweitesUpdateBefunde(pull, umfeld, lesen)),
+    ...(await ueberschneidungBefunde(pull, dateien, umfeld, lesen)),
   ];
 }
 
