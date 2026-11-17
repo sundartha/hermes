@@ -676,3 +676,7 @@ test("IEL-B6-12c: Fehler mit leerer oder fehlender Nachricht wird als unbekannt 
   assert.deepEqual(await fehlerZeilenBei(leer), ["[el-init] fehler: unbekannt"]);
   assert.deepEqual(await fehlerZeilenBei(ohneNachricht), ["[el-init] fehler: unbekannt"]);
 });
+
+test("IEL-B6-12d: Store wirft null im Init-Weg -> 500 und unbekannt im Log", async () => {
+  assert.deepEqual(await fehlerZeilenBei(null), ["[el-init] fehler: unbekannt"]);
+});
