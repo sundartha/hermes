@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { MS_PER_DAY, MS_PER_HOUR } from "./utils/timer.js";
+import { MS_PER_DAY, MS_PER_HOUR } from "./utils/timer.ts";
 
 export const MAX_NEWSLETTER_RECIPIENTS = 5;
 

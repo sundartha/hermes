@@ -1,5 +1,5 @@
 import * as ops from "./state-ops.js";
-import { MS_PER_DAY } from "../utils/timer.js";
+import { MS_PER_DAY } from "../utils/timer.ts";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call

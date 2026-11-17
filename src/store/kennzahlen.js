@@ -4,7 +4,7 @@ import { merkeKennzahlenPasswort } from "./kennzahlen-passwort.js";
 import { START_ROUTINE, START_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
 import { KENNZAHLEN_LESER_ROLLE } from "../db/migrate.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 
 const TAKT_MS = MS_PER_MINUTE;
 const FRIST_SEKUNDEN = 5;

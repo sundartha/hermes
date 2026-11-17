@@ -1,5 +1,5 @@
 import { findActiveNumber } from "./store/views.js";
-import { MS_PER_DAY } from "./utils/timer.js";
+import { MS_PER_DAY } from "./utils/timer.ts";
 
 interface Speicher {
   tenantPrivateNumber: (tenantId: string) => string | null;

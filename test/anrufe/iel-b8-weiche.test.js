@@ -33,7 +33,7 @@ import { DIRECTIVE, hangup, say } from "../../src/telephony/directives.ts";
 import { INBOUND_PATH, logInboundPath } from "../../src/telephony/inbound-path.ts";
 import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { elBeinAnchors, elRueckfallAnchors } from "../../src/telephony/webhook-idempotenz.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from ".././config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from ".././fixtures/elevenlabs-conversations.js";
 import {

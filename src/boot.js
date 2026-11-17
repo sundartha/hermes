@@ -32,7 +32,7 @@ import {
   elInboundAccessFindings,
   angekuendigterOriginFindings,
 } from "./boot-guard.js";
-import { sleep } from "./utils/timer.js";
+import { sleep } from "./utils/timer.ts";
 import { hasActiveNumber } from "./store/views.js";
 import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";

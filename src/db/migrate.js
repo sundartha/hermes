@@ -6,7 +6,7 @@ import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { DEFAULT_GREETING, languageForCountry } from "../i18n/locales.js";
 import { periodStartFromEnd } from "../billing/period.ts";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUSGANG_NAME = "0001_ausgang.sql";

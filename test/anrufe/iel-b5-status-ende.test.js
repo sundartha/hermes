@@ -19,7 +19,7 @@ import {
   terminateAndBillCall,
 } from "../../src/telephony/call-termination.ts";
 import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import {

@@ -1,4 +1,4 @@
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 export const ANBIETER = Object.freeze({ TELNYX: "telnyx", ELEVENLABS: "elevenlabs" });
 

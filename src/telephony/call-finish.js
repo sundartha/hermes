@@ -10,7 +10,7 @@ import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert 
 import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
 import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const SMS_BODY_MAX_CHARS = 1500;
 

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.ts";
 import { fehlerStapel, fehlerText } from "./utils/fehler-text.ts";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.ts";
 import {
   HTTP_FORBIDDEN,
   HTTP_NO_CONTENT,

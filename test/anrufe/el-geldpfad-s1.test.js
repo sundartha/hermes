@@ -13,7 +13,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { publicCall } from "../../src/store/views.js";
 import { billThunk, elevenLabsHangUpAction, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { storeOpsFacade, waitUntil, withFetch } from "../helpers.js";

@@ -125,7 +125,7 @@ function planeFachdatei(wurzel, baustein, name) {
     BEGRIFF: begriff[1],
     ZU_BEGRIFFEN: relativ(datei, begriffe),
     ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.js"),
-    ZU_TIMER: relativ(datei, "src/utils/timer.js"),
+    ZU_TIMER: relativ(datei, "src/utils/timer.ts"),
   };
   return { datei, inhalt: ausfuellen(FACHDATEI, werte), karte: { baustein, eingang: false } };
 }

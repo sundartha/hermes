@@ -17,7 +17,7 @@ import { KOSTENART, KOSTENPROFIL, pflichttypenFuerProfil } from "../../src/billi
 import { SIP_TRUNKING_RECORD_TYPE } from "../../src/billing/sweep-kostenbeleg.ts";
 import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";
-import { MS_PER_MINUTE } from "../../src/utils/timer.js";
+import { MS_PER_MINUTE } from "../../src/utils/timer.ts";
 
 const MIN_AGE_MINUTES = 15;
 const MAX_ATTEMPTS = 5;

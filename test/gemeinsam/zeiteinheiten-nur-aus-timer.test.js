@@ -9,8 +9,8 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REGEL = "hermes/zeiteinheiten-aus-timer";
-const ZEITMODUL = "src/utils/timer.js";
-const IMPORT = 'import { MS_PER_MINUTE } from "./utils/timer.js";\n';
+const ZEITMODUL = "src/utils/timer.ts";
+const IMPORT = 'import { MS_PER_MINUTE } from "./utils/timer.ts";\n';
 
 const eslint = new ESLint({ cwd: WURZEL });
 
@@ -54,7 +54,7 @@ for (const [name, quelltext, anzahl] of VERSTOESSE)
 const ERLAUBT = [
   ["ein Name aus timer.js als Faktor", `${IMPORT}export const a = MS_PER_MINUTE * 5;\n`],
   ["ein Name aus timer.js als Teiler", `${IMPORT}export const a = (x) => x / MS_PER_MINUTE;\n`],
-  ["der Re-Export aus timer.js", 'export { MS_PER_SECOND } from "./utils/timer.js";\n'],
+  ["der Re-Export aus timer.js", 'export { MS_PER_SECOND } from "./utils/timer.ts";\n'],
   ["ein Zeichenlimit 1000", "export const a = 1000;\n"],
   ["eine Summe mit 1000", "export const a = (x) => x + 1000;\n"],
   ["Nanosekunden und Geld 1_000_000", "export const a = (x) => x * 1_000_000;\n"],
@@ -91,6 +91,6 @@ test("Zeiteinheiten-Regel: keine Bestandsliste und keine Unterdrückung für die
 
 test("Zeiteinheiten-Regel: unter src/ steht außer timer.js und wing-canvas-engine.js keine Rohzahl und keine Kopie", () => {
   const muster = String.raw`\bMS_PER_(SECOND|MINUTE|HOUR|DAY)\s*=|[*/]\s*1000\b(?![_.\d])|\b60_?000\b|\b3_?600_?000\b|\b86_?400_?000\b`;
-  const treffer = gitGrep("-nP", muster, "--", "src/*.js", ":!src/utils/timer.js", ":!src/ui/wing-canvas-engine.js");
+  const treffer = gitGrep("-nP", muster, "--", "src/*.js", ":!src/utils/timer.ts", ":!src/ui/wing-canvas-engine.js");
   assert.equal(treffer, "");
 });

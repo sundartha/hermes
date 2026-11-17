@@ -1,6 +1,6 @@
 import { SWEEP_TRIGGER } from "./billing/cost-truing.ts";
 import { starteFristenTakt as starteFristenTaktMitUhr } from "./telephony/fristen-lauf.ts";
-import { MS_PER_MINUTE } from "./utils/timer.js";
+import { MS_PER_MINUTE } from "./utils/timer.ts";
 
 const MINUTES_PER_HOUR = 60;
 const RETENTION_SWEEP_INTERVAL_HOURS = 6;

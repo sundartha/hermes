@@ -16,7 +16,7 @@ import {
   LIST_CALLS_DESCRIPTION,
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps, maskedTranscript } from "./anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;

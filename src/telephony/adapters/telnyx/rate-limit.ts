@@ -1,4 +1,4 @@
-import { MS_PER_MINUTE } from "../../../utils/timer.js";
+import { MS_PER_MINUTE } from "../../../utils/timer.ts";
 
 const MINUTE_WINDOW_MS = MS_PER_MINUTE;
 

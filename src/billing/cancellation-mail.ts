@@ -1,6 +1,6 @@
 import { findPlan } from "../plans.ts";
 import { speicherBereiche } from "../store.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 import { fehlerText } from "../utils/fehler-text.ts";
 
 const AUDIT_ACTION = Object.freeze({

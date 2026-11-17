@@ -21,7 +21,7 @@ import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { HTTP_SERVER_ERROR } from "../utils/http.ts";
-import { MS_PER_HOUR } from "../utils/timer.js";
+import { MS_PER_HOUR } from "../utils/timer.ts";
 import { stripeBilling } from "../billing/stripe.ts";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.ts";
 import { config as globaleConfig, isSelfServiceLive } from "../config.js";

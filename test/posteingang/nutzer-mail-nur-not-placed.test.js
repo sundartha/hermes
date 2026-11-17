@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { MS_PER_MINUTE } from "../../src/utils/timer.js";
+import { MS_PER_MINUTE } from "../../src/utils/timer.ts";
 import { seedCall } from "../helpers.js";
 
 const TARGET = "+12025550143";

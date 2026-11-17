@@ -1,5 +1,5 @@
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../llm/provider.ts";
-import { MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 

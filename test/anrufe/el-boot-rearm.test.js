@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   ERROR_ENVELOPES,

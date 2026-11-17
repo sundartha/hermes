@@ -1,4 +1,4 @@
-import { MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MAX_MS = MS_PER_MINUTE;
 const WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MIN_MS = 100;

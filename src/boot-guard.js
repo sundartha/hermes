@@ -5,7 +5,7 @@ import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.ts";
 import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
 import { normalisierterOrigin } from "./middleware.ts";
-import { MS_PER_DAY } from "./utils/timer.js";
+import { MS_PER_DAY } from "./utils/timer.ts";
 
 export async function guardedBoot(label, fn) {
   try {
