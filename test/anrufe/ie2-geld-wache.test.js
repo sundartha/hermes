@@ -667,3 +667,19 @@ test("Neustart: ein Lesefehler bricht das Wiederherstellen ab, es laeuft kein An
   assert.deepEqual(harness.budgetTimers, []);
   assert.deepEqual(harness.capTimers, []);
 });
+
+test("Neustart: ohne aktiven Anruf schreibt die Geld-Wache keine Re-Arm-Zeile", async (t) => {
+  const harness = neustartHarness(() => async () => []);
+  const zeilen = [];
+  t.mock.method(console, "log", (...args) => {
+    zeilen.push(args.join(" "));
+  });
+  await mitErfasstenFristenUndFehlern(harness, async () => {
+    await harness.lifecycle.rearmBudgetWatchdogs();
+  });
+  assert.deepEqual(
+    zeilen.filter((zeile) => zeile.includes("Boot-Re-Arm der Geld-Wache")),
+    [],
+  );
+  assert.deepEqual(harness.budgetTimers, []);
+});
