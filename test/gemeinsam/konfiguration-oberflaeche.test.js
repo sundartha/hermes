@@ -211,7 +211,6 @@ voice.elevenLabsTenantTokenRequired
 voice.elevenLabsToolToken
 voice.inboundOwnerGreetingEnabled
 voice.inboundOwnerGreetingTenantIds
-voice.maxEmptyTurns
 voice.ownerSelfCallEnabled
 voice.ownerSelfCallTenantIds
 voice.sendSmsSummary

@@ -107,7 +107,6 @@ export function rohwerteVoice(env, helfer, standardSttProfile) {
       fallback: 2,
       min: 1,
     }),
-    maxEmptyTurns: numEnv("MAX_EMPTY_TURNS", env.MAX_EMPTY_TURNS, { fallback: 3, min: 2 }),
     callerSubstanceMinLen: numEnv("CALLER_SUBSTANCE_MIN_LEN", env.CALLER_SUBSTANCE_MIN_LEN, {
       fallback: 2,
       min: 1,
