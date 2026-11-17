@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { blockingBudgetAxis } from "../budget-gate.js";
+import { blockingBudgetAxisFrisch } from "../budget-gate.js";
 import { consultAllowedForCall } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
@@ -199,7 +199,11 @@ async function handleLookup(req, res, { store, config }) {
       callId: call.id,
     });
 
-  const budgetAxis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
+  const budgetAxis = await blockingBudgetAxisFrisch({
+    store,
+    billing: config.billing,
+    tenantId: call.tenantId,
+  });
   if (budgetAxis)
     return toolDenied({
       res,
@@ -270,7 +274,7 @@ export function makeElevenLabsWebhookRoutes({
         callId: call.id,
       });
 
-    const budgetAxis = blockingBudgetAxis({
+    const budgetAxis = await blockingBudgetAxisFrisch({
       store,
       billing: config.billing,
       tenantId: call.tenantId,

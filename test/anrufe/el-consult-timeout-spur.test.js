@@ -97,6 +97,8 @@ function storeDouble({ callId, conversationId, zustellenNachMs = null, quittiere
     timeOutStagedConsult: (id, input) => ops.timeOutStagedConsult(state, id, input),
     resolveProfile: () => ({ allowConsult: true }),
     activeCallsFor: () => [],
+    activeCallsForSql: async () => [],
+    nutzungAuffrischen: async () => true,
     liveBudgetExceeded: () => false,
   };
   return { state, store, cleanup: () => timers.forEach(clearTimeout) };
