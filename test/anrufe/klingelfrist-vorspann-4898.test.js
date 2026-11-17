@@ -39,8 +39,10 @@ afterEach(async () => {
   await umgebung.attrappe.close();
 });
 
-const anrufIn = (callId) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === callId);
-const fristFertig = () => waitUntil(() => umgebung.srv.stdout.includes("klingelfrist-fertig"), { timeoutMs: WARTE_FRIST_MS });
+const ausgabe = () => umgebung.srv.stdout;
+const anrufe = () => umgebung.srv.readStore().calls;
+const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
+const fristFertig = () => waitUntil(() => ausgabe().includes("klingelfrist-fertig"), { timeoutMs: WARTE_FRIST_MS });
 const calleeAufgelegt = (callId) => umgebung.attrappe.pfade.some((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup"));
 
 test("4898 K1: wird das Vorspann-Bein nie abgehoben und kommt kein Webhook, ist der Anruf nach der Frist failed/no-answer und das Bein aufgelegt", async () => {
@@ -64,7 +66,7 @@ test("4898 K3: die gestellte Frist ist genau 75000 ms und wird einmal gestellt",
   await legeAnruf(umgebung.srv, neueAnrufNummer(1));
   await fristFertig();
 
-  assert.equal(umgebung.srv.stdout.match(/klingelfrist-gestellt ms=75000/g).length, 1);
+  assert.equal(ausgabe().match(/klingelfrist-gestellt ms=75000/g).length, 1);
 });
 
 test("4898 K4: nach dem Abheben aendert der Ablauf der Frist nichts, der Anruf bleibt aktiv und das Bein wird nicht aufgelegt", async () => {
