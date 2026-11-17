@@ -86,3 +86,16 @@ test("Geld-Frist schreiben im JSON-Speicher: setzt die Frist eines aktiven Anruf
   assert.equal(speicher.getCall(beendet).fristGeldAt, undefined);
   await speicher.setzeGeldFrist({ callId: "call_gibt_es_nicht", tenantId: A, faelligAt });
 });
+
+test("Geld-Frist schreiben im JSON-Speicher: trifft nur den genannten Anruf, ein anderer aktiver bleibt unveraendert", async () => {
+  const erster = anruf(A, { geld: -MINUTE_MS });
+  const zweiter = anruf(A, { geld: -MINUTE_MS });
+  speicher.getCall(erster).fristGeldVersuche = 2;
+  speicher.getCall(zweiter).fristGeldVersuche = 2;
+  const faelligAt = "2032-01-02T03:04:05.000Z";
+  await speicher.setzeGeldFrist({ callId: zweiter, tenantId: A, faelligAt });
+  assert.equal(speicher.getCall(zweiter).fristGeldAt, faelligAt);
+  assert.equal(speicher.getCall(zweiter).fristGeldVersuche, 0);
+  assert.equal(speicher.getCall(erster).fristGeldAt, new Date(JETZT - MINUTE_MS).toISOString());
+  assert.equal(speicher.getCall(erster).fristGeldVersuche, 2);
+});

@@ -15,4 +15,6 @@ test("Kriterium 3: ist die Geld-Wache abgeschaltet (BUDGET_WATCHDOG_INTERVAL_MS=
   await waitUntil(() => store.getCall(spaeter)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   assert.equal(store.getCall(ueberDecke).status, "active");
   assert.equal(store.getCall(ueberDecke).failureReason, null);
+  const geholt = await store.faelligeFristen({ art: "geld", limitJeMandant: 10, leaseMs: 1000 });
+  assert.equal(geholt.find((treffer) => treffer.callId === ueberDecke)?.versuche, 1);
 });

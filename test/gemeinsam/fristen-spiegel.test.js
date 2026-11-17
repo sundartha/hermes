@@ -72,3 +72,12 @@ test("Fristen im JSON-Speicher: bei gleicher Frist kommt die kleinere Anruf-ID z
   const treffer = (await speicher.faelligeFristen({ ...ANFRAGE, limitJeMandant: 1 })).filter((eintrag) => [erster, zweiter].includes(eintrag.callId));
   assert.deepEqual(ids(treffer), [[erster, zweiter].sort()[0]]);
 });
+
+test("Fristen im JSON-Speicher: die Hoechstdauer zaehlt ihre Versuche im Feld fristVersuche und laesst fristGeldVersuche unberuehrt", async () => {
+  const id = anruf(A);
+  await speicher.faelligeFristen(ANFRAGE);
+  assert.equal(speicher.getCall(id).fristVersuche, 1);
+  await speicher.faelligeFristen({ ...ANFRAGE, jetztMs: JETZT + LEASE_MS });
+  assert.equal(speicher.getCall(id).fristVersuche, 2);
+  assert.equal(speicher.getCall(id).fristGeldVersuche, undefined);
+});
