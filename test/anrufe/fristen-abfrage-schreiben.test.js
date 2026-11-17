@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { POLL_MS, baueElMitStore } from "../_iel-inbound-harness.js";
 import { withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "../fixtures/elevenlabs-conversations.js";
 
-const POLL_MS = 5000;
 const UEBERNAHME_MS = 30_000;
 const JETZT_MS = Date.parse("2031-03-04T05:06:07.000Z");
 const ANRUF = "call_abfrage_schreiben";
@@ -60,13 +57,7 @@ function betrieb({ schreibenScheitert = false } = {}) {
       geschrieben.push(frist);
     },
   };
-  const el = makeElevenLabsOutbound({
-    store,
-    config: withConfigNamespaces({ elevenLabsOutbound: { apiKey: "test-key", apiBase: "https://el.test", resultPollMs: POLL_MS } }),
-    terminateAndBillCall,
-    billThunk: () => () => {},
-    finishCall: () => {},
-  });
+  const el = baueElMitStore(store);
   return { call, geschrieben, el, store };
 }
 
