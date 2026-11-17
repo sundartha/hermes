@@ -6,13 +6,14 @@ import { geldBootJsonStarten } from "./geld-boot-json-aufbau.mjs";
 const EL_BASIS = "https://el.abfrage-boot-json.invalid";
 const KONVERSATION = "conv_abfrage_boot_json";
 const MINUTE_MS = 60_000;
-const FRIST_MS = 120_000 + 30_000;
+const POLL_MS = 1500;
+const FRIST_MS = 120_000 + POLL_MS + 30_000;
 const MANDANT = "t_geld_boot_json";
 
 const { store } = await geldBootJsonStarten({
   ELEVENLABS_API_KEY: "el-abfrage-boot-json",
   ELEVENLABS_API_BASE: EL_BASIS,
-  ELEVENLABS_RESULT_POLL_MS: "1500",
+  ELEVENLABS_RESULT_POLL_MS: String(POLL_MS),
 });
 
 const abrufe = [];
