@@ -29,3 +29,8 @@ export const uhr = {
     zeile(`WARTE ${ms}`);
   },
 };
+
+anrufer.offeneBeenden = async () => {
+  zeile("AUFGELEGT");
+  return FALL.offene ?? 0;
+};
