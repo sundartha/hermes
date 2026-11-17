@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import zeitgeber from "node:timers/promises";
 import { normNum } from "../begriffe/rufnummern.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
@@ -35,6 +36,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
 const RUNNING_DOCUMENT_UNTOUCHED = [];
@@ -44,19 +46,27 @@ function repeatDeliveryXml(call, deps) {
   return deps.render(RUNNING_DOCUMENT_UNTOUCHED, call.provider);
 }
 
+const queryText = (wert) => z.string().catch("").parse(wert);
+
+const VOICE_KOERPER = z.object({
+  To: z.string().optional().catch(undefined),
+  From: z.string().min(1).catch("unbekannt"),
+  CallSid: z.string().optional().catch(undefined),
+});
+
 const STATUS_LOG_PREFIX = "[voice/status]";
 const STATUS_WIEDERANBINDUNG_VERSUCHE = 3;
 const STATUS_WIEDERANBINDUNG_ABSTAND_MS = 500;
 
 async function wiederanbindenMitWiederholung(callId, lifecycle) {
-  let reattached;
+  let reattached = await lifecycle.reattachActiveCall(callId);
   for (let versuch = 1; versuch <= STATUS_WIEDERANBINDUNG_VERSUCHE; versuch += 1) {
-    reattached = await lifecycle.reattachActiveCall(callId);
     if (!reattached.fehlgeschlagen) return reattached;
     console.error(
-      `${STATUS_LOG_PREFIX} Wiederanbindung fehlgeschlagen (callId=${callId}, versuch=${versuch}/${STATUS_WIEDERANBINDUNG_VERSUCHE})`,
+      `${STATUS_LOG_PREFIX} Wiederanbindung fehlgeschlagen (callId=${callId}, versuch=${String(versuch)}/${String(STATUS_WIEDERANBINDUNG_VERSUCHE)})`,
     );
     await sleep(STATUS_WIEDERANBINDUNG_ABSTAND_MS);
+    if (versuch < STATUS_WIEDERANBINDUNG_VERSUCHE) reattached = await lifecycle.reattachActiveCall(callId);
   }
   console.error(`${STATUS_LOG_PREFIX} Statusereignis verworfen (callId=${callId})`);
   return reattached;
@@ -67,7 +77,7 @@ function statusLifecycleFuer(call, lifecycle) {
   return {
     reattachActiveCall: (id) =>
       Promise.resolve(lifecycle.reattachActiveCall(id)).catch((err) => {
-        console.error(`${STATUS_LOG_PREFIX} Wiederanbindung abgelehnt (callId=${id}): ${err.message}`);
+        console.error(`${STATUS_LOG_PREFIX} Wiederanbindung abgelehnt (callId=${id}): ${fehlerText(err)}`);
         throw err;
       }),
   };
@@ -137,7 +147,7 @@ const hierBewacht = (store, call) => call?.status === "active" && store.anrufHie
 
 const brauchtWiederanbindung = (store, call) => !call || (call.status === "active" && !hierBewacht(store, call));
 
-const wiederanbindungsKennung = (req, call) => req.query.callId || call?.id;
+const wiederanbindungsKennung = (req, call) => queryText(req.query.callId) || call?.id;
 
 async function wiederanbinden({ store, lifecycle }, call, callId) {
   if (hierBewacht(store, call)) return { call };
@@ -200,7 +210,7 @@ async function vermerkeNachFehlerBestEffort({ call, nowMs, weg }, deps) {
   try {
     await vermerke({ call, nowMs }, deps);
   } catch (err) {
-    console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", err.message);
+    console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", fehlerText(err));
   }
 }
 
@@ -248,7 +258,7 @@ const rueckfallWegFuer = (call) => (istOutboundElProfil(call) ? AUSGEHENDER_RUEC
 async function antworteAufElRueckfall(req, res, deps) {
   let call = null;
   try {
-    call = await aktiverCallFuer(req.query.callId || "", deps);
+    call = await aktiverCallFuer(queryText(req.query.callId), deps);
     const nowMs = Date.now();
     const weg = rueckfallWegFuer(call);
     const entscheidung = weg.entscheide({ call, nowMs });
@@ -256,14 +266,14 @@ async function antworteAufElRueckfall(req, res, deps) {
       EL_RUECKFALL_LOG_PREFIX,
       JSON.stringify({
         callId: call?.id ?? null,
-        quelle: rueckfallQuelleFuerLog(req.query.quelle),
+        quelle: rueckfallQuelleFuerLog(queryText(req.query.quelle)),
         entscheidung,
         ms_seit_bindung: msSeitBindung(call, nowMs),
       }),
     );
     await weg.antworten[entscheidung]({ res, call, nowMs }, deps);
   } catch (err) {
-    console.error(EL_RUECKFALL_LOG_PREFIX, err.message);
+    console.error(EL_RUECKFALL_LOG_PREFIX, fehlerText(err));
     const weg = rueckfallWegFuer(call);
     await vermerkeNachFehlerBestEffort({ call, nowMs: Date.now(), weg }, deps);
     weg.antworteNachFehler({ res, call }, deps);
@@ -282,7 +292,7 @@ async function lesenMitFehler(lesen, callId, logPrefix) {
   try {
     return { call: await lesen(callId) };
   } catch (err) {
-    console.error(logPrefix, `Anruf lesen fehlgeschlagen (callId=${callId || "-"}):`, err.message);
+    console.error(logPrefix, `Anruf lesen fehlgeschlagen (callId=${callId || "-"}):`, fehlerText(err));
     return { fehler: true };
   }
 }
@@ -295,15 +305,15 @@ const leseCallUngebundenBestEffort = async (store, callId, logPrefix) =>
   (await lesenMitFehler((id) => leseCallUngebunden(store, id), callId, logPrefix)).call;
 
 const statusCallFinden = (req, store) => {
-  const gespiegelt = store.getCall(req.body.CallSid);
-  return gespiegelt ? { call: gespiegelt } : leseCallMitFehler(store, req.query.callId || "", STATUS_LOG_PREFIX);
+  const gespiegelt = store.getCall(VOICE_KOERPER.parse(req.body).CallSid);
+  return gespiegelt ? { call: gespiegelt } : leseCallMitFehler(store, queryText(req.query.callId), STATUS_LOG_PREFIX);
 };
 
 async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   res.sendStatus(HTTP_OK);
-  const callId = req.query.callId || "";
+  const callId = queryText(req.query.callId);
   const gespiegelt = store.getCall(callId);
-  const call = gespiegelt || (await leseCallUngebundenBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
+  const call = gespiegelt ?? (await leseCallUngebundenBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
@@ -313,11 +323,11 @@ async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }
 
 async function antworteAufVorspannEreignis(req, res, { store, config, webhookEvents, vorspannAblauf }) {
   res.sendStatus(HTTP_OK);
-  const call = await leseCallBestEffort(store, req.query.callId || "", VORSPANN_LOG_PREFIX);
+  const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
   if (!call) return;
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
-  void vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  await vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
 }
 
 function ownerTonFuer({ from, tenantId }, { store, config }) {
@@ -391,27 +401,34 @@ export function makeVoiceRoutes({
   router.get("/voice/tts/:token", async (req, res) => {
     try {
       const audio = await ttsStore.takeOnce(req.params.token);
-      if (!audio) return res.status(HTTP_NOT_FOUND).end();
+      if (!audio) {
+        res.status(HTTP_NOT_FOUND).end();
+        return;
+      }
       res.type(audio.contentType).send(audio.bytes);
     } catch (err) {
-      console.error("[voice/tts]", err.message);
+      console.error("[voice/tts]", fehlerText(err));
       res.status(HTTP_NOT_FOUND).end();
     }
   });
 
   router.use("/voice", (req, res, next) => {
-    if (config.safety.skipTwilioSignatureCheck) return next();
+    if (config.safety.skipTwilioSignatureCheck) {
+      next();
+      return;
+    }
     const ok = inboundSignatureVerifier().verifyInboundSignature({
       headers: req.headers,
       rawBody: req.rawBody,
       url: config.server.publicUrl + req.originalUrl,
-      params: req.body || {},
+      params: req.body ?? {},
     });
     if (!ok) {
       console.warn(
-        `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) || "unknown"})`,
+        `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) ?? "unknown"})`,
       );
-      return res.status(HTTP_FORBIDDEN).send("invalid inbound signature");
+      res.status(HTTP_FORBIDDEN).send("invalid inbound signature");
+      return;
     }
     next();
   });
@@ -420,49 +437,50 @@ export function makeVoiceRoutes({
     const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
     let call;
     try {
-      const to = normNum(req.body.To);
+      const body = VOICE_KOERPER.parse(req.body);
+      const to = normNum(body.To);
       const numberRecord = await bereiche.anrufe.numberRecordByE164(to);
       if (!numberRecord) {
         audit("inbound_unrouted", req, `to=${to || "-"}`);
-        return res
-          .type("text/xml")
-          .send(
-            render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhören."), hangupD()], provider),
-          );
+        res.type("text/xml").send(render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhören."), hangupD()], provider));
+        return;
       }
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
       const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 
-      if (store.budgetExceeded(tenantId, config.billing))
-        return sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);
+      if (store.budgetExceeded(tenantId, config.billing)) {
+        sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);
+        return;
+      }
 
       const pfad = inboundPfadFuer({ config, tenantId, numberRecord });
       const inboundLeg = {
         direction: "inbound",
-        from: req.body.From || "unbekannt",
+        from: body.From,
         to,
-        twilioSid: req.body.CallSid,
+        twilioSid: body.CallSid,
         tenantId,
         provider,
         language,
         costProfile: pfad.kostenprofil,
       };
       const maxDurationS = brakeSecondsFor(inboundLeg);
-      call = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
-      store.leitungsplaetze.belegenEingehend({ callId: call.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
-      const abheben = Promise.resolve(store.markAnswered(call.id));
-      const abgehobenUm = call.answeredAt;
+      const angelegt = erzeugeInboundCall({ leg: inboundLeg, maxDurationS }, voiceDeps);
+      call = angelegt;
+      store.leitungsplaetze.belegenEingehend({ callId: angelegt.id, tenantId, weg: pfad.weg, maxDauerS: maxDurationS });
+      const abheben = Promise.resolve(store.markAnswered(angelegt.id));
+      const abgehobenUm = angelegt.answeredAt;
       abheben.catch((fehler) => {
-        call.answeredAt = abgehobenUm;
-        console.error(ABHEBEN_LOG_PREFIX, call.id, fehler?.message ?? fehler);
+        angelegt.answeredAt = abgehobenUm;
+        console.error(ABHEBEN_LOG_PREFIX, angelegt.id, fehlerText(fehler));
       });
-      lifecycle.armMaxDurationTimer(call, req.body.CallSid);
-      await bereiche.einstellungen.recordCostProfile(call.id, pfad.kostenprofil);
-      await pfad.antworte({ res, call, locale }, voiceDeps);
+      lifecycle.armMaxDurationTimer(angelegt, body.CallSid);
+      await bereiche.einstellungen.recordCostProfile(angelegt.id, pfad.kostenprofil);
+      await pfad.antworte({ res, call: angelegt, locale }, voiceDeps);
     } catch (err) {
-      console.error("[incoming]", err.message);
+      console.error("[incoming]", fehlerText(err));
       await sendTechnischesEnde({ res, call, provider }, voiceDeps);
     }
   });
@@ -498,10 +516,15 @@ export function makeVoiceRoutes({
       "[voice/status]",
       JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
     );
-    if (ANGENOMMEN_STATUS.includes(callStatus))
-      return void (await store.markAnswered(call.id));
+    if (ANGENOMMEN_STATUS.includes(callStatus)) {
+      await store.markAnswered(call.id);
+      return;
+    }
     if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) return void startInboundNachlauf(call.id);
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) {
+      await startInboundNachlauf(call.id);
+      return;
+    }
     const endeSchreiben = async () => {
       if (call.status === "active")
         await store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
