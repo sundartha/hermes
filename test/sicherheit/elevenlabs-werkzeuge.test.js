@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { ELEVENLABS_CONSULT_PATH } from "../../src/routes/webhooks-elevenlabs.js";
+import { ELEVENLABS_CONSULT_PATH } from "../../src/routes/webhooks-elevenlabs.ts";
 import { seedCall, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   ELEVENLABS_CONSULT_PATH,
   ELEVENLABS_LOOKUP_PATH,
-} from "../../src/routes/webhooks-elevenlabs.js";
+} from "../../src/routes/webhooks-elevenlabs.ts";
 
 const VORLAGE = JSON.parse(
   readFileSync(

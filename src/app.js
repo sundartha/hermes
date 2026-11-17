@@ -21,7 +21,7 @@ import {
 import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.ts";
 import { stripeBilling } from "./billing/stripe.ts";
 import { makeVoiceRoutes } from "./routes/voice.js";
-import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
+import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.ts";
 import {
   INIT_FEHLVERSUCHE_PRO_MIN,
   initTokenSchranke,

@@ -319,7 +319,7 @@
         "src/turn-budget.ts",
         "src/routes/voice.js",
         "src/routes/webhooks-elevenlabs-init.ts",
-        "src/routes/webhooks-elevenlabs.js",
+        "src/routes/webhooks-elevenlabs.ts",
         "src/routes/api-calls.js",
         "src/routes/api-read.ts",
         "src/routes/_call-request.ts"
