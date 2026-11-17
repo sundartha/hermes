@@ -15,7 +15,7 @@ import {
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
-import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { telnyxWebhookEvents } from "../../src/telephony/adapters/telnyx/webhook-events.js";

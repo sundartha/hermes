@@ -33,7 +33,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`.
    Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
    `SKIP_TWILIO_SIGNATURE_CHECK` bleibt trotz des Namens: der Schalter ist der **globale**
-   `/voice`-Bypass (`routes/voice.js`), kein Twilio-Schalter, und `boot-guard.js` haengt daran.
+   `/voice`-Bypass (`routes/voice.ts`), kein Twilio-Schalter, und `boot-guard.js` haengt daran.
    Ein Rename ist eine eigene Entscheidung.
    **Owner-Entscheidung 2026-07-30 (E10): `MAX_BUDGET_EUR` ist KEIN geschuetztes Gate mehr.**
    Die pro-Tenant-Kostendecke sperrt weiterhin BEIDE Richtungen, Inbound eingeschlossen.

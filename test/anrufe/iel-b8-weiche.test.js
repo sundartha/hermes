@@ -22,7 +22,7 @@ import {
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { LOCALES } from "../../src/i18n/locales.js";
-import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
@@ -143,7 +143,7 @@ test("IEL-B8-8: INBOUND_PATH.ELEVENLABS und seine eine Sonden-Zeile", async () =
   assert.deepEqual(zeilen, ['[inbound-path] inbound_path {"callId":"c","path":"elevenlabs"}']);
 });
 
-test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-Schreiber je genau EINE Lesestelle, sonst nur config und Praedikat", () => {
+test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.ts und im Inbound-Trunk-Schreiber je genau EINE Lesestelle, sonst nur config und Praedikat", () => {
   const vorkommen = quelltexteUnter("src")
     .map(([datei, inhalt]) => [datei, inhalt.split("sipPassword").length - EINMAL])
     .filter(([, anzahl]) => anzahl > 0);
@@ -153,9 +153,9 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-S
     "src/elevenlabs/inbound-path-decision.ts",
     "src/elevenlabs/inbound-trunk-beleg.ts",
     "src/elevenlabs/nummern-registrierung.js",
-    "src/routes/voice.js",
+    "src/routes/voice.ts",
   ]);
-  assert.equal(dateien["src/routes/voice.js"], EINMAL);
+  assert.equal(dateien["src/routes/voice.ts"], EINMAL);
   assert.equal(dateien["src/elevenlabs/nummern-registrierung.js"], EINMAL);
   assert.equal(dateien["src/elevenlabs/inbound-trunk-beleg.ts"], EINMAL);
 });
