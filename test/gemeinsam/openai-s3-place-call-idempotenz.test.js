@@ -222,7 +222,7 @@ function testConfig(overrides = {}) {
 async function postCallTeilB({ store, config, audit = () => {} }) {
   let wahlversuche = 0;
   const { makeOutboundGates } = await import("../../src/telephony/outbound-gates.js");
-  const { makeCallRoutes } = await import("../../src/routes/api-calls.js");
+  const { makeCallRoutes } = await import("../../src/routes/api-calls.ts");
   const { gates: outboundGates, callQuotaDenial } = makeOutboundGates({
     store,
     config,

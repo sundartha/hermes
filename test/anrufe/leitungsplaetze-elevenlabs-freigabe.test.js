@@ -3,7 +3,7 @@ import test from "node:test";
 
 import express from "express";
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
