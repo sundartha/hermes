@@ -1,11 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { gebauteKonfiguration } from "./gebaute-konfiguration.js";
+import { execFileSync } from "node:child_process";
+import { kindUmgebung } from "./kind-umgebung.mjs";
+import { BASE_ENV, ROOT } from "../helpers.js";
 
-const FELDER = ["safety.fristenTaktMs", "safety.fristenLimitJeMandant"];
+const SKRIPT = [
+  'import("./src/config.js").then(({ fristenEinstellungen }) =>',
+  "  process.stdout.write(JSON.stringify(fristenEinstellungen)));",
+].join("\n");
+
 function pruefe(env, takt, limit) {
-  const gebaut = gebauteKonfiguration(env, FELDER);
-  assert.deepEqual(gebaut, { "safety.fristenTaktMs": takt, "safety.fristenLimitJeMandant": limit });
+  const ausgabe = execFileSync(process.execPath, ["--input-type=module", "-e", SKRIPT], {
+    cwd: ROOT,
+    env: kindUmgebung({ ...BASE_ENV, NODE_ENV: "test", ...env }),
+    encoding: "utf8",
+  });
+  assert.deepEqual(JSON.parse(ausgabe), { fristenTaktMs: takt, fristenLimitJeMandant: limit });
 }
 
 test("Fristen-Einstellungen: ohne Angabe gelten Takt 15000 ms und Limit 20", () => {
