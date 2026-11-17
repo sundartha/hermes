@@ -427,13 +427,35 @@ async function actionZeit(name, stand) {
   return Date.parse(release) < Date.parse(commit) ? commit : (release ?? commit);
 }
 
-function behebtAdvisory({ withdrawn_at: zurueckgezogen, vulnerabilities }, name, neu) {
-  return zurueckgezogen === null && vulnerabilities.some(({ package: paket, first_patched_version: fix }) => paket.ecosystem === NPM && paket.name === name && fix === neu);
+const SPANNEN_GRENZE = /^(<=|>=|<|>|=)?\s*(\d+(?:\.\d+)*)/;
+const SPANNEN_PRUEFUNG = {
+  "<": (unterschied) => unterschied < 0,
+  "<=": (unterschied) => unterschied <= 0,
+  ">": (unterschied) => unterschied > 0,
+  ">=": (unterschied) => unterschied >= 0,
+  "=": (unterschied) => unterschied === 0,
+};
+
+function versionsUnterschied(links, rechts) {
+  const [vorne, hinten] = [links, rechts].map((version) => version.split(".").map(Number));
+  const stelle = [...vorne.keys(), ...hinten.keys()].find((i) => (vorne[i] ?? 0) !== (hinten[i] ?? 0));
+  return stelle === undefined ? 0 : (vorne[stelle] ?? 0) - (hinten[stelle] ?? 0);
+}
+
+function liegtInSpanne(version, spanne) {
+  return spanne.split(",").every((teil) => {
+    const [, vergleich = "=", grenze] = SPANNEN_GRENZE.exec(teil.trim());
+    return SPANNEN_PRUEFUNG[vergleich](versionsUnterschied(version, grenze));
+  });
+}
+
+function behebtAdvisory({ withdrawn_at: zurueckgezogen, vulnerabilities }, { name, alt, neu }) {
+  return zurueckgezogen === null && vulnerabilities.some(({ package: paket, first_patched_version: fix, vulnerable_version_range: spanne }) => paket.ecosystem === NPM && paket.name === name && fix === neu && (spanne === undefined || liegtInSpanne(alt, spanne)));
 }
 
 async function ersterFix({ oekosystem, name, alt, neu }) {
   if (oekosystem !== NPM) return false;
-  return (await gepruefteAdvisories(`${name}@${alt}`)).some((advisory) => behebtAdvisory(advisory, name, neu));
+  return (await gepruefteAdvisories(`${name}@${alt}`)).some((advisory) => behebtAdvisory(advisory, { name, alt, neu }));
 }
 
 export function echteQuellen(pull, gruppenKopf) {
