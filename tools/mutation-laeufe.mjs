@@ -162,7 +162,7 @@ export function prueferEingabeBauen(roh) {
 const NODE_RELEASES = "https://nodejs.org/dist/index.json";
 const NODE_LISTE_FRIST_MS = 30_000;
 const LTS_WARTE_TAGE = 14;
-const NPM_ALTER_TAGE = 8;
+const NPM_ALTER_TAGE = 14;
 const TAG_MS = 86_400_000;
 const ISO_TAG_LAENGE = 10;
 export const NODE_LABEL = "node-hauptversion";
