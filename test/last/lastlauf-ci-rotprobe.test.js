@@ -65,6 +65,27 @@ test("H2b CI: Sammel-Job nimmt den Lastlauf in der Merge-Queue mit, am Pull Requ
   assert.match(job, /\.key != "lastlauf"/);
 });
 
+test("A-2EYPUM CI: jeder Job hat ein Zeitlimit auf Job-Ebene", () => {
+  const ZEITLIMIT = {
+    pruefungen: 15,
+    semgrep: 10,
+    tests: 20,
+    webtests: 10,
+    rotprobe: 10,
+    abdeckung: 20,
+    mutation: 30,
+    lastlauf: 30,
+    codeql: 20,
+    ci: 5,
+  };
+  const jobBlock = CI.slice(CI.indexOf("\njobs:"));
+  const namen = [...jobBlock.matchAll(/^ {2}([a-z]+):\n/gm)].map((treffer) => treffer[1]);
+  assert.deepEqual(namen.sort(), Object.keys(ZEITLIMIT).sort());
+  for (const [name, minuten] of Object.entries(ZEITLIMIT)) {
+    assert.match(jobText(name), new RegExp(`^ {4}timeout-minutes: ${minuten}$`, "m"), name);
+  }
+});
+
 test("H2b Treiber: unbekannte Rotprobe-Art bricht ab, bevor eine Umgebung startet", async () => {
   let gestartet = 0;
   const starte = async () => void (gestartet += 1);
