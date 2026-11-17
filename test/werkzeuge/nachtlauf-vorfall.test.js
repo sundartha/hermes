@@ -118,5 +118,5 @@ test("Workflow: das Secret geht nur in den Schritt „Roten Nachtlauf melden“,
     WORKFLOW,
     /- name: Roten Nachtlauf melden\n {8}if: failure\(\) && github\.event_name == 'schedule'\n {8}env:\n {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}\n {10}BETTER_STACK_ALERT_URL: \$\{\{ secrets\.BETTER_STACK_ALERT_URL \}\}\n/,
   );
-  assert.equal(WORKFLOW.match(/BETTER_STACK_ALERT_URL/g).length, 2);
+  assert.equal(WORKFLOW.match(/BETTER_STACK_ALERT_URL/g).length, 4);
 });
