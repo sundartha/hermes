@@ -21,9 +21,24 @@ process.stdout.write("bereit\\n");
 const [aktion, anfrage] = [process.argv[1], JSON.parse(process.argv[2])];
 await new Promise((weiter) => process.stdin.once("data", weiter));
 if (process.argv[3] === "verworfen") await speicher.pruefeVerbindung().catch(() => {});
+const frei = [];
+if (process.argv[3] === "erschoepft") {
+  const belegt = [1, 2, 3, 4, 5, 6].map((routine) => new Promise((belegtMeldung) => {
+    speicher.mitStartSperre(routine, () => new Promise((loesen) => { frei.push(loesen); belegtMeldung(); }));
+  }));
+  await Promise.all(belegt);
+  setTimeout(() => frei[0](), ${LEITUNGSPLATZ_DB_FRIST_MS + 1000});
+}
 const beginn = Date.now();
 const ergebnis = await speicher.leitungsplaetze[aktion](anfrage);
-process.stdout.write(JSON.stringify({ ergebnis, dauerMs: Date.now() - beginn }) + "\\n");
+const dauerMs = Date.now() - beginn;
+if (process.argv[3] === "erschoepft") {
+  await new Promise((weiter) => setTimeout(weiter, 2000));
+  const belegung = await speicher.leitungsplaetze.belegung();
+  process.stdout.write(JSON.stringify({ ergebnis, dauerMs, belegung }) + "\\n");
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ ergebnis, dauerMs }) + "\\n");
 process.exit(0);
 `;
 
@@ -63,7 +78,7 @@ async function frageBeiEingefrorenerDatenbank(t, { aktion, anfrage, abreissen })
   const ueber = new URL(db.adresse);
   ueber.hostname = "127.0.0.1";
   ueber.port = String(weiche.port);
-  const kind = spawn(process.execPath, ["--input-type=module", "-e", KIND_SKRIPT, aktion, JSON.stringify(anfrage), abreissen ? "verworfen" : "gehalten"], {
+  const kind = spawn(process.execPath, ["--input-type=module", "-e", KIND_SKRIPT, aktion, JSON.stringify(anfrage), abreissen === "erschoepft" ? "erschoepft" : abreissen ? "verworfen" : "gehalten"], {
     env: { ...process.env, ...pgStartUmgebung(ueber.href) },
     stdio: ["pipe", "pipe", "inherit"],
   });
@@ -82,8 +97,8 @@ async function frageBeiEingefrorenerDatenbank(t, { aktion, anfrage, abreissen })
       pruefe();
     });
   await zeile(/^bereit$/);
-  weiche.einfrieren();
-  if (abreissen) weiche.abreissen();
+  if (abreissen !== "erschoepft") weiche.einfrieren();
+  if (abreissen === true) weiche.abreissen();
   kind.stdin.write("los\n");
   return JSON.parse(await zeile(/^\{/));
 }
@@ -107,3 +122,12 @@ for (const [name, abreissen] of [
     assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
   });
 }
+
+test("Pool erschoepft, Verbindung wird nach der Frist frei: anbieter_voll und kein leitungsplatz-Eintrag", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  const { ergebnis, dauerMs, belegung } = await frageBeiEingefrorenerDatenbank(t, { aktion: "belegenAusgehend", anfrage: BELEGEN, abreissen: "erschoepft" });
+  assert.deepEqual(ergebnis, { entscheidung: "anbieter_voll" });
+  assert.ok(dauerMs >= LEITUNGSPLATZ_DB_FRIST_MS - 500, `wartet bis zur Frist: ${dauerMs} ms`);
+  assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
+  assert.deepEqual(belegung.map((eintrag) => eintrag.belegt), belegung.map(() => 0));
+});
