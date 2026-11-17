@@ -120,11 +120,33 @@ test("4755: Zeilen ohne Text zaehlen nicht als Annahme", async () => {
   });
 });
 
-test("4755: ein Anruf ueber Telnyx wird von der Frist nicht beendet", async () => {
-  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, beobachteWeiterlaufend);
+const beendet = (srv) => waitForStoreState(srv, () => imStore(srv).status !== "active");
+
+test("4898 K2: ein Anruf ueber Telnyx wird von der Frist als nicht angenommen beendet", async () => {
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: TELNYX }, async (srv, attrappe) => {
+    await waitForStoreState(srv, () => imStore(srv).status !== "active" && attrappe.anfragen.includes("DELETE"));
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "no-answer");
+    assert.equal(call.answeredAt, null);
+    const sicht = await leseAnruf(srv);
+    assert.equal(sicht.status, "failed");
+    assert.equal(sicht.failureReason, "no-answer");
+  });
 });
 
-const beendet = (srv) => waitForStoreState(srv, () => imStore(srv).status !== "active");
+test("4898 K1: ein Anruf im Vorspann-Weg wird von der Frist als nicht angenommen beendet", async () => {
+  await mitAnruf({ alterS: FRIST_S * 2, gespraech: laufend(), costProfile: "telnyx_outbound_el_convai" }, async (srv) => {
+    await beendet(srv);
+
+    const call = imStore(srv);
+    assert.equal(call.status, "failed");
+    assert.equal(call.failureReason, "no-answer");
+    assert.equal(call.answeredAt, null);
+  });
+});
+
 const beendetMitGrund = (srv) => waitForStoreState(srv, () => imStore(srv).status === "failed" && Boolean(imStore(srv).failureReason));
 
 test("4755 K2: meldet der Anbieter das Gespraech mit Dauer 0 als beendet, ist der Anruf sofort failed/no-answer", async () => {
