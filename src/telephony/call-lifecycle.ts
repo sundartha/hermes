@@ -23,6 +23,8 @@ const LESE_FEHLER = "[max-duration] Anruf nicht lesbar, neuer Versuch geplant:";
 
 const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
 
+const RESERVE_FRIST_FEHLER = "[fristen] Reserve-Frist schreiben fehlgeschlagen:";
+
 const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 
 interface Call {
@@ -34,6 +36,14 @@ interface Call {
   maxDurationS?: number;
 }
 
+interface FristEintrag {
+  callId: string;
+  tenantId: string;
+  faelligAt: string;
+}
+
+type FristSchreiber = (frist: FristEintrag) => Promise<unknown>;
+
 interface Store {
   load: () => { calls: Call[]; tenants: { id: string }[] };
   getCall: (callId: string) => Call | null | undefined;
@@ -42,7 +52,8 @@ interface Store {
   setCallEndedAt: (callId: string, status: string, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
   attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
-  setzeHoechstdauerFrist?: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
+  setzeHoechstdauerFrist?: FristSchreiber;
+  setzeReserveFrist?: FristSchreiber;
 }
 
 type SetTimer = (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -106,19 +117,32 @@ interface CallLifecycle {
   terminateExpiredCall: (call: Call) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
+  releaseReserve: (call: Call) => unknown;
 }
 
 function callMaxDurationMs(call: Call): number {
   return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
 }
 
-function schreibeHoechstdauerFrist(store: Store, call: Call, ms: number): void {
+interface FristZiel {
+  schreibe: (frist: FristEintrag) => Promise<unknown> | undefined;
+  fehlerText: string;
+}
+
+function schreibeFrist({ schreibe, fehlerText }: FristZiel, call: Call, ms: number): void {
   const faelligAt = new Date(Date.now() + ms).toISOString();
-  Promise.resolve(store.setzeHoechstdauerFrist?.({ callId: call.id, tenantId: call.tenantId, faelligAt })).catch(
-    (fehler: unknown) => {
-      console.error(FRIST_FEHLER, call.id, String(fehler));
-    },
-  );
+  Promise.resolve(schreibe({ callId: call.id, tenantId: call.tenantId, faelligAt })).catch((fehler: unknown) => {
+    console.error(fehlerText, call.id, String(fehler));
+  });
+}
+
+function planeReserveFreigabe(
+  { store, releaseReserve }: Pick<CallLifecycleDeps, "store" | "releaseReserve">,
+  call: Call,
+  delayMs: number,
+): void {
+  schreibeFrist({ schreibe: (frist) => store.setzeReserveFrist?.(frist), fehlerText: RESERVE_FRIST_FEHLER }, call, delayMs);
+  setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delayMs);
 }
 
 async function loescheElKonversation(call: Call, endActiveCall: CallLifecycleDeps["endActiveCall"]): Promise<void> {
@@ -293,13 +317,12 @@ export function makeCallLifecycle({
   function armMaxDurationTimer(call: Call, providerCallSid: string): void {
     const ms = callMaxDurationMs(call);
     scheduleMaxDurationEnd(call, providerCallSid, ms);
-    schreibeHoechstdauerFrist(store, call, ms);
+    schreibeFrist({ schreibe: (frist) => store.setzeHoechstdauerFrist?.(frist), fehlerText: FRIST_FEHLER }, call, ms);
     budgetAxis.arm(call.id);
   }
 
   function armReserveReleaseTimer(call: Call): void {
-    const delay = callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs;
-    setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delay);
+    planeReserveFreigabe({ store, releaseReserve }, call, callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs);
   }
 
   async function reattachActiveCall(callId: string): Promise<ReattachResult> {
@@ -336,6 +359,7 @@ export function makeCallLifecycle({
 
   return {
     armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
-    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired, blockingAxisFor: budgetAxis.blockingAxisFor,
+    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
+    blockingAxisFor: budgetAxis.blockingAxisFor, releaseReserve,
   };
 }
