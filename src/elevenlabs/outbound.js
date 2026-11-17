@@ -559,6 +559,7 @@ export function initiationContent({
   lookupAllowed,
   tenantToken,
   eroeffnungGesagt,
+  environment,
 }) {
   const bundle = localeFor(locale.language);
   const offenlegung = localeFor(locale.disclosureLanguage);
@@ -587,6 +588,7 @@ export function initiationContent({
       openingLine,
       eroeffnungGesagt,
     }),
+    ...(environment === "production" ? {} : { environment }),
   };
 }
 
@@ -596,10 +598,7 @@ function startCallBody(anfrage) {
     agent_id: el.agentId,
     agent_phone_number_id: agentPhoneNumberId,
     to_number: call.to,
-    conversation_initiation_client_data: {
-      ...initiationContent(anfrage),
-      ...(el.environment === "production" ? {} : { environment: el.environment }),
-    },
+    conversation_initiation_client_data: initiationContent(anfrage),
   };
 }
 
@@ -850,7 +849,8 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
       secret: config.voice.elevenLabsToolToken,
       tenantId: call.tenantId,
     });
-    return { call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, tenantToken };
+    const { environment } = config.voice.elevenLabsOutbound;
+    return { call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, tenantToken, environment };
   };
 }
 

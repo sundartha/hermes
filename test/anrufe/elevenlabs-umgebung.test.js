@@ -11,6 +11,7 @@ import {
   startServerExpectExit,
   TELNYX_TEST_OWNER_NUMBER,
 } from "../helpers.js";
+import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
 import { sendeAnrufstartKoerper } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 
@@ -136,4 +137,38 @@ test("EL-UMGEBUNG f: der Anrufkoerper traegt environment nur ausserhalb von prod
 
   assert.equal(Object.hasOwn(production.conversation_initiation_client_data, "environment"), false);
   assert.equal(staging.conversation_initiation_client_data.environment, "staging");
+});
+
+async function vorspannInitMit(env) {
+  const srv = await startServer({
+    env: {
+      ELEVENLABS_OUTBOUND_ENABLED: "true",
+      ELEVENLABS_RESULT_POLL_MS: "60000",
+      ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
+      ...env,
+    },
+    seed: seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+  });
+  try {
+    const res = await placeCall(srv);
+    const antwort = await res.text();
+    assert.equal(res.status, HTTP_OK, antwort);
+    return await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
+  } finally {
+    await srv.stop();
+  }
+}
+
+test("EL-UMGEBUNG g: der Init eines Vorspann-Anrufs traegt bei ELEVENLABS_ENVIRONMENT=staging environment staging", async () => {
+  const inhalt = await vorspannInitMit({ ELEVENLABS_ENVIRONMENT: "staging" });
+
+  assert.equal(inhalt.environment, "staging");
+});
+
+test("EL-UMGEBUNG h: der Init eines Vorspann-Anrufs traegt bei production keinen Schluessel environment", async () => {
+  const inhalt = await vorspannInitMit({ ELEVENLABS_ENVIRONMENT: "production" });
+
+  assert.ok(inhalt.dynamic_variables, "dynamic_variables fehlt im Init");
+  assert.equal(Object.hasOwn(inhalt, "environment"), false);
 });
