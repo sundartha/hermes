@@ -3,7 +3,7 @@ import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { fremderSigner } from "../../scripts/last/webhooks.mjs";
-import { COMMIT_MUSTER } from "./ausgabe.mjs";
+import { COMMIT_MUSTER, fremdeZeilenMelden } from "./ausgabe.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
 import { abwarten, ECHTE_UHR, STAGING_TAKTE } from "./takt.mjs";
 
@@ -20,19 +20,26 @@ const EXIT_NICHT_GESTARTET = 127;
 const ERREICHT = "erreicht";
 const UEBERHOLT = "ueberholt";
 
-export function skriptStarten(pfad, argumente) {
+export function skriptStarten(pfad, argumente, ausgabe) {
   return new Promise((fertig) => {
     const kind = spawn("bash", [pfad, ...argumente], {
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       env: { PATH: env.PATH ?? "" },
     });
+    const teile = [];
+    kind.stdout.on("data", (stueck) => teile.push(stueck));
+    kind.stderr.on("data", (stueck) => teile.push(stueck));
     kind.on("error", () => fertig(EXIT_NICHT_GESTARTET));
-    kind.on("close", (code) => fertig(code ?? EXIT_NICHT_GESTARTET));
+    kind.on("close", (code) => {
+      const exit = code ?? EXIT_NICHT_GESTARTET;
+      if (exit !== EXIT_OK && ausgabe !== undefined) fremdeZeilenMelden(ausgabe, Buffer.concat(teile).toString());
+      fertig(exit);
+    });
   });
 }
 
-export function probeAuthStarten({ url, commit }) {
-  return skriptStarten(PROBE_AUTH, [url, commit]);
+export function probeAuthStarten({ url, commit, ausgabe }) {
+  return skriptStarten(PROBE_AUTH, [url, commit], ausgabe);
 }
 
 function gemeldetMelden(ausgabe, gemeldet) {
@@ -135,7 +142,7 @@ export async function staging({
   probeAuth = probeAuthStarten,
 }) {
   if (!(await stagingAbwarten({ einstellungen, commit, ausgabe, uhr, takte }))) return false;
-  const exit = await probeAuth({ url: einstellungen.stagingUrl, commit });
+  const exit = await probeAuth({ url: einstellungen.stagingUrl, commit, ausgabe });
   ausgabe.melde("probe_auth", { exit });
   const http = await hermesZugang(einstellungen.stagingUrl).mcpOhneAnmeldung();
   ausgabe.melde("mcp_ohne_anmeldung", { http });

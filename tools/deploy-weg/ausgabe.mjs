@@ -10,6 +10,10 @@ const PLATZHALTER = /\{(\w+)\}/g;
 const TRENNER = /[\s\-/().]/g;
 const VERBOTENE_ZEILEN = [/[\r\n]/, /[^\s@]+@[^\s@]+\.[^\s@]+/, /:\/\//, /bearer/i];
 const TELEFON = /\+\d{8}/;
+const FREMDE_ZEILE = /^[^\p{C}]{1,160}$/u;
+const LETZTE_ZEILEN = 20;
+const ZEILE_LAENGE = 160;
+const ZEILENENDE = /\r?\n|\r/;
 const MASKE_ERSETZUNGEN = [
   [/%/g, "%25"],
   [/\r/g, "%0D"],
@@ -114,6 +118,7 @@ const KATALOG = new Map([
   ["staging_erreicht", "Staging fährt den erwarteten Commit {commit}"],
   ["staging_ueberholt", "Rot: Staging ist überholt und fährt schon den neueren Commit {commit}"],
   ["probe_auth", "Negativproben ohne Zugangsdaten gegen Staging: Exit {exit}"],
+  ["probe_auth_zeile", "Probe: {zeile}"],
   ["telnyx_schluessel", "Telnyx-Signaturschlüssel laut /intern/status: HTTP {http}, ok: {ok}"],
   ["mcp_ohne_anmeldung", "POST /mcp tools/list ohne Anmeldung: HTTP {http}, erwartet 401"],
   ["probe_webhook_fremd", "Mit fremdem Schlüssel signierter Test-Webhook {teil}: HTTP {http}, erwartet 403"],
@@ -266,6 +271,7 @@ function istWahrheit(wert) {
 const PRUEFER = new Map([
   ["commit", istText(COMMIT_MUSTER)],
   ["teil", istText(TEIL_MUSTER)],
+  ["zeile", istText(FREMDE_ZEILE)],
   ["id", istText(DEPLOY_ID)],
   ["check", istText(CHECK_MUSTER)],
   ["status", ausMenge(STATUS_WOERTER)],
@@ -330,6 +336,14 @@ export function zeileBauen(schluessel, werte = {}) {
   });
   if (!zeileErlaubt(text)) throw new AusgabeVerweigert();
   return text;
+}
+
+export function fremdeZeilenMelden(ausgabe, text) {
+  const zeilen = text
+    .split(ZEILENENDE)
+    .map((zeile) => zeile.trim().slice(0, ZEILE_LAENGE))
+    .filter((zeile) => zeile !== "" && FREMDE_ZEILE.test(zeile) && zeileErlaubt(zeile));
+  for (const zeile of zeilen.slice(-LETZTE_ZEILEN)) ausgabe.melde("probe_auth_zeile", { zeile });
 }
 
 function maskenText(wert) {
