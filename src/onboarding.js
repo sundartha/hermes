@@ -6,6 +6,7 @@ import {
   attachNumberRegistration,
   markNumberElInboundTrunkBelegt,
   failNumber,
+  markNumberGekauft,
   releaseNumber,
   findNumber,
   numberBusyReason,
@@ -63,6 +64,7 @@ export async function provisionNumber(
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
     if (err instanceof NummerGekauftIdOffen) {
+      markNumberGekauft(state, numberId, err.e164);
       logger.warn(`[nummer-gekauft-id-offen] number=${numberId} e164=${err.e164}: ${err.message} - Hold bleibt, manuelle Klaerung`);
       throw err;
     }
