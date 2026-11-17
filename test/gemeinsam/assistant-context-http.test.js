@@ -1,10 +1,14 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAbbrechendeAttrappe, starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
+const abbrechend = await starteAbbrechendeAttrappe("kontext", [BOOTSTRAP_TENANT_ID]);
+const erfolgreich = await starteErfolgreicheAttrappe("kontext-ok", [BOOTSTRAP_TENANT_ID]);
+after(() => Promise.all([abbrechend.close(), erfolgreich.close()]));
 
 const CTX = {
   summary: "Stammkunde will Freitag vormittag",
@@ -28,7 +32,7 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("HC1 Flag an, gueltiger context: erreicht den Originate (offline 500) + persistiert normalisierten context", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 500, "Owner passiert alle Gates, scheitert erst am Offline-Originate");
@@ -41,7 +45,7 @@ test("HC1 Flag an, gueltiger context: erreicht den Originate (offline 500) + per
 });
 
 test("HC2 Flag an, key_facts-Eintrag > 200 Zeichen -> 400 (Validierung vor Telefonie)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { key_facts: ["a".repeat(201)] } });
     assert.equal(res.status, 400, "uebergrosser key_facts-Eintrag -> 400");
@@ -53,7 +57,7 @@ test("HC2 Flag an, key_facts-Eintrag > 200 Zeichen -> 400 (Validierung vor Telef
 });
 
 test("AL-P9-9 Flag an, open_questions-Eintrag > 300 Zeichen -> 400 (Validierung vor Telefonie)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { open_questions: ["a".repeat(301)] } });
     assert.equal(res.status, 400, "uebergrosser open_questions-Eintrag -> 400");
@@ -65,7 +69,7 @@ test("AL-P9-9 Flag an, open_questions-Eintrag > 300 Zeichen -> 400 (Validierung 
 });
 
 test("HC3 Flag an, summary > 1000 Zeichen -> 400", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { summary: "a".repeat(1001) } });
     assert.equal(res.status, 400, "uebergrosse summary -> 400");
@@ -77,7 +81,7 @@ test("HC3 Flag an, summary > 1000 Zeichen -> 400", async () => {
 });
 
 test("HC4 Flag an, context kein Objekt -> 400 (context muss ein Objekt sein)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: "x" });
     assert.equal(res.status, 400, "Nicht-Objekt -> 400");
@@ -89,7 +93,7 @@ test("HC4 Flag an, context kein Objekt -> 400 (context muss ein Objekt sein)", a
 });
 
 test("HC5 Flag an, unbekannter Key -> verworfen (Storage-Deckel), bekanntes Teilfeld bleibt", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_ON } });
   try {
     const res = await placeCall(srv, { context: { summary: "ok", junk: "x".repeat(5000) } });
     assert.equal(res.status, 500, "bekanntes Teilfeld gueltig -> Originate (offline 500)");
@@ -102,7 +106,7 @@ test("HC5 Flag an, unbekannter Key -> verworfen (Storage-Deckel), bekanntes Teil
 });
 
 test("HC6 Flag AUS: b.context wird ignoriert -> context null (byte-identisch)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_OFF } });
+  const srv = await startServer({ env: { ...abbrechend.env, ...FLAG_OFF } });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 500, "Owner-Pfad erreicht den Originate (offline 500)");
@@ -114,37 +118,8 @@ test("HC6 Flag AUS: b.context wird ignoriert -> context null (byte-identisch)", 
   }
 });
 
-async function startVoiceMock() {
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ sid: "tnx_ctx_mock_1" }));
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    close: () => new Promise((r) => server.close(r)),
-  };
-}
-
-const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx" };
-const telnyxEnv = (mockUrl, extra = {}) => ({
-  TELNYX_API_KEY: "KEYtest-secret",
-  TELNYX_CONNECTION_ID: "conn_test",
-  TELNYX_ACCOUNT_SID: "acct_test",
-  TELNYX_API_BASE: mockUrl,
-  ALLOWED_NUMBERS: TO,
-  ...extra,
-});
-
 test("HC7 (I10) Flag an, voller context: Erfolgsantwort traegt context_received mit Feld-Flags + key_facts_count", async () => {
-  const mock = await startVoiceMock();
-  const srv = await startServer({
-    env: telnyxEnv(mock.url, { ASSISTANT_CONTEXT_ENABLED: "true" }),
-    ownerNumber: TELNYX_OWNER,
-  });
+  const srv = await startServer({ env: { ...erfolgreich.env, ASSISTANT_CONTEXT_ENABLED: "true" } });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 200, "Originate ueber den Voice-Mock erfolgreich");
@@ -162,16 +137,11 @@ test("HC7 (I10) Flag an, voller context: Erfolgsantwort traegt context_received 
     );
   } finally {
     await srv.stop();
-    await mock.close();
   }
 });
 
 test("HC8 (I10) Flag an, OHNE context: context_received meldet active, aber leere Felder", async () => {
-  const mock = await startVoiceMock();
-  const srv = await startServer({
-    env: telnyxEnv(mock.url, { ASSISTANT_CONTEXT_ENABLED: "true" }),
-    ownerNumber: TELNYX_OWNER,
-  });
+  const srv = await startServer({ env: { ...erfolgreich.env, ASSISTANT_CONTEXT_ENABLED: "true" } });
   try {
     const res = await placeCall(srv);
     assert.equal(res.status, 200);
@@ -184,16 +154,11 @@ test("HC8 (I10) Flag an, OHNE context: context_received meldet active, aber leer
     });
   } finally {
     await srv.stop();
-    await mock.close();
   }
 });
 
 test("HC9 (I10) Flag AUS: context_received.active=false, alle Felder leer (context wurde ignoriert)", async () => {
-  const mock = await startVoiceMock();
-  const srv = await startServer({
-    env: telnyxEnv(mock.url),
-    ownerNumber: TELNYX_OWNER,
-  });
+  const srv = await startServer({ env: erfolgreich.env });
   try {
     const res = await placeCall(srv, { context: CTX });
     assert.equal(res.status, 200);
@@ -206,6 +171,5 @@ test("HC9 (I10) Flag AUS: context_received.active=false, alle Felder leer (conte
     });
   } finally {
     await srv.stop();
-    await mock.close();
   }
 });

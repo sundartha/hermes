@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
-import { TELNYX_GAP10_SCHLUESSEL } from "./erfundene-geheimnisse.js";
+import { starteAblehnendeAttrappe, starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 
 const A = "tenant-gap10-a",
   SUB_A = "sub-gap10-a",
@@ -15,6 +14,7 @@ const B = "tenant-gap10-b",
 const TO = "+4915112345678";
 
 const PROFILE = { maxCallsPerHour: null };
+const MANDANTEN = [BOOTSTRAP_TENANT_ID, A, B];
 
 const activeNumber = (id, e164, tenantId) => ({
   id,
@@ -53,18 +53,8 @@ function placeCall(srv, identity) {
 }
 
 test("Stundenlimit gilt PRO Tenant - Tenant B bleibt frei, obwohl Tenant A sein Limit (6) ausschoepft", async () => {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
-  const srv = await startServer({
-    env: {
-      ...FLAG_ON,
-      ELEVENLABS_API_BASE: abgelehnt.url,
-      TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: TELNYX_GAP10_SCHLUESSEL,
-      TELNYX_CONNECTION_ID: "conn_gap10",
-      TELNYX_ACCOUNT_SID: "acct_gap10",
-    },
-    seed: seedTenants(),
-  });
+  const abgelehnt = await starteAblehnendeAttrappe(400, "gap10", MANDANTEN);
+  const srv = await startServer({ env: { ...FLAG_ON, ...abgelehnt.env }, seed: seedTenants() });
   try {
     for (let i = 1; i <= 6; i++) {
       const res = await placeCall(srv, SUB_A);
@@ -120,8 +110,9 @@ test("Ziel-Limit gilt PRO Tenant - Tenant B erreicht die Nummer, an der Tenant A
   const frueheAnrufeVonA = Array.from({ length: zielLimit }, (_, i) =>
     seedCall({ id: `c_gap10_ziel_${i}`, tenantId: A, to: TO, status: "completed", requestedBy: SUB_A }),
   );
+  const erfolgreich = await starteErfolgreicheAttrappe("gap10-ok", MANDANTEN);
   const srv = await startServer({
-    env: { ...FLAG_ON, PER_TARGET_CALL_CAP: String(zielLimit) },
+    env: { ...FLAG_ON, ...erfolgreich.env, PER_TARGET_CALL_CAP: String(zielLimit) },
     seed: seedTenants(frueheAnrufeVonA),
   });
   try {
@@ -136,5 +127,6 @@ test("Ziel-Limit gilt PRO Tenant - Tenant B erreicht die Nummer, an der Tenant A
     );
   } finally {
     await srv.stop();
+    await erfolgreich.close();
   }
 });

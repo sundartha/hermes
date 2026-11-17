@@ -28,16 +28,6 @@ const anrufBody = () => JSON.stringify({ to: ZIEL, objective: "Termin vereinbare
 const post = (url) =>
   abrufMitFrist(`${url}/api/calls`, { method: "POST", headers: { "content-type": "application/json" }, body: anrufBody() });
 
-async function bodyOhneSchalter() {
-  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" } });
-  try {
-    const antwort = await post(srv.localUrl);
-    return { status: antwort.status, body: await antwort.json() };
-  } finally {
-    await srv.stop();
-  }
-}
-
 test("Fahrzeug Server: mit allen drei Schaltern waehlt POST /api/calls ueber die Attrappe und der Anruf hat eine callControlId", async () => {
   const srv = await startServer({ env: SCHALTER_AN });
   try {
@@ -126,21 +116,6 @@ test("Fahrzeug Routen: makeCallRoutes mit der Vorspann-Attrappe waehlt nur ueber
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
-});
-
-test("Fahrzeug Vergleich: ohne die Schalter liefert dieselbe Anfrage dieselben Antwortfelder wie im Vorspann-Weg", async () => {
-  const srv = await startServer({ env: SCHALTER_AN });
-  let mitSchaltern;
-  try {
-    const antwort = await post(srv.localUrl);
-    mitSchaltern = { status: antwort.status, felder: Object.keys(await antwort.json()).sort() };
-  } finally {
-    await srv.stop();
-  }
-  const ohne = await bodyOhneSchalter();
-  assert.equal(ohne.status, HTTP_OK);
-  assert.equal(mitSchaltern.status, HTTP_OK);
-  assert.deepEqual(Object.keys(ohne.body).sort(), mitSchaltern.felder);
 });
 
 test("Fahrzeug Init: initInhaltFuer liefert fuer einen Vorspann-Anruf first_message leer und eroeffnung_gesagt beginnt mit dem Offenlegungssatz", async () => {

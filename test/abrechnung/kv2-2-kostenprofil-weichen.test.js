@@ -15,35 +15,9 @@ import { starteErfolgreicheAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 
-const EL_BOOT_ENV = Object.freeze({
-  FAKE_ORIGINATE_ELEVENLABS: "true",
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: "agent_x",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phone_x",
-  ELEVENLABS_API_KEY: "key_x",
-});
-
-function callWithId(calls, id) {
-  return calls.find((call) => call.id === id);
-}
 function callWithTwilioSid(calls, twilioSid) {
   return calls.find((call) => call.twilioSid === twilioSid);
 }
-
-test("KV2-2-c1: EL-Zweig (api-calls.js) setzt costProfile=el_convai_sip", async () => {
-  const srv = await startServer({ env: { ...EL_BOOT_ENV }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
-  try {
-    const res = await placeCall(srv);
-    assert.equal(res.status, HTTP_OK);
-    const { callId } = await res.json();
-    const calls = srv.readStore().calls;
-    const call = callWithId(calls, callId);
-    assert.equal(call.costProfile, KOSTENPROFIL.EL_CONVAI_SIP);
-    assert.match(call.elevenlabsConversationId, /^fake_el_/);
-  } finally {
-    await srv.stop();
-  }
-});
 
 function inboundSeed() {
   return ownerNumberSeed(TELNYX_TEST_OWNER_NUMBER);
@@ -73,31 +47,14 @@ test("KV2-2-c4: Inbound-Budget-Zweig setzt costProfile=telnyx_inbound_budget", a
   }
 });
 
-test("KV2-2-c7: alle drei Weichen-Zweige liefern ein Profil aus der Registry", async () => {
-  const elSrv = await startServer({ env: { ...EL_BOOT_ENV }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
-  const texmlSrv = await startServer({ env: { FAKE_ORIGINATE: "true" }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
+test("KV2-2-c7: der Inbound-Zweig liefert ein Profil aus der Registry", async () => {
   const budgetHarness = await startInboundHarness({ seed: inboundSeed() });
   try {
-    const elRes = await placeCall(elSrv);
-    const { callId: elCallId } = await elRes.json();
-    const texmlRes = await placeCall(texmlSrv);
-    const { callId: texmlCallId } = await texmlRes.json();
     await postIncoming(budgetHarness, "CAc7b");
-
-    const elCalls = elSrv.readStore().calls;
-    const texmlCalls = texmlSrv.readStore().calls;
-    const budgetCalls = budgetHarness.store.load().calls;
-    const gefundeneProfile = [
-      callWithId(elCalls, elCallId).costProfile,
-      callWithId(texmlCalls, texmlCallId).costProfile,
-      callWithTwilioSid(budgetCalls, "CAc7b").costProfile,
-    ];
-    for (const profil of gefundeneProfile) {
-      assert.ok(Object.hasOwn(KOSTENPROFILE, profil), `Profil '${profil}' steht nicht in der Registry`);
-    }
+    const { calls } = budgetHarness.store.load();
+    const profil = callWithTwilioSid(calls, "CAc7b").costProfile;
+    assert.ok(Object.hasOwn(KOSTENPROFILE, profil), `Profil '${profil}' steht nicht in der Registry`);
   } finally {
-    await elSrv.stop();
-    await texmlSrv.stop();
     await budgetHarness.stop();
   }
 });

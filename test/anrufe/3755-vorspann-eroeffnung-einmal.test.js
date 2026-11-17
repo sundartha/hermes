@@ -19,7 +19,6 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
-const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
 const NUMMER_PRAEFIX = "+4915112392";
 const EINMAL = 1;
@@ -38,13 +37,8 @@ const elVon = (callId) => `cc_el_${callId}`;
 const aktionen = (attrappe, bein, aktion) => attrappe.anfragen.filter((anfrage) => anfrage.path === `/v2/calls/${bein}/actions/${aktion}`);
 
 let zaehler = 0;
-const ttsFehler = { an: false };
 
 function beantworte({ req, res }, anfrage) {
-  if (ttsFehler.an && req.url.startsWith("/v1/text-to-speech/")) {
-    res.writeHead(HTTP_SERVER_FEHLER, { "content-type": "application/json" });
-    return res.end("{}");
-  }
   if (req.url.startsWith("/v1/text-to-speech/")) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
@@ -133,16 +127,6 @@ function sende(callId, typ, extra = {}) {
 const alleAnfragen = () => umgebung.attrappe.anfragen;
 const sprachAnfragen = () => alleAnfragen().filter((anfrage) => anfrage.path.startsWith("/v1/text-to-speech/"));
 
-function voiceOutbound(callId) {
-  const roh = new URLSearchParams({ CallSid: anrufIn(callId).twilioSid }).toString();
-  const zeit = String(nowSeconds());
-  return abrufMitFrist(`${umgebung.srv.localUrl}/voice/outbound?callId=${callId}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", "telnyx-timestamp": zeit, "telnyx-signature-ed25519": umgebung.signer.sign(zeit, roh) },
-    body: roh,
-  });
-}
-
 async function neuerAnruf(extra = {}) {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
     method: "POST",
@@ -217,27 +201,3 @@ test("3755-K3: zwei Anrufe nacheinander an dieselbe Nummer mit verschiedenem Anl
   assert.equal(initErster.dynamic_variables.eroeffnung_gesagt, spracherster);
   assert.ok(!JSON.stringify(initErster).toLowerCase().includes("blumen"));
 });
-
-for (const [fall, extra, mitAnlass, fragen] of [
-  ["Dritter, fr", { language: "fr" }, true, 0],
-  ["Besitzer, fr", { to: EIGENE_NUMMER, language: "fr" }, true, 0],
-]) {
-  test(`3755-K2: ${fall}, Vorspann nicht erzeugbar (Rueckfall) -> Init ohne eroeffnung_gesagt, first_message traegt die volle Eroeffnung`, async () => {
-    ttsFehler.an = true;
-    let callId;
-    try {
-      callId = await neuerAnruf(extra);
-    } finally {
-      ttsFehler.an = false;
-    }
-    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] rueckfall grund=tts_fehler call=${callId}`));
-    assert.equal((await voiceOutbound(callId)).status, HTTP_OK);
-    const antwort = await init(anrufIn(callId));
-    const { first_message: erste } = antwort.conversation_config_override.agent;
-    assert.equal(antwort.dynamic_variables.eroeffnung_gesagt, undefined);
-    assert.equal(erste.split("?").length - 1, fragen, erste);
-    assert.equal(erste.includes("Termin am Donnerstag vereinbaren"), mitAnlass, erste);
-    assert.match(erste, /KI-Assistent/);
-    assert.equal(anrufIn(callId).calleeIsOwner === true, extra.to === EIGENE_NUMMER);
-  });
-}

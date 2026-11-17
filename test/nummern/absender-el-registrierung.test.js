@@ -483,17 +483,3 @@ test("ANR: lehnt der Anbieter den Start ab, steht die Absenderquelle tenant_did 
     { wahlAblehnung: 422 },
   );
 });
-
-test("B7: ohne Telnyx-Uebergabe und mit Vorspann-Schalter bricht der Anruf ohne Registrierung ab und behaelt das Kostenprofil el_convai_sip", async () => {
-  await withVorspann(
-    async ({ srv, telnyx }) => {
-      await placeCall(srv, SUBJECT_B);
-      const call = ownCall(srv);
-      assert.equal(call.status, "failed");
-      assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
-      assert.equal(call.costProfile, "el_convai_sip");
-      assert.equal(telnyx.waehlaufrufe.length, 0);
-    },
-    { ELEVENLABS_OUTBOUND_UEBER_TELNYX: "false" },
-  );
-});

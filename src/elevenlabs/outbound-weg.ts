@@ -1,21 +1,14 @@
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
-import { ABSENDER_QUELLE } from "../telephony/absender-registrierung.ts";
 import { inboundElPathFor } from "./inbound-path-decision.ts";
-import { eigeneAbsenderRegistrierung } from "./outbound.js";
-import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
-import { VORSPANN_RUECKFALL } from "./vorspann-pruefung.js";
 
-export const OUTBOUND_WEG = Object.freeze({
-  EL_SIP_TRUNK: "el_sip_trunk",
-  TELNYX_UEBERGABE: "telnyx_uebergabe",
-  TELNYX_VORSPANN: "telnyx_vorspann",
+export const OUTBOUND_WEG = Object.freeze({ TELNYX_VORSPANN: "telnyx_vorspann" });
+
+export const WEG_GRUND = Object.freeze({
+  INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit",
+  KEINE_CALL_CONTROL_APP: "keine_call_control_app",
 });
 
-export const WEG_GRUND = Object.freeze({ INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit" });
-
 export const KOSTENPROFIL_FUER_WEG = Object.freeze({
-  [OUTBOUND_WEG.EL_SIP_TRUNK]: KOSTENPROFIL.EL_CONVAI_SIP,
-  [OUTBOUND_WEG.TELNYX_UEBERGABE]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
   [OUTBOUND_WEG.TELNYX_VORSPANN]: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
 });
 
@@ -24,14 +17,12 @@ type EntscheidungsFall = Parameters<typeof inboundElPathFor>[0];
 interface WegConfig {
   voice: {
     elevenLabsInbound: EntscheidungsFall["config"]["voice"]["elevenLabsInbound"];
-    elevenLabsOutbound: { ueberTelnyx: boolean; vorspann: boolean };
   };
   telephony: { telnyxCallControlAppId: string | undefined };
 }
 
 interface WegStore {
   numberRecordByE164: (e164: string) => EntscheidungsFall["numberRecord"];
-  load: () => unknown;
 }
 
 interface WegAnruf {
@@ -42,45 +33,27 @@ interface WegAnruf {
 type WegArt = keyof typeof KOSTENPROFIL_FUER_WEG;
 
 interface Wahl {
-  weg: WegArt;
+  weg: WegArt | null;
   grund: string | null;
 }
 
 const LOG_PREFIX = "[el-outbound-weg]";
 
-function weg(art: WegArt, grund: string | null = null): Wahl {
-  return { weg: art, grund };
+const vorspannWeg: Wahl = { weg: OUTBOUND_WEG.TELNYX_VORSPANN, grund: null };
+
+function abbruch(grund: string | null): Wahl {
+  return { weg: null, grund };
 }
 
 export function outboundWegFuer({ config, store, call }: { config: WegConfig; store: WegStore; call: WegAnruf }): Wahl {
-  const el = config.voice.elevenLabsOutbound;
-  if (!el.ueberTelnyx) return weg(OUTBOUND_WEG.EL_SIP_TRUNK);
-  const absender = eigeneAbsenderRegistrierung({ store, call });
-  if (absender.quelle !== ABSENDER_QUELLE.TENANT_DID) return weg(OUTBOUND_WEG.EL_SIP_TRUNK, absender.grund);
+  if (!config.telephony.telnyxCallControlAppId) return abbruch(WEG_GRUND.KEINE_CALL_CONTROL_APP);
   const numberRecord = store.numberRecordByE164(call.from);
   if (!inboundElPathFor({ config, tenantId: call.tenantId, numberRecord }))
-    return weg(OUTBOUND_WEG.EL_SIP_TRUNK, WEG_GRUND.INBOUND_WEG_NICHT_BEREIT);
-  return uebergabeWeg(config);
+    return abbruch(WEG_GRUND.INBOUND_WEG_NICHT_BEREIT);
+  return vorspannWeg;
 }
 
-function uebergabeWeg(config: WegConfig): Wahl {
-  if (!config.voice.elevenLabsOutbound.vorspann) return weg(OUTBOUND_WEG.TELNYX_UEBERGABE);
-  if (!config.telephony.telnyxCallControlAppId)
-    return weg(OUTBOUND_WEG.TELNYX_UEBERGABE, VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP);
-  return weg(OUTBOUND_WEG.TELNYX_VORSPANN);
-}
-
-export function meldeOutboundWeg({
-  config,
-  callId,
-  wahl,
-}: {
-  config: WegConfig;
-  callId: string;
-  wahl: Wahl;
-}): void {
-  if (!config.voice.elevenLabsOutbound.ueberTelnyx) return;
+export function meldeOutboundWeg({ callId, wahl }: { callId: string; wahl: Wahl }): void {
   const grund = wahl.grund ? ` grund=${wahl.grund}` : "";
-  console.log(`${LOG_PREFIX} weg=${wahl.weg}${grund} call=${callId}`);
-  if (wahl.grund === VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP) meldeVorspannRueckfall({ callId, grund: wahl.grund });
+  console.log(`${LOG_PREFIX} weg=${wahl.weg ?? "abbruch"}${grund} call=${callId}`);
 }

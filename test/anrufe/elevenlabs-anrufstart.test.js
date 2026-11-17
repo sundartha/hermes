@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import http from "node:http";
 import test from "node:test";
 
 import { timezoneForCountry } from "../../src/geo/resolve.js";
@@ -11,72 +10,26 @@ import { countryForE164 } from "../../src/begriffe/rufnummern.js";
 import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
-  OWNER_TEST_REGISTRIERUNG,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
-  mcpPost,
-  readToolResult,
   seedState,
   startServer,
-  toolCall,
-  waitForStoreState,
 } from "../helpers.js";
-import {
-  CONVERSATION_DONE_WITH_ANALYSIS,
-  ERROR_ENVELOPES,
-} from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
-const HTTP_SERVER_ERROR = 500;
-const HTTP_BAD_GATEWAY = 502;
 
-const START_PATH = "/v1/convai/sip-trunk/outbound-call";
-const CONVERSATION_PATH = "/v1/convai/conversations/";
-const API_KEY_HEADER = "xi-api-key";
-
-const AGENT_ID = "agent_el_test_1";
-const AGENT_PHONE_NUMBER_ID = "phnum_el_test_1";
 const TENANT_A_REGISTRIERUNG = "phnum_tenant_a_test";
-const API_KEY = "el-api-key-testgeheim";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren (EL-START)";
 const OWNER_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const TENANT_A = "tenant-a";
 const SUBJECT_A = "sub-a";
 const NUMBER_A = "+4915005559002";
 
-const CONVERSATION_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
-const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
-const TRANSCRIPT_LINE = CONVERSATION_DONE_WITH_ANALYSIS.transcript.find(
-  (zeile) => zeile.role === "user",
-).message;
-
-const PROVIDER_ERROR_ENVELOPE = ERROR_ENVELOPES.unauthorizedBadKey;
-const PROVIDER_ERROR_MARKER = PROVIDER_ERROR_ENVELOPE.body.detail.message;
-
 const RESULT_POLL_MS = "150";
-const RESULT_WAIT_MS = 8000;
-const DOMESTIC_TARIFF_CENTS = "20";
-const STARTS_NACH_ERHOLUNG = 2;
-
-const EL_ENV = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: AGENT_ID,
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: AGENT_PHONE_NUMBER_ID,
-  ELEVENLABS_API_KEY: API_KEY,
-  ELEVENLABS_RESULT_POLL_MS: RESULT_POLL_MS,
-});
-
-function endJson(res, status, payload) {
-  res.writeHead(status, { "content-type": "application/json" });
-  res.end(JSON.stringify(payload));
-}
-
-const dynamicVariables = (anfrage) =>
-  anfrage.body.conversation_initiation_client_data?.dynamic_variables ?? {};
 
 const OVERRIDE_ALLOWED_LEAF_PATHS = new Set(["agent.language", "agent.first_message", "tts.voice_id"]);
 function overrideLeafPaths(wert, prefix = []) {
@@ -85,57 +38,6 @@ function overrideLeafPaths(wert, prefix = []) {
   return Object.entries(wert).flatMap(([schluessel, kind]) =>
     overrideLeafPaths(kind, [...prefix, schluessel]),
   );
-}
-
-async function startElevenLabsMock() {
-  const startRequests = [];
-  const resultRequests = [];
-  const mode = { startStatus: HTTP_OK, abbruch: false };
-
-  const handleStart = (req, res, raw) => {
-    startRequests.push({ headers: req.headers, raw, body: JSON.parse(raw || "{}") });
-    if (mode.abbruch) return res.socket.destroy();
-    if (mode.startStatus !== HTTP_OK)
-      return endJson(res, mode.startStatus, PROVIDER_ERROR_ENVELOPE.body);
-    return endJson(res, HTTP_OK, {
-      success: true,
-      conversation_id: CONVERSATION_ID,
-      sip_call_id: "sip_el_test_1",
-    });
-  };
-
-  const handleResult = (req, res) => {
-    resultRequests.push({ url: req.url });
-    return endJson(res, HTTP_OK, CONVERSATION_DONE_WITH_ANALYSIS);
-  };
-
-  const server = http.createServer((req, res) => {
-    let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => {
-      if (req.url.startsWith(START_PATH)) return handleStart(req, res, raw);
-      if (req.url.startsWith(CONVERSATION_PATH)) return handleResult(req, res);
-      return endJson(res, ERROR_ENVELOPES.notFound.httpStatus, ERROR_ENVELOPES.notFound.body);
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    startRequests,
-    resultRequests,
-    breakStart: (status) => {
-      mode.startStatus = status;
-    },
-    abortStart: () => {
-      mode.abbruch = true;
-    },
-    healStart: () => {
-      mode.startStatus = HTTP_OK;
-      mode.abbruch = false;
-    },
-    close: () => new Promise((resolve) => server.close(resolve)),
-  };
 }
 
 function seedOwner(tenantOverrides = {}) {
@@ -193,21 +95,6 @@ function seedTenantAWithSpend(costEur) {
   return seed;
 }
 
-async function withElevenLabs(options, run) {
-  const mock = await startElevenLabsMock();
-  const srv = await startServer({
-    env: { ...EL_ENV, ELEVENLABS_API_BASE: mock.url, ...options.env },
-    seed: options.seed,
-    ownerNumber: options.ownerNumber,
-  });
-  try {
-    return await run({ srv, mock });
-  } finally {
-    await srv.stop();
-    await mock.close();
-  }
-}
-
 function placeCall(srv, identity, auftrag = {}) {
   return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
@@ -247,6 +134,8 @@ async function vorspannInit(srv, identity, auftrag = {}) {
   assert.ok(srv.vorspannAttrappe.pfade.includes("/v2/calls"), "Vorbedingung: der Vorspann-Anruf wurde gewaehlt");
   return initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
 }
+
+const wahlen = ({ vorspannAttrappe }) => vorspannAttrappe.pfade.filter((pfad) => pfad === "/v2/calls").length;
 
 const ownCalls = (srv) => srv.readStore().calls.filter((call) => call.goal === OBJECTIVE);
 
@@ -301,21 +190,21 @@ const OWNER_NAME_FALL = {
 const laufOptionen = (fall, variante) => ({ ...fall[variante], ownerNumber: fall.ownerNumber });
 
 async function assertGateBlockiert(fall) {
-  await withElevenLabs(laufOptionen(fall, "scharf"), async ({ srv, mock }) => {
+  await withVorspann(laufOptionen(fall, "scharf"), async ({ srv }) => {
     const res = await placeCall(srv, fall.scharf.identity);
     assert.equal(res.status, fall.status, `Gate ${fall.id} muss ablehnen`);
     assert.match((await res.json()).error, fall.fehler, `Ablehnung aus dem Gate ${fall.id}`);
     assert.equal(
-      mock.startRequests.length,
+      wahlen(srv),
       0,
-      `Gate ${fall.id}: der ElevenLabs-Anrufstart darf NIE erreicht werden`,
+      `Gate ${fall.id}: die Wahl am Anbieter darf NIE erreicht werden`,
     );
     assert.equal(ownCalls(srv).length, 0, `Gate ${fall.id}: kein Call-Datensatz`);
   });
 }
 
 async function assertAnbieterErreicht(fall) {
-  await withElevenLabs(laufOptionen(fall, "entschaerft"), async ({ srv, mock }) => {
+  await withVorspann(laufOptionen(fall, "entschaerft"), async ({ srv }) => {
     const res = await placeCall(srv, fall.entschaerft.identity);
     assert.equal(
       res.status,
@@ -323,112 +212,12 @@ async function assertAnbieterErreicht(fall) {
       `Positiv-Kontrolle ${fall.id}: derselbe Seed OHNE die gesenkte Achse muss durchgehen`,
     );
     assert.equal(
-      mock.startRequests.length,
+      wahlen(srv),
       1,
-      `Positiv-Kontrolle ${fall.id}: genau EIN Anrufstart am Anbieter`,
+      `Positiv-Kontrolle ${fall.id}: genau EINE Wahl am Anbieter`,
     );
   });
 }
-
-test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation_id landet am Call", async (ctx) => {
-  await withElevenLabs(
-    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv);
-      const antwort = await res.json();
-
-      await ctx.test("200 mit callId", () => {
-        assert.equal(res.status, HTTP_OK, JSON.stringify(antwort));
-        assert.ok(antwort.callId, "callId fehlt in der Antwort");
-      });
-
-      await ctx.test("genau EIN POST auf /v1/convai/sip-trunk/outbound-call", () => {
-        assert.equal(mock.startRequests.length, 1);
-      });
-
-      const anfrage = mock.startRequests[0] || { body: {}, headers: {} };
-
-      await ctx.test("Pflichtfelder agent_id / agent_phone_number_id / to_number", () => {
-        assert.equal(anfrage.body.agent_id, AGENT_ID);
-        assert.equal(anfrage.body.agent_phone_number_id, OWNER_TEST_REGISTRIERUNG);
-        assert.equal(
-          anfrage.body.to_number,
-          TELNYX_TEST_PEER_NUMBER,
-          "das serverseitig normalisierte Ziel, unveraendert (geprueft == gewaehlt)",
-        );
-      });
-
-      await ctx.test("Auftrag als dynamische Variable, nicht als Prompt-Uebersteuerung", () => {
-        assert.equal(dynamicVariables(anfrage).objective, OBJECTIVE);
-      });
-
-      await ctx.test("callee benennt dasselbe normalisierte Ziel, das gewaehlt wurde", () => {
-        assert.equal(
-          dynamicVariables(anfrage).callee,
-          TELNYX_TEST_PEER_NUMBER,
-          "{{callee}} bleibt sonst unaufgeloest oder nennt eine andere Nummer als die gewaehlte",
-        );
-      });
-
-      await ctx.test("xi-api-key traegt den Schluessel", () => {
-        assert.equal(anfrage.headers[API_KEY_HEADER], API_KEY);
-      });
-
-      await ctx.test("conversation_id steht ueber recordElevenlabsConversationId am Call", () => {
-        const call = ownCalls(srv)[0];
-        assert.ok(call, "kein Call-Datensatz angelegt");
-        assert.equal(
-          call.elevenlabsConversationId,
-          CONVERSATION_ID,
-          "das Feld ist das einzige Produkt des Mutators - ohne es bindet der Consult-Webhook nie",
-        );
-      });
-    },
-  );
-});
-
-test("EL-START ROTPROBE-1: FAKE_ORIGINATE_ELEVENLABS=true erreicht den Anbieter NIE, legt aber einen Call-Datensatz mit fake_el_-Kennung an", async (ctx) => {
-  await withElevenLabs(
-    {
-      env: { FAKE_ORIGINATE_ELEVENLABS: "true" },
-      seed: seedOwner(),
-      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-    },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv);
-      const antwort = await res.json();
-
-      await ctx.test("200 mit callId - der Anruf-Datensatz entsteht trotzdem", () => {
-        assert.equal(res.status, HTTP_OK, JSON.stringify(antwort));
-        assert.ok(antwort.callId, "callId fehlt in der Antwort");
-      });
-
-      await ctx.test(
-        "KEIN Netzzugriff gegen den Anbieter (POST /v1/convai/sip-trunk/outbound-call)",
-        () => {
-          assert.equal(
-            mock.startRequests.length,
-            0,
-            "der Anrufstart darf den Anbieter mit gesetztem Schalter NIE erreichen",
-          );
-        },
-      );
-
-      await ctx.test(
-        "die Kennung traegt die Anbieter-Form (SIPTrunkOutboundCallResponse), erfundene Werte klar markiert",
-        () => {
-          const call = ownCalls(srv)[0];
-          assert.ok(call, "kein Call-Datensatz angelegt");
-          assert.match(
-            call.elevenlabsConversationId,
-            /^fake_el_[0-9a-f]{16}$/,
-            `fake_el_-Praefix fehlt: ${call.elevenlabsConversationId}`,
-          );
-        },
-      );
-    },
-  );
-});
 
 for (const fall of GATE_FAELLE) {
   test(`EL-START T2 (${fall.id}): ${fall.was} sperrt auch den ElevenLabs-Zweig`, async (ctx) => {
@@ -440,181 +229,6 @@ for (const fall of GATE_FAELLE) {
     );
   });
 }
-
-test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassung so im Store, dass get_call_result sie liefert", async (ctx) => {
-  await withElevenLabs(
-    {
-      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
-      seed: seedOwner(),
-      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-    },
-    async ({ srv, mock }) => {
-      const res = await placeCall(srv);
-      assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
-      const { callId } = await res.json();
-
-      const stand = await waitForStoreState(
-        srv,
-        (state) => state.calls.some((call) => call.id === callId && call.status !== "active"),
-        RESULT_WAIT_MS,
-      );
-      const call = stand.calls.find((eintrag) => eintrag.id === callId);
-
-      await ctx.test("der Anbieter wurde nach dem Ergebnis gefragt", () => {
-        assert.ok(
-          mock.resultRequests.some((anfrage) => anfrage.url.includes(CONVERSATION_ID)),
-          "kein GET auf /v1/convai/conversations/{id}",
-        );
-      });
-
-      await ctx.test("Bedingung 1: der Call verlaesst 'active'", () => {
-        assert.notEqual(call.status, "active");
-      });
-      await ctx.test("Bedingung 2: transcript ist ein Array", () => {
-        assert.ok(Array.isArray(call.transcript), `transcript=${JSON.stringify(call.transcript)}`);
-      });
-      await ctx.test("die Zusammenfassung des Anbieters steht am Call", () => {
-        assert.equal(call.summary, PROVIDER_SUMMARY);
-      });
-
-      await ctx.test("get_call_result liefert sie - und NICHT das Roh-Transkript", async () => {
-        const antwort = await mcpPost(
-          `${srv.localUrl}/mcp`,
-          null,
-          toolCall("get_call_result", { call_id: callId }),
-        );
-        const ergebnis = await readToolResult(antwort);
-        const text = ergebnis.content[0].text;
-        assert.equal(
-          JSON.parse(text).result_summary,
-          PROVIDER_SUMMARY,
-          `Zusammenfassung fehlt in get_call_result: ${text}`,
-        );
-        assert.ok(
-          !text.includes(TRANSCRIPT_LINE),
-          "das Roh-Transkript darf NIE nach aussen (Datensparsamkeit)",
-        );
-      });
-
-      const nachBuchung = await waitForStoreState(
-        srv,
-        (state) => state.calls.some((eintrag) => eintrag.id === callId && eintrag.billedAt),
-        RESULT_WAIT_MS,
-      );
-
-      await ctx.test(
-        "Positiv-Kontrolle: die Buchungskette ist gelaufen, und dieses Leg ist bepreist",
-        () => {
-          const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
-          assert.ok(
-            abgerechnet.billedAt,
-            "der Erfolgspfad erreicht den EINEN Beender (terminateAndBillCall) gar nicht erst",
-          );
-          assert.ok(
-            abgerechnet.reserveCents > 0,
-            `Wache: der Minutensatz dieses Legs ist 0 (reserveCents=${JSON.stringify(abgerechnet.reserveCents)}) - dann bucht auch ein heiler Weg 0, und der Fall unten maesse die Test-Umgebung statt des Zweigs`,
-          );
-        },
-      );
-
-      await ctx.test("der Erfolgspfad bucht auf die Kosten-/Verbrauchsachse des Tenants", () => {
-        const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
-        const gebucht = nachBuchung.usage?.[BOOTSTRAP_TENANT_ID]?.costCents;
-        assert.ok(
-          gebucht > 0,
-          `ein gelungener ElevenLabs-Anruf legt NICHTS auf die Achse, die die pro-Tenant-Kostendecke liest (usage[${BOOTSTRAP_TENANT_ID}].costCents=${JSON.stringify(gebucht)}, Satz VOICE_TARIFF_DOMESTIC_CENTS=${DOMESTIC_TARIFF_CENTS}) - er kostet real (Carrier-Minuten der DID plus das Gespraech beim Anbieter), aber das Gate sieht davon nichts und deckelt diesen Weg nie. Am Record nachgemessen: answeredAt=${JSON.stringify(abgerechnet.answeredAt)}, endedAt=${JSON.stringify(abgerechnet.endedAt)}, estimatedCostCents=${JSON.stringify(abgerechnet.estimatedCostCents)} - die Minuten-Quelle beider Buchungen (voiceMinutesOf, billing/metering.js) liefert ohne answeredAt 0, und markAnswered ruft auf diesem Weg niemand: der Anruf laeuft ueber den SIP-Trunk des Anbieters, es kommt kein /voice-Webhook, der ihn setzen wuerde`,
-        );
-      });
-    },
-  );
-});
-
-test("EL-START T4 (a): Anbieter antwortet mit Fehler -> sauberes Ende, Reserve frei, Tenant nicht blockiert", async (ctx) => {
-  await withElevenLabs(
-    {
-      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
-      seed: seedOwner(),
-      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-    },
-    async ({ srv, mock }) => {
-      mock.breakStart(PROVIDER_ERROR_ENVELOPE.httpStatus);
-      const res = await placeCall(srv);
-      const antwort = await res.json();
-
-      await ctx.test("502 und KEINE rohe Anbieter-Meldung an den Aufrufer", () => {
-        assert.equal(
-          res.status,
-          HTTP_BAD_GATEWAY,
-          "eine echte HTTP-Ablehnung des Anbieters traegt providerStatus -> 502 (Muster Telnyx-Adapter)",
-        );
-        const roh = JSON.stringify(antwort);
-        assert.ok(!roh.includes(PROVIDER_ERROR_MARKER), `Anbieter-Rumpf durchgereicht: ${roh}`);
-        assert.ok(!roh.includes(API_KEY), "Schluessel in der Antwort");
-      });
-
-      const stand = await waitForStoreState(
-        srv,
-        (state) => state.calls.some((call) => call.reserveReleased === true),
-        RESULT_WAIT_MS,
-      );
-
-      await ctx.test("genau EIN Call-Datensatz, Status failed, Reserve freigegeben", () => {
-        const eigene = stand.calls.filter((call) => call.goal === OBJECTIVE);
-        assert.equal(eigene.length, 1, "kein Retry/Doppel-Anlegen");
-        assert.equal(eigene[0].status, "failed");
-        assert.equal(eigene[0].reserveReleased, true);
-        assert.equal(eigene[0].elevenlabsConversationId ?? null, null, "keine halbe Kennung");
-      });
-
-      await ctx.test("danach geht ein neuer Anruf desselben Tenants sofort wieder", async () => {
-        mock.healStart();
-        const zweiter = await placeCall(srv);
-        assert.equal(zweiter.status, HTTP_OK, await zweiter.text());
-        assert.equal(
-          mock.startRequests.length,
-          STARTS_NACH_ERHOLUNG,
-          "der zweite Anrufstart erreicht den Anbieter",
-        );
-      });
-    },
-  );
-});
-
-test("EL-START T4 (b): Anbieter bricht die Verbindung ab -> 500, Call failed, keine Kennung am Call", async (ctx) => {
-  await withElevenLabs(
-    {
-      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
-      seed: seedOwner(),
-      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-    },
-    async ({ srv, mock }) => {
-      mock.abortStart();
-      const res = await placeCall(srv);
-
-      await ctx.test("der Anrufstart hat den Anbieter erreicht (Positiv-Kontrolle)", () => {
-        assert.equal(mock.startRequests.length, 1);
-      });
-
-      await ctx.test("500 (ein Transportfehler traegt keinen providerStatus)", async () => {
-        assert.equal(res.status, HTTP_SERVER_ERROR, await res.text());
-      });
-
-      const stand = await waitForStoreState(
-        srv,
-        (state) => state.calls.some((call) => call.reserveReleased === true),
-        RESULT_WAIT_MS,
-      );
-
-      await ctx.test("Call failed, Reserve freigegeben, keine conversation_id", () => {
-        const eigene = stand.calls.filter((call) => call.goal === OBJECTIVE);
-        assert.equal(eigene.length, 1);
-        assert.equal(eigene[0].status, "failed");
-        assert.equal(eigene[0].reserveReleased, true);
-        assert.equal(eigene[0].elevenlabsConversationId ?? null, null);
-      });
-    },
-  );
-});
 
 test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert first_message NICHT", async (ctx) => {
   await withVorspann(

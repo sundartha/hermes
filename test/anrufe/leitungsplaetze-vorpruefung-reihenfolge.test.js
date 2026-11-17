@@ -10,7 +10,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { legeMandantAn } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { anrufeSql, mitHermesAufPostgres, neueAnrufe, postgresVorhanden } from "./hermes-mit-postgres.js";
-import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { vorspannDiAttrappe, vorspannKonfig, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 import { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
@@ -96,7 +96,7 @@ const routenConfig = withConfigNamespaces({
   diagnosticRetentionDays: 0,
   ownerSelfCallEnabled: false,
   ownerSelfCallTenantIds: [],
-  elevenLabsOutbound: { ...EL_OUTBOUND_CONFIG },
+  ...vorspannKonfig(["T"], EL_OUTBOUND_CONFIG),
   telnyxElevenLabs: {},
   telnyxAssistant: { enabled: false },
   voiceEngine: "budget",
@@ -131,6 +131,7 @@ function reserveZaehler(store) {
   const beobachtet = {
     ...store,
     numberRecordByE164: (e164) => ({ e164, tenantId: "T", providerAgentPhoneNumberId: "phnum_vp" }),
+    load: () => ({ ...store.load(), numbers: [vorspannSeedNummer({ tenantId: "T", nummer: "+491700000000", registrierung: "phnum_vp" })] }),
     releaseOutboundReserveCents: (tenantId, cents) => {
       zaehler.zurueck.push(cents);
       return store.releaseOutboundReserveCents(tenantId, cents);

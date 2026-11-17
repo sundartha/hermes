@@ -152,10 +152,3 @@ test("K3: wird die fehlende Registrierung nachgeholt, waehlt der Anruf ueber den
   assert.equal(call.fromRegistrationSource, "tenant_did");
   assert.ok(!alleAnfragen({ anbieter, telnyx }).includes(GLOBALE_KENNUNG), "globale Kennung in einer Anbieteranfrage");
 });
-
-test("K4: ohne Vorspann-Schalter holt der SIP-Start die Registrierung nach und der Vorspann waehlt nicht", async () => {
-  const { res, anbieter, telnyx } = await rufeAn(null, { registrierungStatus: HTTP_OK, umgebung: { ELEVENLABS_OUTBOUND_VORSPANN: "false" } });
-  assert.equal(res.status, HTTP_OK, await res.text());
-  assert.deepEqual(telnyx.waehlaufrufe, []);
-  assert.deepEqual(anbieter.sipStarts().map((start) => start.body.agent_phone_number_id), [NACHGEHOLTE_KENNUNG]);
-});

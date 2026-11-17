@@ -43,7 +43,6 @@ const EN_STIMME = "ZSNL4hPqCnqoMPaI4jGX";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
 const dritteroeffnung = (auftraggeber, openingLine) =>
   `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${auftraggeber}. Das Gespräch wird für meinen Auftraggeber zusammengefasst. ${openingLine}`;
-const PLATZHALTER_NAME = "{{platzhalter}}";
 const LEERER_NAME = " ";
 
 const TTS_MODUS = Object.freeze({
@@ -134,7 +133,6 @@ async function mitServer({ env = {}, seed, ttsModus, ersteTtsAntwortNach }, run)
 }
 
 const ANDERE_NUMMER = "+4915112345679";
-const DRITTE_NUMMER = "+4915112345680";
 
 const anrufStarten = (srv, wartezeitMs = 0, to = TELNYX_TEST_PEER_NUMBER) =>
   abrufMitFrist(
@@ -185,58 +183,6 @@ function mitTtsVerbrauch(zeichen) {
 }
 
 const zeichenGebucht = (srv) => srv.readStore().platformTtsUsage?.characters ?? 0;
-
-function normalisiert(text, call) {
-  return text.replaceAll(call.id, "call_X").replaceAll(call.streamToken ?? "kein-token", "TOKEN");
-}
-
-async function telnyxWahlUndTeXml(env) {
-  let ergebnis;
-  await mitServer({ env }, async ({ srv, attrappe }) => {
-    const antwort = await anrufStarten(srv);
-    const { callId } = await antwort.json();
-    const call = anrufIn(srv, callId);
-    const formular = Object.fromEntries(new URLSearchParams(nach(attrappe, TEXML_ANRUF_PFAD)[0].roh));
-    ergebnis = {
-      formular: JSON.parse(normalisiert(JSON.stringify(formular), call)),
-      texml: normalisiert(await (await voiceOutbound(srv, callId)).text(), call),
-      ttsAufrufe: nach(attrappe, TTS_PFAD).length,
-      callControlAufrufe: nach(attrappe, CALL_CONTROL_PFAD).length,
-      wahlen: nach(attrappe, TEXML_ANRUF_PFAD).length,
-      vorspannLog: srv.stdout.includes("[el-vorspann]"),
-    };
-  });
-  return ergebnis;
-}
-
-test("3365-K1: Schalter aus (auch mit gesetzter Call-Control-App) -> genau ein TeXML-Wahlversuch, kein TTS, kein POST /v2/calls, TeXML byte-gleich, keine el-vorspann-Logzeile", async () => {
-  const heute = await telnyxWahlUndTeXml({});
-  const mitAppId = await telnyxWahlUndTeXml({
-    TELNYX_CALL_CONTROL_APP_ID: CALL_CONTROL_APP_ID,
-    ELEVENLABS_OUTBOUND_VORSPANN: "",
-  });
-  for (const lauf of [heute, mitAppId]) {
-    assert.equal(lauf.wahlen, EINMAL);
-    assert.equal(lauf.ttsAufrufe, 0);
-    assert.equal(lauf.callControlAufrufe, 0);
-    assert.equal(lauf.vorspannLog, false);
-  }
-  assert.deepEqual(mitAppId.formular, heute.formular);
-  assert.equal(mitAppId.texml, heute.texml);
-});
-
-test("3365-K2: Schalter an ohne Call-Control-App -> TeXML wie heute plus Rueckfall-Logzeile keine_call_control_app", async () => {
-  await mitServer({ env: { ELEVENLABS_OUTBOUND_VORSPANN: "true", TELNYX_CALL_CONTROL_APP_ID: "" } }, async ({ srv, attrappe }) => {
-    const antwort = await anrufStarten(srv);
-    const { callId } = await antwort.json();
-    assert.equal(antwort.status, HTTP_OK);
-    assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, EINMAL);
-    assert.equal(nach(attrappe, TTS_PFAD).length, 0);
-    assert.equal(nach(attrappe, CALL_CONTROL_PFAD).length, 0);
-    assert.ok(srv.stdout.includes(rueckfallZeile(VORSPANN_RUECKFALL.KEINE_CALL_CONTROL_APP, callId)), srv.stdout);
-    assert.equal(anrufIn(srv, callId).costProfile, UEBER_TELNYX);
-  });
-});
 
 test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1x, danach TeXML, Logzeile bereit, Zeichen gebucht, keine Geheimnisse im Log", async () => {
   const env = { ...VORSPANN_AN, ELEVENLABS_TOOL_TOKEN: "el-tool-token-3365" };
@@ -294,17 +240,6 @@ test("3365-K3: leerer Auftraggebername -> Offenlegung mit Ersatzname, nie leer",
   });
 });
 
-test("3365-K3: Eroeffnung mit Platzhalter -> Rueckfall grund=eroeffnung, kein TTS, TeXML wie heute", async () => {
-  await mitServer({ env: VORSPANN_AN, seed: mitEigentuemer({ ownerName: PLATZHALTER_NAME }) }, async ({ srv, attrappe }) => {
-    const antwort = await anrufStarten(srv);
-    const { callId } = await antwort.json();
-    assert.equal(antwort.status, HTTP_OK);
-    assert.equal(nach(attrappe, TTS_PFAD).length, 0);
-    assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, EINMAL);
-    assert.ok(srv.stdout.includes(rueckfallZeile(VORSPANN_RUECKFALL.EROEFFNUNG, callId)), srv.stdout);
-  });
-});
-
 test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, nicht der Dritt-Satz", async () => {
   const env = {
     ...VORSPANN_AN,
@@ -318,45 +253,6 @@ test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, 
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
     assert.equal(text, `Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: ${OBJECTIVE}.`);
     assert.ok(!text.includes("?"), text);
-  });
-});
-
-test("3365-K4: Plattform-TTS-Quote erschoepft -> Rueckfall grund=tts_quote ohne TTS-Aufruf", async () => {
-  await mitServer({ env: { ...VORSPANN_AN, TTS_QUOTA_CYCLE_ANCHOR_DAY: ZYKLUS_ANKER_TAG }, seed: mitTtsVerbrauch(TTS_QUOTE) }, async ({ srv, attrappe }) => {
-    const antwort = await anrufStarten(srv);
-    const { callId } = await antwort.json();
-    assert.equal(antwort.status, HTTP_OK);
-    assert.equal(nach(attrappe, TTS_PFAD).length, 0);
-    assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, EINMAL);
-    assert.ok(srv.stdout.includes(rueckfallZeile(VORSPANN_RUECKFALL.TTS_QUOTE, callId)), srv.stdout);
-  });
-});
-
-const GLEICHZEITIG_JE_KUNDE = 2;
-
-const TTS_RUECKFAELLE = [
-  [VORSPANN_RUECKFALL.TTS_FEHLER, TTS_MODUS.FEHLER, TELNYX_TEST_PEER_NUMBER],
-  [VORSPANN_RUECKFALL.TTS_UNVOLLSTAENDIG, TTS_MODUS.UNVOLLSTAENDIG, ANDERE_NUMMER],
-  [VORSPANN_RUECKFALL.TTS_UNPLAUSIBEL, TTS_MODUS.ZU_KURZ, DRITTE_NUMMER],
-];
-
-test("3365-K5: TTS-Fehler, abgebrochener Strom und unplausibles Audio -> heutiger TeXML-Weg, Logzeile mit Grund, keine Geheimnisse im Log", async () => {
-  await mitServer({ env: VORSPANN_AN, seed: mitEigentuemer() }, async ({ srv: ersterServer, attrappe, neustart }) => {
-    let srv = ersterServer;
-    for (const [index, [grund, ttsModus, nummer]] of TTS_RUECKFAELLE.entries()) {
-      if (index === GLEICHZEITIG_JE_KUNDE) srv = await neustart();
-      attrappe.setzeTtsModus(ttsModus);
-      const antwort = await anrufStarten(srv, 0, nummer);
-      const { callId } = await antwort.json();
-      assert.equal(antwort.status, HTTP_OK);
-      assert.equal(nach(attrappe, TTS_PFAD).length, index + 1);
-      assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, index + 1);
-      assert.equal(nach(attrappe, CALL_CONTROL_PFAD).length, 0);
-      assert.ok(srv.stdout.includes(rueckfallZeile(grund, callId)), srv.stdout);
-      if (ttsModus === TTS_MODUS.FEHLER) assert.equal(zeichenGebucht(srv), 0, "ein fehlgeschlagener Aufruf bucht keine Zeichen");
-      keineGeheimnisseIm(srv.stdout, anrufIn(srv, callId));
-    }
-    assert.doesNotMatch(srv.stdout, /\[el-vorspann\] bereit/);
   });
 });
 
