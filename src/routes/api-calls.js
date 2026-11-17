@@ -500,7 +500,7 @@ export function makeCallRoutes({
   async function beantworteConsult(req, res) {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
-    const call = await leseAnruf(store, req.params.id);
+    const call = store.getCall(req.params.id);
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return res

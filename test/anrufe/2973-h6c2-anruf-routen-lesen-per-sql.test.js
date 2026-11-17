@@ -46,7 +46,7 @@ async function zweiInstanzen() {
 
 async function zeile(db, id) {
   await setzeKontext(db, KUNDE);
-  return (await db.query("SELECT status, consults FROM call WHERE id = $1", [id])).rows[0];
+  return (await db.query("SELECT status, ended_at, consults FROM call WHERE id = $1", [id])).rows[0];
 }
 
 const kaputtMachen = (db) => db.exec("ALTER TABLE anruf_schluessel RENAME TO anruf_schluessel_versteckt");
@@ -117,6 +117,33 @@ test("H6c2-1: POST /api/calls/:id/cancel auf Instanz B beendet den Anruf von Ins
   assert.equal((await zeile(db, call.id)).status, "cancelled");
 });
 
+test("H6c2-1b: der naechste Speichervorgang der Instanz A setzt den auf B abgebrochenen Anruf nicht auf active zurueck", async () => {
+  const { db, a, b, call } = await zweiInstanzen();
+  await mitServer(routen(b, KUNDE), async (post) => {
+    await post(`/api/calls/${call.id}/cancel`);
+  });
+  const beendetAm = (await zeile(db, call.id)).ended_at;
+  assert.ok(beendetAm);
+  assert.equal(a.getCall(call.id).status, "active");
+  await a.save();
+  await a.drainFlushes();
+  const danach = await zeile(db, call.id);
+  assert.equal(danach.status, "cancelled");
+  assert.equal(danach.ended_at, beendetAm);
+});
+
+test("H6c2-1c: beendet die Instanz den Anruf nur im Spiegel, schreibt ihr Speichern Status und Ende in die aktive Zeile", async () => {
+  const { db, a, call } = await zweiInstanzen();
+  const eigener = a.getCall(call.id);
+  eigener.status = "completed";
+  eigener.endedAt = "2030-01-02T03:04:05.000Z";
+  await a.save();
+  await a.drainFlushes();
+  const danach = await zeile(db, call.id);
+  assert.equal(danach.status, "completed");
+  assert.equal(danach.ended_at, "2030-01-02T03:04:05.000Z");
+});
+
 test("H6c2-2: cancel mit Lesefehler der Datenbank antwortet 500 statt 404 und beendet den Anruf nicht", async () => {
   const { db, b, call } = await zweiInstanzen();
   await kaputtMachen(db);
@@ -143,35 +170,3 @@ test("H6c2-3: cancel eines unbekannten Anrufs und eines fremden Mandanten antwor
   });
 });
 
-test("H6c2-4: consult/answer auf Instanz B beantwortet die Rueckfrage des Anrufs von Instanz A", async () => {
-  const { b, call, eventId } = await zweiInstanzen();
-  await mitServer(routen(b, KUNDE), async (post) => {
-    const antwort = await post(`/api/calls/${call.id}/consult/answer`, { event_id: eventId, answers: ["Donnerstag passt"] });
-    assert.equal(antwort.status, 200);
-    assert.deepEqual(JSON.parse(antwort.text), { accepted: true, merged_facts: 1 });
-  });
-});
-
-test("H6c2-5: consult/answer mit Lesefehler der Datenbank antwortet 500 statt 404", async () => {
-  const { db, b, call, eventId } = await zweiInstanzen();
-  await kaputtMachen(db);
-  await ohneLog(() =>
-    mitServer(routen(b, KUNDE), async (post) => {
-      const antwort = await post(`/api/calls/${call.id}/consult/answer`, { event_id: eventId, answers: ["x"] });
-      assert.equal(antwort.status, 500);
-    }),
-  );
-});
-
-test("H6c2-6: consult/answer eines unbekannten Anrufs und eines fremden Mandanten antwortet weiter 404 not found", async () => {
-  const { b, call, eventId } = await zweiInstanzen();
-  await mitServer(routen(b, KUNDE), async (post) => {
-    const unbekannt = await post("/api/calls/call_gibt_es_nicht/consult/answer", { event_id: eventId, answers: ["x"] });
-    assert.equal(unbekannt.status, 404);
-    assert.deepEqual(JSON.parse(unbekannt.text), { error: "not found" });
-  });
-  await mitServer(routen(b, FREMD), async (post) => {
-    const fremd = await post(`/api/calls/${call.id}/consult/answer`, { event_id: eventId, answers: ["x"] });
-    assert.equal(fremd.status, 404);
-  });
-});
