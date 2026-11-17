@@ -769,15 +769,21 @@ export async function bootServer({
 
   await lifecycle.rearmBudgetWatchdogs();
 
-  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen });
+  elevenLabsOutbound.rearmActiveConversationPolls();
+
+  starteFristenTakt({
+    store,
+    lifecycle,
+    config,
+    fristen: fristenEinstellungen,
+    abfrage: { pollen: elevenLabsOutbound.abfrageDurchLauf },
+  });
 
   const instanzTakt = await store.starteInstanzTakt();
 
   if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 
   await expireOrphanedConsults(store);
-
-  elevenLabsOutbound.rearmActiveConversationPolls();
 
   inboundBridges.rearmDeadlines();
 
