@@ -85,7 +85,8 @@ test("Entprellen: derselbe Alarm in derselben Stunde trägt dieselbe Vorfall-Ken
     const teile = [];
     anfrage.on("data", (stueck) => teile.push(stueck));
     anfrage.on("end", () => {
-      empfangen.push(JSON.parse(Buffer.concat(teile).toString()).incident.id);
+      const { incident } = JSON.parse(Buffer.concat(teile).toString());
+      empfangen.push(incident.id);
       rueckgabe.writeHead(200);
       rueckgabe.end();
     });
