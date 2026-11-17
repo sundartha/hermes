@@ -1,24 +1,40 @@
 import assert from "node:assert/strict";
-import { test, mock } from "node:test";
+import http from "node:http";
+import { test, mock, after } from "node:test";
 
 import { starteHermesMitPglite } from "./server-mit-testdatenbank.js";
+import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { zaehlerPunkte, mitTelemetrie } from "../gemeinsam/anbieter-messung-export.mjs";
 
 const HTTP_OK = 200;
-const TELNYX_BELEGE = "https://telnyx.kv2.invalid/v2/detail_records";
+const TELNYX_BELEGE = "/v2/detail_records";
 const BELEG_COST_USD = "0.05";
 const GESCHAETZT_CENT = 20;
 const BETREIBER_SUB = "kv2-betreiber";
 const ALARM_POSTFACH = "postfach@kv2.invalid";
 
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: ALARM_POSTFACH, anrufstartAbgelehnt: true });
+const belegAnfragen = [];
+const belege = { aktuell: {} };
+
+const telnyxStub = http.createServer((req, res) => {
+  const url = new URL(req.url, "http://stub");
+  const ist = url.pathname === TELNYX_BELEGE;
+  if (ist) belegAnfragen.push(req.url);
+  const typ = url.searchParams.get("filter[record_type]");
+  res.writeHead(HTTP_OK, { "content-type": "application/json" });
+  res.end(JSON.stringify({ data: ist ? (belege.aktuell[typ] ?? []) : [] }));
+});
+await new Promise((bereit) => telnyxStub.listen(0, "127.0.0.1", bereit));
+after(() => new Promise((fertig) => telnyxStub.close(fertig)));
+process.env.TELNYX_API_BASE = `http://127.0.0.1:${telnyxStub.address().port}`;
+process.env.TELNYX_API_KEY = TELNYX_MESSZEILE_SCHLUESSEL;
+process.env.TELNYX_CONNECTION_ID = "conn_sweep";
+
+const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: ALARM_POSTFACH });
 const { makeDueOutboundCall } = await import("../cost-truing-harness.js");
 const store = await import("../../src/store.js");
 const { config } = await import("../../src/config.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
-
-const belegAnfragen = [];
-const echtesFetch = globalThis.fetch;
 
 function belegeFuer(call) {
   const zeit = call.answeredAt;
@@ -35,17 +51,6 @@ function belegeFuer(call) {
   return {
     "sip-trunking": [beleg("sip-trunking", BELEG_COST_USD)],
     "call-control": [beleg("call-control", "0")],
-  };
-}
-
-function telnyxBelegeAnbieten(call) {
-  const belege = belegeFuer(call);
-  globalThis.fetch = async (url, optionen) => {
-    const ziel = String(url);
-    if (!ziel.startsWith(TELNYX_BELEGE)) return echtesFetch(url, optionen);
-    belegAnfragen.push(ziel);
-    const typ = new URL(ziel).searchParams.get("filter[record_type]");
-    return new Response(JSON.stringify({ data: belege[typ] ?? [] }), { status: HTTP_OK });
   };
 }
 
@@ -81,29 +86,27 @@ const gebucht = (callId) => {
 
 async function sweepAnEinemAnruf(hermes, sitzung, { mitMessung }) {
   const call = await anrufAnlegen(hermes);
-  telnyxBelegeAnbieten(call);
+  belege.aktuell = belegeFuer(call);
   const nutzungVorher = store.usageOf(call.tenantId);
   const vorher = JSON.stringify(nutzungVorher);
   const lauf = async (exporte) => {
     const ergebnis = await sweepLaufen(hermes, sitzung);
     return { ergebnis, exporte: exporte(), ...gebucht(call.id), nutzungGeaendert: JSON.stringify(store.usageOf(call.tenantId)) !== vorher };
   };
-  try {
-    if (!mitMessung) return await lauf(() => []);
-    return await mitTelemetrie(starteTelemetrie, async ({ telemetrie, exporte }) => {
-      const ergebnis = await lauf(() => exporte);
-      await telemetrie.spuele();
-      return { ...ergebnis, exporte };
-    });
-  } finally {
-    globalThis.fetch = echtesFetch;
-  }
+  if (!mitMessung) return lauf(() => []);
+  return mitTelemetrie(starteTelemetrie, async ({ telemetrie, exporte }) => {
+    const ergebnis = await lauf(() => exporte);
+    await telemetrie.spuele();
+    return { ...ergebnis, exporte };
+  });
 }
 
 test("B5 ueber die Route: die gebuchten Ist-Kosten des Sweeps sind mit und ohne Messung gleich", async () => {
   const hermes = laufendesHermes();
   const { sessionCookie: sitzung } = await hermes.anmelden();
+  belegAnfragen.length = 0;
   const ohne = await sweepAnEinemAnruf(hermes, sitzung, { mitMessung: false });
+  assert.ok(belegAnfragen.length > 0);
   const mit = await sweepAnEinemAnruf(hermes, sitzung, { mitMessung: true });
   assert.equal(ohne.costTruedSource, "kostenbuch_vollbeleg");
   assert.equal(ohne.actualCostMicroCents, 5_000_000);
