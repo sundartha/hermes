@@ -72,9 +72,7 @@ async function baueStore(protokoll) {
     anrufpauseAktiv: () => protokoll.pause,
     recordFailureReason: (callId, grund) => protokoll.gruende.push([callId, grund]),
     endCallRecord: (callId, status) => protokoll.enden.push([callId, status]),
-    save: () => {
-      protokoll.gespeichert += 1;
-    },
+    save: () => protokoll.gespeichert.push(true),
   };
   return mitSperreGelesen(Object.assign(echt, basis));
 }
@@ -133,7 +131,7 @@ async function postBeiVollerPlattform({
   arm = { armMaxDurationTimer: () => {}, armReserveReleaseTimer: () => {} },
 }) {
   const aufrufe = { pruefen: [], belegen: [] };
-  const protokoll = { angelegt: [], gruende: [], enden: [], abgerechnet: [], pause: false, gespeichert: 0, aufrufe };
+  const protokoll = { angelegt: [], gruende: [], enden: [], abgerechnet: [], pause: false, gespeichert: [], aufrufe };
   const store = await baueStore(protokoll);
   const config = konfig();
   const app = express();
@@ -318,9 +316,9 @@ test("Wartender Anruf: der Auftrag waehlt ueber die Wahlfolge der Route genau ei
   t.mock.method(console, "log", () => {});
   const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
   assert.deepEqual(ergebnis.gewaehlt, []);
-  const gespeichertVorher = ergebnis.protokoll.gespeichert;
+  const gespeichertVorher = ergebnis.protokoll.gespeichert.length;
   await verbindung.starte(anruf);
-  assert.equal(ergebnis.protokoll.gespeichert, gespeichertVorher + 1);
+  assert.equal(ergebnis.protokoll.gespeichert.length, gespeichertVorher + 1);
   assert.deepEqual(ergebnis.gewaehlt, [anruf.id]);
   assert.equal(anruf.callControlId, `cc_callee_${anruf.id}`);
   assert.deepEqual(ergebnis.protokoll.gruende, []);
