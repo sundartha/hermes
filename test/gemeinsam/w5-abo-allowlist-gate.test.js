@@ -6,14 +6,15 @@ import { abrufMitFrist } from ".././gemeinsam/antwortfrist.mjs";
 import { starteAbbrechendeAttrappe } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
-const abbrechend = await starteAbbrechendeAttrappe("w5", [BOOTSTRAP_TENANT_ID]);
-after(() => abbrechend.close());
 const DENY_EMERGENCY = "112";
 const DENY_PREMIUM = "+4990012345678";
 const US = "+12025550123";
 const A = "tenant-a",
   SUB_A = "sub-a",
   NUM_A = "+4915110000001";
+
+const abbrechend = await starteAbbrechendeAttrappe("w5", [BOOTSTRAP_TENANT_ID, A]);
+after(() => abbrechend.close());
 
 const activeNumber = (id, e164, tenantId) => ({
   id,
@@ -22,6 +23,7 @@ const activeNumber = (id, e164, tenantId) => ({
   provider: "telnyx",
   status: "active",
   providerNumberId: null,
+  providerAgentPhoneNumberId: "phnum_" + id,
 });
 
 function seed({ kycLevel, status = "active", calls = [], profiles = { [A]: { maxCallsPerHour: null } } } = {}) {
@@ -57,7 +59,7 @@ const recent = () => new Date().toISOString();
 const MT = { MULTI_TENANT: "true" };
 
 test("W5-1: aktiver Subscriber (kyc=card) waehlt beliebiges Ziel OHNE ALLOWED_NUMBERS-Eintrag", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...MT }, seed: seed({ kycLevel: "card" }) });
+  const srv = await startServer({ env: { ...abbrechend.env, ...MT }, seed: seed({ kycLevel: "card" }) });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 500, "Abo+KYC ersetzt die statische Allowlist -> alle Gates passiert");
