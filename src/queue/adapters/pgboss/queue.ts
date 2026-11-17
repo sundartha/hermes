@@ -68,6 +68,8 @@ const STUNDEN_JE_TAG = 24;
 const ZEITPLAN_PRAEFIX = "zeitplan_";
 const INTERNER_PRAEFIX = "__pgboss__";
 const ZEITPLAN_ABRUF_SEKUNDEN = 30;
+const ZEITPLAN_HERZSCHLAG_SEKUNDEN = 30;
+const ZEITPLAN_FRIST_MAX_SEKUNDEN = STUNDEN_JE_TAG * MINUTEN_JE_STUNDE * MINUTEN_JE_STUNDE;
 
 const STATE_TO_STATUS: Readonly<Record<string, "queued" | "done" | "failed">> = Object.freeze({
   created: "queued",
@@ -144,11 +146,12 @@ function cronFuerTakt(intervallMs: number): string {
   throw new Error(`Takt ${String(intervallMs)} ms lässt sich nicht als Zeitplan ausdrücken`);
 }
 
-async function ensureZeitplanQueue(instance: PgBoss, queueName: string, intervallMs: number): Promise<void> {
+async function ensureZeitplanQueue(instance: PgBoss, queueName: string): Promise<void> {
   await instance.createQueue(queueName, {
     policy: "exclusive",
     retryLimit: 0,
-    expireInSeconds: intervallMs / MS_JE_SEKUNDE,
+    expireInSeconds: ZEITPLAN_FRIST_MAX_SEKUNDEN,
+    heartbeatSeconds: ZEITPLAN_HERZSCHLAG_SEKUNDEN,
     retentionSeconds: RETENTION_SECONDS,
     deleteAfterSeconds: DELETE_AFTER_SECONDS,
   });
@@ -287,7 +290,7 @@ export function makePgBossQueue({
     const cron = cronFuerTakt(intervallMs);
     const instance = await start();
     const queueName = ZEITPLAN_PRAEFIX + name;
-    await ensureZeitplanQueue(instance, queueName, intervallMs);
+    await ensureZeitplanQueue(instance, queueName);
     await instance.schedule(queueName, cron);
     await instance.work(queueName, { pollingIntervalSeconds: ZEITPLAN_ABRUF_SEKUNDEN }, () => fuehreLaufAus(eintrag));
     geplant.set(name, { intervallMs, seitMs: jetzt() });
