@@ -192,7 +192,7 @@ test("Eine Abfrage-Kette: der Nachlauf nach dem Beanspruchen kennt den Mandanten
   assert.deepEqual(geschrieben.at(-1), { callId: ANRUF, tenantId: MANDANT, faelligAt: null });
 });
 
-test("Eine Abfrage-Kette: die Frist steht vor dem ersten Abruf des Neustarts und vor dem ersten Abruf des Nachlaufs auf Abruffrist plus Uebernahmezeit", async (t) => {
+test("Eine Abfrage-Kette: die Frist steht vor dem ersten Abruf des Neustarts auf Abruffrist plus Uebernahmezeit; der Nachlauf-Start schreibt vor dem ersten Abruf nichts, die Frist folgt danach", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: JETZT_MS });
   const erwartet = { callId: ANRUF, tenantId: MANDANT, faelligAt: new Date(JETZT_MS + ABRUF_FRIST_MS + UEBERNAHME_MS).toISOString() };
   const neustart = speicher({ faelligMs: null });
@@ -203,7 +203,7 @@ test("Eine Abfrage-Kette: die Frist steht vor dem ersten Abruf des Neustarts und
   const el2 = prozess(nachlauf.store).el;
   await withFetch(async () => {
     gesehen.neustart ??= neustart.geschrieben[0];
-    gesehen.nachlauf ??= nachlauf.geschrieben[0];
+    gesehen.nachlauf ??= nachlauf.geschrieben[0] ?? "nichts geschrieben";
     return laeuft();
   }, async () => {
     await el1.rearmActiveConversationPolls();
@@ -211,5 +211,8 @@ test("Eine Abfrage-Kette: die Frist steht vor dem ersten Abruf des Neustarts und
     await abwarten();
   });
   assert.deepEqual(gesehen.neustart, erwartet);
-  assert.deepEqual(gesehen.nachlauf, erwartet);
+  assert.equal(gesehen.nachlauf, "nichts geschrieben");
+  const danach = nachlauf.geschrieben[0];
+  assert.deepEqual({ callId: danach.callId, tenantId: danach.tenantId }, { callId: ANRUF, tenantId: MANDANT });
+  assert.ok(Date.parse(danach.faelligAt) >= JETZT_MS + UEBERNAHME_MS, "die Frist nach dem ersten Abruf enthaelt die Uebernahmezeit");
 });

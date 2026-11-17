@@ -729,6 +729,9 @@ async function finishFromConversationOnce({ store, terminateAndBillCall, billThu
   store.leitungsplaetze?.freigeben(callId);
 }
 
+const keineVorabFrist = async () => {};
+const schreibeAbrufFrist = (abfrageFrist, call) => abfrageFrist.schreibe(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
+
 async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
   const beanspruchen = store.beanspruecheInboundElNachlauf ?? store.markInboundElNachlaufStarted;
   const { call, changed } = await beanspruchen(callId, new Date().toISOString());
@@ -736,7 +739,7 @@ async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversat
   console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
   if (laufendeInboundPolls.has(callId)) return;
   laufendeInboundPolls.add(callId);
-  void pollConversationResult(callId, call.elevenlabsConversationId, { tenantId: call.tenantId });
+  void pollConversationResult(callId, call.elevenlabsConversationId, { tenantId: call.tenantId, ohneVorabFrist: true });
 }
 
 async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
@@ -938,24 +941,24 @@ export function makeElevenLabsOutbound({
   const permanentErrorStreaks = new Map();
   const laufendeInboundPolls = new Set();
 
-  async function pollConversationResult(callId, conversationId, { tenantId } = {}) {
+  async function pollConversationResult(callId, conversationId, { tenantId, ohneVorabFrist = false } = {}) {
     let ausgang;
     try {
-      ausgang = await pollTakt(callId, conversationId);
+      ausgang = await pollTakt(callId, conversationId, ohneVorabFrist ? keineVorabFrist : (call) => schreibeAbrufFrist(abfrageFrist, call));
       if (ausgang !== FOLGETAKT_GEPLANT) abfrageFrist.schreibe({ id: callId, tenantId }, null);
     } finally {
       if (ausgang !== FOLGETAKT_GEPLANT) laufendeInboundPolls.delete(callId);
     }
   }
 
-  async function pollTakt(callId, conversationId) {
+  async function pollTakt(callId, conversationId, schreibeVorabFrist) {
     const call = await abfrageFrist.lese(callId);
     if (!pollDarfWirken(call)) return;
     const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
     if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
-    await abfrageFrist.schreibe(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
+    await schreibeVorabFrist(call);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
