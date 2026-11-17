@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { startServer, seedState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const OWN = "+491713920012";
 const FOREIGN = "+491729999001";
@@ -28,7 +29,7 @@ const postCall = (url, body) =>
 
 test("P2b-40: to=eigene Nummer + diagnostic=true -> gewaehrt (Response UND Store)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
+    env: { ALLOWED_COUNTRY_CODES: "+49", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed,
   });
   try {
@@ -45,7 +46,7 @@ test("P2b-40: to=eigene Nummer + diagnostic=true -> gewaehrt (Response UND Store
 
 test("P2b-41 (Scope-Beweis): to=fremde Nummer + diagnostic=true -> still verworfen", async () => {
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
+    env: { ALLOWED_COUNTRY_CODES: "+49", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed,
   });
   try {
@@ -62,7 +63,7 @@ test("P2b-41 (Scope-Beweis): to=fremde Nummer + diagnostic=true -> still verworf
 
 test("P2b-42: to=eigene Nummer OHNE diagnostic-Feld -> gewaehrt (GQ-P11)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
+    env: { ALLOWED_COUNTRY_CODES: "+49", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed,
   });
   try {
@@ -79,7 +80,7 @@ test("P2b-42: to=eigene Nummer OHNE diagnostic-Feld -> gewaehrt (GQ-P11)", async
 
 test("GQ-P11-8: to=eigene Nummer + diagnostic=false -> still verworfen (Opt-out wirkt bis in den Store)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
+    env: { ALLOWED_COUNTRY_CODES: "+49", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed,
   });
   try {
@@ -96,7 +97,7 @@ test("GQ-P11-8: to=eigene Nummer + diagnostic=false -> still verworfen (Opt-out 
 
 test("P2b-43: DIAGNOSTIC_RETENTION_DAYS=0 -> Feature-Aus wirkt am Producer (kein Grant trotz Scope-Treffer)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "0" },
+    env: { ALLOWED_COUNTRY_CODES: "+49", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), DIAGNOSTIC_RETENTION_DAYS: "0" },
     seed,
   });
   try {

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { mcpPost, startServer, toolCall } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const ZIEL = "+4915112345678";
 const OFFENE_FRAGEN = Object.freeze(["Welche Uhrzeit passt genau?", "Darf es auch Freitag sein?"]);
 const ENV = Object.freeze({
   ASSISTANT_CONTEXT_ENABLED: "true",
-  FAKE_ORIGINATE: "true",
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
   ALLOWED_COUNTRY_CODES: "*",
 });
 

@@ -4,6 +4,7 @@ import { EL_OUTBOUND_BOOT_ENV, startServer, seedState, seedCall, waitForLog, wai
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
@@ -51,7 +52,7 @@ function neuerLauf(antworten) {
 }
 
 const BRIEFING_ENV = {
-  FAKE_ORIGINATE: "true",
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
   ALLOWED_COUNTRY_CODES: "*",
   ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",

@@ -139,3 +139,34 @@ export async function starteAblehnendeAttrappe(status, kennung, tenantIds) {
   };
   return { env, close: attrappe.close };
 }
+
+async function starteVorspannAnbieter(behandeln, kennung, tenantIds) {
+  const { makeTelnyxSigner, vorspannUmgebung } = await import("../anrufe/el-bein-attrappe.js");
+  const { starteAttrappe } = await import("../anrufe/attrappen-server.js");
+  const attrappe = await starteAttrappe(behandeln);
+  const env = {
+    ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung }),
+    ...vorspannMandantenUmgebung(tenantIds),
+  };
+  return { env, close: attrappe.close };
+}
+
+export const starteAbbrechendeAttrappe = (kennung, tenantIds) =>
+  starteVorspannAnbieter((anfrage, antwort) => {
+    anfrage.resume();
+    anfrage.on("end", () => {
+      if (!anfrage.url.startsWith(TTS_PFAD)) return antwort.destroy();
+      antwort.writeHead(HTTP_OK, { "content-type": AUDIO_TYP });
+      antwort.end(Buffer.alloc(AUDIO_BYTES, 1));
+    });
+  }, kennung, tenantIds);
+
+export async function starteErfolgreicheAttrappe(kennung, tenantIds) {
+  const { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } = await import("../anrufe/el-bein-attrappe.js");
+  const attrappe = await starteAttrappe();
+  const env = {
+    ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung }),
+    ...vorspannMandantenUmgebung(tenantIds),
+  };
+  return { env, attrappe, close: attrappe.close };
+}

@@ -5,6 +5,8 @@ import { registerTools } from "../../src/mcp-tools.js";
 import { startServer, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteJsonAttrappe } from "./attrappen-server.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const SECOND_MS = 1000;
 const THIRTY_S_MS = 30 * SECOND_MS;
@@ -147,7 +149,7 @@ test("Ausgabe-Schema: alte Antwort ohne die drei Felder bleibt gueltig, neue Fel
 test("POST /api/calls nennt startedAt des Anrufs, auch bei deduplicated", async () => {
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { ALLOWED_COUNTRY_CODES: "*", FAKE_ORIGINATE: "true" },
+    env: { ALLOWED_COUNTRY_CODES: "*", ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]) },
   });
   try {
     const post = () =>

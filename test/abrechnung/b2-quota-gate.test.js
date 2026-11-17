@@ -6,6 +6,7 @@ import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
 import { findPlan } from "../../src/plans.ts";
 import { resolvePeriodStartIso, periodStartFromEnd } from "../../src/billing/period.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
 
@@ -21,12 +22,8 @@ const fiveDaysAgoSec = nowSec - 5 * SECONDS_PER_DAY;
 const twentyFiveDaysAheadSec = nowSec + 25 * SECONDS_PER_DAY;
 
 const activeNumber = (id, e164, tenantId, status = "active") => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
+  ...vorspannSeedNummer({ tenantId, nummer: e164, id }),
   status,
-  providerNumberId: null,
 });
 
 const voiceMinuteEvent = (tenantId, quantity, idSuffix = "") => ({
@@ -94,12 +91,14 @@ const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 async function tryOutbound(env, seed, identity) {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...env }, seed });
+  const attrappe = await starteAbbrechendeAttrappe("quota", seed.tenants.map((eintrag) => eintrag.id));
+  const srv = await startServer({ env: { ...attrappe.env, ...env }, seed });
   try {
     const res = await placeCall(srv, identity);
     return { status: res.status, body: await res.text(), callCount: outboundCallsTo(srv).length };
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 }
 

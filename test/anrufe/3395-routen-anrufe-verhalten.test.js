@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -14,7 +15,7 @@ const OVER_LIMIT = 33;
 
 const BASE_ENV = {
   ALLOWED_COUNTRY_CODES: "+49",
-  FAKE_ORIGINATE: "true",
+  ...vorspannMandantenUmgebung([MANDANT]),
   PRECALL_BRIEFING_ENABLED: "false",
 };
 

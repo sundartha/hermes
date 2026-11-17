@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { startServer, DOMESTIC_TEST_NUMBER, waitForLog } from "../helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { beinLegtAuf, starteAbbrechendeAttrappe, starteErfolgreicheAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_INTERNAL_ERROR = 500;
@@ -16,13 +18,14 @@ const post = (url, to) =>
   });
 
 test("OUT-05 F2: zwei gleichzeitige place_call gegen engen Cap -> genau 1x200, 1x402(reserve)", async () => {
+  const attrappe = await starteErfolgreicheAttrappe("reserve", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "300",
       ALLOWED_COUNTRY_CODES: "*",
-      FAKE_ORIGINATE: "true",
+      ...attrappe.env,
     },
   });
   try {
@@ -46,15 +49,18 @@ test("OUT-05 F2: zwei gleichzeitige place_call gegen engen Cap -> genau 1x200, 1
     assert.equal((await dialed.json()).status, "dialing");
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 });
 
 test("OUT-05 F2: catch-Pfad gibt die Reserve frei (zweiter Call erreicht wieder den Originate)", async () => {
+  const attrappe = await starteAbbrechendeAttrappe("reserve", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     env: {
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
       ALLOWED_COUNTRY_CODES: "*",
+      ...attrappe.env,
     },
   });
   try {
@@ -71,17 +77,19 @@ test("OUT-05 F2: catch-Pfad gibt die Reserve frei (zweiter Call erreicht wieder 
     assert.notEqual(r2.status, HTTP_PAYMENT_REQUIRED, "402 hier hiesse: Reserve NICHT freigegeben");
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 });
 
 test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async () => {
+  const attrappe = await starteErfolgreicheAttrappe("reserve", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "300",
       ALLOWED_COUNTRY_CODES: "*",
-      FAKE_ORIGINATE: "true",
+      ...attrappe.env,
     },
   });
   try {
@@ -96,12 +104,7 @@ test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async
       "zweite Reserve reisst den Cap, solange #1 haelt",
     );
 
-    const st = await abrufMitFrist(`${srv.localUrl}/voice/status?callId=${callId1}`, {
-      method: "POST",
-      body: new URLSearchParams({ CallStatus: "completed" }),
-    });
-    assert.equal(st.status, HTTP_OK);
-    await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId1}"`));
+    await beinLegtAuf(srv, callId1);
 
     const r2b = await post(srv.localUrl, "+4915112340002");
     assert.equal(
@@ -111,6 +114,7 @@ test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async
     );
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 });
 
@@ -118,9 +122,11 @@ const DOMESTIC = "+4915112345678";
 const INTL = "+12025550123";
 
 test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert", async (kontext) => {
+  const attrappe = await starteAbbrechendeAttrappe("reserve", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
-    env: { FAKE_ORIGINATE_ELEVENLABS: "false",
+    env: {
+      ...attrappe.env,
       ALLOWED_NUMBERS: `${DOMESTIC},${INTL}`,
       ALLOWED_COUNTRY_CODES: "*",
       MAX_BUDGET_EUR: "6",
@@ -155,5 +161,6 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
     );
   } finally {
     await srv.stop();
+    await attrappe.close();
   }
 });

@@ -1,8 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { startServer, seedState, seedCall, anthropicAttrappe, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteErfolgreicheAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 
 const LEERE_ANTWORT_SCHLIESST = "Leere Antwort schließt die Rückfrage";
@@ -115,30 +116,11 @@ test("answer_consult mit status working ohne answers quittiert weiter und lässt
 const ZIEL = "+4915112345678";
 const TELNYX_BESITZER = { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_leere_antwort" };
 
-async function starteSprachAttrappe() {
-  const server = http.createServer((anfrage, antwort) => {
-    anfrage.resume();
-    anfrage.on("end", () => {
-      antwort.setHeader("content-type", "application/json");
-      antwort.end(JSON.stringify({ success: true, conversation_id: "conv_leere_antwort_1", sip_call_id: "sip_leere_antwort_1" }));
-    });
-  });
-  await new Promise((bereit) => server.listen(0, "127.0.0.1", bereit));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    stop: () => new Promise((fertig) => server.close(fertig)),
-  };
-}
-
 async function placeCallMitBriefing(context) {
-  const sprache = await starteSprachAttrappe();
+  const sprache = await starteErfolgreicheAttrappe("leere", [BOOTSTRAP_TENANT_ID]);
   const anrufServer = await startServer({
     env: {
-      TELNYX_API_KEY: "KEYtest-secret",
-      TELNYX_CONNECTION_ID: "conn_test",
-      TELNYX_ACCOUNT_SID: "acct_test",
-      TELNYX_API_BASE: sprache.url,
-      ELEVENLABS_API_BASE: sprache.url,
+      ...sprache.env,
       ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
       ASSISTANT_CONTEXT_ENABLED: "true",
       PRECALL_BRIEFING_ENABLED: "true",
@@ -155,7 +137,7 @@ async function placeCallMitBriefing(context) {
     return { status: antwort.status, body: await antwort.json(), briefings: anthropicAttrappe.anfragen() - briefingVorher };
   } finally {
     await anrufServer.stop();
-    await sprache.stop();
+    await sprache.close();
   }
 }
 
