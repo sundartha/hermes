@@ -5,5 +5,5 @@
 - abrechnung: api-billing.ts, stripe-webhook.ts. Zweck und Darf nutzen: stehen in `src/billing/CLAUDE.md`, dem ersten Ordner von abrechnung. Eingang: stripe-webhook.ts.
 - anmeldung: _tenant.js. Zweck und Darf nutzen: stehen in `src/wiring/CLAUDE.md`, dem ersten Ordner von anmeldung. Eingang: _tenant.js.
 - selbstbedienung: api-onboard.js. Zweck und Darf nutzen: stehen in `src/geo/CLAUDE.md`, dem ersten Ordner von selbstbedienung. Eingang: kein Eingang hier.
-- anrufe: _call-request.ts, api-calls.js, api-read.ts, voice.js, webhooks-elevenlabs-init.js, webhooks-elevenlabs.js. Zweck und Darf nutzen: stehen in `src/telephony/CLAUDE.md`, dem ersten Ordner von anrufe. Eingang: webhooks-elevenlabs-init.js.
+- anrufe: _call-request.ts, api-calls.js, api-read.ts, voice.js, webhooks-elevenlabs-init.ts, webhooks-elevenlabs.js. Zweck und Darf nutzen: stehen in `src/telephony/CLAUDE.md`, dem ersten Ordner von anrufe. Eingang: webhooks-elevenlabs-init.ts.
 - Ort für Neues: Neue Route mit `npm run neu -- route <baustein> <name>`; der Baustein steht in tools/bausteine.json.

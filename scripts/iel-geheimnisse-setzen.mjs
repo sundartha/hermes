@@ -16,7 +16,7 @@ import {
   inventarUrteil,
   registrierungenMitNummer,
 } from "../src/elevenlabs/nummern-registrierung.js";
-import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
+import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.ts";
 import {
   EXIT,
   exitVon,

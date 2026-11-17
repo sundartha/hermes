@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/inbound-path-decision.ts";
@@ -15,6 +16,72 @@ import { normNum } from "../begriffe/rufnummern.js";
 import { safeEqual } from "../util.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.ts";
+
+interface Anruf {
+  id: string;
+  to: string;
+  from: string;
+  tenantId: string;
+  status?: string;
+  streamToken?: string;
+  costProfile?: unknown;
+  answeredAt?: string;
+  elFallbackAt?: unknown;
+  elBoundAt: string;
+  elevenlabsConversationId?: unknown;
+}
+
+interface InitKoerper {
+  agent_id?: unknown;
+  called_number?: unknown;
+  conversation_id?: unknown;
+}
+
+interface Konfiguration {
+  voice: {
+    elevenLabsInbound: { initWebhookToken?: unknown };
+    elevenLabsOutbound: { agentId?: unknown };
+  };
+}
+
+interface Bindung {
+  bound: boolean;
+  changed: boolean;
+  call: Anruf;
+}
+
+interface Speicher {
+  load(): { calls: Anruf[] };
+  numberRecordByE164(e164: string): NummernSatz;
+  bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
+}
+
+type NummernSatz = Parameters<typeof inboundElPathFor>[0]["numberRecord"];
+
+interface Abhaengigkeiten {
+  store: Speicher;
+  config: Konfiguration;
+  bridges: { clearDeadlines(callId: string): void };
+  now: () => number;
+  outboundInitInhalt?: ((call: Anruf, vorspann: unknown) => Record<string, unknown>) | undefined;
+  vorspannText: (callId: string) => unknown;
+}
+
+type Zaehler = (ip: string | undefined) => { allowed: boolean; retryAfterS: number };
+type InitGrund = (typeof INIT_GRUND)[keyof typeof INIT_GRUND];
+type Zuordnung = { grund: InitGrund; call: Anruf | null } | { grund: null; call: Anruf };
+
+interface Bindbar {
+  call: Anruf;
+  conversationId: unknown;
+  nowMs: number;
+}
+
+interface Dienste {
+  store: Speicher;
+  config: Konfiguration;
+  call: Anruf;
+}
 
 export const ELEVENLABS_INIT_PATH = "/webhooks/elevenlabs/init";
 export const INIT_TOKEN_HEADER = "x-hermes-init-token";
@@ -42,27 +109,27 @@ const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";
 const INIT_KOERPER = z.object({}).passthrough().catch({});
-const KEINE_NUMMER = Object.freeze([undefined, null, ""]);
+const KEINE_NUMMER: readonly unknown[] = Object.freeze([undefined, null, ""]);
 export const INIT_FEHLVERSUCHE_PRO_MIN = 30;
 const INIT_HTTP_METHODE = "POST";
 const EXAKTER_ROUTER = Object.freeze({ caseSensitive: true, strict: true });
 
-function initTokenGueltig(config, req) {
+function initTokenGueltig(config: Konfiguration, req: Request): boolean {
   const erwartet = config.voice.elevenLabsInbound.initWebhookToken;
   if (typeof erwartet !== "string" || erwartet.length < INIT_WEBHOOK_TOKEN_MIN_LENGTH) return false;
   return safeEqual(req.get(INIT_TOKEN_HEADER) ?? "", erwartet);
 }
 
-function verweigern(res) {
+function verweigern(res: Response): Response {
   console.log(`[${INIT_LOG_TAG}] abgelehnt grund=${INIT_GRUND.TOKEN}`);
   return res.status(HTTP_FORBIDDEN).json(INIT_ANTWORT.VERWEIGERT);
 }
 
-export function istInitWebhookAnfrage(req) {
+export function istInitWebhookAnfrage(req: Request): boolean {
   return req.method === INIT_HTTP_METHODE && req.path === ELEVENLABS_INIT_PATH;
 }
 
-function makeDrosselungsMelder({ now, fensterMs }) {
+function makeDrosselungsMelder({ now, fensterMs }: { now: () => number; fensterMs: number }): () => void {
   const stand = { seitLetzterZeile: 0, letzteZeileMs: Number.NEGATIVE_INFINITY };
   return function meldeDrosselungHoechstensJeFenster() {
     stand.seitLetzterZeile += 1;
@@ -73,9 +140,17 @@ function makeDrosselungsMelder({ now, fensterMs }) {
   };
 }
 
-export function initTokenSchranke({ config, zaehler, now = Date.now }) {
+export function initTokenSchranke({
+  config,
+  zaehler,
+  now = Date.now,
+}: {
+  config: Konfiguration;
+  zaehler: Zaehler;
+  now?: () => number;
+}): (req: Request, res: Response, next: () => unknown) => unknown {
   const meldeDrosselung = makeDrosselungsMelder({ now, fensterMs: RATE_WINDOW_MS });
-  return function initTokenSchrankeMiddleware(req, res, next) {
+  return function initTokenSchrankeMiddleware(req: Request, res: Response, next: () => unknown): unknown {
     if (initTokenGueltig(config, req)) return next();
     const { allowed, retryAfterS } = zaehler(req.ip);
     if (allowed) return verweigern(res);
@@ -84,12 +159,22 @@ export function initTokenSchranke({ config, zaehler, now = Date.now }) {
   };
 }
 
-function schluesselFuerLog(body) {
+function schluesselFuerLog(body: InitKoerper | null | undefined): string {
   const bereinigt = Object.keys(body ?? {}).map((name) => name.replace(LOG_ZEICHEN_UNERLAUBT, LOG_ERSATZZEICHEN));
   return bereinigt.sort().slice(0, LOG_SCHLUESSEL_MAX).join(",");
 }
 
-function keinAnruf({ res, body, grund, callId = null }) {
+function keinAnruf({
+  res,
+  body,
+  grund,
+  callId = null,
+}: {
+  res: Response;
+  body: InitKoerper | null | undefined;
+  grund: string;
+  callId?: string | null | undefined;
+}): Response {
   const anruf = callId ? ` call=${callId}` : "";
   console.log(
     `[${INIT_LOG_TAG}] abgelehnt grund=${grund} schluessel=${schluesselFuerLog(body)} sip_headers=${sipHeadersFormOf(body)}${anruf}`,
@@ -97,13 +182,13 @@ function keinAnruf({ res, body, grund, callId = null }) {
   return res.status(HTTP_NOT_FOUND).json(INIT_ANTWORT.KEIN_ANRUF);
 }
 
-function aktiverElInboundCallMitToken(store, token) {
+function aktiverElInboundCallMitToken(store: Speicher, token: unknown): Anruf | null {
   if (!token) return null;
   return (
     store
       .load()
       .calls.find(
-        (call) =>
+        (call: Anruf) =>
           call.status === "active" &&
           bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND &&
           Boolean(call.streamToken) &&
@@ -112,7 +197,7 @@ function aktiverElInboundCallMitToken(store, token) {
   );
 }
 
-function istWiederholung({ call, conversationId, nowMs }) {
+function istWiederholung({ call, conversationId, nowMs }: Bindbar): boolean {
   return (
     bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN &&
     call.elevenlabsConversationId === conversationId &&
@@ -120,22 +205,32 @@ function istWiederholung({ call, conversationId, nowMs }) {
   );
 }
 
-function bindbar({ call, conversationId, nowMs }) {
+function bindbar({ call, conversationId, nowMs }: Bindbar): boolean {
   return bridgeStateOf(call) === BRIDGE_STATE.WARTET || istWiederholung({ call, conversationId, nowMs });
 }
 
-function agentPasst(config, body) {
+function agentPasst(config: Konfiguration, body: InitKoerper): boolean {
   const agentId = config.voice.elevenLabsOutbound.agentId;
   return Boolean(agentId) && body.agent_id === agentId;
 }
 
-function calledNumberPasst(body, call) {
+function calledNumberPasst(body: InitKoerper, call: Anruf): boolean {
   const fehlt = KEINE_NUMMER.includes(body.called_number);
   if (istOutboundElProfil(call)) return !fehlt && normNum(body.called_number) === call.from;
   return fehlt || normNum(body.called_number) === call.to;
 }
 
-function zuordnungFuer({ store, config, body, nowMs }) {
+function zuordnungFuer({
+  store,
+  config,
+  body,
+  nowMs,
+}: {
+  store: Speicher;
+  config: Konfiguration;
+  body: InitKoerper;
+  nowMs: number;
+}): Zuordnung {
   const call = aktiverElInboundCallMitToken(store, callBindingTokenOf(body));
   if (!call) return { grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, call: null };
   if (!bindbar({ call, conversationId: body.conversation_id, nowMs }))
@@ -145,37 +240,51 @@ function zuordnungFuer({ store, config, body, nowMs }) {
   return { grund: null, call };
 }
 
-const elWegFuer = ({ store, config, call }) =>
+const elWegFuer = ({ store, config, call }: Dienste): boolean =>
   inboundElPathFor({ config, tenantId: call.tenantId, numberRecord: store.numberRecordByE164(call.to) });
 
-const eroeffnungSicher = ({ store, config, call }) => inboundEroeffnungsDefekteFuer({ store, config, call }).length === 0;
+const eroeffnungSicher = ({ store, config, call }: Dienste): boolean => inboundEroeffnungsDefekteFuer({ store, config, call }).length === 0;
 
-function bindungsLogZeile({ bindung, call, nowMs, eingangMs }) {
+function bindungsLogZeile({
+  bindung,
+  call,
+  nowMs,
+  eingangMs,
+}: {
+  bindung: Bindung;
+  call: Anruf;
+  nowMs: number;
+  eingangMs: number;
+}): string {
   if (!bindung.changed) return `[${INIT_LOG_TAG}] wiederholung call=${call.id}`;
   const zeile = `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${String(msSeitAnnahme(call, nowMs))}`;
   if (!istOutboundElProfil(call)) return zeile;
   return `${zeile} ms_bearbeitung=${String(Math.round(performance.now() - eingangMs))}`;
 }
 
-function inboundSperrgrundFuer({ store, config, call }) {
+function inboundSperrgrundFuer({ store, config, call }: Dienste): InitGrund | null {
   if (istOutboundElProfil(call)) return null;
   if (!elWegFuer({ store, config, call })) return INIT_GRUND.KEIN_EL_WEG;
   if (!eroeffnungSicher({ store, config, call })) return INIT_GRUND.EROEFFNUNG;
   return null;
 }
 
-function outboundAntwortFuer({ outboundInitInhalt, vorspannText, call }) {
+function outboundAntwortFuer({
+  outboundInitInhalt,
+  vorspannText,
+  call,
+}: Pick<Abhaengigkeiten, "outboundInitInhalt" | "vorspannText"> & { call: Anruf }): Record<string, unknown> | null {
   if (!istOutboundElProfil(call)) return null;
   if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-function handleInit({ req, res, deps }) {
+function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): unknown {
   const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
-  const body = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
+  const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
   const zuordnung = zuordnungFuer({ store, config, body, nowMs });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
@@ -198,12 +307,19 @@ function handleInit({ req, res, deps }) {
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call }));
 }
 
-function fehlerNachricht(err) {
+function fehlerNachricht(err: unknown): string {
   if (typeof err !== "object" || err === null || !("message" in err)) return "";
   return typeof err.message === "string" ? err.message : "";
 }
 
-export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt, vorspannText }) {
+export function makeElevenLabsInitWebhookRoutes({
+  store,
+  config,
+  bridges,
+  now = Date.now,
+  outboundInitInhalt,
+  vorspannText,
+}: Omit<Abhaengigkeiten, "now"> & { now?: () => number }): Router {
   const router = Router(EXAKTER_ROUTER);
   const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
 

@@ -27,7 +27,7 @@ import {
   initTokenSchranke,
   istInitWebhookAnfrage,
   makeElevenLabsInitWebhookRoutes,
-} from "./routes/webhooks-elevenlabs-init.js";
+} from "./routes/webhooks-elevenlabs-init.ts";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.ts";
 import { makeInboxRoutes } from "./routes/api-inbox.ts";

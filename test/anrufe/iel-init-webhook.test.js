@@ -24,7 +24,7 @@ import {
   INIT_ANTWORT,
   INIT_TOKEN_HEADER,
   makeElevenLabsInitWebhookRoutes,
-} from "../../src/routes/webhooks-elevenlabs-init.js";
+} from "../../src/routes/webhooks-elevenlabs-init.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { templatePlaceholderNames } from ".././helpers/el-vorlage-variablen.mjs";
