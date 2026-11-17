@@ -67,7 +67,7 @@ function betrieb({ schreibenScheitert = false } = {}) {
     billThunk: () => () => {},
     finishCall: () => {},
   });
-  return { call, geschrieben, el };
+  return { call, geschrieben, el, store };
 }
 
 const abwarten = () => new Promise((erfuellen) => setImmediate(erfuellen));
@@ -138,4 +138,23 @@ test("Abfrage-Frist: ein Anruf ohne Gespraechskennung wird nicht abgefragt, sein
   });
   assert.equal(abfragen, 0);
   assert.deepEqual(geschrieben, [{ callId: ANRUF, tenantId: MANDANT, faelligAt: null }]);
+});
+
+test("Abfrage-Frist: die Abfrage liest den Anruf ohne ihn an diesen Prozess zu binden", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: JETZT_MS });
+  const { call, el, store } = betrieb();
+  const gelesen = { gebunden: 0, ungebunden: 0 };
+  store.leseCall = async () => {
+    gelesen.gebunden += 1;
+    return call;
+  };
+  store.leseCallUngebunden = async () => {
+    gelesen.ungebunden += 1;
+    return call;
+  };
+  await withFetch(async () => laeuft(), async () => {
+    await el.pollFrist(ANRUF, MANDANT);
+    await abwarten();
+  });
+  assert.equal(gelesen.ungebunden, 2);
 });
