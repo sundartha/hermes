@@ -11,6 +11,7 @@ const UNBEKANNTE_CALL_ID = "call_gibt_es_nicht_2662";
 const IMMER = Number.POSITIVE_INFINITY;
 const KEINMAL = 0;
 const EINMAL = 1;
+const ZWEIMAL = 2;
 const DREIMAL = 3;
 const HTTP_OK = 200;
 const WARTE_MS = 5000;
@@ -116,7 +117,7 @@ test("2662 Kriterium 1: Pool weist einmal ab, dann gelingt es -> 200 und Anruf i
 test("2662 Kriterium 2: genau eine Fehlschlag-Zeile mit versuch=1, kein Verwerfen", async () => {
   const callId = await aktiverAnrufDerAnderenInstanz();
   const zeilen = neueZeilen();
-  poolWeistAb(EINMAL);
+  poolWeistAb(ZWEIMAL);
   await postStatus(callId, "completed");
   await waitUntil(() => store.getCall(callId)?.status === "completed", { timeoutMs: WARTE_MS });
   const fehlschlaege = zeilen(FEHLGESCHLAGEN_LOG);
@@ -148,9 +149,9 @@ test("2662 Kriterium 4: unbekannte callId bei gesundem Pool -> genau 1 Versuch, 
   const mandanten = store.load().tenants.length;
   const antwort = await postStatus(UNBEKANNTE_CALL_ID, "completed");
   assert.equal(antwort.status, HTTP_OK);
-  await waitUntil(() => abfragenNachId.get(UNBEKANNTE_CALL_ID) >= mandanten, { timeoutMs: WARTE_MS });
+  await waitUntil(() => abfragenNachId.get(UNBEKANNTE_CALL_ID) >= mandanten + EINMAL, { timeoutMs: WARTE_MS });
   await ruhe();
-  assert.equal(abfragenNachId.get(UNBEKANNTE_CALL_ID), mandanten, "je Mandant genau eine Abfrage, also ein Versuch");
+  assert.equal(abfragenNachId.get(UNBEKANNTE_CALL_ID), mandanten + EINMAL, "eine Leseabfrage und je Mandant genau eine Abfrage, also ein Versuch");
   assert.equal(zeilen(FEHLGESCHLAGEN_LOG).length, KEINMAL);
   assert.equal(zeilen(VERWORFEN_LOG).length, KEINMAL);
 });
