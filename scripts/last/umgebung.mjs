@@ -3,10 +3,9 @@ import pg from "pg";
 import { LASTLAUF_WERKZEUG_TOKEN, WEB_SITZUNGS_GEHEIMNIS } from "../../test/gemeinsam/erfundene-geheimnisse.js";
 import { POSTGRES_VARIABLE } from "../../test/gemeinsam/echtes-postgres.js";
 import { verwaltungsAdresse } from "../../test/gemeinsam/verwaltungsadresse.js";
-import { pgStartUmgebung } from "../../test/gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../../test/gemeinsam/test-rolle.js";
-import { seedeMandant } from "../../test/anrufe/hermes-mit-postgres.js";
-import { makeTelnyxSigner, nowSeconds, startIdp, startServer } from "../../test/helpers.js";
+import { seedeMandant, starteAnAnbieter } from "../../test/anrufe/hermes-mit-postgres.js";
+import { makeTelnyxSigner, nowSeconds, startIdp } from "../../test/helpers.js";
 import { starteLastAttrappe } from "./attrappe.mjs";
 import { baueWebhooks, WEBHOOKS_JE_LAUF } from "./webhooks.mjs";
 
@@ -20,18 +19,14 @@ const MANDANTEN = Array.from({ length: ANZAHL_MANDANTEN }, (leer, nummer) => ({
   sub: `sub-last-${nummer}`,
   e164: `+4930555000${ERSTE_RUFNUMMER + nummer}`,
 }));
-const ELEVENLABS = Object.freeze({
-  ELEVENLABS_AGENT_ID: "agent_last",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_last",
-  ELEVENLABS_API_KEY: "el-last-schluessel",
-  ELEVENLABS_RESULT_POLL_MS: "200",
-});
+const ELEVENLABS_ABFRAGE_MS = "200";
+const RESSOURCEN_PFAD = "/.well-known/oauth-protected-resource";
 
-function prozessUmgebung({ db, anbieter, idp, signer }) {
-  return pgStartUmgebung(db.adresse, {
-    ...ELEVENLABS,
-    ELEVENLABS_API_BASE: anbieter.url,
+function prozessUmgebung({ idp, signer }) {
+  return {
+    ELEVENLABS_RESULT_POLL_MS: ELEVENLABS_ABFRAGE_MS,
     ELEVENLABS_TOOL_TOKEN: LASTLAUF_WERKZEUG_TOKEN,
+    ELEVENLABS_INBOUND_TENANT_IDS: MANDANTEN.map((mandant) => mandant.id).join(","),
     MCP_AUTH: "oauth",
     OAUTH_ISSUER_URL: idp.issuer,
     MULTI_TENANT: "true",
@@ -41,7 +36,12 @@ function prozessUmgebung({ db, anbieter, idp, signer }) {
     SESSION_SECRET: WEB_SITZUNGS_GEHEIMNIS,
     SELF_SERVICE_ENABLED: "true",
     LOGIN_RATE_LIMIT_PER_MIN: "10000",
-  });
+  };
+}
+
+async function audienzVon(prozess) {
+  const antwort = await fetch(`${prozess.localUrl}${RESSOURCEN_PFAD}`);
+  return (await antwort.json()).resource;
 }
 
 export async function starteLokaleUmgebung({ rotprobe } = {}) {
@@ -49,7 +49,9 @@ export async function starteLokaleUmgebung({ rotprobe } = {}) {
   const merke = (schliessen) => aufraeumen.push(schliessen);
   const kontext = { after: merke, diagnostic: () => undefined, skip: () => undefined };
   const schliessen = async () => {
-    for (const aufgabe of aufraeumen.reverse()) await aufgabe();
+    for (const aufgabe of aufraeumen.reverse()) {
+      await aufgabe().catch((fehler) => console.error("[lastlauf] aufraeumen:", fehler.message));
+    }
   };
   try {
     const db = await echteDatenbankMitRolle(kontext);
@@ -57,18 +59,21 @@ export async function starteLokaleUmgebung({ rotprobe } = {}) {
     const verwaltung = new pg.Client({ connectionString: verwaltungsAdresse(db.adresse) });
     await verwaltung.connect();
     merke(() => verwaltung.end());
-    const anbieter = await starteLastAttrappe();
-    merke(() => anbieter.close());
     const idp = await startIdp();
     merke(() => idp.close());
     const signer = makeTelnyxSigner();
-    const env = prozessUmgebung({ db, anbieter, idp, signer });
-    const erster = await startServer({ env });
+    const anbieter = await starteLastAttrappe({ signer });
+    merke(() => anbieter.close());
+    const env = prozessUmgebung({ idp, signer });
+    const erster = await starteAnAnbieter(db, anbieter, env);
     await erster.stop();
     for (const mandant of MANDANTEN) await seedeMandant((text, werte) => verwaltung.query(text, werte), mandant);
-    const prozesse = [await startServer({ env }), await startServer({ env })];
+    const prozesse = [await starteAnAnbieter(db, anbieter, env), await starteAnAnbieter(db, anbieter, env)];
     merke(() => Promise.all(prozesse.map((prozess) => prozess.stop())));
-    const tokens = await Promise.all(MANDANTEN.map((mandant) => idp.sign({ sub: mandant.sub }, { exp: TOKEN_GUELTIG })));
+    const audiences = await Promise.all(prozesse.map(audienzVon));
+    const tokens = await Promise.all(
+      MANDANTEN.map((mandant) => idp.sign({ sub: mandant.sub }, { exp: TOKEN_GUELTIG, aud: audiences })),
+    );
     const jetzt = nowSeconds();
     return {
       ziele: prozesse.map((prozess) => prozess.localUrl),
