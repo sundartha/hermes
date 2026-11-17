@@ -10,6 +10,7 @@ const ANRUF = "call_abfrage_boot";
 const ANRUF_FEHLER = "call_abfrage_fehler";
 const ANRUF_NEU = "call_abfrage_neu";
 const ANRUF_KETTE = "call_abfrage_kette";
+const ANRUF_WEG = "call_abfrage_weg";
 const EL_BASIS = "https://el.abfrage-boot.invalid";
 const FRIST_BIS_ABRUF_MS = 10_000;
 const ABFRAGE_FRIST_MS = 120_000 + 60_000 + 30_000;
@@ -115,7 +116,10 @@ store.save();
 await store.drainFlushes();
 await db.exec(`CREATE FUNCTION abfrage_fehler() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'schreiben verweigert'; END $$ LANGUAGE plpgsql;
   CREATE TRIGGER abfrage_fehler BEFORE UPDATE OF frist_abfrage_at ON call FOR EACH ROW
-  WHEN (NEW.id = '${ANRUF_FEHLER}') EXECUTE FUNCTION abfrage_fehler()`);
+  WHEN (NEW.id = '${ANRUF_FEHLER}') EXECUTE FUNCTION abfrage_fehler();
+  CREATE FUNCTION abfrage_weg() RETURNS trigger AS $$ BEGIN DELETE FROM call WHERE id = NEW.id; RETURN NULL; END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER abfrage_weg AFTER UPDATE OF frist_abfrage_lease_bis ON call FOR EACH ROW
+  WHEN (NEW.id = '${ANRUF_WEG}') EXECUTE FUNCTION abfrage_weg()`);
 const server = await serverImportieren();
 after(() => {
   server.closeAllConnections();
@@ -165,4 +169,13 @@ test("Kriterium 5: ist die Abfrage-Kette eines Anrufs in diesem Prozess zu Ende,
   await frischFaellig(db, ANRUF_NEU);
   await waitUntil(() => abrufeVon(ANRUF_NEU) === 2, { timeoutMs: FRIST_BIS_ABRUF_MS });
   await beenden(db, ANRUF_NEU);
+});
+
+test("Kriterium 5: ist der Anruf einer faelligen Abfrage beim Start der Abfrage schon aus der Datenbank verschwunden, fragt der Boot-Takt nicht an und meldet keinen Fehler", async () => {
+  await fremderAnruf(db, ANRUF_WEG);
+  await einenTaktAbwarten("sonde_e");
+  await einenTaktAbwarten("sonde_f");
+  assert.deepEqual(await imMandanten(db, "SELECT id FROM call WHERE id = $1", [ANRUF_WEG]), []);
+  assert.equal(abrufeVon(ANRUF_WEG), 0);
+  assert.deepEqual(fehlerzeilen.filter((zeile) => zeile.includes(ANRUF_WEG)), []);
 });
