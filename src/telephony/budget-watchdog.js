@@ -23,7 +23,7 @@ export function makeBudgetWatchdog({
 
   async function tick(callId) {
     if (!armed.has(callId)) return;
-    const call = activeCallById(callId);
+    const call = await activeCallById(callId);
     if (!call) {
       armed.delete(callId);
       return;
