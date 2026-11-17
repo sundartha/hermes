@@ -126,6 +126,8 @@ test("Anruf: place_call mit Ziel, 60 s und Deutsch, Messung aus Status und erste
   assert.deepEqual(messung, {
     annahmeSekunden: 4,
     begruessung: GRUSS,
+    gegenseite: [GRUSS],
+    stillstandSekunden: 0,
     sprache: "de",
     auftraggeber: AUFTRAGGEBER,
     vorname: VORNAME,
