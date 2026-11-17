@@ -17,17 +17,22 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
   const pfade = [];
   const anfragen = [];
   const waehlbefehle = [];
+  const waehlaufrufe = [];
+  const rohkoerper = [];
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", async () => {
       pfade.push(req.url);
+      rohkoerper.push(roh);
       anfragen.push({ methode: req.method, pfad: req.url });
       if (req.url.startsWith("/v1/text-to-speech/")) {
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
-      const befehl = req.url === "/v2/calls" ? JSON.parse(roh).command_id : "";
+      const waehlaufruf = req.url === "/v2/calls" ? JSON.parse(roh) : null;
+      if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
+      const befehl = waehlaufruf ? waehlaufruf.command_id : "";
       if (befehl) waehlbefehle.push(befehl);
       const istEl = befehl.endsWith("-el");
       if (istEl) await vorElAntwort();
@@ -42,6 +47,8 @@ export async function starteAttrappe(vorElAntwort = async () => {}) {
     pfade,
     anfragen,
     waehlbefehle,
+    waehlaufrufe,
+    rohkoerper,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();

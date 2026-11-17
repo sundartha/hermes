@@ -11,9 +11,13 @@ import {
 } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } from "../anrufe/el-bein-attrappe.js";
 
 const HTTP_OK = 200;
 const START_PATH = "/v1/convai/sip-trunk/outbound-call";
+const TTS_PATH = "/v1/text-to-speech/";
+const AUDIO_BYTES = 200_000;
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const NACHGEHOLTE_REGISTRIERUNG = "phnum_nachgeholt_b";
@@ -66,6 +70,10 @@ async function startElevenLabsMock({
         return void new Promise((fertig) => setImmediate(fertig)).then(() =>
           endJson(res, registrierungStatus, { phone_number_id: NACHGEHOLTE_REGISTRIERUNG }),
         );
+      }
+      if (req.url.startsWith(TTS_PATH)) {
+        res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+        return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
       if (req.url.startsWith(START_PATH)) {
         startRequests.push({ body: JSON.parse(raw || "{}") });
@@ -138,6 +146,30 @@ async function withElevenLabs(run, extraEnv = {}, optionen = {}) {
   }
 }
 
+async function withVorspann(run) {
+  const mock = await startElevenLabsMock();
+  const telnyx = await starteAttrappe();
+  const srv = await startServer({
+    env: {
+      ...vorspannUmgebung({ attrappe: telnyx, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "b" }),
+      ...vorspannMandantenUmgebung([TENANT_A, TENANT_B]),
+      ...EL_ENV,
+      ELEVENLABS_API_BASE: mock.url,
+    },
+    seed: seedZweiTenants(),
+  });
+  try {
+    return await run({ srv, mock, telnyx });
+  } finally {
+    await srv.stop();
+    await mock.close();
+    await telnyx.close();
+  }
+}
+
+const KENNUNGEN = [RUECKFALL_AGENT_PHONE_NUMBER_ID, REGISTRIERUNG_TENANT_A];
+const kennungenInAnfragen = ({ telnyx }) => KENNUNGEN.filter((kennung) => telnyx.rohkoerper.join("\n").includes(kennung));
+
 function placeCall(srv, identity, to = TELNYX_TEST_PEER_NUMBER) {
   return abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
@@ -148,27 +180,30 @@ function placeCall(srv, identity, to = TELNYX_TEST_PEER_NUMBER) {
 
 const ownCall = (srv) => srv.readStore().calls.find((call) => call.goal === OBJECTIVE);
 
-test("B1: Tenant mit eigener Registrierung -> agent_phone_number_id ist ihre Kennung, byte-genau", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+test("B1: Tenant mit eigener Registrierung -> die Wahl geht von der eigenen DID aus, byte-genau", async () => {
+  await withVorspann(async ({ srv, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_A);
     assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
-    assert.equal(mock.startRequests.length, 1, "genau ein Anrufstart");
-    const koerper = mock.startRequests[0].body;
-    assert.equal(koerper.agent_phone_number_id, REGISTRIERUNG_TENANT_A);
-    assert.equal(koerper.to_number, TELNYX_TEST_PEER_NUMBER);
+    assert.equal(telnyx.waehlaufrufe.length, 1, "genau eine Wahl");
+    const wahl = telnyx.waehlaufrufe[0];
+    assert.equal(wahl.from, NUMBER_A);
+    assert.equal(wahl.to, TELNYX_TEST_PEER_NUMBER);
+    assert.deepEqual(kennungenInAnfragen({ telnyx }), []);
   });
 });
 
-test("B2: Tenant-Isolation ueber die Route - Tenant B ohne Registrierung startet NIE mit Tenant As Kennung und nicht mit der globalen", async () => {
-  await withElevenLabs(async ({ srv, mock }) => {
+test("B2: Tenant-Isolation ueber die Route - Tenant B ohne Registrierung waehlt NIE von Tenant As DID und nicht mit der globalen", async () => {
+  await withVorspann(async ({ srv, telnyx }) => {
     const res = await placeCall(srv, SUBJECT_B);
     assert.equal(res.status, HTTP_NOT_PLACED, "der Anruf wird klar abgelehnt");
-    assert.equal(mock.startRequests.length, 0, "kein Anbieteraufruf, keine Kosten");
+    assert.equal(telnyx.waehlaufrufe.length, 0, "kein Anbieteraufruf, keine Kosten");
+    assert.deepEqual(kennungenInAnfragen({ telnyx }), []);
+    assert.ok(!telnyx.rohkoerper.join("\n").includes(NUMBER_A), "Tenant As DID in einer Anbieteranfrage");
   });
 });
 
 test("B3: der Abbruch ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", async () => {
-  await withElevenLabs(async ({ srv }) => {
+  await withVorspann(async ({ srv }) => {
     await placeCall(srv, SUBJECT_B);
     assert.match(srv.stdout, /Anruf ohne eigene Absendernummer abgebrochen/);
     assert.match(srv.stdout, /grund=keine_eigene_registrierung/);
@@ -177,7 +212,7 @@ test("B3: der Abbruch ist LAUT im Log - benannt, mit Grund, ohne Rufnummer", asy
 });
 
 test("B4: Abbruch am Datensatz erkennbar - failed und fromRegistrationSource=abgebrochen:<grund>", async () => {
-  await withElevenLabs(async ({ srv }) => {
+  await withVorspann(async ({ srv }) => {
     await placeCall(srv, SUBJECT_B);
     const call = ownCall(srv);
     assert.equal(call.status, "failed");
@@ -186,7 +221,7 @@ test("B4: Abbruch am Datensatz erkennbar - failed und fromRegistrationSource=abg
 });
 
 test("B5: eigene DID am Datensatz erkennbar - fromRegistrationSource=tenant_did", async () => {
-  await withElevenLabs(async ({ srv }) => {
+  await withVorspann(async ({ srv }) => {
     const res = await placeCall(srv, SUBJECT_A);
     assert.equal(res.status, HTTP_OK, JSON.stringify(await res.json()));
     const call = ownCall(srv);
@@ -195,12 +230,12 @@ test("B5: eigene DID am Datensatz erkennbar - fromRegistrationSource=tenant_did"
 });
 
 test("B6: Bestandsschutz - call.from bleibt in BEIDEN Faellen die gebuchte Tenant-DID", async () => {
-  await withElevenLabs(async ({ srv }) => {
+  await withVorspann(async ({ srv }) => {
     const resA = await placeCall(srv, SUBJECT_A);
     assert.equal(resA.status, HTTP_OK, JSON.stringify(await resA.json()));
     assert.equal(ownCall(srv).from, NUMBER_A);
   });
-  await withElevenLabs(async ({ srv }) => {
+  await withVorspann(async ({ srv }) => {
     await placeCall(srv, SUBJECT_B);
     assert.equal(ownCall(srv).from, NUMBER_B);
   });
