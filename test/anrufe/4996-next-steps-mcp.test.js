@@ -84,9 +84,9 @@ test("get_call_result liefert next_steps strukturiert mit Art, Text und Zeitpunk
 
 test("get_call_result: ohne Schritte ist next_steps leer, bei Ergebniskarte ohne Feld und ohne Karte", async () => {
   const mitKarte = await getCallResult(endedCall(karte()));
-  const { structuredContent } = mitKarte.reply;
+  const { structuredContent, content } = mitKarte.reply;
   assert.deepEqual(structuredContent.next_steps, []);
-  const textKarte = JSON.parse(mitKarte.reply.content[0].text);
+  const textKarte = JSON.parse(content[0].text);
   assert.deepEqual(textKarte.next_steps, []);
 
   const altKarte = karte();
