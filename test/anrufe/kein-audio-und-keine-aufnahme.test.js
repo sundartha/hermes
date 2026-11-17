@@ -176,22 +176,13 @@ test("LAW-21: Telnyx-Anrufsteuerung startet keine Aufnahme", async () => {
   const { requests, restore } = stubFetch();
   try {
     const voice = voiceControl();
-    await voice.originateCall({
-      from: "+13125550100",
-      to: TO,
-      url: "https://agent.test/voice/outbound?callId=call_law21",
-      statusCallback: "https://agent.test/voice/status?callId=call_law21",
-      statusCallbackEvent: ["answered", "completed"],
-      method: "POST",
-      timeLimit: 180,
-    });
     await voice.redirectCall("tnx_law21", "https://agent.test/voice/turn?callId=call_law21");
     await voice.endCall("tnx_law21");
     await voice.endCallViaCallControl("ctl_law21");
   } finally {
     restore();
   }
-  assert.equal(requests.length, 4, "jede Steuerung erreicht Telnyx");
+  assert.equal(requests.length, 3, "jede Steuerung erreicht Telnyx");
   assert.deepEqual(
     requests.filter((request) => RECORDING.test(request)),
     [],

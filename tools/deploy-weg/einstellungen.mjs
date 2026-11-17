@@ -11,6 +11,7 @@ const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\[bot\])?$/;
 const PFAD = /^\S.{0,1023}$/;
 const SCHLUESSEL_PEM = /^-----BEGIN PRIVATE KEY-----[\w+/=\s]{1,4000}-----END PRIVATE KEY-----\s*$/;
 const SCHLUSS_STRICH = /\/+$/;
+const HEARTBEAT_NACHTLAUF = "BETTER_STACK_HEARTBEAT_NACHTLAUF";
 
 function muster(ausdruck) {
   return (wert) => ausdruck.test(wert);
@@ -18,6 +19,10 @@ function muster(ausdruck) {
 
 function standardOderLoopback(standard) {
   return (wert) => wert === standard || LOOPBACK.test(wert);
+}
+
+function httpsOderLoopback(wert) {
+  return /^https:\/\/\S{1,1000}$/.test(wert) || LOOPBACK.test(wert);
 }
 
 function dienstAdresse(wert) {
@@ -47,6 +52,8 @@ const REGELN = new Map([
   ["STAGING_STATUS_TOKEN", muster(/^\S{32,512}$/)],
   ["STAGING_TELNYX_PRIVATE_KEY", muster(SCHLUESSEL_PEM)],
   ["UPDATE_WORKFLOW_TOKEN", muster(/^\S{1,1024}$/)],
+  ["BETTER_STACK_ALERT_URL", httpsOderLoopback],
+  [HEARTBEAT_NACHTLAUF, httpsOderLoopback],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
@@ -58,6 +65,8 @@ const GEHEIM = [
   "UPDATE_WORKFLOW_TOKEN",
   "STAGING_STATUS_TOKEN",
   "STAGING_TELNYX_PRIVATE_KEY",
+  "BETTER_STACK_ALERT_URL",
+  HEARTBEAT_NACHTLAUF,
 ];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
@@ -87,7 +96,7 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL"],
+      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL"],
     },
   ],
   [
@@ -123,6 +132,7 @@ const BEFEHLE = new Map([
       freiwillig: NOTFALL_AKTEURE,
     },
   ],
+  ["heartbeat", { pflicht: [], freiwillig: [], tolerant: [HEARTBEAT_NACHTLAUF] }],
 ]);
 
 function gueltig(name, wert) {
@@ -165,6 +175,10 @@ function werteBauen(umgebung) {
     updateToken: umgebung.UPDATE_WORKFLOW_TOKEN || null,
     statusToken: umgebung.STAGING_STATUS_TOKEN,
     telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
+    vorfallUrl: umgebung.BETTER_STACK_ALERT_URL || null,
+    heartbeatNachtlaufUrl: gueltig(HEARTBEAT_NACHTLAUF, umgebung[HEARTBEAT_NACHTLAUF])
+      ? umgebung[HEARTBEAT_NACHTLAUF]
+      : null,
   };
 }
 
@@ -177,8 +191,10 @@ export function einstellungenLesen(befehl, umgebung, ausgabe) {
   const falsch = ungueltigeNamen(regeln, umgebung);
   for (const name of falsch) ausgabe.melde("einstellung_ungueltig", { name });
   if (falsch.length > 0) throw new Abbruch("einstellungen");
-  const eigene = [...regeln.pflicht, ...regeln.freiwillig];
-  const geheimnisse = GEHEIM.filter((name) => eigene.includes(name)).map((name) => umgebung[name]);
+  const eigene = [...regeln.pflicht, ...regeln.freiwillig, ...(regeln.tolerant ?? [])];
+  const geheimnisse = GEHEIM.filter(
+    (name) => eigene.includes(name) && gueltig(name, umgebung[name]),
+  ).map((name) => umgebung[name]);
   if (maskenWirken(regeln, umgebung)) ausgabe.maskiere(geheimnisse);
   return Object.freeze(werteBauen(umgebung));
 }

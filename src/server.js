@@ -62,6 +62,7 @@ import { bootServer } from "./boot.js";
 import { anfrage } from "./utils/anfrage.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.ts";
 import { starteTelemetrie } from "./utils/telemetrie.js";
+import { defaultSetTimer } from "./utils/timer.js";
 
 await store.oeffneSpeicher();
 
@@ -111,6 +112,7 @@ const inboundTrunkSweep = makeTrunkSweep({
   elRead,
   reparatur: inboundTrunkSchreiberWennErlaubt(config),
   mitStartSperre: store.mitStartSperre,
+  jetzt: () => new Date(),
 });
 
 const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
@@ -183,6 +185,7 @@ const lifecycle = makeCallLifecycle({
 const inboundBridges = makeInboundBridges({
   store,
   now: Date.now,
+  setTimer: defaultSetTimer,
   umleiten: ({ call, rueckfallUrl }) =>
     umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });
@@ -240,6 +243,7 @@ const vorspannAblauf = makeVorspannAblauf({
   finishCall: callFinish.finishCall,
   ausgehendGesperrt: () => ausgehendGesperrt(config, store),
   now: Date.now,
+  setTimer: defaultSetTimer,
 });
 
 const consultDelivery = makeConsultDelivery({ store, webhookHoldMs: config.tenancy.elConsultAnswerMs });

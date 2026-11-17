@@ -25,6 +25,14 @@ export function pickTranscript(callId, call, texts = null) {
   };
 }
 
+export function maskedNextSteps(result) {
+  return (result?.nextSteps ?? []).map((step) => ({
+    type: step.type,
+    text: maskRestrictedText(step.text),
+    at: step.at,
+  }));
+}
+
 export function maskResultCardFields(card) {
   return {
     outcome: maskRestrictedText(card.outcome),

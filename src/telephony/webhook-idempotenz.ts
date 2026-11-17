@@ -6,7 +6,6 @@ import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.ts";
-import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 
 interface Anfrage {
   headers?: Record<string, string | undefined>;
@@ -104,7 +103,7 @@ interface WachParameter {
 }
 
 type Wache = (req: Anfrage, res: Antwortkanal, next: Weiter) => Promise<unknown>;
-type Waechter = Record<"forIncoming" | "forElRueckfall" | "forElBein" | "forElUebergabe" | "forStatus" | "forVorspann", Wache>;
+type Waechter = Record<"forIncoming" | "forElRueckfall" | "forElBein" | "forStatus" | "forVorspann", Wache>;
 
 interface Wartebedarf {
   ablage: Ablage | null;
@@ -132,8 +131,6 @@ interface SendeParameter {
   freigeben: Freigeben;
   verwerfen: () => void;
 }
-
-const UEBERGABE_ZUSTAENDE: readonly string[] = [BRIDGE_STATE.GEBUNDEN, BRIDGE_STATE.RUECKFALL];
 
 const ANSWER_CACHE_MAX = 200;
 const FREMDE_ANNAHME_TAKT_MS = 200;
@@ -182,7 +179,6 @@ function queryEreignisAnker(req: Anfrage, ereignis: { praefix: string; untersche
   return envelope ? [...anchors, envelope] : anchors;
 }
 export const elRueckfallAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
-export const elUebergabeAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eu", unterscheider: "" });
 export const elBeinAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req: Anfrage): Anker {
@@ -229,7 +225,7 @@ async function versuche<T>(arbeit: () => T | Promise<T>): Promise<{ wert: T } | 
   }
 }
 
-const LESEFEHLER_PRAEFIX: Record<string, string> = { "el-uebergabe": "[voice/outbound]", incoming: "[incoming]" };
+const LESEFEHLER_PRAEFIX: Record<string, string> = { incoming: "[incoming]" };
 
 function antworteMitLesefehler({ weg, req, res, err }: { weg: string; req: Anfrage; res: Antwortkanal; err: unknown }): unknown {
   const praefix = LESEFEHLER_PRAEFIX[weg];
@@ -484,18 +480,6 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort, jetzt, 
     anchorsOf: elRueckfallAnchors,
     ...ohneNeustartSchicht,
   });
-  const uebergabeLaeuftOderEndete = async (req: Anfrage): Promise<Anruf | null | undefined> => {
-    const call = await leseAnruf(ankerTeil(req.query?.callId));
-    return UEBERGABE_ZUSTAENDE.includes(bridgeStateOf(call)) ? call : null;
-  };
-  const forElUebergabe = makeGuard({
-    weg: "el-uebergabe",
-    ablage: store.webhookZustellung ?? null,
-    geheimnis: elPasswort,
-    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
-    seenBefore: uebergabeLaeuftOderEndete,
-    remember: ohneNeustartSchicht.remember,
-  });
   const elBeinGuard = { weg: "el-bein", ablage: store.webhookZustellung ?? null, geheimnis: elPasswort, anchorsOf: elBeinAnchors };
   const forElBein = makeGuard({ ...elBeinGuard, ...ohneNeustartSchicht });
 
@@ -504,5 +488,5 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort, jetzt, 
   const forStatus = ereignisGuard("status", statusAnchors);
   const forVorspann = ereignisGuard("vorspann", vorspannAnchors);
 
-  return { forIncoming, forElRueckfall, forElBein, forElUebergabe, forStatus, forVorspann };
+  return { forIncoming, forElRueckfall, forElBein, forStatus, forVorspann };
 }

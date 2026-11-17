@@ -1,5 +1,4 @@
 import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.ts";
-import { defaultSetTimer } from "../utils/timer.js";
 
 export const EL_BRIDGE_START_DEADLINE_MS = 30000;
 export const EL_BINDING_AFTER_ANSWER_MS = 8000;
@@ -51,13 +50,13 @@ const umleitungFaellig = (call: Anruf | null | undefined): boolean =>
 export function makeInboundBridges({
   store,
   umleiten,
-  setTimer = defaultSetTimer,
+  setTimer,
   clearTimer = clearTimeout,
   now,
 }: {
   store: { getCall: (id: string) => Anruf | null | undefined; load: () => { calls: Anruf[] } };
   umleiten: (umleitung: Umleitung) => unknown;
-  setTimer?: (fn: () => void, ms: number) => Handle;
+  setTimer: (fn: () => void, ms: number) => Handle;
   clearTimer?: (handle: Handle) => void;
   now: () => number;
 }): InboundBridges {

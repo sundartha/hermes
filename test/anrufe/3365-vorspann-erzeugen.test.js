@@ -145,11 +145,11 @@ const anrufStarten = (srv, wartezeitMs = 0, to = TELNYX_TEST_PEER_NUMBER) =>
   );
 const anrufIn = (srv, id) => srv.readStore().calls.find((eintrag) => eintrag.id === id);
 
-const voiceOutbound = (srv, callId) =>
-  abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${callId}`, {
+const angenommen = (srv, callId) =>
+  abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ CallSid: TRAEGER_SID }).toString(),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ data: { id: `evt-3365-${callId}`, event_type: "call.answered", payload: { call_control_id: CALL_CONTROL_ID } } }),
   });
 
 const rueckfallZeile = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
@@ -204,7 +204,7 @@ test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1
     assert.equal(call.costProfile, UEBER_TELNYX);
     assert.equal(zeichenGebucht(srv), text.length, "K4: die Vorspann-Zeichen stehen auf der Plattform-TTS-Quote");
     keineGeheimnisseIm(srv.stdout, call);
-    await voiceOutbound(srv, callId);
+    assert.equal((await angenommen(srv, callId)).status, HTTP_OK);
     const init = await initAntwort(srv, call);
     assert.equal(init.conversation_config_override.agent.first_message, "", "der Anbieter spricht die Eroeffnung nicht noch einmal");
     assert.equal(init.dynamic_variables.eroeffnung_gesagt, text, "wortgleich der gesprochene Vorspann");

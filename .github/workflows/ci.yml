@@ -355,6 +355,9 @@ jobs:
     name: Lastlauf
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -376,6 +379,24 @@ jobs:
 
       - name: Lastlauf gegen zwei lokale Prozesse mit Postgres und Attrappen
         run: node scripts/last/lauf.mjs k6
+
+      - name: Median der Fehlerquote der letzten 20 Queue-Läufe (nur Messung, kein Gate)
+        if: ${{ !cancelled() && github.event_name == 'merge_group' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ordner=$(mktemp -d)
+          abruf() {
+            for lauf in $(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?event=merge_group&per_page=20" --jq '.workflow_runs[].id'); do
+              job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${lauf}/jobs?per_page=100" --jq '.jobs[] | select(.name == "Lastlauf") | .id' | head -n 1)
+              if [ -n "$job" ]; then
+                gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "$ordner/$lauf.log" || rm -f "$ordner/$lauf.log"
+              fi
+            done
+          }
+          abruf || echo "Abruf der letzten Queue-Läufe nicht möglich"
+          node scripts/last/median.mjs "$ordner" || echo "Median nicht berechenbar"
 
       - name: Rotprobe, erzwungene Fehlerquote und verworfener Anruf machen den Lauf rot
         run: |

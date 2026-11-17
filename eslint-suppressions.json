@@ -542,7 +542,7 @@
       "count": 1
     }
   },
-  "src/routes/api-calls.js": {
+  "src/routes/api-calls.ts": {
     "complexity": {
       "count": 1
     },
@@ -693,9 +693,6 @@
   "src/telephony/registry.js": {
     "id-length": {
       "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 1
     }
   },
   "src/tts/store.ts": {

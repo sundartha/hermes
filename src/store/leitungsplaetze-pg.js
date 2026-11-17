@@ -27,7 +27,7 @@ export function makePostgresLeitungsplaetze(runner) {
         const ergebnis = await arbeit(client);
         if (abbruch.abgelaufen) throw new Error("Frist abgelaufen, Transaktion zurueckgerollt");
         await client.query("COMMIT");
-        if (abbruch.abgelaufen) await spaetFreigeben(client, callId);
+        if (abbruch.abgelaufen && callId) await spaetFreigeben(client, callId);
         return ergebnis;
       } catch (fehler) {
         await client.query("ROLLBACK").catch(() => {});
@@ -88,7 +88,6 @@ export function makePostgresLeitungsplaetze(runner) {
     try {
       await inTransaktion((client) =>
         client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.EINGEHEND]),
-        callId,
       );
     } catch (fehler) {
       console.error("[leitungsplaetze] Eingehend nicht gezaehlt:", fehler.message);

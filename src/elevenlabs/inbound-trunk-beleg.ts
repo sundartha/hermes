@@ -267,7 +267,7 @@ export function makeTrunkSweep({
   reparatur,
   mitStartSperre = ohneStartSperre,
   logger = console,
-  jetzt = () => new Date(),
+  jetzt,
 }: {
   store: Store;
   config: SweepConfig;
@@ -277,7 +277,7 @@ export function makeTrunkSweep({
   reparatur?: Reparatur | null | undefined;
   mitStartSperre?: StartSperre;
   logger?: Logger;
-  jetzt?: () => Date;
+  jetzt: () => Date;
 }): { runBootSweep: () => Promise<void> } {
   function sollZugang() {
     return {

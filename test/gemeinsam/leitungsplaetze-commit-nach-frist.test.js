@@ -31,7 +31,7 @@ async function bisCommitOffen(zustand) {
 const freigaben = (aufrufe) => aufrufe.filter((a) => a.text === FREIGEBEN);
 
 for (const [name, aktion] of [["belegenAusgehend", "belegenAusgehend"], ["belegenEingehend", "belegenEingehend"]]) {
-  test(`${name}: COMMIT nach der Frist gibt den Platz der callId wieder frei`, async (t) => {
+  test(`${name}: COMMIT nach der Frist gibt nur ausgehend den Platz der callId wieder frei`, async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const { runner, aufrufe, zustand } = runnerMitOffenemCommit();
     const lauf = makePostgresLeitungsplaetze(runner)[aktion](BELEGEN);
@@ -43,7 +43,7 @@ for (const [name, aktion] of [["belegenAusgehend", "belegenAusgehend"], ["belege
     zustand.commitFertig({ rows: [] });
     await weiter();
     await weiter();
-    assert.deepEqual(freigaben(aufrufe).map((a) => a.parameter), [[CALL_ID]]);
+    assert.deepEqual(freigaben(aufrufe).map((a) => a.parameter), aktion === "belegenAusgehend" ? [[CALL_ID]] : []);
   });
 }
 

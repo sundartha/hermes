@@ -205,7 +205,6 @@ const ROUTE_FINGERPRINT = [
   "POST /voice/el-bein",
   "POST /voice/el-rueckfall",
   "POST /voice/incoming",
-  "POST /voice/outbound",
   "POST /voice/status",
   "POST /voice/vorspann",
   "POST /webhooks/elevenlabs/consult",

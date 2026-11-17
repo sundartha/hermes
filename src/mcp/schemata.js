@@ -20,11 +20,18 @@ const RESULT_CARD_OUTPUT = {
   next_step: z.string().nullable(),
 };
 
+const NEXT_STEP_OUTPUT = z.object({
+  type: z.string(),
+  text: z.string(),
+  at: z.string().nullable(),
+});
+
 export const CALL_RESULT_OUTPUT = {
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
   ...RESULT_CARD_OUTPUT,
+  next_steps: z.array(NEXT_STEP_OUTPUT),
 };
 
 export const AWAIT_EVENT_OUTPUT = {

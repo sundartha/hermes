@@ -1,6 +1,6 @@
 import { AUTOMATION_LOGIN } from "../github.mjs";
 import { Abbruch } from "./ausgabe.mjs";
-import { githubZugang } from "./netz.mjs";
+import { anfrage, githubZugang } from "./netz.mjs";
 
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
@@ -16,7 +16,9 @@ const NACHKONTROLLE_MELDUNGEN = Object.freeze({
 });
 const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
+const HTTP_NICHT_OK_AB = 300;
 const SEITE = 100;
+const HEARTBEAT_FRIST_MS = 5000;
 const OHNE_NAMEN = "(der Abgleich hat keine Namen gemeldet)";
 
 function issueText({ commit, teile, laufUrl }) {
@@ -101,7 +103,7 @@ async function issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe }
     const { status } = await github.senden({ methode: "PATCH", pfad, koerper: { body } });
     if (status !== HTTP_OK) throw new Abbruch("issue_schreiben", status);
     ausgabe.melde(meldungen.ersetzt, { nummer: vorhanden.number });
-    return;
+    return vorhanden;
   }
   const { status, daten } = await github.senden({
     methode: "POST",
@@ -112,6 +114,63 @@ async function issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe }
     throw new Abbruch("issue_schreiben", status);
   }
   ausgabe.melde(meldungen.angelegt, { nummer: daten.number });
+  return null;
+}
+
+const MS_JE_SEKUNDE = 1000;
+const SEKUNDEN_JE_MINUTE = 60;
+const ENTPRELLEN_MINUTEN = 60;
+const VORFALL_ENTPRELLEN_MS = ENTPRELLEN_MINUTEN * SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
+
+function vorfallText({ commit, laufUrl }) {
+  return [
+    NACHTLAUF_TITEL + " (Commit " + commit + ").",
+    "Umgebung: Staging.",
+    "Lauf: " + laufUrl,
+    "Erster Schritt: Ursache im Lauf lesen",
+  ].join("\n");
+}
+
+function frischGemeldet(vorher, jetzt) {
+  const geaendert = Date.parse(vorher?.updated_at ?? "");
+  return Number.isFinite(geaendert) && jetzt - geaendert < VORFALL_ENTPRELLEN_MS;
+}
+
+async function vorfallMelden({ einstellungen, commit, vorher, ausgabe }) {
+  if (einstellungen.vorfallUrl === null) {
+    ausgabe.melde("vorfall_uebersprungen");
+    return;
+  }
+  if (frischGemeldet(vorher, Date.now())) {
+    ausgabe.melde("vorfall_entprellt");
+    return;
+  }
+  const text = vorfallText({ commit, laufUrl: laufAdresse(einstellungen) });
+  const { status } = await anfrage(einstellungen.vorfallUrl, {
+    methode: "POST",
+    koerper: { incident: { id: "nachtlauf-staging", status: "alert" }, text },
+  });
+  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
+    ausgabe.melde("vorfall_nicht_zugestellt", { http: status });
+    return;
+  }
+  ausgabe.melde("vorfall_gesendet");
+}
+
+export async function heartbeatNachtlauf({ einstellungen, ausgabe }) {
+  if (einstellungen.heartbeatNachtlaufUrl === null) {
+    ausgabe.melde("heartbeat_uebersprungen");
+    return true;
+  }
+  const { status } = await anfrage(einstellungen.heartbeatNachtlaufUrl, {
+    fristMs: HEARTBEAT_FRIST_MS,
+  });
+  if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
+    ausgabe.melde("heartbeat_nicht_zugestellt", { http: status });
+    return true;
+  }
+  ausgabe.melde("heartbeat_gemeldet");
+  return true;
 }
 
 function laufAdresse({ serverUrl, repository, runId }) {
@@ -132,7 +191,8 @@ export async function hoertestIssueAnlegenOderErsetzen({
 }) {
   const { titel, meldungen, text } = ANLAESSE[anlass];
   const body = text({ commit, teile, laufUrl: laufAdresse(einstellungen) });
-  await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
+  const vorher = await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
+  if (anlass === "nachtlauf") await vorfallMelden({ einstellungen, commit, vorher, ausgabe });
 }
 
 export async function nachkontrolleIssueSchreiben({

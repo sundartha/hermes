@@ -11,7 +11,7 @@ import {
 import { deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
-import { hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
+import { heartbeatNachtlauf, hoertestIssueAnlegenOderErsetzen } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
@@ -52,6 +52,7 @@ function anlassLesen(wert) {
 }
 
 const ARGUMENTE = new Map([
+  ["--name", anlassLesen],
   ["--commit", commitLesen],
   ["--produktion", commitLesen],
   ["--teile", teileLesen],
@@ -131,6 +132,7 @@ const BEFEHLE = new Map([
         updateNachkontrolle({ einstellungen, commit: werte.get("--commit"), ausgabe }),
     },
   ],
+  ["heartbeat", { argumente: ["--name"], ausfuehren: heartbeatNachtlauf }],
   [
     "anrufpause",
     {

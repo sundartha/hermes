@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
+import { neueUhr, pgBossUmgebung, pgliteUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 
 const NAME = "plane";
 const MINUTE_MS = 60_000;
@@ -68,8 +68,7 @@ test("die Queue des Zeitplans hat Frist 24 Stunden und Herzschlagfenster 30 Seku
 
 test("stürzt die Instanz mit dem laufenden Lauf ab, startet der nächste Takt nach dem Herzschlagfenster statt nach 24 Stunden", async (t) => {
   const clock = neueUhr();
-  const { db, queue, weitereQueue } = await pgBossUmgebung(t, { clock });
-  if (db.art !== "pglite") return t.skip("Absturz wird nur mit der eingebetteten Datenbank nachgestellt");
+  const { db, queue, weitereQueue } = await pgliteUmgebung(t, { clock });
   const echt = db.queueOptionen.bossOptions.db;
   const absturz = { aus: false };
   const sterbendeDb = {

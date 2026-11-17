@@ -306,6 +306,7 @@ test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felde
       "commitments",
       "counterparty_commitments",
       "next_step",
+      "next_steps",
       "objective_achieved",
       "open_points",
       "outcome",

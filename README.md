@@ -8,7 +8,7 @@ Ein echtes, funktionierendes Produkt (keine Simulation): Der Agent hat eine **ei
 Claude (Chat) ──MCP Streamable HTTP (ngrok)──► /mcp ─┐
 Claude Desktop ──MCP stdio──► src/mcp-server.js ─────┤   Gateway (dieser Node-Prozess)
 Dashboard (Browser) ──REST──► /api/* ────────────────┘        │
-                                                              │ Telnyx REST: originateCall
+                                                              │ Telnyx REST: Call Control
                                                               ▼
 Angerufenes Handy ◄──Mobilfunknetz──► Telnyx ◄──── Budget-Engine: <Gather>/<Say> (STT/TTS de-DE)
                                                          └► Claude Haiku = Gehirn + Tools
