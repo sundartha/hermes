@@ -175,11 +175,15 @@ function openReplacement(state, old, maxNumbers) {
   return { ergebnis: { ok: true, number, purchase: true }, geaendert: true };
 }
 
+function kaufBestaetigt(number) {
+  return number.status === NUMBER_STATUS.PROVISIONING && Boolean(number.e164);
+}
+
 function resumeReplacement(state, oldNumberId, maxNumbers) {
   const trace = findSwapTrace(state, oldNumberId);
   const number = findNumber(state, trace.numberId);
   if (number && IN_SERVICE.has(number.status)) return { ergebnis: { ok: true, number, purchase: false } };
-  if (!number || number.status === NUMBER_STATUS.RELEASED || trace.attempts >= SWAP_ATTEMPTS_MAX)
+  if (!number || number.status === NUMBER_STATUS.RELEASED || trace.attempts >= SWAP_ATTEMPTS_MAX || kaufBestaetigt(number))
     return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.MANUELL } };
   if (capReached(state, maxNumbers, number))
     return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.PLATTFORMDECKE } };
@@ -404,6 +408,12 @@ export function activateNumber(
 
 export function failNumber(state, numberId) {
   return transitionNumber(state, numberId, NUMBER_STATUS.FAILED);
+}
+
+export function markNumberGekauft(state, numberId, e164) {
+  const number = findNumber(state, numberId);
+  number.e164 = e164;
+  return number;
 }
 
 export function releaseNumber(state, numberId) {

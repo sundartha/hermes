@@ -166,6 +166,7 @@ export {
   beginCapturing,
   activateNumber,
   failNumber,
+  markNumberGekauft,
   releaseNumber,
   recordProvisioningJob,
   redriveAgeHoldReason,
