@@ -22,6 +22,7 @@ import {
   reserveSpiegelVersuchen,
 } from "./nutzung-pg.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
+import { mitZeitgrenze } from "./webhook-zustellung.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
@@ -208,14 +209,18 @@ async function anrufAusZeile(client, row) {
   return rowToCall(row, groupTranscripts(segRows), groupActionItemIds(itemRows));
 }
 
-async function anrufAnhaengen({ client, state, eigene }, row) {
-  const call = anrufAlsGelesen(await anrufAusZeile(client, row));
+function anrufEinsetzen({ state, eigene }, gelesen) {
+  const call = anrufAlsGelesen(gelesen);
   const raced = ops.getCall(state, call.id);
   if (raced && eigene.has(call.id)) return raced;
   if (raced) state.calls.splice(state.calls.indexOf(raced), 1, call);
   else state.calls.push(call);
   eigene.add(call.id);
   return call;
+}
+
+async function anrufAnhaengen({ client, state, eigene }, row) {
+  return anrufEinsetzen({ state, eigene }, await anrufAusZeile(client, row));
 }
 
 
@@ -261,26 +266,41 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     }
   }
 
-  async function leseAusDatenbank(id, verarbeite) {
+  async function anrufLesen(client, id) {
+    const schluessel = await schluesselZu(client, id);
+    if (!schluessel) return null;
+    await setTenant(client, schluessel.tenantId);
+    const rows = (await client.query(CALL_ZEILE_SQL, [schluessel.callId])).rows;
+    return rows.length > 0 ? await anrufAusZeile(client, rows[0]) : null;
+  }
+
+  async function kopieNeuLesen(id, bekannt, uebernehmen) {
+    let gelesen;
+    try {
+      gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id) });
+    } catch (err) {
+      console.error("[pg] leseCall fehlgeschlagen, geladene Kopie bleibt:", err.message);
+      return bekannt;
+    }
+    return gelesen ? uebernehmen(requireState(), gelesen) : bekannt;
+  }
+
+  async function leseAusDatenbank(id, uebernehmen) {
     const state = requireState();
     const bekannt = ops.getCall(state, id);
     if (bekannt && eigene.has(id)) return bekannt;
+    if (bekannt) return kopieNeuLesen(id, bekannt, uebernehmen);
     try {
-      return await runner.withClient(async (client) => {
-        const schluessel = await schluesselZu(client, id);
-        if (!schluessel) return null;
-        await setTenant(client, schluessel.tenantId);
-        const rows = (await client.query(CALL_ZEILE_SQL, [schluessel.callId])).rows;
-        return rows.length > 0 ? await verarbeite(client, state, rows[0]) : null;
-      });
+      const gelesen = await runner.withClient((client) => anrufLesen(client, id));
+      return gelesen ? uebernehmen(state, gelesen) : null;
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);
       throw err;
     }
   }
 
-  const leseAnruf = (id) => leseAusDatenbank(id, (client, state, row) => anrufAnhaengen({ client, state, eigene }, row));
-  const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (client, _state, row) => anrufAusZeile(client, row));
+  const leseAnruf = (id) => leseAusDatenbank(id, (state, gelesen) => anrufEinsetzen({ state, eigene }, gelesen));
+  const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (_state, gelesen) => gelesen);
   return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden };
 }
 
