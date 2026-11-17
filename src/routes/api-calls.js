@@ -277,6 +277,7 @@ export function makeCallRoutes({
   callQuotaDenial = callQuotaDenialNotWired,
   voiceControl,
   originateElevenLabsCall = elevenLabsCallNotWired,
+  beschaffeAbsender = elevenLabsCallNotWired,
   erzeugeVorspann,
   vorspannAblauf,
   terminateAndBillCall,
@@ -427,6 +428,8 @@ export function makeCallRoutes({
     await emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
+      const vorspannEin = config.voice.elevenLabsOutbound.ueberTelnyx && config.voice.elevenLabsOutbound.vorspann;
+      if (vorspannEin) await beschaffeAbsender(call);
       const wahl = outboundWegFuer({ config, store, call });
       meldeOutboundWeg({ config, callId: call.id, wahl });
       await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);

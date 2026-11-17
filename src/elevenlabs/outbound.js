@@ -968,6 +968,7 @@ export function makeElevenLabsOutbound({
 
   return {
     originateCall,
+    beschaffeAbsenderOderBrichAb,
     initInhaltFor,
     endActiveCall,
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),

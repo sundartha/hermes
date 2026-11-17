@@ -38,7 +38,7 @@ const freieGates = [
   },
 ];
 
-async function wahlOhneAnrufstart() {
+async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: false }) {
   const zeilen = [];
   const original = console.error;
   console.error = (...teile) => zeilen.push(teile.join(" "));
@@ -59,7 +59,7 @@ async function wahlOhneAnrufstart() {
         ownerSelfCallTenantIds: [],
         publicUrl: "http://127.0.0.1:1",
         telnyxElevenLabs: { voiceId: "" },
-        elevenLabsOutbound: { ueberTelnyx: false, vorspann: false },
+        elevenLabsOutbound: schalter,
       }),
       audit: () => {},
       outboundGates: freieGates,
@@ -96,6 +96,16 @@ async function wahlOhneAnrufstart() {
 
 test("Ausgehend: ohne verdrahteten Anrufstart nennt die Fehlerzeile genau diesen Grund", async () => {
   const zeilen = await wahlOhneAnrufstart();
+  const zeile = zeilen.find((text) => text.startsWith("[place_call] originate fehlgeschlagen call=call_"));
+  assert.ok(zeile, zeilen.join("\n"));
+  assert.ok(
+    zeile.endsWith(": Der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)"),
+    zeile,
+  );
+});
+
+test("Ausgehend: auch im Vorspann-Weg nennt die Fehlerzeile den nicht verdrahteten Anrufstart", async () => {
+  const zeilen = await wahlOhneAnrufstart({ ueberTelnyx: true, vorspann: true });
   const zeile = zeilen.find((text) => text.startsWith("[place_call] originate fehlgeschlagen call=call_"));
   assert.ok(zeile, zeilen.join("\n"));
   assert.ok(
