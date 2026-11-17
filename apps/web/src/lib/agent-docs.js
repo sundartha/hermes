@@ -34,9 +34,8 @@ function claudeConnectUrl(page) {
 }
 export const CLAUDE_CONNECT_URL = claudeConnectUrl("customize");
 export const CLAUDE_ADMIN_CONNECT_URL = claudeConnectUrl("admin-settings");
-// Ohne "#no_universal_links" uebergibt Safari den Link an die ChatGPT-App (Universal Link laut
-// chatgpt.com/.well-known/apple-app-site-association); "Add custom MCP server" gibt es nur im Web.
-export const CHATGPT_PLUGINS_URL = "https://chatgpt.com/plugins#no_universal_links";
+const CHATGPT_KEINE_APP_UEBERGABE = "#no_universal_links";
+export const CHATGPT_PLUGINS_URL = `https://chatgpt.com/plugins${CHATGPT_KEINE_APP_UEBERGABE}`;
 
 const SUMMARY =
   "Hermes gives your AI a real phone number. It answers incoming calls, places outgoing calls on the user's behalf (Pro plan) and reports back. " +
