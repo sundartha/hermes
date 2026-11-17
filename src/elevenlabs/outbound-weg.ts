@@ -22,7 +22,7 @@ interface WegConfig {
   telephony: { telnyxCallControlAppId: string | undefined };
 }
 
-type WegNummer = EntscheidungsFall["numberRecord"] & { providerAgentPhoneNumberId?: string | null };
+type WegNummer = (NonNullable<EntscheidungsFall["numberRecord"]> & { providerAgentPhoneNumberId?: string | null }) | null | undefined;
 
 interface WegStore {
   numberRecordByE164: (e164: string) => WegNummer;
