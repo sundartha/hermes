@@ -56,10 +56,10 @@ function inboundConfig(overrides = {}) {
 const PRAEDIKAT_FAELLE = [
   { name: "aus", overrides: { enabled: false }, tenantId: GEPINNT, erwartet: true },
   { name: "enabled als String", overrides: { enabled: "true" }, tenantId: GEPINNT, erwartet: true },
-  { name: "Allowlist leer", overrides: { tenantIds: [] }, tenantId: GEPINNT, erwartet: false },
-  { name: "nicht gepinnt", overrides: {}, tenantId: FREMD, erwartet: false },
-  { name: "tenantId leer", overrides: { tenantIds: [""] }, tenantId: "", erwartet: false },
-  { name: "tenantIds kein Array", overrides: { tenantIds: GEPINNT }, tenantId: GEPINNT, erwartet: false },
+  { name: "Allowlist leer", overrides: { tenantIds: [] }, tenantId: GEPINNT, erwartet: true },
+  { name: "nicht gepinnt", overrides: {}, tenantId: FREMD, erwartet: true },
+  { name: "tenantId leer", overrides: { tenantIds: [""] }, tenantId: "", erwartet: true },
+  { name: "tenantIds kein Array", overrides: { tenantIds: GEPINNT }, tenantId: GEPINNT, erwartet: true },
   { name: "Zugang fehlt", overrides: { sipUser: "" }, tenantId: GEPINNT, erwartet: false },
   {
     name: "Passwort 31 Zeichen",

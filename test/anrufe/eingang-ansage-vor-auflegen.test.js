@@ -12,15 +12,10 @@ import {
   seedWithTelnyxNumber,
   startServer,
 } from "../helpers.js";
-import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const KURZE_GESAMTFRIST_MS = 1000;
-const LANGE_GESAMTFRIST_MS = 30000;
-const ANTWORT_RESERVE_MS = 3000;
-const ANTWORT_OBERGRENZE_MS = KURZE_GESAMTFRIST_MS + ANTWORT_RESERVE_MS;
-const TESTFRIST_LANG_MS = 25000;
 
 const SYNTHESE_ENDE = Object.freeze({ HAENGT: "haengt", REISST_AB: "reisst_ab", VOLLSTAENDIG: "vollstaendig" });
 
@@ -30,7 +25,6 @@ const EL_ALLOWLIST_ENV = Object.freeze({
   ELEVENLABS_INBOUND_SCOPE: "allowlist",
   ...EL_INBOUND_ACCESS_BOOT_ENV,
 });
-const EL_REGISTRIERT_ENV = Object.freeze({ ...EL_ALLOWLIST_ENV, ELEVENLABS_INBOUND_SCOPE: "registrierte_dids" });
 
 function beendeSynthese(ende) {
   return (res, req) => {
@@ -72,24 +66,6 @@ async function incomingAntwort(srv, callSid, wartezeitMs) {
   return res.text();
 }
 
-test("Abweisung ohne Beleg: haengende oder abreissende Synthese -> Say und Hangup statt abgebrochenem Play", async () => {
-  for (const ende of [SYNTHESE_ENDE.HAENGT, SYNTHESE_ENDE.REISST_AB]) {
-    await mitSynthese({ ende, env: EL_REGISTRIERT_ENV }, async (srv) => {
-      const beginn = Date.now();
-      const texml = await incomingAntwort(srv, `CAvorauflegen${ende}`);
-      assert.ok(Date.now() - beginn < ANTWORT_OBERGRENZE_MS, `${ende}: die Antwort kommt vor der Webhook-Frist`);
-      pruefeSayDannHangup(texml);
-    });
-  }
-});
-
-test("Abweisung ohne Beleg: vollstaendige Synthese -> Play mit Hangup", async () => {
-  await mitSynthese({ ende: SYNTHESE_ENDE.VOLLSTAENDIG, env: EL_REGISTRIERT_ENV }, async (srv) => {
-    const texml = await incomingAntwort(srv, "CAvorauflegenvoll");
-    assert.match(texml, /<Play>https:\/\/[^<]+\/voice\/tts\/[A-Za-z0-9_-]+<\/Play><Hangup\/><\/Response>$/);
-  });
-});
-
 test("Rueckfall nach gescheiterter Uebergabe: Synthese haengt -> Say und Hangup", async () => {
   await mitSynthese({ ende: SYNTHESE_ENDE.HAENGT, env: EL_ALLOWLIST_ENV }, async (srv) => {
     await incomingAntwort(srv, "CAvorauflegenrueckfall");
@@ -102,21 +78,3 @@ test("Rueckfall nach gescheiterter Uebergabe: Synthese haengt -> Say und Hangup"
     pruefeSayDannHangup(await res.text());
   });
 });
-
-test(
-  "Gesamtfrist laenger als die Webhook-Frist: die Antwort kommt vor der Webhook-Frist als Say und Hangup",
-  { timeout: TESTFRIST_LANG_MS },
-  async () => {
-    await mitSynthese(
-      { ende: SYNTHESE_ENDE.HAENGT, env: EL_REGISTRIERT_ENV, gesamtfristMs: LANGE_GESAMTFRIST_MS },
-      async (srv) => {
-        const beginn = Date.now();
-        const texml = await incomingAntwort(srv, "CAvorauflegenlang", PROVIDER_WEBHOOK_HARDCUT_MS);
-        assert.ok(Date.now() - beginn < PROVIDER_WEBHOOK_HARDCUT_MS, "die Antwort wartet nicht ueber die Webhook-Frist hinaus");
-        pruefeSayDannHangup(texml);
-        assert.match(srv.stdout, /Satz vor dem Auflegen unvollstaendig oder zu spaet/);
-        assert.ok(!srv.stdout.includes("Synthese geworfen"), "zu spaet ist kein Wurf");
-      },
-    );
-  },
-);

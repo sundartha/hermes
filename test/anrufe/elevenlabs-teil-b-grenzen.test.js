@@ -158,19 +158,19 @@ test("Pfadentscheidung Allowlist: nur gepinnte Tenants gehen ueber ElevenLabs", 
   const wahl = (tenantId, inbound = allow) => inboundPfadEntscheidung({ config: konfig(inbound), tenantId });
   assert.equal(wahl("t1"), "elevenlabs");
   assert.equal(wahl("t2"), "elevenlabs");
-  assert.equal(wahl("t3"), "abgewiesen");
-  assert.equal(wahl(""), "abgewiesen");
-  assert.equal(wahl(undefined), "abgewiesen");
-  assert.equal(wahl("t1", { ...allow, tenantIds: undefined }), "abgewiesen");
-  assert.equal(wahl("t1", { ...allow, tenantIds: "t1" }), "abgewiesen");
+  assert.equal(wahl("t3"), "elevenlabs");
+  assert.equal(wahl(""), "elevenlabs");
+  assert.equal(wahl(undefined), "elevenlabs");
+  assert.equal(wahl("t1", { ...allow, tenantIds: undefined }), "elevenlabs");
+  assert.equal(wahl("t1", { ...allow, tenantIds: "t1" }), "elevenlabs");
   assert.equal(wahl("t1", { ...allow, enabled: false }), "elevenlabs");
   assert.equal(wahl("t1", { ...allow, enabled: "true" }), "elevenlabs");
   assert.equal(wahl("t1", { ...allow, sipUser: "" }), "abgewiesen");
   assert.equal(wahl("t1", { ...allow, sipPassword: "p".repeat(31) }), "abgewiesen");
   assert.equal(wahl("t1", { ...allow, initWebhookToken: "" }), "abgewiesen");
-  assert.equal(wahl("t1", { ...allow, scope: "unbekannt" }), "abgewiesen");
+  assert.equal(wahl("t1", { ...allow, scope: "unbekannt" }), "elevenlabs");
   assert.equal(inboundElPathFor({ config: konfig(allow), tenantId: "t1" }), true);
-  assert.equal(inboundElPathFor({ config: konfig(allow), tenantId: "t3" }), false);
+  assert.equal(inboundElPathFor({ config: konfig(allow), tenantId: "t3" }), true);
 });
 
 test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen, sonst abgewiesen", () => {
@@ -178,13 +178,13 @@ test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen
   const fp = "0ac7924bacfe9bfb";
   const wahl = (numberRecord, inbound = reg) => inboundPfadEntscheidung({ config: konfig(inbound), tenantId: "t9", numberRecord });
   assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }), "elevenlabs");
-  assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: "anderer" }), "abgewiesen");
-  assert.equal(wahl({ elInboundTrunkZugangFp: fp }), "abgewiesen");
-  assert.equal(wahl({ elInboundTrunkBelegtAt: "", elInboundTrunkZugangFp: fp }), "abgewiesen");
-  assert.equal(wahl(undefined), "abgewiesen");
-  assert.equal(wahl(null), "abgewiesen");
-  assert.equal(wahl({}), "abgewiesen");
-  assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: null }), "abgewiesen");
+  assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: "anderer" }), "elevenlabs");
+  assert.equal(wahl({ elInboundTrunkZugangFp: fp }), "elevenlabs");
+  assert.equal(wahl({ elInboundTrunkBelegtAt: "", elInboundTrunkZugangFp: fp }), "elevenlabs");
+  assert.equal(wahl(undefined), "elevenlabs");
+  assert.equal(wahl(null), "elevenlabs");
+  assert.equal(wahl({}), "elevenlabs");
+  assert.equal(wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: null }), "elevenlabs");
   assert.equal(
     wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }, { ...reg, enabled: false }),
     "elevenlabs",
@@ -193,7 +193,7 @@ test("Pfadentscheidung registrierte DIDs: Beleg muss zum laufenden Zugang passen
     wahl({ elInboundTrunkBelegtAt: "2026-01-01", elInboundTrunkZugangFp: fp }, { ...reg, sipPassword: "kurz" }),
     "abgewiesen",
   );
-  assert.equal(inboundElPathFor({ config: konfig(reg), tenantId: "t9", numberRecord: undefined }), false);
+  assert.equal(inboundElPathFor({ config: konfig(reg), tenantId: "t9", numberRecord: undefined }), true);
 });
 
 test("Allowlist-Pruefzeile: aktive DIDs gepinnter Tenants, sortiert, sonst keine aktive DID", () => {

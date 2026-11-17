@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { inboundTrunkSchreibenErlaubt } from "../../src/elevenlabs/nummern-registrierung.js";
+import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   postTelnyxIncoming,
@@ -121,3 +122,19 @@ for (const fall of TRUNK_FAELLE) {
     assert.equal(inboundTrunkSchreibenErlaubt(schreibConfig(fall.config)), fall.erwartet);
   });
 }
+
+const HTTP_FORBIDDEN = 403;
+
+test("Init-Webhook ohne gueltiges Token bleibt abgelehnt, auch ohne Mandantenliste", async () => {
+  await mitServer({ env: { ...EL_INBOUND_ACCESS_BOOT_ENV }, seed: seed() }, async (srv) => {
+    const url = `${srv.localUrl}${ELEVENLABS_INIT_PATH}`;
+    for (const kopfzeilen of [{}, { [INIT_TOKEN_HEADER]: "x".repeat(ZUGANG_MIN) }]) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...kopfzeilen },
+        body: JSON.stringify({}),
+      });
+      assert.equal(res.status, HTTP_FORBIDDEN);
+    }
+  });
+});

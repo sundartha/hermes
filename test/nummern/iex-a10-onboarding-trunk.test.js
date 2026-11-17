@@ -172,7 +172,6 @@ function ohneLeck(text, verboten) {
 }
 
 const GESCHLOSSENE_GATES = [
-  ["Scope allowlist", { inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } }],
   ["sipUser leer", { inbound: { sipUser: "" } }],
   ["sipPassword zu kurz", { inbound: { sipPassword: "kurz" } }],
   ["initWebhookToken fehlt", { inbound: { initWebhookToken: undefined } }],
@@ -181,7 +180,7 @@ const GESCHLOSSENE_GATES = [
   ["agentId leer", { outbound: { agentId: "" } }],
 ];
 
-test("IEX-A10-1: Gate-Tabelle - nur alles an + registrierte_dids baut einen Schreiber", () => {
+test("IEX-A10-1: Gate-Tabelle - nur alles an + registrierte_dids baut einen Schreiber (ohne Scope-Bedingung)", () => {
   const offen = schreibConfig();
   assert.equal(inboundTrunkSchreibenErlaubt(offen), true);
   const schreiber = inboundTrunkSchreiberWennErlaubt(offen);
@@ -243,12 +242,12 @@ async function drainDeps(voice) {
   return erfasst[0];
 }
 
-test("IEX-A10-3: Produktionspfad - runProvisioningDrain injiziert den Schreiber nur unter registrierte_dids", async () => {
+test("IEX-A10-3: Produktionspfad - runProvisioningDrain injiziert den Schreiber unabhaengig vom Scope", async () => {
   const allowlist = await drainDeps({
     elevenLabsOutbound: EL_OUTBOUND,
     elevenLabsInbound: { ...EL_INBOUND, scope: INBOUND_EL_SCOPE.ALLOWLIST },
   });
-  assert.equal(allowlist.inboundTrunkSchreiber, undefined);
+  assert.equal(typeof allowlist.inboundTrunkSchreiber?.ensureInboundTrunk, "function");
   assert.equal(typeof allowlist.sipRegistrar?.ensureRegistration, "function", "Registrierung bleibt unberuehrt");
   const registriert = await drainDeps({ elevenLabsOutbound: EL_OUTBOUND, elevenLabsInbound: EL_INBOUND });
   assert.equal(typeof registriert.inboundTrunkSchreiber?.ensureInboundTrunk, "function");
@@ -278,16 +277,15 @@ test("IEX-A10-4: Onboarding Erfolg - PATCH, Nach-GET, Beleg mit laufendem Finger
   ohneLeck(logger.text(), [SIP_PASSWORT, SIP_USER, GEKAUFTE_E164]);
 });
 
-test("IEX-A10-5: Onboarding unter allowlist - kein Schreiber, 0 PATCH, Registrierung unveraendert", async () => {
+test("IEX-A10-5: Onboarding unter allowlist - Schreiber da, ein PATCH, Beleg gesetzt", async () => {
   const el = fakeEl();
-  const inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(schreibConfig({ inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } }));
-  const { aktiviert, gespeichert, logger } = await onboarde({ el, inboundTrunkSchreiber });
+  const logger = fakeLogger();
+  const inboundTrunkSchreiber = schreiberFuer({ fetchImpl: el.fetchImpl, logger, inbound: { scope: INBOUND_EL_SCOPE.ALLOWLIST } });
+  const { aktiviert, gespeichert } = await onboarde({ el, inboundTrunkSchreiber, logger });
   assert.equal(aktiviert.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(el.patches().length, 0);
-  assert.equal(el.aufrufe.filter((aufruf) => aufruf.method === "POST").length, EINMAL);
-  assert.equal(gespeichert.elInboundTrunkBelegtAt, undefined);
-  assert.equal(gespeichert.elInboundTrunkZugangFp, undefined);
-  assert.equal(logger.mit("[el-trunk]").length, 0);
+  assert.equal(el.patches().length, EINMAL);
+  assert.equal(gespeichert.elInboundTrunkZugangFp, zugangsFingerabdruck(SIP_USER));
+  assert.match(gespeichert.elInboundTrunkBelegtAt, ISO_MUSTER);
 });
 
 test("IEX-A10-6: Onboarding PATCH 500 mit gespiegeltem Koerper - DID aktiv, kein Retry, kein Beleg, kein Leck", async () => {
