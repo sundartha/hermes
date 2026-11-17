@@ -645,3 +645,34 @@ test("IEL-3479-5b: Koerper als Liste -> 404 ohne Daten, keine Bindung", async ()
   });
   assert.equal(zustand.call.elevenlabsConversationId, null);
 });
+
+async function fehlerZeilenBei(fehler) {
+  const zeilen = [];
+  const original = console.error;
+  console.error = (...a) => zeilen.push(a.map(String).join(" "));
+  try {
+    const ergebnis = await einzelFall({
+      storeUeberschreibung: {
+        tenantTimezone: () => {
+          throw fehler;
+        },
+      },
+    });
+    assert.equal(ergebnis.status, HTTP_SERVER_ERROR);
+  } finally {
+    console.error = original;
+  }
+  return zeilen;
+}
+
+test("IEL-B6-12b: Fehler im Init-Weg wird mit seiner Nachricht geloggt", async () => {
+  const zeilen = await fehlerZeilenBei(new Error("zeitzone nicht lesbar"));
+  assert.deepEqual(zeilen, ["[el-init] fehler: zeitzone nicht lesbar"]);
+});
+
+test("IEL-B6-12c: Fehler mit leerer oder fehlender Nachricht wird als unbekannt geloggt", async () => {
+  const ohneNachricht = Object.assign(new Error("x"), { message: undefined });
+  const leer = Object.assign(new Error("x"), { message: "" });
+  assert.deepEqual(await fehlerZeilenBei(leer), ["[el-init] fehler: unbekannt"]);
+  assert.deepEqual(await fehlerZeilenBei(ohneNachricht), ["[el-init] fehler: unbekannt"]);
+});
