@@ -19,6 +19,7 @@ import {
 } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 import { makeAnrufstartMarker, makePostgresAnrufstartMarker } from "./store/anrufstart-marker.js";
+import { makePostgresLeitungsplaetze } from "./store/leitungsplaetze-pg.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -37,7 +38,6 @@ async function createPgBackend() {
   const startSperre = await import("./store/start-sperre.js");
   const { rolleVorhanden: rolleImKatalog } = await import("./db/migrate.js");
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
-  const { makePostgresLeitungsplaetze } = await import("./store/leitungsplaetze-pg.js");
   const { makePostgresTtsAblage } = await import("./store/tts-ablage.js");
   const { makePostgresKonsultPlaetze } = await import("./store/konsult-plaetze-pg.js");
   const { runner, poolZustand } = await createPgPoolRunner(config.store.databaseUrl);
@@ -134,7 +134,7 @@ export const anrufstartMarker = {
   lies: (callId) => aktiverAnrufstartMarker().lies(callId),
 };
 
-export { makeAnrufstartMarker, makePostgresAnrufstartMarker };
+export { makeAnrufstartMarker, makePostgresAnrufstartMarker, makePostgresLeitungsplaetze };
 
 export const ttsAblage = {
   ablegen: (token, audio) => offenesBackend.ttsAblage.ablegen(token, audio),
