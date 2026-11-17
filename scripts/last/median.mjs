@@ -20,15 +20,12 @@ function quoteDerZeile(zeile) {
 }
 
 function quoteDesLogs(text) {
-  return text
-    .split("\n")
-    .map(quoteDerZeile)
-    .filter((quote) => quote !== undefined)
-    .at(-1);
+  const quoten = text.split("\n").map(quoteDerZeile).filter((quote) => quote !== undefined);
+  return quoten.at(-1);
 }
 
 function medianVon(werte) {
-  const sortiert = [...werte].sort((a, b) => a - b);
+  const sortiert = [...werte].sort((links, rechts) => links - rechts);
   const mitte = Math.floor(sortiert.length / HALB);
   const wert = sortiert.length % HALB === 1 ? sortiert[mitte] : (sortiert[mitte - 1] + sortiert[mitte]) / HALB;
   return Math.round(wert * NACHKOMMASTELLEN) / NACHKOMMASTELLEN;
