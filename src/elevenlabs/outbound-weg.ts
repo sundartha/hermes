@@ -6,6 +6,7 @@ export const OUTBOUND_WEG = Object.freeze({ TELNYX_VORSPANN: "telnyx_vorspann" }
 export const WEG_GRUND = Object.freeze({
   INBOUND_WEG_NICHT_BEREIT: "inbound_weg_nicht_bereit",
   KEINE_CALL_CONTROL_APP: "keine_call_control_app",
+  KEINE_EIGENE_REGISTRIERUNG: "keine_eigene_registrierung",
 });
 
 export const KOSTENPROFIL_FUER_WEG = Object.freeze({
@@ -21,8 +22,10 @@ interface WegConfig {
   telephony: { telnyxCallControlAppId: string | undefined };
 }
 
+type WegNummer = EntscheidungsFall["numberRecord"] & { providerAgentPhoneNumberId?: string | null };
+
 interface WegStore {
-  numberRecordByE164: (e164: string) => EntscheidungsFall["numberRecord"];
+  numberRecordByE164: (e164: string) => WegNummer;
 }
 
 interface WegAnruf {
@@ -45,6 +48,7 @@ function abbruch(grund: string): Wahl {
 export function outboundWegFuer({ config, store, call }: { config: WegConfig; store: WegStore; call: WegAnruf }): Wahl {
   if (!config.telephony.telnyxCallControlAppId) return abbruch(WEG_GRUND.KEINE_CALL_CONTROL_APP);
   const numberRecord = store.numberRecordByE164(call.from);
+  if (!numberRecord?.providerAgentPhoneNumberId) return abbruch(WEG_GRUND.KEINE_EIGENE_REGISTRIERUNG);
   if (!inboundElPathFor({ config, tenantId: call.tenantId, numberRecord }))
     return abbruch(WEG_GRUND.INBOUND_WEG_NICHT_BEREIT);
   return vorspannWeg;

@@ -218,7 +218,7 @@ before(async () => {
   ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
 });
 
-const innereConfig = () =>
+const innereConfig = (zusatz = {}) =>
   withConfigNamespaces({
     outboundFrozen: false,
     assistantContextEnabled: false,
@@ -232,7 +232,28 @@ const innereConfig = () =>
     telnyxAssistant: { enabled: false },
     voiceEngine: "budget",
     publicUrl: "http://127.0.0.1:1",
+    ...zusatz,
   });
+
+const configMitFreiemWeg = () =>
+  innereConfig({
+    telnyxCallControlAppId: "cc_app_3403",
+    elevenLabsInbound: {
+      scope: "allowlist",
+      tenantIds: [TENANT],
+      sipUser: "sip-user-3403",
+      sipPassword: "p".repeat(40),
+      initWebhookToken: "t".repeat(40),
+    },
+  });
+
+const speicherMitStartFehler = (fehler) => ({
+  ...speicher,
+  numberRecordByE164: () => ({ providerAgentPhoneNumberId: "phnum_3403" }),
+  recordCostProfile: async () => {
+    throw fehler;
+  },
+});
 
 const freieGates = [
   {
@@ -355,12 +376,8 @@ const ORIGINATE_FEHLER = [
 
 test("3403-B2: Anrufstart scheitert - Status und Text folgen dem Anbieter-Status", async () => {
   for (const [name, fehler, status, text] of ORIGINATE_FEHLER) {
-    const abhaengigkeiten = {
-      beschaffeAbsender: async () => {
-        throw fehler;
-      },
-    };
-    await mitRoute({ abhaengigkeiten }, async ({ anlegen }) => {
+    const abhaengigkeiten = { config: configMitFreiemWeg() };
+    await mitRoute({ store: speicherMitStartFehler(fehler), abhaengigkeiten }, async ({ anlegen }) => {
       const res = await anlegen();
       assert.equal(res.status, status, name);
       assert.deepEqual(await res.json(), { error: text }, name);
@@ -378,12 +395,8 @@ test("3403-B3: Fehlerzeile des Anrufstarts nennt die Nachricht, bei leerer Nachr
     [null, "null"],
   ];
   for (const [fehler, erwartet] of faelle) {
-    const abhaengigkeiten = {
-      beschaffeAbsender: async () => {
-        throw fehler;
-      },
-    };
-    await mitRoute({ abhaengigkeiten }, async ({ anlegen, fehlerzeilen }) => {
+    const abhaengigkeiten = { config: configMitFreiemWeg() };
+    await mitRoute({ store: speicherMitStartFehler(fehler), abhaengigkeiten }, async ({ anlegen, fehlerzeilen }) => {
       await anlegen();
       const teile = zeileMit(fehlerzeilen, LOG_ZEILE_START);
       assert.ok(teile, String(erwartet));

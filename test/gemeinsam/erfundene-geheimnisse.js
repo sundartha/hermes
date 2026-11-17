@@ -89,3 +89,5 @@ export const PROBE_TELNYX_SCHLUESSEL = "KEYtest-probe-schluessel-erfunden";
 
 export const EL_REGISTRIERUNG_BOOT_SCHLUESSEL = "el-registrierung-boot-erfunden";
 export const PROBE_STAGING_TEST_TOKEN = "stgtest-probe-token-erfunden";
+
+export const SIP_PASSWORT_BEISPIEL = "sip-pw-erfunden-nicht-echt";

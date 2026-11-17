@@ -11,7 +11,7 @@ import { makeTelnyxSigner, starteAttrappe as starteTelnyxAttrappe, vorspannUmgeb
 
 const HTTP_OK = 200;
 const HTTP_ABGELEHNT = 500;
-const HTTP_NICHT_GESTARTET = 500;
+const HTTP_CONFLICT = 409;
 const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
 const NACHGEHOLTE_KENNUNG = "phnum_nachgeholt_k";
 const TTS_PFAD = "/v1/text-to-speech/";
@@ -128,27 +128,25 @@ test("K1: +49-Nummer mit eigener Registrierung startet mit genau der eigenen Ken
   const { res, call, anbieter, telnyx } = await rufeAn(EIGENE_KENNUNG);
   assert.equal(res.status, HTTP_OK, await res.text());
   assert.deepEqual(telnyx.waehlaufrufe.map((wahl) => wahl.from), [DEUTSCHE_NUMMER]);
-  assert.equal(call.fromRegistrationSource, "tenant_did");
   assert.equal(call.from, DEUTSCHE_NUMMER);
   assert.ok(!alleAnfragen({ anbieter, telnyx }).includes(GLOBALE_KENNUNG), "globale Kennung in einer Anbieteranfrage");
 });
 
-test("K2: +49-Nummer ohne Registrierung wird nachgeholt, scheitert das, bricht der Anruf ab und die globale Kennung bleibt draussen", async () => {
+test("K2: +49-Nummer ohne Registrierung wird nicht nachgeholt, der Anruf bricht ab und die globale Kennung bleibt draussen", async () => {
   const { res, call, anbieter, telnyx } = await rufeAn(null);
-  assert.equal(res.status, HTTP_NICHT_GESTARTET);
+  assert.equal(res.status, HTTP_CONFLICT);
   assert.deepEqual(telnyx.waehlaufrufe, []);
-  assert.deepEqual(anbieter.registrierungen().map((anfrage) => anfrage.body.phone_number), [DEUTSCHE_NUMMER]);
+  assert.deepEqual(anbieter.registrierungen(), []);
   assert.equal(call.status, "failed");
-  assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
+  assert.equal(call.failureReason, "not-placed:keine_eigene_registrierung");
   assert.ok(!alleAnfragen({ anbieter, telnyx }).includes(GLOBALE_KENNUNG), "globale Kennung in einer Anbieteranfrage");
 });
 
-test("K3: wird die fehlende Registrierung nachgeholt, waehlt der Anruf ueber den Vorspann mit der eigenen DID als Absender", async () => {
-  const { res, call, anbieter, telnyx } = await rufeAn(null, { registrierungStatus: HTTP_OK });
-  assert.equal(res.status, HTTP_OK, await res.text());
-  assert.deepEqual(anbieter.registrierungen().map((anfrage) => anfrage.body.phone_number), [DEUTSCHE_NUMMER]);
-  assert.deepEqual(telnyx.waehlaufrufe.map((wahl) => wahl.from), [DEUTSCHE_NUMMER]);
+test("K3: auch wenn der Anbieter eine Registrierung annehmen wuerde, legt der Anruf keine an und waehlt nicht", async () => {
+  const { res, anbieter, telnyx } = await rufeAn(null, { registrierungStatus: HTTP_OK });
+  assert.equal(res.status, HTTP_CONFLICT);
+  assert.deepEqual(anbieter.registrierungen(), []);
+  assert.deepEqual(telnyx.waehlaufrufe, []);
   assert.deepEqual(anbieter.sipStarts(), []);
-  assert.equal(call.fromRegistrationSource, "tenant_did");
   assert.ok(!alleAnfragen({ anbieter, telnyx }).includes(GLOBALE_KENNUNG), "globale Kennung in einer Anbieteranfrage");
 });

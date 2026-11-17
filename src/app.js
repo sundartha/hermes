@@ -227,7 +227,6 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       outboundGates,
       callQuotaDenial,
       voiceControl,
-      beschaffeAbsender: elevenLabsOutbound?.beschaffeAbsenderOderBrichAb,
       erzeugeVorspann: vorspannErzeuger,
       vorspannAblauf,
       terminateAndBillCall,
