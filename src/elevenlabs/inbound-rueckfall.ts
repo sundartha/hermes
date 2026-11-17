@@ -12,7 +12,7 @@ interface Anruf {
   streamToken?: string;
   status?: unknown;
   elBoundAt?: string;
-  answeredAt?: string;
+  answeredAt?: string | undefined;
   maxDurationS?: number;
 }
 
