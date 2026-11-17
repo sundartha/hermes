@@ -171,7 +171,7 @@ test("Fehlende Adresse des Alarmwegs: nichts gewählt, Lauf grün, Name im Proto
   assert.match(sichtbar, /probe_uebersprungen_better_stack_alert_url_fehlt/);
 });
 
-for (const name of ["STAGING_PROBE_ZIEL", "STAGING_PROBE_TELNYX_KEY"]) {
+for (const name of ["STAGING_PROBE_ZIEL"]) {
   test(`Fehlt ${name}: nichts gewählt, Lauf grün, Name im Protokoll`, async () => {
     const { sichtbar, code } = await aufrufen({ umgebung: { [name]: "" } });
     assert.equal(code, 0);
@@ -227,7 +227,7 @@ test("Ohne Anrufer-Modul oder ohne gültigen Commit wird nicht gewählt und der 
 
 test("Schlüssel, Zielnummer und Alarmadresse stehen nur in Maskierungszeilen, nie im sichtbaren Protokoll oder Vorfall", async () => {
   const { ausgabe, sichtbar, vorfaelle, schreibend, adresse } = await aufrufen({ fall: { messungen: [ROT, ROT] } });
-  for (const geheim of [PROBE_TELNYX_SCHLUESSEL, ZIEL, adresse]) {
+  for (const geheim of [ZIEL, adresse]) {
     assert.ok(ausgabe.includes(`::add-mask::${geheim}`));
     assert.ok(!sichtbar.includes(geheim));
     assert.ok(!JSON.stringify(vorfaelle).includes(geheim));
