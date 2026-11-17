@@ -24,6 +24,7 @@ const NICHT = [
   ["CREATE INDEX", "CREATE INDEX a_b ON a (b);"],
   ["alle drei zusammen", "CREATE TABLE a (id int);\nALTER TABLE a ADD COLUMN b text;\nCREATE INDEX a_b ON a (b);"],
   ["Gefährliches nur im Kommentar", "-- DROP TABLE a;\n/* DELETE FROM a;\nTRUNCATE a; */\nCREATE TABLE b (id int);"],
+  ["DROP POLICY mit neuem CREATE POLICY (nur Zugriffsregel, keine Daten)", "CREATE TABLE a (id int);\nDROP POLICY IF EXISTS p ON a;\nCREATE POLICY p ON a USING (true);"],
   ["Gefährliches im Text steht nicht im Kommentar", "INSERT INTO b VALUES ('-- x');\nCREATE TABLE c (id int);"],
 ];
 
@@ -56,6 +57,7 @@ const ZERSTOEREND = [
   ["nach einem verschachtelten Blockkommentar", "/* /* */ ' */ SELECT '--'; DROP TABLE a;"],
   ["nach einem Dollar-Zeichen im Bezeichner", "SELECT foo$t$, '$t$ -- '; DROP TABLE a;"],
   ["nach einem E-Text mit Backslash-Escape", "SELECT E'\\'--'; DROP TABLE a;"],
+  ["DROP POLICY zusammen mit DROP TABLE", "DROP POLICY IF EXISTS p ON a;\nDROP TABLE a;"],
   ["UPDATE ueberschreibt Daten", "UPDATE a SET b = NULL;"],
   ["UPDATE nach einem anderen Befehl", "CREATE TABLE b (id int);\nupdate a set b = 1;"],
 ];
