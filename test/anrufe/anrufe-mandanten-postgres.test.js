@@ -36,7 +36,8 @@ const GESPRAECH = Object.freeze([
   { role: "user", message: "Donnerstag um zehn Uhr passt." },
 ]);
 const GESPRAECH_TEXTE = GESPRAECH.map((zeile) => zeile.message);
-const texteVon = (zeilen) => zeilen.map((zeile) => zeile.text);
+const VORSPANN_ZEILEN = 1;
+const texteVon = (zeilen) => zeilen.slice(VORSPANN_ZEILEN).map((zeile) => zeile.text);
 
 const ANRUFE_JE_MANDANT_SQL =
   "SELECT tenant_id, count(*)::int AS anzahl FROM call GROUP BY tenant_id ORDER BY tenant_id";
@@ -150,7 +151,7 @@ test("PG-MANDANT-EXPORT: der Export liefert B keinen Anruf und A genau seinen An
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   await mitMandanten(t, BEHALTEN_ENV, async (hermes) => {
     const anruf = await beendeGespraechVonA(hermes);
-    const zeilen = await transkriptSql(hermes.sql, anruf, GESPRAECH.length);
+    const zeilen = await transkriptSql(hermes.sql, anruf, GESPRAECH.length + VORSPANN_ZEILEN);
     assert.deepEqual(texteVon(zeilen), GESPRAECH_TEXTE);
     const exportB = await (await hermes.b.hole("/api/tenant-data/export")).json();
     assert.equal(exportB.calls.length, 0);
@@ -166,7 +167,7 @@ test("PG-MANDANT-NEUSTART: nach hartem Neustart liefert Hermes A dieselben Trans
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   await mitMandanten(t, BEHALTEN_ENV, async (hermes) => {
     const anruf = await beendeGespraechVonA(hermes);
-    await transkriptSql(hermes.sql, anruf, GESPRAECH.length);
+    await transkriptSql(hermes.sql, anruf, GESPRAECH.length + VORSPANN_ZEILEN);
     const { srv } = await hermes.neustartHart();
     const nachA = await mandantenAbruf(srv, MANDANT_A.sub).hole(`/api/calls/${anruf.id}`);
     assert.equal(nachA.status, HTTP_OK);

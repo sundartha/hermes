@@ -4,10 +4,9 @@ import test from "node:test";
 
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "./echtes-postgres.js";
-import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
-import { postgresVorhanden, seedeMandant, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
-import { startServer, waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { postgresVorhanden, seedeMandant, starteAnAnbieter, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
+import { waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
@@ -17,11 +16,13 @@ const WARTEGRENZE_PUFFER_MS = 3_000;
 const ELEVENLABS_PLAETZE = 4;
 const ZIEL_VORWAHL = "+49151123401";
 const ZIEL_STELLEN = 3;
+const MANDANT_IDS = [0, 1, 2].map((index) => `tenant_lp_pg_${index}`).join(",");
 const EL_WEG = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
   ELEVENLABS_AGENT_ID: "agent_lp_pg",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_lp_pg",
   ELEVENLABS_API_KEY: "el-lp-pg-schluessel",
+  ELEVENLABS_INBOUND_TENANT_IDS: MANDANT_IDS,
 });
 const MANDANTEN = [0, 1, 2].map((index) => ({
   id: `tenant_lp_pg_${index}`,
@@ -56,9 +57,7 @@ async function mitZweiProzessen(t, lauf, { abholTaktMs = "60000" } = {}) {
   const anbieter = await starteAttrappeMitGespraechsende();
   const gestartet = [];
   const starte = async () => {
-    const instanz = await startServer({
-      env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_RESULT_POLL_MS: abholTaktMs, ELEVENLABS_API_BASE: anbieter.url }),
-    });
+    const instanz = await starteAnAnbieter(db, anbieter, { ...EL_WEG, ELEVENLABS_RESULT_POLL_MS: abholTaktMs });
     gestartet.push(instanz);
     return instanz;
   };

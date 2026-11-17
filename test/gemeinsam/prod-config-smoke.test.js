@@ -12,6 +12,8 @@ import {
   prodEnv,
 } from "../prod-env.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const TARGET_DOMESTIC = "+4915112345678";
 const TARGET_INTERNATIONAL = "+12025550143";
@@ -64,7 +66,8 @@ test("Produktionskonfiguration (GAP-33): der Server bootet unter den ausgeliefer
 });
 
 test("Produktionskonfiguration (GAP-33): Outbound ins Inland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
-  const srv = await startServer({ env: prodEnv() });
+  const anbieter = await starteAbbrechendeAttrappe("prod", [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({ env: { ...prodEnv(), ...anbieter.env } });
   try {
     const res = await placeCall(srv, TARGET_DOMESTIC);
     assert.equal(
@@ -75,11 +78,13 @@ test("Produktionskonfiguration (GAP-33): Outbound ins Inland kommt unter ausgeli
     );
   } finally {
     await srv.stop();
+    await anbieter.close();
   }
 });
 
 test("Produktionskonfiguration (GAP-33): Outbound ins Ausland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
-  const srv = await startServer({ env: prodEnv() });
+  const anbieter = await starteAbbrechendeAttrappe("prod", [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({ env: { ...prodEnv(), ...anbieter.env } });
   try {
     const res = await placeCall(srv, TARGET_INTERNATIONAL);
     assert.equal(
@@ -91,6 +96,7 @@ test("Produktionskonfiguration (GAP-33): Outbound ins Ausland kommt unter ausgel
     );
   } finally {
     await srv.stop();
+    await anbieter.close();
   }
 });
 
