@@ -776,14 +776,8 @@ export async function bootServer({
   await lifecycle.rearmBudgetWatchdogs();
 
   elevenLabsOutbound.rearmActiveConversationPolls();
-
-  starteFristenTakt({
-    store,
-    lifecycle,
-    config,
-    fristen: fristenEinstellungen,
-    abfrage: { pollen: elevenLabsOutbound.abfrageDurchLauf },
-  });
+  const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
+  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage });
 
   const instanzTakt = await store.starteInstanzTakt();
 
