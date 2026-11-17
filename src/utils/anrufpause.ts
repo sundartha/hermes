@@ -1,6 +1,11 @@
 import { fehlerText } from "./fehler-text.ts";
 
-export async function anrufpauseGilt(store) {
+export interface PausenSpeicher {
+  anrufpauseGelesen?: () => Promise<unknown>;
+  anrufpauseAktiv?: () => unknown;
+}
+
+export async function anrufpauseGilt(store: PausenSpeicher): Promise<boolean> {
   if (!store.anrufpauseGelesen) return store.anrufpauseAktiv?.() === true;
   try {
     return (await store.anrufpauseGelesen()) === true;

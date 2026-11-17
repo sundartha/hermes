@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { audit } from "../util.ts";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
-import { anrufpauseGilt } from "../utils/anrufpause.js";
+import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 
