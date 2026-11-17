@@ -1,7 +1,7 @@
 import { oneMonthBack } from "../utils/month.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 
-export { MS_PER_SECOND } from "../utils/timer.js";
+export { MS_PER_SECOND } from "../utils/timer.ts";
 
 interface PeriodSeconds {
   currentPeriodStart?: number | null | undefined;

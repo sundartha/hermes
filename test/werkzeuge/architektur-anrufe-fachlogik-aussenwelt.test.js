@@ -58,8 +58,8 @@ for (const ziel of VERBOTEN) {
   });
 }
 
-test("Fachlogik des Anrufbereichs darf reine Hilfen wie src/utils/timer.js importieren", () => {
-  assert.deepEqual(verstoesse(FACHLOGIK, "src/utils/timer.js"), []);
+test("Fachlogik des Anrufbereichs darf reine Hilfen wie src/utils/timer.ts importieren", () => {
+  assert.deepEqual(verstoesse(FACHLOGIK, "src/utils/timer.ts"), []);
 });
 
 test("Fachlogik des Anrufbereichs in src/elevenlabs/ wird ebenfalls geprüft", () => {

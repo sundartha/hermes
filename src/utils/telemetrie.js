@@ -1,5 +1,5 @@
 import { NANOSEKUNDEN_JE_MS, schalteScharf } from "./betriebsmessung.js";
-import { MS_PER_MINUTE } from "./timer.js";
+import { MS_PER_MINUTE } from "./timer.ts";
 
 const ANFRAGE_DAUER_NAME = "hermes.http.server.duration";
 const ANBIETER_AUFRUFE_NAME = "hermes.anbieter.aufrufe";

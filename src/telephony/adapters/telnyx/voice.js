@@ -2,7 +2,7 @@ import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.ts";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.ts";
 import { createMinuteWindowThrottle } from "./rate-limit.ts";
-import { MS_PER_SECOND } from "../../../utils/timer.js";
+import { MS_PER_SECOND } from "../../../utils/timer.ts";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const TEXML_BASE = "/v2/texml";

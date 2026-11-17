@@ -1,4 +1,4 @@
-import { MS_PER_HOUR } from "../../src/utils/timer.js";
+import { MS_PER_HOUR } from "../../src/utils/timer.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const INBOUND = "inbound";

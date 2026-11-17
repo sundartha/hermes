@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sleep } from "../utils/timer.js";
+import { sleep } from "../utils/timer.ts";
 import { STRIPE_EREIGNIS_ABFRAGE_FRIST_MS, STRIPE_EREIGNIS_SPERRE_ABLAUF_MS } from "../begriffe/speicher.js";
 import { wartenBisFrei } from "./stripe-ereignis-regeln.js";
 

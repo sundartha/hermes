@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 import { safeEqual } from "../util.ts";
 import { REQUEST_TIMEOUT_MS } from "./convai.ts";
 

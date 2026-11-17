@@ -1,6 +1,6 @@
 import type { Accounts, MailPlan } from "./mail-summary.ts";
 import { meldetAlsNichtGestartet } from "./telephony/failure-reason.ts";
-import { MS_PER_MINUTE } from "./utils/timer.js";
+import { MS_PER_MINUTE } from "./utils/timer.ts";
 
 const MINUTES_PER_HOUR = 60;
 const NOT_PLACED_MAIL_DEBOUNCE_MS = MINUTES_PER_HOUR * MS_PER_MINUTE;

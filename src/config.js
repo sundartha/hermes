@@ -49,7 +49,7 @@ import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.ts";
 import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.ts";
 import { LLM_PROVIDER } from "./llm/provider.ts";
-import { MS_PER_MINUTE } from "./utils/timer.js";
+import { MS_PER_MINUTE } from "./utils/timer.ts";
 import { merkeLogGeheimnisse } from "./log-maske.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

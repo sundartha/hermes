@@ -12,7 +12,7 @@ import {
   recordAnsweredUnclearReason,
   trueUpAnsweredAt,
 } from "../../src/store/state-ops.js";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 
 const ENDED_AT = "2026-08-15T10:05:00.000Z";
 const STALE_DIAL_TIME_STAMP = "2026-08-15T10:00:00.000Z";

@@ -1,4 +1,4 @@
-import { MS_PER_SECOND } from "./utils/timer.js";
+import { MS_PER_SECOND } from "./utils/timer.ts";
 import { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
 
 interface AnrufDauer {

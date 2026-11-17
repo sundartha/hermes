@@ -1,4 +1,4 @@
-import { MS_PER_DAY } from "../utils/timer.js";
+import { MS_PER_DAY } from "../utils/timer.ts";
 
 export function rohwerteProvisioning(env, { boolEnv, numEnv }) {
   return {

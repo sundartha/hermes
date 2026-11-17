@@ -203,7 +203,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
 ];
 const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.ts";
-const ZEIT_MODUL = "src/utils/timer.js";
+const ZEIT_MODUL = "src/utils/timer.ts";
 const MONAT_MODUL = "src/utils/month.js";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
@@ -757,7 +757,7 @@ export default [
         "error",
         {
           paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })),
-          patterns: [{ regex: "(^|/)utils/timer(\\.js)?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
+          patterns: [{ regex: "(^|/)utils/timer(\\.(js|ts))?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
         },
       ],
       "no-restricted-syntax": [

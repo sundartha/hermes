@@ -8,7 +8,7 @@ import { nachlaufPolitikFuer, pollDarfWirken } from "../../src/elevenlabs/nachla
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { POLL_TIMEOUT_REASON } from "../../src/telephony/failure-reason.ts";
-import { MS_PER_SECOND } from "../../src/utils/timer.js";
+import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_IN_PROGRESS,

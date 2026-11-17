@@ -1,4 +1,4 @@
-import { MS_PER_MINUTE } from "../utils/timer.js";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const CONSULT_WAIT_MAX_MS = MS_PER_MINUTE;
 const CONSULT_OPEN_MAX_MS = 300_000;

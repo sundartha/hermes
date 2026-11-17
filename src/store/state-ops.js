@@ -19,7 +19,7 @@ import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.ts";
 import { stripResultEvidence, resultCardView } from "../call-result.ts";
 import { MEMORY_MAX_CALLS } from "../call-memory.ts";
-import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_DAY, MS_PER_SECOND } from "../utils/timer.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import {
   gateNutzungCents,

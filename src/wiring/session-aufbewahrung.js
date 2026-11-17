@@ -1,4 +1,4 @@
-import { MS_PER_HOUR } from "../utils/timer.js";
+import { MS_PER_HOUR } from "../utils/timer.ts";
 import { zeitplanImProzess } from "../utils/zeitplan-im-prozess.ts";
 
 export const SESSION_AUFBEWAHRUNG_TAGE = 30;

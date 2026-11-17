@@ -1,5 +1,5 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
-import { MS_PER_SECOND } from "./timer.js";
+import { MS_PER_SECOND } from "./timer.ts";
 
 export const NANOSEKUNDEN_JE_MS = 1_000_000;
 const P99 = 99;
