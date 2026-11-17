@@ -37,11 +37,12 @@ const ANRUF_TOKEN_SQL = "SELECT stream_token, from_e164 FROM call WHERE id = $1"
 
 let instanzZaehler = 0;
 
-export async function starteAnAnbieter(db, anbieter, env) {
+export async function starteAnAnbieter(db, anbieter, env, { mandantGepinnt = true } = {}) {
   const host = `instanz-${(instanzZaehler += 1)}.agent.test`;
   const srv = await startServer({
     env: pgStartUmgebung(db.adresse, {
       ...EL_WEG,
+      ...(mandantGepinnt ? {} : { ELEVENLABS_INBOUND_TENANT_IDS: "" }),
       ...anbieterUmgebung(anbieter.url),
       PUBLIC_URL: `https://${host}`,
       ...env,
@@ -89,12 +90,12 @@ async function seedeBootstrapMandant(sql) {
   assert.equal(rowCount, 1, "der Bootstrap-Mandant hat genau eine Nummer zum Seeden");
 }
 
-export async function mitHermesAufPostgres(t, { env = {} }, lauf) {
+export async function mitHermesAufPostgres(t, { env = {}, mandantGepinnt }, lauf) {
   const db = await echteDatenbankMitRolle(t);
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();
   const anbieter = await starteAnrufstartAttrappe();
-  const starte = () => starteAnAnbieter(db, anbieter, env);
+  const starte = () => starteAnAnbieter(db, anbieter, env, { mandantGepinnt });
   const sql = (text, parameter) => verwaltung.query(text, parameter);
   let srv = await starte();
   try {
@@ -109,7 +110,7 @@ export async function mitHermesAufPostgres(t, { env = {} }, lauf) {
   }
 }
 
-export async function mitZweiHermesAufPostgres(t, { env = {} }, lauf) {
+export async function mitZweiHermesAufPostgres(t, { env = {}, mandantGepinnt }, lauf) {
   const db = await echteDatenbankMitRolle(t);
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();
@@ -117,7 +118,7 @@ export async function mitZweiHermesAufPostgres(t, { env = {} }, lauf) {
   const sql = (text, parameter) => verwaltung.query(text, parameter);
   const gestartet = [];
   const starte = async () => {
-    const instanz = await starteAnAnbieter(db, anbieter, env);
+    const instanz = await starteAnAnbieter(db, anbieter, env, { mandantGepinnt });
     gestartet.push(instanz);
     return instanz;
   };
