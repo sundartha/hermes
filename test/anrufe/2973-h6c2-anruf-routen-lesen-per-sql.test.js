@@ -3,6 +3,7 @@ import { test } from "node:test";
 import express from "express";
 
 import { config } from "../../src/config.js";
+import { makeConsultDelivery } from "../../src/consult/delivery.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
@@ -46,12 +47,12 @@ async function zweiInstanzen() {
 
 async function zeile(db, id) {
   await setzeKontext(db, KUNDE);
-  return (await db.query("SELECT status, ended_at, consults FROM call WHERE id = $1", [id])).rows[0];
+  return (await db.query("SELECT status, ended_at, consults, billed_at FROM call WHERE id = $1", [id])).rows[0];
 }
 
 const kaputtMachen = (db) => db.exec("ALTER TABLE anruf_schluessel RENAME TO anruf_schluessel_versteckt");
 
-function routen(store, mandant) {
+function routen(store, mandant, consultDelivery) {
   const app = express();
   app.use(express.json());
   app.use(
@@ -71,6 +72,7 @@ function routen(store, mandant) {
         requireTenant: () => mandant,
         tenantOwnsCall: (call, tenantId) => call.tenantId === tenantId,
       },
+      consultDelivery,
       internalIdentity: () => "intern",
       OWNER_ID: "owner",
     }),
@@ -132,6 +134,45 @@ test("H6c2-1b: der naechste Speichervorgang der Instanz A setzt den auf B abgebr
   assert.equal(danach.ended_at, beendetAm);
 });
 
+test("H6c2-1d: der naechste Speichervorgang der Instanz A leert die auf B gesetzte Abrechnungsmarke nicht, die Abrechnung gelingt kein zweites Mal", async () => {
+  const { db, a, b, call } = await zweiInstanzen();
+  await mitServer(routen(b, KUNDE), async (post) => {
+    await post(`/api/calls/${call.id}/cancel`);
+  });
+  assert.ok((await b.markBilled(call.id)).billedAt);
+  const gesetzt = (await zeile(db, call.id)).billed_at;
+  assert.ok(gesetzt);
+  a.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Anderer", tenantId: KUNDE, provider: "telnyx" });
+  await a.save();
+  await a.drainFlushes();
+  assert.equal((await zeile(db, call.id)).billed_at, gesetzt);
+  await a.markBilled(call.id);
+  assert.equal((await zeile(db, call.id)).billed_at, gesetzt);
+});
+
+const MARKEN_UND_KOSTEN = [
+  ["summary_sms_sent_at", "2030-01-02T03:04:05.000Z"],
+  ["summary_mail_sent_at", "2030-01-02T03:04:06.000Z"],
+  ["not_placed_mail_sent_at", "2030-01-02T03:04:07.000Z"],
+  ["estimated_cost_cents", 42],
+  ["actual_cost_micro_cents", 4242],
+  ["cost_trued_at", "2030-01-02T03:04:08.000Z"],
+  ["cost_trued_source", "telnyx"],
+];
+
+for (const [spalte, wert] of MARKEN_UND_KOSTEN) {
+  test(`H6c2-1e: das Speichern der Instanz A leert ${spalte} der Zeile nicht`, async () => {
+    const { db, a, call } = await zweiInstanzen();
+    await setzeKontext(db, KUNDE);
+    await db.query(`UPDATE call SET ${spalte} = $1 WHERE id = $2`, [wert, call.id]);
+    await a.save();
+    await a.drainFlushes();
+    await setzeKontext(db, KUNDE);
+    const danach = (await db.query(`SELECT ${spalte} AS wert FROM call WHERE id = $1`, [call.id])).rows[0].wert;
+    assert.notEqual(danach, null);
+  });
+}
+
 test("H6c2-1c: beendet die Instanz den Anruf nur im Spiegel, schreibt ihr Speichern Status und Ende in die aktive Zeile", async () => {
   const { db, a, call } = await zweiInstanzen();
   const eigener = a.getCall(call.id);
@@ -170,3 +211,25 @@ test("H6c2-3: cancel eines unbekannten Anrufs und eines fremden Mandanten antwor
   });
 });
 
+
+test("H6c2-7: der Rueckfrage-Poll eines Anrufs, den die Datenbank nicht (mehr) kennt, liefert die offene Rueckfrage statt eines Fehlers", async () => {
+  const { a, call } = await zweiInstanzen();
+  const ohneLeser = Object.assign(Object.create(a), {
+    rueckfrageGelesen: undefined,
+    leseCallUngebunden: async () => null,
+  });
+  const app = routen(a, KUNDE, makeConsultDelivery({ store: ohneLeser, holdMs: 30, tickMs: 5 }));
+  const server = await new Promise((resolve) => {
+    const srv = app.listen(0, "127.0.0.1", () => resolve(srv));
+  });
+  try {
+    const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/calls/${call.id}/consult`);
+    assert.equal(antwort.status, 200);
+    const koerper = JSON.parse(await antwort.text());
+    assert.equal(koerper.event, "consult");
+    assert.deepEqual(koerper.questions, ["Passt Donnerstag?"]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
