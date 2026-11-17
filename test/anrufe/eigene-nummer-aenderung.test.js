@@ -22,7 +22,7 @@ Object.assign(process.env, {
 const { starteHermesMitPglite, LOGIN_SUB } = await import("../abrechnung/server-mit-testdatenbank.js");
 const laufendesHermes = await starteHermesMitPglite({
   alarmPostfach: "postfach@en.invalid",
-  anrufstartAbgelehnt: true,
+  vorspannWahlAbgelehnt: true,
 });
 
 let zaehler = 0;

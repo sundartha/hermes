@@ -4,10 +4,9 @@ import { test } from "node:test";
 import { runNummerntausch } from "../../src/worker/nummerntausch.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { seedState, startServer } from "../helpers.js";
-import { starteJsonAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -35,7 +34,7 @@ function startMit(nummern, env = {}) {
   stand.outageAlerts = [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: new Date().toISOString() }];
   return startServer({
     seed: stand,
-    env: { FAKE_ORIGINATE: "true", VOICE_TARIFF_DEFAULT_CENTS: "30", VOICE_TARIFF_DOMESTIC_CENTS: "30", ...env },
+    env: { ...vorspannMandantenUmgebung([MANDANT]), VOICE_TARIFF_DEFAULT_CENTS: "30", VOICE_TARIFF_DOMESTIC_CENTS: "30", ...env },
   });
 }
 
@@ -58,14 +57,9 @@ async function anrufen(srv) {
 }
 
 test("Absender: bei offener Plattform-Nummern-Meldung geht der Anruf mit der eigenen Nummer des Mandanten raus", async () => {
-  const anbieter = await starteJsonAttrappe({ data: [] });
   const srv = await startMit([nummer({ id: "num_e1", tenantId: MANDANT, e164: EIGENE_NUMMER })], {
     OUTBOUND_ANI_GATE_ENABLED: "true",
     PLATFORM_ANI_E164: PLATTFORM_NUMMER,
-    TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
-    TELNYX_CONNECTION_ID: "conn_test",
-    TELNYX_ACCOUNT_SID: "acct_test",
-    TELNYX_API_BASE: anbieter.url,
   });
   try {
     const { status } = await anrufen(srv);
@@ -74,7 +68,6 @@ test("Absender: bei offener Plattform-Nummern-Meldung geht der Anruf mit der eig
     assert.equal(anruf.from, EIGENE_NUMMER);
   } finally {
     await srv.stop();
-    await anbieter.close();
   }
 });
 

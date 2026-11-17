@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { E164, hasTrunkZeroAfterCountryCode } from "../../src/begriffe/rufnummern.js";
 import { isTrunkZeroFormatError } from "../../src/telephony/outbound-gates.js";
 import { startServer, placeCall } from "../helpers.js";
-import { starteJsonAttrappe } from "./attrappen-server.js";
-import { TELNYX_TRUNK_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 test("hasTrunkZeroAfterCountryCode (Praedikat)", async (t) => {
   await t.test("Trunk-0 nach +49/+33/+44 -> true", () => {
@@ -53,16 +53,12 @@ const TRUNK_ZERO = ["+4901713920012", "+3301713920012", "+4401713920012"];
 const CLEAN = ["+491713920012", "+33123456789", "+447700900123"];
 
 test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t) => {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
+  const abgelehnt = await starteAblehnendeAttrappe(400, "e164", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     env: {
       ALLOWED_NUMBERS: [...TRUNK_ZERO, ...CLEAN].join(","),
       ALLOWED_COUNTRY_CODES: "+49,+33,+44",
-      ELEVENLABS_API_BASE: abgelehnt.url,
-      TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: TELNYX_TRUNK_SCHLUESSEL,
-      TELNYX_CONNECTION_ID: "conn_trunk",
-      TELNYX_ACCOUNT_SID: "acct_trunk",
+      ...abgelehnt.env,
     },
   });
   try {

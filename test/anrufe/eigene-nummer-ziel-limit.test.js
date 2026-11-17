@@ -4,10 +4,10 @@ import test from "node:test";
 import { seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { starteJsonAttrappe } from "./attrappen-server.js";
-import { TELNYX_EIGENE_NUMMER_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_GATE_PASSIERT = 502;
+const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
 const EIGENE_NUMMER = "+491713920012";
@@ -38,15 +38,8 @@ const seedMit = (privateNumber) =>
   });
 
 async function mitServer({ env, privateNumber = EIGENE_NUMMER }, lauf) {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
-  const anbieter = {
-    ELEVENLABS_API_BASE: abgelehnt.url,
-    TELNYX_API_BASE: abgelehnt.url,
-    TELNYX_API_KEY: TELNYX_EIGENE_NUMMER_SCHLUESSEL,
-    TELNYX_CONNECTION_ID: "conn_eigene_nummer",
-    TELNYX_ACCOUNT_SID: "acct_eigene_nummer",
-  };
-  const srv = await startServer({ env: { ...BASIS_ENV, ...anbieter, ...env }, seed: seedMit(privateNumber) });
+  const abgelehnt = await starteAblehnendeAttrappe(HTTP_BAD_REQUEST, "enzl", [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({ env: { ...BASIS_ENV, ...abgelehnt.env, ...env }, seed: seedMit(privateNumber) });
   try {
     return await lauf(srv);
   } finally {

@@ -2,6 +2,8 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer as startServerImpl, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 
@@ -24,7 +26,7 @@ const POLL_TIMEOUT_MS = MAX_DURATION_S * MS_PER_SECOND + POLL_PUFFER_MS;
 const DOMESTIC_TO = "+4915112345678";
 
 async function placeCappedCall() {
-  const srv = await startServer({ env: { FAKE_ORIGINATE: "true" } });
+  const srv = await startServer({ env: vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]) });
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
