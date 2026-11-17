@@ -7,12 +7,12 @@ import { widgetPins } from "../../src/ui/registry.js";
 const AUSGELASTET = "at-capacity";
 const AUSGELASTET_BESCHRIFTUNG = "At capacity";
 const ALLE_WIDGETS = ["agent-status", "my-number", "calls", "call"];
-const NAECHSTE_VERSION = { "agent-status": "25", "my-number": "26", calls: "26", call: "38" };
+const NAECHSTE_VERSION = { "agent-status": "25", "my-number": "26", calls: "26", call: "39" };
 const LETZTER_BESTEHENDER_PIN = {
   "agent-status": ["24", "4fafd12557e5380bac81d1217a07d841b08cd383625808f3d4970f2835610de0"],
   "my-number": ["25", "009f25cce76001cc53cd2d76aa6247cdff09d6a2618c81baca738a643e1d0cc0"],
   calls: ["25", "92e6556e29116e70a4e2cf8050be364ccb56faf2afdc735582d1d60016230083"],
-  call: ["37", "73782f71daf4e92f26c769c77a05e1ad050737f8b88dab435fe99b3fcec0a4ab"],
+  call: ["38", "179cfab9e4560ad282c013d08493b7e12752dafd322808397aae7f887935b2d8"],
 };
 
 async function ausgelieferteWidgets() {
