@@ -54,7 +54,7 @@ async function starteWeiche(ziel) {
   };
 }
 
-async function frageBeiEingefrorenerDatenbank(t, aktion, anfrage, abreissen) {
+async function frageBeiEingefrorenerDatenbank(t, { aktion, anfrage, abreissen }) {
   const db = await echteDatenbankMitRolle(t);
   await mitGestartetemHermes(db.adresse, {}, async () => {});
   const ziel = new URL(db.adresse);
@@ -94,7 +94,7 @@ for (const [name, abreissen] of [
 ]) {
   test(`${name}: Pruefen lehnt nach der Frist ab, nicht erst nach 10 Sekunden`, { timeout: ZEITGRENZE_MS }, async (t) => {
     if (!postgresVorhanden()) return;
-    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, "pruefenAusgehend", ANFRAGE, abreissen);
+    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, { aktion: "pruefenAusgehend", anfrage: ANFRAGE, abreissen });
     assert.equal(ergebnis, "anbieter_voll");
     assert.ok(dauerMs >= LEITUNGSPLATZ_DB_FRIST_MS - 500, `wartet bis zur Frist: ${dauerMs} ms`);
     assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
@@ -102,7 +102,7 @@ for (const [name, abreissen] of [
 
   test(`${name}: Belegen liefert anbieter_voll nach der Frist`, { timeout: ZEITGRENZE_MS }, async (t) => {
     if (!postgresVorhanden()) return;
-    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, "belegenAusgehend", BELEGEN, abreissen);
+    const { ergebnis, dauerMs } = await frageBeiEingefrorenerDatenbank(t, { aktion: "belegenAusgehend", anfrage: BELEGEN, abreissen });
     assert.deepEqual(ergebnis, { entscheidung: "anbieter_voll" });
     assert.ok(dauerMs < LEITUNGSPLATZ_DB_FRIST_MS + PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
   });
