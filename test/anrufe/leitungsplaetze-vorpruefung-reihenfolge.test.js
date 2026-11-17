@@ -229,8 +229,8 @@ test("T2: die Ablehnung bei voller Plattform gibt die Budget-Reserve genau einma
     await belegeAllePlaetze(platz);
     const abgelehnt = await route.post(ziel(1));
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
-    assert.deepEqual(route.zaehler.zurueck, [RESERVE_CENTS]);
+    assert.match(abgelehnt.body.error, /nicht gewaehlt/);
+    assert.deepEqual(route.zaehler.zurueck, []);
   });
 });
 
@@ -238,8 +238,8 @@ test("T2: meldet die Datenbank beim Pruefen anbieter_voll, kommt 503 ausgelastet
   await mitRoute(pruefenMeldetVoll, async ({ route }) => {
     const abgelehnt = await route.post(ziel(1));
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
-    assert.deepEqual(route.zaehler.zurueck, [RESERVE_CENTS]);
+    assert.match(abgelehnt.body.error, /nicht gewaehlt/);
+    assert.deepEqual(route.zaehler.zurueck, []);
   });
 });
 

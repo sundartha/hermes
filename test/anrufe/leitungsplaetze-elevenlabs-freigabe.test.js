@@ -14,6 +14,7 @@ import { initInhaltFuer, vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUm
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
+const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const AUFTRAG = "Tisch fuer zwei reservieren (EL-Freigabe)";
 const EL_PLAETZE_NUTZBAR = 4;
 const KUNDEN = EL_PLAETZE_NUTZBAR + 1;
@@ -100,7 +101,7 @@ async function fuelleElPlaetze(srv, { nachErstem = async () => {} } = {}) {
 async function assertAusgelastet(srv, nummer) {
   const antwort = await rufeAn(srv, KUNDEN - 1, nummer);
   assert.equal(antwort.status, HTTP_UNAVAILABLE);
-  assert.equal(antwort.body.reason, "ausgelastet");
+  assert.equal(antwort.body.error, KEINE_WARTESCHLANGE);
 }
 
 async function aufDemElWeg({ env = {}, seed }, lauf) {

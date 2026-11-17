@@ -12,6 +12,7 @@ import { starteAttrappe } from "./attrappen-server.js";
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAVAILABLE = 503;
+const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const WAHL_PFAD = "/v2/calls";
 const TTS_PFAD = "/v1/text-to-speech/";
 const AUFTRAG = "Tisch fuer zwei reservieren (Leitungsplatz)";
@@ -105,7 +106,7 @@ test("S1: vier laufende ElevenLabs-Anrufe fuellen die Plaetze, der fuenfte Start
     await startePlaetze(srv, [2, 1, 1]);
     const abgelehnt = await rufeAn(srv, 3, zielVon(900));
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.reason, "ausgelastet");
+    assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE);
     assert.equal(anbieter.starts().length, 4, "ElevenLabs sieht 4 Starts, nicht 5");
   });
 });
@@ -118,13 +119,16 @@ test("S9: die Ablehnung hinterlaesst keinen Anrufdatensatz und gibt die Budget-R
       for (const versuch of [900, 901]) {
         const abgelehnt = await rufeAn(srv, KNAPPER_KUNDE, zielVon(versuch));
         assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-        assert.equal(abgelehnt.body.reason, "ausgelastet", "die Reserve ist zurueck: kein Budget-Grund beim zweiten Versuch");
+        assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE, "die Reserve ist zurueck: kein Budget-Grund beim zweiten Versuch");
       }
-      const stand = await waitForStoreState(srv, (s) => s.calls.length >= 4);
-      assert.equal(stand.calls.length, 4);
-      assert.equal(
-        stand.calls.some((call) => call.tenantId === kundeVon(KNAPPER_KUNDE)),
-        false,
+      const stand = await waitForStoreState(srv, (s) => s.calls.length >= 6);
+      const ohneWahl = stand.calls.filter((call) => call.failureReason === "not-placed:warteschlange");
+      assert.deepEqual(
+        ohneWahl.map((call) => [call.tenantId, call.status, Boolean(call.callControlId)]),
+        [
+          [kundeVon(KNAPPER_KUNDE), "failed", false],
+          [kundeVon(KNAPPER_KUNDE), "failed", false],
+        ],
       );
     },
     { mitBudget: true },
@@ -143,7 +147,8 @@ for (const [sprache, erwartet] of Object.entries(HTTP_TEXT))
       async ({ srv }) => {
         await startePlaetze(srv, [2, 1, 1]);
         const abgelehnt = await rufeAn(srv, KNAPPER_KUNDE, zielVon(900));
-        assert.equal(abgelehnt.body.error, erwartet);
+        assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
+        assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE, erwartet);
       },
       { sprache },
     );

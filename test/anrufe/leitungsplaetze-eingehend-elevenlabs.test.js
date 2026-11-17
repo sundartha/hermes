@@ -7,6 +7,7 @@ import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
+const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const KUNDE = "t_el_ein";
 const ABSENDER = "+12025552100";
 const EL_PLAETZE = 6;
@@ -64,7 +65,7 @@ test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-A
     assert.ok(stand.calls.filter((call) => call.direction === "inbound").every((call) => call.costProfile === "telnyx_inbound_el_convai"));
     const abgelehnt = await rufeAusgehendAn(srv, 1);
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal((await abgelehnt.json()).reason, "ausgelastet");
+    assert.equal((await abgelehnt.json()).error, KEINE_WARTESCHLANGE);
   } finally {
     await srv.stop();
   }

@@ -99,6 +99,8 @@ function starteElAnbieter() {
   }).then((attrappe) => ({ ...attrappe, melde: (id) => fertig.add(id) }));
 }
 
+const erster = (stand) => stand.calls.find((call) => call.failureReason !== "not-placed:warteschlange");
+
 test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch laufendes Gespraech nicht", async () => {
   const anbieter = await starteElAnbieter();
   const srv = await startServer({
@@ -114,15 +116,15 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
     await startePlaetze(srv, EL_PLAETZE_NUTZBAR, (nummer) => nummer - 1);
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(900))).status, HTTP_UNAVAILABLE);
     const stand = await waitForStoreState(srv, (s) => s.calls.length >= EL_PLAETZE_NUTZBAR);
-    await initInhaltFuer(srv, { callId: stand.calls[0].id, agentId: `agent_${AGENT_KENNUNG}` });
-    const gebunden = await waitForStoreState(srv, (s) => Boolean(s.calls[0].elevenlabsConversationId));
-    const callId = gebunden.calls[0].id;
+    await initInhaltFuer(srv, { callId: erster(stand).id, agentId: `agent_${AGENT_KENNUNG}` });
+    const gebunden = await waitForStoreState(srv, (s) => Boolean(erster(s).elevenlabsConversationId));
+    const callId = erster(gebunden).id;
     await meldeBein(srv, callId, { typ: "call.playback.ended", status: "completed" });
     await meldeBein(srv, callId, { typ: "call.answered", bein: elVon(callId) });
-    await waitForStoreState(srv, (s) => Boolean(s.calls[0].bridgedAt));
-    anbieter.melde(gebunden.calls[0].elevenlabsConversationId);
+    await waitForStoreState(srv, (s) => Boolean(erster(s).bridgedAt));
+    anbieter.melde(erster(gebunden).elevenlabsConversationId);
     await beinLegtAuf(srv, callId);
-    await waitForStoreState(srv, (s) => s.calls[0].status === "completed" && Boolean(s.calls[0].billedAt) && Boolean(s.calls[0].summary));
+    await waitForStoreState(srv, (s) => erster(s).status === "completed" && Boolean(erster(s).billedAt) && Boolean(erster(s).summary));
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(901))).status, HTTP_OK);
     assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(902))).status, HTTP_UNAVAILABLE);
   } finally {

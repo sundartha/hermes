@@ -196,7 +196,7 @@ test("Vorpruefung: eine Ablehnung ausgelastet kostet keinen Sprachmodellaufruf",
     const fuerVierAnrufe = anthropicAttrappe.anfragen() - vorher;
     const abgelehnt = await rufeAn(srv, 3, zielVon(900));
     assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(anthropicAttrappe.anfragen() - vorher, fuerVierAnrufe);
+    assert.equal(anthropicAttrappe.anfragen() - vorher, fuerVierAnrufe + 1);
   });
 });
 

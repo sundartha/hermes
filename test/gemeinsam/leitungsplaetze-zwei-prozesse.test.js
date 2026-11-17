@@ -11,6 +11,7 @@ import { waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
+const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const WARTEGRENZE_MS = 5_000;
 const WARTEGRENZE_PUFFER_MS = 3_000;
 const ELEVENLABS_PLAETZE = 4;
@@ -105,7 +106,7 @@ test(
       const abgelehnt = antworten.filter((antwort) => antwort.status === HTTP_UNAVAILABLE);
       assert.equal(angenommen.length, ELEVENLABS_PLAETZE);
       assert.equal(abgelehnt.length, 2);
-      for (const antwort of abgelehnt) assert.equal(antwort.body.reason, "ausgelastet");
+      for (const antwort of abgelehnt) assert.equal(antwort.body.error, KEINE_WARTESCHLANGE);
       assert.equal(anbieter.starts().length, ELEVENLABS_PLAETZE, "ElevenLabs sieht 4 Starts, nicht 6");
       const { rows } = await sql(PLAETZE_SQL);
       assert.deepEqual(rows, [
@@ -114,9 +115,9 @@ test(
       ]);
       const anrufe = await zeilenBis(
         async () => (await sql(ANRUFE_SQL)).rows[0].anzahl,
-        (anzahl) => anzahl >= ELEVENLABS_PLAETZE,
+        (anzahl) => anzahl >= ELEVENLABS_PLAETZE + abgelehnt.length,
       );
-      assert.equal(anrufe, ELEVENLABS_PLAETZE, "Ablehnungen hinterlassen keinen Anruf");
+      assert.equal(anrufe, ELEVENLABS_PLAETZE + abgelehnt.length, "die Abgelehnten sind beendete, nie gewaehlte Anrufe");
     });
   },
 );
@@ -138,12 +139,12 @@ test(
       }
       const dauerMs = Date.now() - beginn;
       assert.equal(blockiert.status, HTTP_UNAVAILABLE);
-      assert.equal(blockiert.body.reason, "ausgelastet");
+      assert.equal(blockiert.body.error, KEINE_WARTESCHLANGE);
       assert.match(a.stdout, /\[leitungsplaetze\] Datenbank nicht erreichbar, ausgehend abgelehnt:/);
       assert.ok(dauerMs >= WARTEGRENZE_MS - 500, `wartet bis zur Grenze: ${dauerMs} ms`);
       assert.ok(dauerMs < WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
       assert.equal(anbieter.starts().length, 0, "ElevenLabs wurde nie angerufen");
-      assert.equal((await sql(ANRUFE_SQL)).rows[0].anzahl, 0);
+      assert.equal((await sql(ANRUFE_SQL)).rows[0].anzahl, 1, "nur der beendete, nie gewaehlte Anruf");
       assert.equal((await rufeAn(a, MANDANTEN[0])).status, HTTP_OK);
     });
   },
@@ -160,7 +161,7 @@ test("S5: abgelaufene Plaetze zaehlen nicht und werden entfernt, unabgelaufene P
     await fuelleMitAlten(sql, "1 hour");
     const voll = await rufeAn(b, MANDANTEN[0]);
     assert.equal(voll.status, HTTP_UNAVAILABLE);
-    assert.equal(voll.body.reason, "ausgelastet");
+    assert.equal(voll.body.error, KEINE_WARTESCHLANGE);
     assert.equal(anbieter.starts().length, 0);
     await sql("UPDATE leitungsplatz SET ablauf_um = now() - interval '1 minute'");
     assert.equal((await rufeAn(a, MANDANTEN[0])).status, HTTP_OK);
