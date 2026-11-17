@@ -239,4 +239,4 @@ nennt je Zeile oben die Tests, die sie belegen.
 
 ## Roter Staging-Nachtlauf im Slack-Kanal
 
-Ist der Nachtlauf (`.github/workflows/staging.yml`) rot, schreibt der Schritt „Roten Nachtlauf an Better Stack melden“ zusätzlich zum Issue einen Vorfall an den Better-Stack-Eingang aus dem Secret `BETTER_STACK_ALERT_URL`; Better Stack verteilt in Slack. Ohne das Secret überspringt der Schritt und sagt das im Lauf. Derselbe Alarm trägt je Stunde dieselbe Vorfall-Kennung (Entprellen, Quelle: `nachtlaufVorfallMelden` in `tools/deploy-weg/hoertest.mjs`). Erster Schritt: den verlinkten Lauf öffnen.
+Ist der Nachtlauf (`.github/workflows/staging.yml`) rot, schreibt der Schritt „Roten Nachtlauf melden“ zusätzlich zum Issue einen Vorfall an den Better-Stack-Eingang aus dem Secret `BETTER_STACK_ALERT_URL`; Better Stack verteilt in Slack. Ohne das Secret überspringt der Schritt und sagt das im Lauf. Wurde das Issue „Staging-Nachtlauf rot“ vor weniger als 60 Minuten zuletzt geändert, geht kein zweiter Vorfall raus (Quelle: `vorfallMelden` in `tools/deploy-weg/hoertest.mjs`). Nimmt Better Stack nicht an, bleibt der Lauf wie er ist. Erster Schritt: den verlinkten Lauf öffnen.

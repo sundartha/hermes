@@ -66,13 +66,8 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node tools/deploy-weg.mjs hoertest --anlass nachtlauf --commit "$GITHUB_SHA" --teile ""
-
-      - name: Roten Nachtlauf an Better Stack melden
-        if: failure() && github.event_name == 'schedule'
-        env:
           BETTER_STACK_ALERT_URL: ${{ secrets.BETTER_STACK_ALERT_URL }}
-        run: node tools/deploy-weg.mjs vorfall --anlass nachtlauf --commit "$GITHUB_SHA"
+        run: node tools/deploy-weg.mjs hoertest --anlass nachtlauf --commit "$GITHUB_SHA" --teile ""
 
   lastlauf:
     name: Lastlauf gegen Staging
