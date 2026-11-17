@@ -25,6 +25,9 @@ export function internalOnly<Parameter>(
     next();
     return;
   }
-  auditAuthFailed(req, AUTH_FAILED_GRUND.NOT_LOCAL);
+  auditAuthFailed(
+    { path: req.path, ...(req.ip === undefined ? {} : { ip: req.ip }) },
+    AUTH_FAILED_GRUND.NOT_LOCAL,
+  );
   res.status(HTTP_FORBIDDEN).json({ error: "Forbidden" });
 }
