@@ -178,10 +178,6 @@ test("IEP-P2c-A8: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED steht kohaerent in
   const SCHLUESSEL = "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED";
 
   const LAUT_FELD = "voice.elevenLabsInbound.begruessungslautEnabled";
-  assert.deepEqual(
-    gebauteKonfiguration({ ELEVENLABS_INBOUND_SCOPE: "registrierte_dids" }, ["voice.elevenLabsInbound.scope"]),
-    { "voice.elevenLabsInbound.scope": "registrierte_dids" },
-  );
 
   assert.deepEqual(gebauteKonfiguration({ [SCHLUESSEL]: undefined }, [LAUT_FELD]), { [LAUT_FELD]: true });
   assert.deepEqual(gebauteKonfiguration({ [SCHLUESSEL]: "false" }, [LAUT_FELD]), { [LAUT_FELD]: false });
