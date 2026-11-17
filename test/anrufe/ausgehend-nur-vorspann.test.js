@@ -153,10 +153,11 @@ test("ausgehend-nur-vorspann: ein nicht freigeschalteter Mandant bricht mit inbo
 
 test("ausgehend-nur-vorspann: Mandantennummer ohne Registrierung bricht ab, die globale Nummer springt nicht ein", async () => {
   const ergebnis = await anrufMitServer({ numbers: [nummer(null)] });
-  assert.equal(ergebnis.status, HTTP_SERVER_ERROR);
+  assert.equal(ergebnis.status, HTTP_CONFLICT);
+  assert.equal(ergebnis.koerper.grund, "keine_eigene_registrierung");
   assert.equal(wahlen(ergebnis.anfragen).length, 0);
   assert.equal(ergebnis.anruf.status, "failed");
-  assert.equal(ergebnis.anruf.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
+  assert.equal(ergebnis.anruf.failureReason, "not-placed:keine_eigene_registrierung");
   assert.equal(ergebnis.anruf.reserveReleased, true);
 });
 

@@ -35,12 +35,12 @@
     "quellen": [
       "^src/(onboarding|release-reconcile)\\.[jt]s$",
       "^src/(worker|queue)/",
-      "^src/telephony/(provisioning-geo|absender-registrierung)\\.[jt]s$",
+      "^src/telephony/provisioning-geo\\.[jt]s$",
       "^src/telephony/adapters/telnyx/numbers\\.[jt]s$",
       "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
     ],
     "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$"],
-    "fachlogik": ["^src/telephony/absender-registrierung\\.[jt]s$"]
+    "fachlogik": []
   },
   {
     "bereich": "anmeldung",
