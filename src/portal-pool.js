@@ -1,6 +1,6 @@
 import pg from "pg";
 import { config } from "./config.js";
-import { poolFehlerZeile, portalPoolOptionen } from "./utils/pg-pool.js";
+import { poolFehlerZeile, portalPoolOptionen, ueberwacheClients } from "./utils/pg-pool.js";
 
 const IS_SUPERUSER_ON = "on";
 
@@ -39,6 +39,7 @@ export async function assertNoBypassRls(client) {
 function neuerPortalPool() {
   const pool = new pg.Pool(portalPoolOptionen(config.store.databaseUrl));
   pool.on("error", (err) => console.error(poolFehlerZeile("portal", err)));
+  ueberwacheClients(pool, "portal");
   return pool;
 }
 
