@@ -61,7 +61,7 @@ test("Zeitplan: ein Zeitplan, die Probe läuft im Staging-Job und damit bei Push
 test("Probe-Schritt: läuft nach dem grünen Abwarten, bei absichtlich_rot trotzdem, und vor dem Heartbeat", () => {
   const text = job("staging");
   const probeSchritt = schritt(text, "Anrufprobe");
-  assert.match(probeSchritt, /if: \$\{\{ success\(\) \|\| inputs\.absichtlich_rot \}\}/);
+  assert.match(probeSchritt, /if: \$\{\{ \(success\(\) \|\| inputs\.absichtlich_rot\) && \(github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\) \}\}/);
   assert.ok(text.indexOf("- name: Anrufprobe") < text.indexOf("- name: Heartbeat Nachtlauf"));
   assert.ok(text.indexOf("- name: Heartbeat Nachtlauf") < text.indexOf("- name: Offene Probe-Anrufe beenden"));
 });
