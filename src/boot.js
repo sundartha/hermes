@@ -1,6 +1,7 @@
 import {
   alarmEingangFindings,
   assertConfig,
+  fristenEinstellungen,
   gatewayUrlForPort,
   setBoundGatewayPort,
   todayIsoDate,
@@ -786,7 +787,7 @@ export async function bootServer({
 
   lifecycle.rearmBudgetWatchdogs();
 
-  starteFristenTakt({ store, lifecycle, config });
+  starteFristenTakt({ store, lifecycle, fristen: fristenEinstellungen });
 
   const instanzTakt = await store.starteInstanzTakt();
 

@@ -36,13 +36,13 @@ export function runSweepTick(waechter) {
   for (const { logTag, lauf } of TEILLAEUFE) void lauf(waechter).catch((err) => console.error(logTag, err.message));
 }
 
-export function starteFristenTakt({ store, lifecycle, config }) {
+export function starteFristenTakt({ store, lifecycle, fristen }) {
   return starteFristenTaktMitUhr({
     store,
     beende: lifecycle.terminateExpiredCall,
-    limitJeMandant: config.safety.fristenLimitJeMandant,
-    leaseMs: config.safety.fristenTaktMs,
-    taktMs: config.safety.fristenTaktMs,
+    limitJeMandant: fristen.fristenLimitJeMandant,
+    leaseMs: fristen.fristenTaktMs,
+    taktMs: fristen.fristenTaktMs,
     uhr: { setzeTakt: setInterval, loescheTakt: clearInterval },
   });
 }
