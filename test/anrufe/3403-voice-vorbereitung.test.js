@@ -285,12 +285,16 @@ test("3403 Eingehender Anruf mit Fehler in der Verarbeitung: Log beginnt mit [in
   }
 });
 
-function mitFehlerweg(app) {
+function mitFehlerweg(inneresApp) {
   const fehler = [];
-  app.use((err, req, res, _next) => {
-    fehler.push(err.message);
-    if (!res.headersSent) res.status(HTTP_SERVER_ERROR).end();
-  });
+  const app = express();
+  app.use((req, res, next) =>
+    inneresApp(req, res, (err) => {
+      if (!err) return next();
+      fehler.push(err.message);
+      if (!res.headersSent) res.status(HTTP_SERVER_ERROR).end();
+    }),
+  );
   return { app, fehler };
 }
 
