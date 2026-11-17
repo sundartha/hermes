@@ -22,7 +22,7 @@ test("Vorlage verweist nirgends auf die nicht mehr vorhandene src/elevenlabs/con
 test("jeder src-Pfad in den Hinweistexten der Vorlage nennt eine vorhandene Datei", () => {
   const vorlage = JSON.parse(readFileSync(VORLAGE, "utf8"));
   const verweise = texteMitPfad(vorlage, "", []).flatMap(([pfad, text]) =>
-    (text.match(/src\/[A-Za-z0-9_\/-]+\.(?:js|ts|mjs)\b/g) ?? []).map((datei) => [pfad, datei]),
+    (text.match(/src\/[A-Za-z0-9_/-]+\.(?:js|ts|mjs)\b/g) ?? []).map((datei) => [pfad, datei]),
   );
   assert.ok(verweise.length > 0);
   const fehlend = verweise.filter(([, datei]) => !existsSync(datei));
