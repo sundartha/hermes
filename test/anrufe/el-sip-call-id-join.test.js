@@ -255,7 +255,7 @@ test("der Schluessel ueberlebt das pg-Backend (Spalte + Flush + rowToCall)", asy
   const wiedergeoeffnet = makePgStore(runner);
   await wiedergeoeffnet.init();
   assert.equal(
-    wiedergeoeffnet.getCall(call.id).sipCallId,
+    (await wiedergeoeffnet.leseCall(call.id)).sipCallId,
     OTB_JOINT,
     "ohne Spalte + ON CONFLICT DO UPDATE SET + rowToCall ginge der Schluessel beim Restart verloren UND der naechste Flush schriebe NULL zurueck",
   );

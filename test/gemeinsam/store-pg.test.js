@@ -81,7 +81,7 @@ test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () 
   });
   await store.save();
   const reopened = await reopen(db);
-  const got = reopened.getCall(call.id);
+  const got = await reopened.leseCall(call.id);
   assert.ok(got, "Call ueberlebt die Re-Hydrierung");
   assert.equal(got.streamToken, call.streamToken);
   assert.equal(got.direction, "inbound");
@@ -99,7 +99,7 @@ test("createCall: provider ueberlebt die Re-Hydrierung (call.provider, P6a)", as
   });
   await store.save();
   const reopened = await reopen(db);
-  assert.equal(reopened.getCall(call.id).provider, PROVIDER.TELNYX);
+  assert.equal((await reopened.leseCall(call.id)).provider, PROVIDER.TELNYX);
 });
 
 test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
@@ -109,7 +109,7 @@ test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
   store.addTranscript(call.id, "caller", "zweite");
   await store.save();
   const reopened = await reopen(db);
-  const got = reopened.getCall(call.id);
+  const got = await reopened.leseCall(call.id);
   assert.deepEqual(
     got.transcript.map((t) => [t.role, t.text]),
     [
@@ -126,7 +126,7 @@ test("addActionItem haengt id an call.actionItemIds + persistiert", async () => 
   assert.deepEqual(store.getCall(call.id).actionItemIds, [item.id]);
   await store.save();
   const reopened = await reopen(db);
-  assert.deepEqual(reopened.getCall(call.id).actionItemIds, [item.id]);
+  assert.deepEqual((await reopened.leseCall(call.id)).actionItemIds, [item.id]);
   assert.equal(reopened.load().actionItems[0].id, item.id);
 });
 
@@ -154,8 +154,8 @@ test("markAnswered + endCallRecord: Statusuebergaenge + Idempotenz", async () =>
   assert.equal(store.getCall(call.id).status, "completed");
   await store.save();
   const reopened = await reopen(db);
-  assert.equal(reopened.getCall(call.id).status, "completed");
-  assert.ok(reopened.getCall(call.id).endedAt);
+  assert.equal((await reopened.leseCall(call.id)).status, "completed");
+  assert.ok((await reopened.leseCall(call.id)).endedAt);
 });
 
 test("countOutboundCallsSince mit und ohne requestedBy", async () => {
@@ -291,7 +291,7 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   );
   await store.save();
   const reopened = await reopen(db);
-  assert.ok(!reopened.getCall(doneOld.id), "Loeschung persistiert (samt Transkript per Cascade)");
+  assert.ok(!await reopened.leseCall(doneOld.id), "Loeschung persistiert (samt Transkript per Cascade)");
 });
 
 test("pruneOldData() ohne Argument nutzt config.privacy.retentionDays (Produktions-Caller server.js:583)", async () => {
@@ -324,12 +324,12 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   store.save();
   await store.save();
   const reopened = await reopen(db);
-  const got = reopened.getCall(call.id);
+  const got = await reopened.leseCall(call.id);
   assert.equal(got.twilioSid, "CA-test-sid");
   assert.equal(got.summary, "Gespraech zusammengefasst");
   assert.equal(got.objectiveAchieved, true);
   assert.equal(got.failureReason, "no-answer");
-  assert.equal(reopened.getCall("CA-test-sid").id, call.id);
+  assert.equal((await reopened.leseCall("CA-test-sid")).id, call.id);
 });
 
 test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", async () => {
@@ -473,8 +473,8 @@ test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer
   await store.save();
 
   const r1 = await reopen(db);
-  assert.equal(r1.getCall(c1.id).transcript.length, 2);
-  assert.equal(r1.getCall(c2.id).transcript.length, 1);
+  assert.equal((await r1.leseCall(c1.id)).transcript.length, 2);
+  assert.equal((await r1.leseCall(c2.id)).transcript.length, 1);
 
   r1.purgeTranscript(c1.id);
   await r1.save();
@@ -492,16 +492,16 @@ test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer
     "anderer Call: Segmente unberuehrt (Cross-Call-Dichtheit)",
   );
   assert.deepEqual(
-    r2.getCall(c1.id).transcript,
+    (await r2.leseCall(c1.id)).transcript,
     [],
     "Spiegel: Ziel-Transkript leer nach Re-Hydrierung",
   );
   assert.equal(
-    r2.getCall(c1.id).summary,
+    (await r2.leseCall(c1.id)).summary,
     "Zusammenfassung 1",
     "Summary-Spalte ueberlebt den Purge",
   );
-  assert.equal(r2.getCall(c2.id).transcript.length, 1, "anderer Call: Transkript bleibt");
+  assert.equal((await r2.leseCall(c2.id)).transcript.length, 1, "anderer Call: Transkript bleibt");
 });
 
 test("tenant_budget ueberlebt Flush+Re-Hydrierung (Money als Ganzzahl Cents, P6b3)", async () => {

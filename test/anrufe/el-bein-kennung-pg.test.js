@@ -20,7 +20,7 @@ test("3553-K3: ein Anruf ohne EL-Bein laedt nach dem Neustart mit elCallControlI
   const { store, runner } = await makePgTestStore();
   const call = store.createCall(neuerAnruf());
   await store.save();
-  const geladen = (await oeffne(runner)).getCall(call.id);
+  const geladen = await (await oeffne(runner)).leseCall(call.id);
   assert.equal(geladen.elCallControlId, null);
 });
 
@@ -33,6 +33,6 @@ test("3553-K4: ein aelterer Stand ohne Kennung ueberschreibt die gespeicherte Ke
   await store.save();
   aeltererStand.recordFailureReason(call.id, "unreachable:probe");
   await aeltererStand.save();
-  const geladen = (await oeffne(runner)).getCall(call.id);
+  const geladen = await (await oeffne(runner)).leseCall(call.id);
   assert.equal(geladen.elCallControlId, "cc_el_gespeichert");
 });
