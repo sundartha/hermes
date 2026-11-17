@@ -48,7 +48,13 @@ function jaNeinLesen(wert) {
 }
 
 function anlassLesen(wert) {
-  return wert === "nachtlauf" ? wert : null;
+  return wert === "nachtlauf" || wert === "probe" ? wert : null;
+}
+
+const ZEITPUNKT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
+function zeitpunktLesen(wert) {
+  return ZEITPUNKT.test(wert) ? wert : null;
 }
 
 const ARGUMENTE = new Map([
@@ -59,6 +65,7 @@ const ARGUMENTE = new Map([
   ["--ziel", zielLesen],
   ["--an", jaNeinLesen],
   ["--anlass", anlassLesen],
+  ["--seit", zeitpunktLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -90,13 +97,14 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       argumente: ["--commit", "--teile"],
-      freiwillig: ["--anlass"],
+      freiwillig: ["--anlass", "--seit"],
       ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
         await hoertestIssueAnlegenOderErsetzen({
           einstellungen,
           anlass: werte.get("--anlass"),
           commit: werte.get("--commit"),
           teile: werte.get("--teile"),
+          seit: werte.get("--seit"),
           ausgabe,
         });
         return true;
