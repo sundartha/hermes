@@ -563,7 +563,7 @@
       "count": 1
     }
   },
-  "src/routes/voice.js": {
+  "src/routes/voice.ts": {
     "max-lines-per-function": {
       "count": 1
     }

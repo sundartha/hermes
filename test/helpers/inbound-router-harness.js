@@ -63,7 +63,7 @@ export async function startInboundHarness({ seed = {}, configureState } = {}) {
   if (configureState) configureState(state);
   const store = makeHarnessStore(state);
   const config = makeHarnessConfig();
-  const { makeVoiceRoutes } = await import("../../src/routes/voice.js");
+  const { makeVoiceRoutes } = await import("../../src/routes/voice.ts");
   const { makeVoiceRender } = await import("../../src/telephony/voice-render.js");
 
   const app = express();

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
 
-import { makeVoiceRoutes } from "../../src/routes/voice.js";
+import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { speicherBereiche } from "../../src/store.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { startInboundHarness } from "../helpers/inbound-router-harness.js";
