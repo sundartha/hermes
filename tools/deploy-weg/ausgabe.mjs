@@ -91,6 +91,7 @@ const EINSTELLUNGEN = new Set([
   "UPDATE_WORKFLOW_TOKEN",
   "STAGING_STATUS_TOKEN",
   "STAGING_TELNYX_PRIVATE_KEY",
+  "BETTER_STACK_ALERT_URL",
   "GITHUB_ACTIONS",
 ]);
 const AUSLIEFERN = new Set(["commit", "checksPass", "off"]);
@@ -99,7 +100,7 @@ const EREIGNISSE = new Set(["workflow_run", "workflow_dispatch"]);
 const KATALOG = new Map([
   [
     "aufruf",
-    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest [--anlass nachtlauf] --commit <sha> --teile <namen> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
+    "Aufruf: node tools/deploy-weg.mjs staging --commit <sha> | entscheiden | hoertest [--anlass nachtlauf] --commit <sha> --teile <namen> | vorfall --anlass nachtlauf --commit <sha> | deploy --commit <sha> --produktion <sha> | zurueckrollen --ziel vorher|<sha> | anrufpause --an ja|nein | nachkontrolle --commit <sha>",
   ],
   ["einstellung_ungueltig", "Einstellung fehlt oder ist ungültig: {name}"],
   ["ausgabe_verweigert", "Ausgabe verweigert: ein Wert ist für das Log nicht erlaubt"],
@@ -157,6 +158,9 @@ const KATALOG = new Map([
   ["issue_angelegt", "Hörtest-Issue #{nummer} angelegt"],
   ["nachtlauf_ersetzt", "Nachtlauf-Issue #{nummer}: Text ersetzt"],
   ["nachtlauf_angelegt", "Nachtlauf-Issue #{nummer} angelegt"],
+  ["vorfall_uebersprungen", "Vorfall übersprungen: BETTER_STACK_ALERT_URL ist nicht gesetzt"],
+  ["vorfall_gesendet", "Vorfall an Better Stack gesendet"],
+  ["rot_vorfall_nicht_angenommen", "Rot: Better Stack hat den Vorfall nicht angenommen: HTTP {http}"],
   ["produktion_veraendert", "Rot: Produktion fährt nicht mehr den Commit aus der Entscheidung"],
   ["deploy_ausgeloest", "Deploy angefordert: HTTP {http}"],
   ["deploy_status", "Deploy-Status: {status}"],

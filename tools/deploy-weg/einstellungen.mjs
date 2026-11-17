@@ -47,6 +47,7 @@ const REGELN = new Map([
   ["STAGING_STATUS_TOKEN", muster(/^\S{32,512}$/)],
   ["STAGING_TELNYX_PRIVATE_KEY", muster(SCHLUESSEL_PEM)],
   ["UPDATE_WORKFLOW_TOKEN", muster(/^\S{1,1024}$/)],
+  ["BETTER_STACK_ALERT_URL", (wert) => /^https:\/\/\S{1,1000}$/.test(wert) || LOOPBACK.test(wert)],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
@@ -58,6 +59,7 @@ const GEHEIM = [
   "UPDATE_WORKFLOW_TOKEN",
   "STAGING_STATUS_TOKEN",
   "STAGING_TELNYX_PRIVATE_KEY",
+  "BETTER_STACK_ALERT_URL",
 ];
 const NOTFALL_AKTEURE = ["GITHUB_ACTIONS", "GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"];
 
@@ -88,6 +90,13 @@ const BEFEHLE = new Map([
     {
       pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
       freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL"],
+    },
+  ],
+  [
+    "vorfall",
+    {
+      pflicht: ["GITHUB_REPOSITORY", "GITHUB_RUN_ID"],
+      freiwillig: ["GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL"],
     },
   ],
   [
@@ -165,6 +174,7 @@ function werteBauen(umgebung) {
     updateToken: umgebung.UPDATE_WORKFLOW_TOKEN || null,
     statusToken: umgebung.STAGING_STATUS_TOKEN,
     telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
+    vorfallUrl: umgebung.BETTER_STACK_ALERT_URL || null,
   };
 }
 
