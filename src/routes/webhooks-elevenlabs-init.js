@@ -50,7 +50,7 @@ const EXAKTER_ROUTER = Object.freeze({ caseSensitive: true, strict: true });
 function initTokenGueltig(config, req) {
   const erwartet = config.voice.elevenLabsInbound.initWebhookToken;
   if (typeof erwartet !== "string" || erwartet.length < INIT_WEBHOOK_TOKEN_MIN_LENGTH) return false;
-  return safeEqual(req.get(INIT_TOKEN_HEADER) || "", erwartet);
+  return safeEqual(req.get(INIT_TOKEN_HEADER) ?? "", erwartet);
 }
 
 function verweigern(res) {
@@ -68,7 +68,7 @@ function makeDrosselungsMelder({ now, fensterMs }) {
     stand.seitLetzterZeile += 1;
     const nowMs = now();
     if (nowMs - stand.letzteZeileMs < fensterMs) return;
-    console.log(`[${INIT_LOG_TAG}] gedrosselt anzahl=${stand.seitLetzterZeile}`);
+    console.log(`[${INIT_LOG_TAG}] gedrosselt anzahl=${String(stand.seitLetzterZeile)}`);
     Object.assign(stand, { seitLetzterZeile: 0, letzteZeileMs: nowMs });
   };
 }
@@ -108,7 +108,7 @@ function aktiverElInboundCallMitToken(store, token) {
           bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND &&
           Boolean(call.streamToken) &&
           safeEqual(token, call.streamToken),
-      ) || null
+      ) ?? null
   );
 }
 
@@ -152,9 +152,9 @@ const eroeffnungSicher = ({ store, config, call }) => inboundEroeffnungsDefekteF
 
 function bindungsLogZeile({ bindung, call, nowMs, eingangMs }) {
   if (!bindung.changed) return `[${INIT_LOG_TAG}] wiederholung call=${call.id}`;
-  const zeile = `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${msSeitAnnahme(call, nowMs)}`;
+  const zeile = `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${String(msSeitAnnahme(call, nowMs))}`;
   if (!istOutboundElProfil(call)) return zeile;
-  return `${zeile} ms_bearbeitung=${Math.round(performance.now() - eingangMs)}`;
+  return `${zeile} ms_bearbeitung=${String(Math.round(performance.now() - eingangMs))}`;
 }
 
 function inboundSperrgrundFuer({ store, config, call }) {
@@ -170,12 +170,12 @@ function outboundAntwortFuer({ outboundInitInhalt, vorspannText, call }) {
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-async function handleInit({ req, res, deps }) {
+function handleInit({ req, res, deps }) {
   const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
-  const body = pruefeKoerper(res, { schema: INIT_KOERPER }, req.body);
+  const body = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
   const zuordnung = zuordnungFuer({ store, config, body, nowMs });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
@@ -202,11 +202,11 @@ export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = 
   const router = Router(EXAKTER_ROUTER);
   const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
 
-  router.post(ELEVENLABS_INIT_PATH, async (req, res) => {
+  router.post(ELEVENLABS_INIT_PATH, (req, res) => {
     try {
-      return await handleInit({ req, res, deps });
+      return handleInit({ req, res, deps });
     } catch (err) {
-      console.error(`[${INIT_LOG_TAG}] fehler: ${err?.message || "unbekannt"}`);
+      console.error(`[${INIT_LOG_TAG}] fehler: ${String(err?.message ?? "") || "unbekannt"}`);
       if (res.headersSent) return res.end();
       return res.status(HTTP_SERVER_ERROR).json(INIT_ANTWORT.INTERN);
     }
