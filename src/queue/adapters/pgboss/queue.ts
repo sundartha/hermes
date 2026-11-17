@@ -147,14 +147,15 @@ function cronFuerTakt(intervallMs: number): string {
 }
 
 async function ensureZeitplanQueue(instance: PgBoss, queueName: string): Promise<void> {
-  await instance.createQueue(queueName, {
-    policy: "exclusive",
+  const optionen = {
     retryLimit: 0,
     expireInSeconds: ZEITPLAN_FRIST_MAX_SEKUNDEN,
     heartbeatSeconds: ZEITPLAN_HERZSCHLAG_SEKUNDEN,
     retentionSeconds: RETENTION_SECONDS,
     deleteAfterSeconds: DELETE_AFTER_SECONDS,
-  });
+  };
+  await instance.createQueue(queueName, { policy: "exclusive", ...optionen });
+  await instance.updateQueue(queueName, optionen);
 }
 
 async function wartendeJeArt(instance: PgBoss, schema: string, kind: string): Promise<{ laenge: number; aeltesteMs: number | null }> {
