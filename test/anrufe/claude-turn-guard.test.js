@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { tempDataDir, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
-let shouldSuppressEndCall;
+let shouldSuppressEndCall, claudeExports;
 
 before(async () => {
   process.env.MAX_EMPTY_TURNS = "2";
@@ -15,7 +15,8 @@ before(async () => {
     }),
   );
   await import("../../src/config.js");
-  ({ shouldSuppressEndCall } = await import("../../src/claude.js"));
+  claudeExports = await import("../../src/claude.js");
+  ({ shouldSuppressEndCall } = claudeExports);
 });
 
 test("P3.3: inbound OHNE Anrufer-Zeile unter der Leer-Turn-Schwelle -> true (Symmetrisierung)", () => {
@@ -64,4 +65,10 @@ test("shouldSuppressEndCall: outbound bei maxEmptyTurns unbeantworteten Agent-Tu
     ],
   };
   assert.equal(shouldSuppressEndCall(call), false);
+});
+
+test("H4c-1a: claude.js bietet keinen Gespraechsrunden-Eingang agentTurn mehr", () => {
+  assert.equal(claudeExports.agentTurn, undefined);
+  assert.equal(typeof claudeExports.summarizeCall, "function");
+  assert.equal(typeof claudeExports.systemPrompt, "function");
 });
