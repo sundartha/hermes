@@ -5,6 +5,7 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import {
   antwortVon,
   mitDatenbankVorDemStart,
+  mitInstanzHinterRelais,
   mitInstanzenAufPostgres,
   signierteZustellung,
   zeilenBis,
@@ -18,6 +19,7 @@ const LANG_VERGANGEN = "2020-01-01T00:00:00.000Z";
 const KURZE_HOECHSTDAUER_S = 60;
 const BEENDEN_SQL = "UPDATE call SET status = 'completed', failure_reason = $2 WHERE id = $1";
 const ABLAUF_SQL = "UPDATE call SET started_at = $2, answered_at = $2, max_duration_s = $3 WHERE id = $1";
+const LOESCHEN_SQL = "DELETE FROM call WHERE id = $1";
 const ZEILE_SQL = "SELECT status, failure_reason FROM call WHERE id = $1";
 
 const lies = (instanz, id) => abrufMitFrist(`${instanz.localUrl}/api/calls/${id}`);
@@ -62,5 +64,30 @@ test("H7c2a-3: auf einer Instanz liefert GET /api/calls/:id einen eigenen Anruf 
     assert.equal(anruf.id, EIGENER_ANRUF);
     assert.equal(anruf.status, "failed");
     assert.equal(anruf.goal, "Testziel");
+  });
+});
+
+test("H7c2a-4: hängt die Datenbank, liefert GET /api/calls/:id auf Instanz B die geladene Kopie statt eines Fehlers", async (t) => {
+  await mitInstanzHinterRelais(t, { anrufe: [ANRUF] }, async ({ a: b, relais }) => {
+    relais.anhalten();
+    try {
+      const antwort = await lies(b, ANRUF);
+      assert.equal(antwort.status, HTTP_OK);
+      const anruf = await antwort.json();
+      assert.equal(anruf.id, ANRUF);
+      assert.equal(anruf.status, "active");
+      assert.match(b.stdout, /geladene Kopie bleibt/);
+    } finally {
+      relais.fortsetzen();
+    }
+  });
+});
+
+test("H7c2a-5: ist der Anruf in der Datenbank nicht mehr da, liefert GET /api/calls/:id auf Instanz B die geladene Kopie", async (t) => {
+  await mitInstanzenAufPostgres(t, { anrufe: [ANRUF] }, async ({ instanzen: [, b], sql }) => {
+    await sql(LOESCHEN_SQL, [ANRUF]);
+    const antwort = await lies(b, ANRUF);
+    assert.equal(antwort.status, HTTP_OK);
+    assert.equal((await antwort.json()).status, "active");
   });
 });
