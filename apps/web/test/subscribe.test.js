@@ -1273,3 +1273,19 @@ test("Widerruf-Beginn: Server antwortet 400 consent_required -> Hinweis auf den 
     abruf.restore();
   }
 });
+
+test("Widerruf-Beginn: die Zustimmung im Request folgt dem Haken zum Sendezeitpunkt, nicht nur der Verdrahtung", async () => {
+  const abruf = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: "consent_required" } }));
+  try {
+    const { container, consent } = consentFixture();
+    const lesungen = [true];
+    Object.defineProperty(consent.box, "checked", { get: () => lesungen.shift() ?? false });
+    wireSubscribe(container, { ...spyOpts(), consent });
+    await container.click("starter");
+    assert.equal(abruf.calls.length, 1);
+    const { options } = abruf.calls[0];
+    assert.deepEqual(JSON.parse(options.body), { plan: "starter" }, "Haken inzwischen weg: keine Zustimmung senden");
+  } finally {
+    abruf.restore();
+  }
+});

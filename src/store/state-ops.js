@@ -197,6 +197,8 @@ export {
   tenantNewsletterConsent,
   setWiderrufBeginn,
   tenantWiderrufBeginn,
+  setAboBestaetigungFuer,
+  aboBestaetigungFuer,
   tenantNewsletterRecipients,
   confirmedNewsletterRecipients,
   dailyNewsletterConfirmMailCount,

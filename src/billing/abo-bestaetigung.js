@@ -79,15 +79,28 @@ export function aboBestaetigungsMail({ sprache, planSlug, zustimmung }) {
   return { subject: texte.betreff(plan.name), text };
 }
 
-export async function sendeAboBestaetigung({ bereiche, accounts, mailer, tenant, planSlug }) {
-  if (!mailer) return;
+async function sendeAboBestaetigung({ bereiche, accounts, mailer, tenant, planSlug }) {
   try {
     const account = await accounts.accountByTenant(tenant);
-    if (!account?.email) return;
+    if (!account?.email) return false;
     const sprache = localeFor(await bereiche.mandantProfil.tenantLanguage(tenant)).language;
     const zustimmung = await bereiche.konto.tenantWiderrufBeginn(tenant);
+    if (!zustimmung.at) console.warn(`[abo-bestaetigung] keine gespeicherte Zustimmung tenant=${tenant}`);
     await mailer.sendMail({ to: account.email, ...aboBestaetigungsMail({ sprache, planSlug, zustimmung }) });
+    return true;
   } catch (err) {
     console.error(`[abo-bestaetigung] Versand fehlgeschlagen tenant=${tenant}: ${fehlerText(err)}`);
+    return false;
   }
+}
+
+const BESTAETIGBAR = Object.freeze(new Set(["already_subscribed"]));
+
+export async function bestaetigeAbo(deps, ergebnis) {
+  if (!deps.mailer) return;
+  if (ergebnis.ok !== true && !BESTAETIGBAR.has(ergebnis.reason)) return;
+  const { subscriptionId } = await deps.bereiche.konto.tenantSubscription(deps.tenant);
+  if (!subscriptionId) return;
+  if ((await deps.bereiche.konto.aboBestaetigungFuer(deps.tenant)) === subscriptionId) return;
+  if (await sendeAboBestaetigung(deps)) await deps.bereiche.konto.setAboBestaetigungFuer(deps.tenant, subscriptionId);
 }

@@ -385,8 +385,10 @@ export const stripeBilling = umhuelleVon("stripe", {
     body.set("metadata[tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][plan_slug]", planSlug);
-    if (widerrufBeginnAt) body.set("metadata[widerruf_beginn_at]", widerrufBeginnAt);
-    if (widerrufBeginnText) body.set("metadata[widerruf_beginn_text]", widerrufBeginnText);
+    for (const ziel of ["metadata", "subscription_data[metadata]"]) {
+      if (widerrufBeginnAt) body.set(`${ziel}[widerruf_beginn_at]`, widerrufBeginnAt);
+      if (widerrufBeginnText) body.set(`${ziel}[widerruf_beginn_text]`, widerrufBeginnText);
+    }
     const res = await anfrage(url(CHECKOUT_SESSIONS_PATH), {
       method: "POST",
       headers,

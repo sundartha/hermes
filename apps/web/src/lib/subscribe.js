@@ -148,7 +148,7 @@ function checkoutErrorMessage(err) {
 
 async function runSubscribe(plan, opts) {
   try {
-    const url = await startBillingSetupCheckout(plan, { widerrufBeginn: Boolean(opts.consent) });
+    const url = await startBillingSetupCheckout(plan, { widerrufBeginn: opts.consent?.box.checked === true });
     opts.navigate(url);
   } catch (err) {
     opts.onMessage(checkoutErrorMessage(err), false);

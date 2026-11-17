@@ -45,7 +45,7 @@ function fakeBilling(planSlug) {
   };
 }
 
-async function setup({ sprache = "de", planSlug = "starter", mailer, zustimmung = true }) {
+async function setup({ sprache = "de", planSlug = "starter", mailer, zustimmung = true, webhookZuerst = false }) {
   const { store, runner } = await makePgTestStore();
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
@@ -54,6 +54,7 @@ async function setup({ sprache = "de", planSlug = "starter", mailer, zustimmung 
   await store.setTenantStripe(TENANT, { customerId: CUSTOMER });
   await store.setTenantGeo(TENANT, { defaultLanguage: sprache });
   if (zustimmung) await store.setWiderrufBeginn(TENANT, { at: ZUSTIMMUNG_AT, text: "widerruf-beginn-v1" });
+  if (webhookZuerst) await store.setTenantSubscription(TENANT, { subscriptionId: "sub_wb2", planSlug });
   const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
   const { base, close } = await startRouterApp(
     makeSelfServiceRoutes({
@@ -132,7 +133,8 @@ test("Bestätigungs-Mail geht höchstens einmal: erneute Rückkehr mit derselben
   }
 });
 
-test("Ohne gespeicherte Zustimmung (Checkout vor dem Update begonnen) geht die Mail ohne Zustimmungsabschnitt", async () => {
+test("Ohne gespeicherte Zustimmung (Checkout vor dem Update begonnen) geht die Mail ohne Zustimmungsabschnitt, das Fehlen wird mit Tenant geloggt", async (t) => {
+  const warnung = t.mock.method(console, "warn", () => {});
   const post = postfach();
   const s = await setup({ mailer: post, zustimmung: false });
   try {
@@ -142,6 +144,48 @@ test("Ohne gespeicherte Zustimmung (Checkout vor dem Update begonnen) geht die M
     assert.match(mail.text, /Tarif: Starter/);
     assert.equal(mail.text.includes("Erklärung abgegeben"), false);
     assert.equal(mail.text.includes(DE_ZUSTIMMUNG), false);
+    const zeilen = warnung.mock.calls.map((aufruf) => String(aufruf.arguments[0]));
+    const treffer = zeilen.filter((zeile) => zeile.includes("abo-bestaetigung") && zeile.includes(`tenant=${TENANT}`));
+    assert.equal(treffer.length, 1, "fehlende Zustimmung wird genau einmal mit Tenant geloggt");
+    assert.equal(treffer[0].includes(EMAIL), false, "keine Mailadresse im Log");
+  } finally {
+    await s.close();
+  }
+});
+
+test("Webhook vor der Rückkehr (Abo schon gesetzt): genau eine Bestätigungs-Mail, ein Reload danach schickt keine weitere", async () => {
+  const post = postfach();
+  const s = await setup({ mailer: post, webhookZuerst: true });
+  try {
+    const res = await s.rueckkehr();
+    assert.equal(res.status, 302);
+    assert.equal(post.mails.length, 1);
+    assert.match(post.mails[0].text, /Tarif: Starter/);
+    await s.rueckkehr();
+    assert.equal(post.mails.length, 1);
+  } finally {
+    await s.close();
+  }
+});
+
+test("Scheitert der erste Versand, holt die nächste Rückkehr die Mail nach (Marker erst nach Erfolg)", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const versuche = [];
+  let scheitern = true;
+  const s = await setup({
+    mailer: {
+      sendMail: async (mail) => {
+        versuche.push(mail);
+        if (scheitern) throw new Error("smtp down");
+      },
+    },
+  });
+  try {
+    await s.rueckkehr();
+    scheitern = false;
+    await s.rueckkehr();
+    await s.rueckkehr();
+    assert.equal(versuche.length, 2, "ein gescheiterter und ein erfolgreicher Versuch, danach keiner mehr");
   } finally {
     await s.close();
   }

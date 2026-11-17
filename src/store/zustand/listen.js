@@ -83,6 +83,17 @@ export function tenantWiderrufBeginn(state, tenantId) {
   return { at: tenant?.widerrufBeginnAt ?? null, text: tenant?.widerrufBeginnText ?? null };
 }
 
+export function setAboBestaetigungFuer(state, tenantId, subscriptionId) {
+  const tenant = findTenant(state, tenantId);
+  if (!tenant) throw new Error(`setAboBestaetigungFuer: Tenant ${tenantId} nicht gefunden`);
+  tenant.aboBestaetigungFuer = subscriptionId;
+  return tenant;
+}
+
+export function aboBestaetigungFuer(state, tenantId) {
+  return findTenant(state, tenantId)?.aboBestaetigungFuer ?? null;
+}
+
 export function tenantNewsletterRecipients(state, tenantId) {
   return findTenant(state, tenantId)?.newsletterRecipients ?? [];
 }

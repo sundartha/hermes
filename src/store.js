@@ -424,6 +424,8 @@ export const {
   tenantNewsletterConsent,
   setWiderrufBeginn,
   tenantWiderrufBeginn,
+  setAboBestaetigungFuer,
+  aboBestaetigungFuer,
   tenantNewsletterRecipients,
   confirmedNewsletterRecipients,
   dailyNewsletterConfirmMailCount,

@@ -374,8 +374,6 @@
   align-self: flex-start;
 }
 
-/* #5203: Zustimmung zum Leistungsbeginn vor Ablauf der Widerrufsfrist, nie vorangekreuzt.
-   Natives Kontrollkaestchen (Fokusring des Browsers bleibt), nur semantische Tokens. */
 .plan-consent {
   margin-bottom: var(--space-stack);
 }
