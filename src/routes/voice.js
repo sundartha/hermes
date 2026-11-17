@@ -302,7 +302,8 @@ const statusCallFinden = (req, store) => {
 
 async function vermerkeElBein(req, res, { store, inboundBridges, webhookEvents }) {
   res.sendStatus(HTTP_OK);
-  const call = await leseCallBestEffort(store, req.query.callId || "", EL_BEIN_LOG_PREFIX);
+  const callId = req.query.callId || "";
+  const call = store.getCall(callId) || (await leseCallBestEffort(store, callId, EL_BEIN_LOG_PREFIX));
   if (!call) return;
   const { status } = webhookEvents(call.provider).parseLifecycleEvent(req.body);
   const angenommen = beinAngenommen({ call, status });
