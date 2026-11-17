@@ -1501,8 +1501,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
     agentId: "",
-    ueberTelnyx: false,
-    vorspann: false,
     numberRegistrationEnabled: false,
     resultPollMs: 5000,
     vorspannWiedergabeFristMs: 20000,
@@ -1557,8 +1555,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   ELEVENLABS_TOOL_TOKEN: " werkzeug ",
   ELEVENLABS_TENANT_TOKEN_REQUIRED: "true",
   ELEVENLABS_AGENT_ID: " agent ",
-  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
-  ELEVENLABS_OUTBOUND_VORSPANN: "true",
   ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "true",
   ELEVENLABS_RESULT_POLL_MS: "200",
   VORSPANN_WIEDERGABE_FRIST_MS: "300",
@@ -1613,8 +1609,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
   });
   assert.deepEqual(ist.voice.elevenLabsOutbound, {
     agentId: "agent",
-    ueberTelnyx: true,
-    vorspann: true,
     numberRegistrationEnabled: true,
     resultPollMs: 200,
     vorspannWiedergabeFristMs: 300,
@@ -1716,8 +1710,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "FAKE_ORIGINATE_ELEVENLABS",
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
-    "ELEVENLABS_OUTBOUND_UEBER_TELNYX",
-    "ELEVENLABS_OUTBOUND_VORSPANN",
     "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
     "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
     "SEND_SMS_SUMMARY",
