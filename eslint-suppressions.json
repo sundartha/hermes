@@ -422,22 +422,16 @@
   },
   "src/claude.js": {
     "complexity": {
-      "count": 2
+      "count": 1
     },
     "id-length": {
-      "count": 30
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
+      "count": 27
     },
     "no-param-reassign": {
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 6
+      "count": 5
     }
   },
   "src/db/migrate.js": {
@@ -853,11 +847,6 @@
       "count": 1
     }
   },
-  "test/gemeinsam/al-p10b-lookup.test.js": {
-    "no-restricted-syntax": {
-      "count": 13
-    }
-  },
   "test/anmeldung/auth-p4-deleted-routes.test.js": {
     "no-restricted-syntax": {
       "count": 1
@@ -865,11 +854,6 @@
   },
   "test/anmeldung/auth-p6-operator-routes.test.js": {
     "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/anrufe/al-d1-cause-diagnostics.test.js": {
-    "no-param-reassign": {
       "count": 1
     }
   },
@@ -888,7 +872,7 @@
   },
   "test/anrufe/al-p14-in-call-consult.test.js": {
     "no-restricted-syntax": {
-      "count": 18
+      "count": 1
     }
   },
   "test/abrechnung/billing-subscribe.test.js": {
@@ -1074,9 +1058,6 @@
   "test/rueckfrage/gq-p2-consult-deadline.test.js": {
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 16
     }
   },
   "test/anrufe/gq-p4-action-item-dedup.test.js": {
@@ -1086,7 +1067,7 @@
   },
   "test/rueckfrage/gq-p8-consult-arrival-marker.test.js": {
     "no-restricted-syntax": {
-      "count": 7
+      "count": 6
     }
   },
   "test/anmeldung/grant-admin.test.js": {
@@ -1332,14 +1313,6 @@
   "test/anmeldung/web-auth.test.js": {
     "no-param-reassign": {
       "count": 1
-    }
-  },
-  "test/anrufe/ww-f2-tool-follow-up.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   }
 }
