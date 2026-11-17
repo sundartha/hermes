@@ -262,12 +262,10 @@
         "src/orphan-account-reconcile.js",
         "src/portal-pool.js",
         "src/wiring/",
-        "src/routes/_tenant.js",
-        "src/elevenlabs/tenant-tool-token.ts"
+        "src/routes/_tenant.js"
       ],
       "eingaenge": [
         "src/auth.js",
-        "src/elevenlabs/tenant-tool-token.ts",
         "src/request-tenant.js",
         "src/routes/_tenant.js",
         "src/wiring/internal-only.js",
@@ -366,7 +364,6 @@
     { "von": "anmeldung", "nach": "nummern" },
     { "von": "anmeldung", "nach": "selbstbedienung" },
     { "von": "anmeldung", "nach": "start" },
-    { "von": "anrufe", "nach": "anmeldung" },
     { "von": "anrufe", "nach": "nummern" },
     { "von": "anrufe", "nach": "posteingang" },
     { "von": "anrufe", "nach": "selbstbedienung" },

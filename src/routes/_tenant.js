@@ -1,12 +1,8 @@
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.ts";
+import { isLocalSocket, isTrustedLocalCaller } from "../utils/vertrauter-aufruf.ts";
 
-export const isLocalSocket = (req) =>
-  ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
-
-const isProxyForwarded = (req) => Boolean(req.headers["x-forwarded-for"]);
-
-export const isTrustedLocalCaller = (req) => isLocalSocket(req) && !isProxyForwarded(req);
+export { isLocalSocket, isTrustedLocalCaller };
 
 const trustedLocalHeader = (req, name) => {
   if (!isTrustedLocalCaller(req)) return null;
