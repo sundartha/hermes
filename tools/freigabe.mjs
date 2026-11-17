@@ -474,10 +474,15 @@ async function ersterFix({ oekosystem, name, alt, neu }) {
   return (await gepruefteAdvisories(`${name}@${alt}`)).some((advisory) => behebtAdvisory(advisory, { name, alt, neu }));
 }
 
+async function kopfGepusht({ ref, sha }) {
+  const eintraege = await api(`/activity?ref=${encodeURIComponent(ref)}&per_page=${FREMD_SEITE}`);
+  return eintraege.find(({ after }) => after === sha)?.timestamp;
+}
+
 export function echteQuellen(pull, gruppenKopf) {
   return {
     veroeffentlicht: (oekosystem, name, stand) => (oekosystem === "actions" ? actionZeit(name, stand) : npmZeit(name, stand)),
-    kopfGepusht: async () => (await api(`/activity?ref=${encodeURIComponent(pull.head.ref)}&per_page=${FREMD_SEITE}`)).find(({ after }) => after === pull.head.sha)?.timestamp,
+    kopfGepusht: () => kopfGepusht(pull.head),
     ersterFix,
     nodeLtsSeit: async (haupt) => nodeLtsSeit(await nodeListeLesen(), haupt),
     queueEintraege: () => queueEintraege(pull.base.ref),
