@@ -693,3 +693,7 @@ test("IEL-B6-12g: Store wirft ein Objekt mit message undefined oder null -> 500 
   assert.deepEqual(await fehlerZeilenBei({ message: undefined }), ["[el-init] fehler: unbekannt"]);
   assert.deepEqual(await fehlerZeilenBei({ message: null }), ["[el-init] fehler: unbekannt"]);
 });
+
+test("IEL-B6-12h: Store wirft ein Objekt mit message als Zahl -> 500 und unbekannt im Log", async () => {
+  assert.deepEqual(await fehlerZeilenBei({ message: 42 }), ["[el-init] fehler: unbekannt"]);
+});
