@@ -144,6 +144,10 @@ function gueltig(name, wert) {
   return typeof wert === "string" && REGELN.get(name)(wert);
 }
 
+function gueltigOderNull(name, umgebung) {
+  return gueltig(name, umgebung[name]) ? umgebung[name] : null;
+}
+
 function ungueltigeNamen({ pflicht, freiwillig }, umgebung) {
   const fehlend = pflicht.filter((name) => !gueltig(name, umgebung[name]));
   const falsch = freiwillig.filter(
@@ -182,12 +186,8 @@ function werteBauen(umgebung) {
     telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
     vorfallUrl: umgebung.BETTER_STACK_ALERT_URL || null,
     slackUrl: umgebung.SLACK_ALERT_URL || null,
-    heartbeatNachtlaufUrl: gueltig(HEARTBEAT_NACHTLAUF, umgebung[HEARTBEAT_NACHTLAUF])
-      ? umgebung[HEARTBEAT_NACHTLAUF]
-      : null,
-    heartbeatProbeUrl: gueltig(HEARTBEAT_PROBE, umgebung[HEARTBEAT_PROBE])
-      ? umgebung[HEARTBEAT_PROBE]
-      : null,
+    heartbeatNachtlaufUrl: gueltigOderNull(HEARTBEAT_NACHTLAUF, umgebung),
+    heartbeatProbeUrl: gueltigOderNull(HEARTBEAT_PROBE, umgebung),
   };
 }
 
