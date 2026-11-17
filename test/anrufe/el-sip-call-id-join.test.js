@@ -28,8 +28,6 @@ const GESPRAECH_ANRUF_2 = Object.freeze({
 });
 const CONVERSATION_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
 
-const START_PATH = "/v1/convai/sip-trunk/outbound-call";
-
 const POLL_MS = 5;
 const WARTE_MS = 4000;
 const WARTE_TAKT_MS = 10;
@@ -76,12 +74,12 @@ function outboundFactory(store) {
   });
 }
 
-async function mitAttrappe({ startAntwort, gespraech }, fn) {
+async function mitAttrappe({ gespraech }, fn) {
   const original = globalThis.fetch;
-  globalThis.fetch = async (url) => ({
+  globalThis.fetch = async () => ({
     ok: true,
     status: 200,
-    json: async () => (String(url).includes(START_PATH) ? startAntwort : gespraech),
+    json: async () => gespraech,
   });
   try {
     return await fn();
@@ -110,22 +108,17 @@ async function warteBis(pruefung) {
 
 const anrufStillegen = (callId) => jsonStore.endCallRecord(callId, "completed");
 
-test("die sip_call_id der Anrufstart-Antwort wird verworfen, persistiert wird der Wert aus dem Gespraechs-Datensatz", async () => {
+test("persistiert wird die sip_call_id aus dem Gespraechs-Datensatz, nicht der call_sid des Anbieters", async () => {
   const call = neuerAnruf();
   assert.equal(call.sipCallId, null, "Call-Default: null, nie undefined (json<->pg-Parity)");
 
-  const { originateCall } = outboundFactory(jsonStore);
+  const outbound = outboundFactory(jsonStore);
   const gefunden = await mitAttrappe(
-    {
-      startAntwort: {
-        success: true,
-        conversation_id: CONVERSATION_ID,
-        sip_call_id: SCL_JOINT_NICHT,
-      },
-      gespraech: GESPRAECH_ANRUF_2,
-    },
+    { gespraech: GESPRAECH_ANRUF_2 },
     async () => {
-      await originateCall(jsonStore.getCall(call.id));
+      jsonStore.recordElevenlabsConversationId(call.id, CONVERSATION_ID);
+      await jsonStore.markAnswered(call.id);
+      outbound.rearmActiveConversationPolls();
       return warteBis(() => Boolean(jsonStore.getCall(call.id)?.sipCallId));
     },
   );
@@ -145,32 +138,7 @@ test("die sip_call_id der Anrufstart-Antwort wird verworfen, persistiert wird de
   assert.equal(
     jsonStore.getCall(call.id).elevenlabsConversationId,
     CONVERSATION_ID,
-    "der Anrufstart muss gelaufen sein - sonst misst der Fall darueber nichts",
-  );
-});
-
-test("ohne Ergebnisabruf bleibt der Schluessel leer statt falsch", async () => {
-  const call = neuerAnruf();
-
-  const { originateCall } = outboundFactory(jsonStore);
-  await mitAttrappe(
-    {
-      startAntwort: {
-        success: true,
-        conversation_id: CONVERSATION_ID,
-        sip_call_id: SCL_JOINT_NICHT,
-      },
-      gespraech: CONVERSATION_FAILED_INVALID_DESTINATION,
-    },
-    () => originateCall(jsonStore.getCall(call.id)),
-  );
-  const direktNachDemStart = jsonStore.getCall(call.id).sipCallId;
-  anrufStillegen(call.id);
-
-  assert.equal(
-    direktNachDemStart,
-    null,
-    "der Anrufstart darf nichts schreiben - sein Feld traegt den call_sid, nicht den Join-Schluessel",
+    "die Gespraechskennung muss am Anruf stehen - sonst misst der Fall darueber nichts",
   );
 });
 
@@ -310,28 +278,10 @@ test("publicCall zeigt den Join-Schluessel und streicht weiterhin die Kosten-Fel
   assert.equal(sicht.telnyxConversationId, undefined, "Bestandsverhalten unveraendert");
 });
 
-test("eine Anrufstart-Antwort ohne conversation_id bricht ab und laesst Kennung, Antwortzeit und Ergebnisabruf leer", async () => {
-  const call = neuerAnruf();
-  let gespraechAbgerufen = false;
-  const gespraech = new Proxy(GESPRAECH_ANRUF_2, {
-    get(ziel, name) {
-      gespraechAbgerufen = true;
-      return ziel[name];
-    },
-  });
+test("die ausgehende Anbindung startet keinen Anruf mehr am SIP-Trunk, Init-Inhalt und Absender-Beschaffung bleiben", () => {
+  const anbindung = outboundFactory(jsonStore);
 
-  const { originateCall } = outboundFactory(jsonStore);
-  await mitAttrappe({ startAntwort: { success: true }, gespraech }, async () => {
-    await assert.rejects(
-      originateCall(jsonStore.getCall(call.id)),
-      /ElevenLabs-Anrufstart lieferte keine conversation_id/,
-    );
-    await warteBis(() => gespraechAbgerufen);
-  });
-  const danach = jsonStore.getCall(call.id);
-  anrufStillegen(call.id);
-
-  assert.equal(danach.elevenlabsConversationId, null, "ohne Kennung darf keine Kennung am Anruf stehen");
-  assert.equal(danach.answeredAt, null, "ohne Kennung gilt der Anruf nicht als angenommen");
-  assert.equal(gespraechAbgerufen, false, "ohne Kennung laeuft kein Ergebnisabruf");
+  assert.equal(anbindung.originateCall, undefined);
+  assert.equal(typeof anbindung.initInhaltFor, "function");
+  assert.equal(typeof anbindung.beschaffeAbsenderOderBrichAb, "function");
 });

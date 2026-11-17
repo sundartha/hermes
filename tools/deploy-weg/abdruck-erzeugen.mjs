@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { abdruckEinstellungen, abdruckSpeicher, anrufstartFaelle, eingangsFaelle } from "./abdruck-faelle.mjs";
+import { abdruckEinstellungen, abdruckSpeicher, eingangsFaelle } from "./abdruck-faelle.mjs";
 import { FEHLER, abbild, istEinfachesObjekt, kanonisch } from "./abdruck-wert.mjs";
 
 const JAVASCRIPT = ".js";
@@ -25,15 +25,12 @@ const EXIT_AUFRUF = 2;
 const ERSTES_ARGUMENT = 2;
 
 const PFADE = Object.freeze({
-  anrufstart: "src/elevenlabs/outbound.js",
   eingangsstart: "src/elevenlabs/inbound-initiation.js",
   prompts: "src/i18n/prompts",
   locales: "src/i18n/locales.js",
   stimmen: "src/telephony/adapters/telnyx/elevenlabs-voice.ts",
   vorlage: "elevenlabs/agent_configs/outbound-agent.template.json",
 });
-
-const netz = { mitschnitt: null };
 
 function uhrFestsetzen() {
   const EchtesDatum = Date;
@@ -50,35 +47,12 @@ function uhrFestsetzen() {
   globalThis.Date = FestesDatum;
 }
 
-function pfadVon(adresse) {
-  try {
-    return new URL(String(adresse)).pathname;
-  } catch {
-    return "‹unlesbar›";
-  }
-}
-
-function koerperVon(koerper) {
-  if (typeof koerper !== "string") return koerper ?? null;
-  try {
-    return JSON.parse(koerper);
-  } catch {
-    return koerper;
-  }
-}
-
 function netzAttrappe() {
-  globalThis.fetch = async (adresse, anfrage = {}) => {
-    netz.mitschnitt?.push({
-      methode: anfrage.method ?? "GET",
-      pfad: pfadVon(adresse),
-      koerper: koerperVon(anfrage.body),
-    });
-    return new Response(JSON.stringify({ conversation_id: "abdruck-gespraech" }), {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ conversation_id: "abdruck-gespraech" }), {
       status: HTTP_OK,
       headers: { "content-type": "application/json" },
     });
-  };
 }
 
 function konsoleStumm() {
@@ -110,29 +84,6 @@ async function sicher(erzeugen) {
   } catch {
     return FEHLER;
   }
-}
-
-async function anrufstartTeile(wurzel) {
-  const teile = {};
-  for (const fall of anrufstartFaelle()) {
-    teile[fall.name] = await sicher(async () => {
-      const { makeElevenLabsOutbound } = await import(modulAdresse(wurzel, PFADE.anrufstart));
-      netz.mitschnitt = [];
-      const { originateCall } = makeElevenLabsOutbound({
-        store: abdruckSpeicher(fall.speicherSprache),
-        config: abdruckEinstellungen(),
-        terminateAndBillCall: async () => undefined,
-        billThunk: () => async () => undefined,
-        finishCall: async () => undefined,
-        consultAllowedForCall: () => fall.consult,
-      });
-      await originateCall(fall.anruf);
-      const anfragen = netz.mitschnitt;
-      netz.mitschnitt = null;
-      return maskiereHeute(anfragen);
-    });
-  }
-  return teile;
 }
 
 async function eingangsTeile(wurzel) {
@@ -290,7 +241,6 @@ async function abdruck(wurzel) {
     ...(await localeTeile(wurzel, bekannt)),
     ...(await stimmenTeile(wurzel)),
     ...vorlageTeile(wurzel),
-    ...(await anrufstartTeile(wurzel)),
     ...(await eingangsTeile(wurzel)),
   };
 }

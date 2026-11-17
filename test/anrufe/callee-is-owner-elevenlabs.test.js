@@ -14,7 +14,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.js");
 const { consultAllowedForCall } = await import("../../src/consult/gate.js");
 const { LOCALES } = await import("../../src/i18n/locales.js");
-const { OVERRIDE_ALLOWED_LEAF_PATHS, startOutboundCall } =
+const { OVERRIDE_ALLOWED_LEAF_PATHS, assertEroeffnungGeprueft } =
   await import("../../src/elevenlabs/convai.ts");
 const { GET_CONSULT_TOOL_NAME } = await import("../../src/consult/in-call.js");
 
@@ -88,8 +88,7 @@ describe("OC-P2-A: ein Fremd-Ziel sieht exakt den Bestands-Anfragekoerper", () =
     for (const name of LAUFABHAENGIGE_VARIABLEN) variablen[name] = LAUFABHAENGIG;
 
     const golden = JSON.parse(readFileSync(GOLDEN_PATH, "utf8"));
-    assert.deepEqual(koerper, golden);
-    assert.equal(JSON.stringify(koerper), JSON.stringify(golden));
+    assert.deepEqual(rumpfVon(koerper), golden.conversation_initiation_client_data);
   });
 
   it("OC-P2-A4: Fremd-Ziel - das Uebersteuerungs-Objekt fuehrt nur Sprache und Stimme", async () => {
@@ -212,17 +211,7 @@ describe("OC-P2-C: jede unvollstaendige Lage faellt auf den Offenlegungs-Rahmen 
   });
 });
 
-const WAECHTER_ACCOUNT = Object.freeze({ apiKey: "pin-key", apiBase: "https://pin.invalid" });
 const WAECHTER_CALL_ID = "call-pin-waechter";
-
-function zaehlendesFetch() {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    return { ok: true, json: async () => ({ conversation_id: "conv_pin_waechter" }) };
-  };
-  return { fetchImpl, calls };
-}
 
 const koerperMitUebersteuerung = (override) => ({
   agent_id: "pin-agent",
@@ -234,78 +223,31 @@ const MIT_EROEFFNUNG = () =>
   koerperMitUebersteuerung({ agent: { language: "de", first_message: "Hallo Pin." } });
 
 describe("OC-P2-D: agent.first_message ist ohne Owner-Kontext ein Abbruch, kein stiller Filter", () => {
-  it("OC-P2-D1: calleeIsOwner weggelassen -> Wurf, kein Netzzugriff", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
-
-    await assert.rejects(
-      () =>
-        startOutboundCall({
-          fetchImpl,
-          account: WAECHTER_ACCOUNT,
-          body: MIT_EROEFFNUNG(),
-          callId: WAECHTER_CALL_ID,
-        }),
+  it("OC-P2-D1: calleeIsOwner weggelassen -> Wurf", () => {
+    assert.throws(
+      () => assertEroeffnungGeprueft(MIT_EROEFFNUNG(), WAECHTER_CALL_ID, {}),
       /agent\.first_message/,
     );
-    assert.equal(
-      calls.length,
-      0,
-      "fail-closed per Default: ein vergessener Wert ist die strenge Menge",
-    );
   });
 
-  it("OC-P2-D2: calleeIsOwner === false -> Wurf, kein Netzzugriff", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
-
-    await assert.rejects(
-      () =>
-        startOutboundCall({
-          fetchImpl,
-          account: WAECHTER_ACCOUNT,
-          body: MIT_EROEFFNUNG(),
-          callId: WAECHTER_CALL_ID,
-          calleeIsOwner: false,
-        }),
+  it("OC-P2-D2: calleeIsOwner === false -> Wurf", () => {
+    assert.throws(
+      () => assertEroeffnungGeprueft(MIT_EROEFFNUNG(), WAECHTER_CALL_ID, { calleeIsOwner: false }),
       /agent\.first_message/,
     );
-    assert.equal(calls.length, 0);
   });
 
-  it("OC-P2-D3: calleeIsOwner === true -> kein Wurf, genau EIN Netzzugriff (Positiv-Kontrolle)", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
-
-    const { conversationId } = await startOutboundCall({
-      fetchImpl,
-      account: WAECHTER_ACCOUNT,
-      body: MIT_EROEFFNUNG(),
-      callId: WAECHTER_CALL_ID,
-      calleeIsOwner: true,
-    });
-
-    assert.equal(conversationId, "conv_pin_waechter");
-    assert.equal(
-      calls.length,
-      1,
-      "ohne diesen Fall belegt D1/D2 nur, dass der Waechter alles ablehnt",
-    );
+  it("OC-P2-D3: calleeIsOwner === true -> kein Wurf (Positiv-Kontrolle)", () => {
+    assert.doesNotThrow(() => assertEroeffnungGeprueft(MIT_EROEFFNUNG(), WAECHTER_CALL_ID, { calleeIsOwner: true }));
   });
 
-  it("OC-P2-D4: ein VIERTER Pfad bricht auch im Owner-Kontext ab", async () => {
-    const { fetchImpl, calls } = zaehlendesFetch();
+  it("OC-P2-D4: ein VIERTER Pfad bricht auch im Owner-Kontext ab", () => {
     const body = koerperMitUebersteuerung({ agent: { language: "de" }, tts: { speed: 1.2 } });
 
-    await assert.rejects(
-      () =>
-        startOutboundCall({
-          fetchImpl,
-          account: WAECHTER_ACCOUNT,
-          body,
-          callId: WAECHTER_CALL_ID,
-          calleeIsOwner: true,
-        }),
+    assert.throws(
+      () => assertEroeffnungGeprueft(body, WAECHTER_CALL_ID, { calleeIsOwner: true }),
       /tts\.speed/,
     );
-    assert.equal(calls.length, 0);
     assert.ok(!OVERRIDE_ALLOWED_LEAF_PATHS.includes("tts.speed"));
   });
 });
@@ -471,15 +413,15 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
     assert.ok(karte.includes("ich bin Hermes, der KI-Assistent von meinem Auftraggeber,"), karte);
   });
 
-  it("G6: ein Name mit Satzzeichen steht im KI-Satz, auch ein Fragezeichen im Namen bricht den Waechter nicht", async () => {
+  it("G6: ein Name mit Satzzeichen steht im KI-Satz, auch ein Fragezeichen im Namen bricht den Waechter nicht", () => {
     const mitPunkt = vorspann3488(anrufIn3488("de"), namensStore3488("Dr. M. Müller")).text;
     assert.ok(mitPunkt.includes("ich bin Hermes, der KI-Assistent von Dr. M. Müller,"), mitPunkt);
     const mitFrage = vorspann3488(anrufIn3488("de"), namensStore3488("Max Wer?")).text;
     assert.ok(mitFrage.includes("ich bin Hermes, der KI-Assistent von Max Wer?,"), mitFrage);
-    await waechterStart3488(mitFrage);
+    waechterStart3488(mitFrage);
   });
 
-  it("E6 G1: ohne KI-Satz, doppelter KI-Satz, KI-Satz ohne Namen und Frage davor brechen ab", async () => {
+  it("E6 G1: ohne KI-Satz, doppelter KI-Satz, KI-Satz ohne Namen und Frage davor brechen ab", () => {
     for (const text of [
       `${ANLASS_3488} Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
       `${ANLASS_3488} ${KI_SATZ_3488} ${KI_SATZ_3488}`,
@@ -487,21 +429,17 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
       `Haben Sie kurz Zeit? ${ANLASS_3488} ${KI_SATZ_3488}`,
       `${ANLASS_3488} ich bin Hermes, der KI-Assistent von `,
     ]) {
-      const { fetchImpl, calls } = zaehlendesFetch();
-      await assert.rejects(() => waechterStart3488(text, fetchImpl), /agent\.first_message/, text);
-      assert.equal(calls.length, 0, text);
+      assert.throws(() => waechterStart3488(text), /agent\.first_message/, text);
     }
   });
 
-  it("E6: KI-Satz nur am Ende, KI-Satz zuerst und der alte Pflichtsatz zuerst gehen durch", async () => {
+  it("E6: KI-Satz nur am Ende, KI-Satz zuerst und der alte Pflichtsatz zuerst gehen durch", () => {
     for (const text of [
       `${ANLASS_3488} ${KI_SATZ_3488}`,
       `${KI_SATZ_3488} ${ANLASS_3488}`,
       `${LOCALES.de.disclosure("Max")} Ich rufe an, um einen Termin zu vereinbaren.`,
     ]) {
-      const { fetchImpl, calls } = zaehlendesFetch();
-      await waechterStart3488(text, fetchImpl);
-      assert.equal(calls.length, 1, text);
+      assert.doesNotThrow(() => waechterStart3488(text), text);
     }
   });
 
@@ -528,16 +466,9 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
 const ANLASS_3488 = "Hallo, ich rufe an, um einen Termin zu vereinbaren –";
 const KI_SATZ_3488 = "ich bin Hermes, der KI-Assistent von Max, und ich fasse das Gespräch für Max zusammen.";
 
-function waechterStart3488(firstMessage, fetchImpl = zaehlendesFetch().fetchImpl) {
+function waechterStart3488(firstMessage) {
   const body = koerperMitUebersteuerung({ agent: { language: "en", first_message: firstMessage } });
-  return startOutboundCall({
-    fetchImpl,
-    account: WAECHTER_ACCOUNT,
-    body,
-    callId: WAECHTER_CALL_ID,
-    calleeIsOwner: false,
-    disclosureLanguage: "de",
-  });
+  return assertEroeffnungGeprueft(body, WAECHTER_CALL_ID, { calleeIsOwner: false, disclosureLanguage: "de" });
 }
 
 describe("EROEFFNUNG-3735: Variable eroeffnung am Anrufstart", () => {
