@@ -42,7 +42,7 @@ const SQUAWK_AUSSCHLUSS = /squawk-ignore/i;
 const SQL_KOMMENTAR = /"(?:[^"]|"")*"|'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g;
 const UNSICHERES_SQL = /\$|\\|\/\*(?:(?!\*\/)[\s\S])*\/\*/;
 const ZERSTOERENDE_MUSTER = [
-  /\bDROP\b/i,
+  /\bDROP\b(?!\s+POLICY\b)/i,
   /\bDELETE\s+FROM\b/i,
   /\bTRUNCATE\b/i,
   /\bALTER\b[^;]*\bTYPE\b/i,
