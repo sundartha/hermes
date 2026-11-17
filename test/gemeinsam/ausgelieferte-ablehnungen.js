@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { seedState, startServer, withFetch } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { captureToolHandlers } from "./werkzeug-registrierung.js";
+import { vorspannMandantenUmgebung } from "./vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -29,7 +30,6 @@ const GATE_SERVER_ENV = Object.freeze({
   PER_TARGET_CALL_CAP: "1",
   VOICE_TARIFF_DEFAULT_CENTS: "30",
   VOICE_TARIFF_DOMESTIC_CENTS: "30",
-  FAKE_ORIGINATE: "true",
 });
 
 const GATE_CASES = Object.freeze([
@@ -170,7 +170,11 @@ async function gateRejection(srv, fall, index) {
 }
 
 export async function gateRejectionTexts() {
-  const srv = await startServer({ seed: gateSeed(GATE_CASES), env: GATE_SERVER_ENV });
+  const mandanten = GATE_CASES.map((_, index) => tenantIdOf(index));
+  const srv = await startServer({
+    seed: gateSeed(GATE_CASES),
+    env: { ...GATE_SERVER_ENV, ...vorspannMandantenUmgebung(mandanten) },
+  });
   try {
     const texts = [];
     for (const [index, fall] of GATE_CASES.entries()) {

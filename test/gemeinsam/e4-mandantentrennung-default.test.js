@@ -13,6 +13,7 @@ import {
 } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannMandantenUmgebung, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 
 const TENANT_A = "t_a",
   TENANT_B = "t_b";
@@ -27,15 +28,8 @@ const HTTP_OK = 200,
   HTTP_UNAUTHORIZED = 401,
   HTTP_NOT_FOUND = 404;
 
-const activeNumber = (id, e164, tenantId) => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
-  status: "active",
-  providerNumberId: null,
-  providerAgentPhoneNumberId: `phnum_h2t2_${id}`,
-});
+const activeNumber = (id, e164, tenantId) =>
+  vorspannSeedNummer({ tenantId, nummer: e164, id, registrierung: `phnum_h2t2_${id}` });
 
 function seedTwoTenants({ calls = [] } = {}) {
   const callA = seedCall({ id: "call_a", twilioSid: "CAa", tenantId: TENANT_A, status: "completed" });
@@ -240,7 +234,7 @@ test("E4-18b: /mcp ohne Token -> 401 mit WWW-Authenticate (Torschluss sitzt HINT
   }
 });
 
-const CALL_ENV = { FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV };
+const CALL_ENV = { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID, TENANT_A, TENANT_B]), ...EL_OUTBOUND_BOOT_ENV };
 const ALLOWLIST_A = { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: TENANT_A };
 
 async function placeCallAndRead({ env = {}, identity = null, to }) {

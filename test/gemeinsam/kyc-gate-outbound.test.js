@@ -1,7 +1,8 @@
-import test from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const TO = "+4915112345678";
@@ -10,14 +11,10 @@ const A = "tenant-a",
   SUB_A = "sub-a",
   NUM_A = "+4915110000001";
 
-const activeNumber = (id, e164, tenantId) => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
-  status: "active",
-  providerNumberId: null,
-});
+const activeNumber = (id, e164, tenantId) => vorspannSeedNummer({ tenantId, nummer: e164, id });
+
+const abbrechend = await starteAbbrechendeAttrappe("kyc", [BOOTSTRAP_TENANT_ID, A]);
+after(() => abbrechend.close());
 
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
 
@@ -42,12 +39,12 @@ const placeCall = (srv, identity) =>
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
   });
 
-const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
+const FLAG_ON = { ...abbrechend.env, MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 const outboundCalls = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("Flag an: Tenant kyc_level<card (otp) -> 403 KYC-Reject, KEIN Call", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON }, seed: seedKyc("otp") });
+  const srv = await startServer({ env: FLAG_ON, seed: seedKyc("otp") });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "otp < card -> Reject");
@@ -59,7 +56,7 @@ test("Flag an: Tenant kyc_level<card (otp) -> 403 KYC-Reject, KEIN Call", async 
 });
 
 test("Flag an: Tenant kyc_level>=card -> KYC passiert (erreicht Originate, offline 500)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON }, seed: seedKyc("card") });
+  const srv = await startServer({ env: FLAG_ON, seed: seedKyc("card") });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(
@@ -76,7 +73,7 @@ test("Flag an: Tenant kyc_level>=card -> KYC passiert (erreicht Originate, offli
 });
 
 test("Flag an: Gate-Schnittmenge - kyc<card sperrt, OBWOHL alle anderen Gates frei waeren", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON }, seed: seedKyc("none") });
+  const srv = await startServer({ env: FLAG_ON, seed: seedKyc("none") });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "none sperrt trotz freier Nummer/Budget (Schnittmenge)");
@@ -87,7 +84,7 @@ test("Flag an: Gate-Schnittmenge - kyc<card sperrt, OBWOHL alle anderen Gates fr
 });
 
 test("Flag an: Tenant OHNE kyc_level (Nicht-Subscriber, eigene Nummer) -> 403 (Toll-Fraud-Riegel)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ...FLAG_ON }, seed: seedKyc(null) });
+  const srv = await startServer({ env: FLAG_ON, seed: seedKyc(null) });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "fehlendes kyc_level -> fail-closed am KYC-Gate");
@@ -99,7 +96,7 @@ test("Flag an: Tenant OHNE kyc_level (Nicht-Subscriber, eigene Nummer) -> 403 (T
 });
 
 test("Betreiber-Kanal (keine Identitaet): Owner-Pfad passiert via Boot-Seed id_verified (kein Selbst-Aussperren)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false", ALLOWED_NUMBERS: TO }, seed: seedKyc("none") });
+  const srv = await startServer({ env: { ...abbrechend.env, ALLOWED_NUMBERS: TO }, seed: seedKyc("none") });
   try {
     const res = await placeCall(srv, null);
     assert.equal(res.status, 500, "identitaetslos -> tenantId=owner, Boot-Seed id_verified -> KYC passiert");

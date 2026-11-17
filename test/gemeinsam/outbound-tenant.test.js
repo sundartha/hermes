@@ -1,11 +1,14 @@
-import test from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
 const OWNER_NUMBER = "+15005550006";
+const abbrechend = await starteAbbrechendeAttrappe("tenant", [BOOTSTRAP_TENANT_ID, "tenant-a", "tenant-b", "tenant-c"]);
+after(() => abbrechend.close());
 
 const A = "tenant-a",
   SUB_A = "sub-a",
@@ -18,12 +21,8 @@ const C = "tenant-c",
   NUM_C = "+4915110000003";
 
 const activeNumber = (id, e164, tenantId, status = "active") => ({
-  id,
-  e164,
-  tenantId,
-  provider: "telnyx",
+  ...vorspannSeedNummer({ tenantId, nummer: e164, id }),
   status,
-  providerNumberId: null,
 });
 
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
@@ -56,7 +55,7 @@ function placeCall(srv, identity, body = {}) {
   });
 }
 
-const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
+const FLAG_ON = { ...abbrechend.env, MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 
 const outboundCallsTo = (srv) =>
   srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
@@ -151,7 +150,7 @@ test("KS-P9: die Plattform-Summe sperrt nicht mehr - A telefoniert trotz gerisse
 });
 
 test("Ohne MULTI_TENANT gesetzt: Identitaets-Header attribuiert unbedingt auf den echten Tenant, NIE auf den Owner", async () => {
-  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedTenants() });
+  const srv = await startServer({ env: { ...abbrechend.env, ALLOWED_NUMBERS: TO }, seed: seedTenants() });
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 500, "Tenant-A-Pfad erreicht den Originate (offline 500)");

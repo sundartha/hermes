@@ -4,6 +4,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import { MCP_BASE_INSTRUCTIONS } from "../../src/mcp-server-info.js";
 import { startServer, stdioServerTransport } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { vorspannMandantenUmgebung } from "./vorspann-fahrzeug.js";
 
 const TARGET = "+4915112340099";
 const OBJECTIVE = "Termin vereinbaren";
@@ -11,7 +13,7 @@ const OBJECTIVE = "Termin vereinbaren";
 test("(h) stdio (echter Kindprozess): place_call Rundlauf ueber einen echten tools/call", async () => {
   const gateway = await startServer({
     env: {
-      FAKE_ORIGINATE: "true",
+      ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
       ALLOWED_COUNTRY_CODES: "*",
     },
   });

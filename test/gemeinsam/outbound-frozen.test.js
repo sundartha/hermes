@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAbbrechendeAttrappe } from "./vorspann-fahrzeug.js";
 import { maskNumber } from "../../src/util.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -29,10 +31,12 @@ test("OUTBOUND_FROZEN=true sperrt jeden Outbound sofort (403, kein Originate)", 
 });
 
 test("OUTBOUND_FROZEN default (false): Owner erreicht den Originate (Pfad 2, 500)", async () => {
-  const srv = await startServer({ env: { FAKE_ORIGINATE_ELEVENLABS: "false" } });
+  const abbrechend = await starteAbbrechendeAttrappe("frozen", [BOOTSTRAP_TENANT_ID]);
+  const srv = await startServer({ env: abbrechend.env });
   try {
     assert.equal((await post(srv.localUrl)).status, 500);
   } finally {
     await srv.stop();
+    await abbrechend.close();
   }
 });

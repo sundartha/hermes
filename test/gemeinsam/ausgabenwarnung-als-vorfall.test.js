@@ -4,7 +4,8 @@ import { after, test } from "node:test";
 import { startServer, DOMESTIC_TEST_NUMBER, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { starteBetterStackAttrappe } from "./better-stack-attrappe.mjs";
-import { TELNYX_MESSZEILE_SCHLUESSEL } from "./erfundene-geheimnisse.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 import { starteAttrappe } from "../anrufe/attrappen-server.js";
 
 const FRIST = { timeout: 60_000 };
@@ -49,20 +50,17 @@ function umbiegeBrevo() {
   ].join("\n");
 }
 
-function umgebung({ telnyx, brevo, adresse }) {
+function umgebung({ brevo, adresse }) {
   return {
     MAX_BUDGET_EUR: "11",
     VOICE_TARIFF_DOMESTIC_CENTS: "250",
     ALLOWED_COUNTRY_CODES: "*",
-    FAKE_ORIGINATE: "true",
     PLATFORM_SPEND_WARN_PERCENT: "40",
     PLATFORM_ALERT_SMS_TO: SMS_ZIEL,
     PLATFORM_ALERT_MAIL_TO: MAIL_ZIEL,
     BETTERSTACK_ALERT_URL: adresse,
     BREVO_API_KEY: "waechter-mail-schluessel",
     MAIL_FROM: "hermes@waechter.invalid",
-    TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
-    TELNYX_API_BASE: telnyx.url,
     NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(umbiegeBrevo())}`,
     TEST_BREVO_URL: brevo.url,
   };
@@ -78,8 +76,14 @@ const rufAn = (srv, ziel) =>
 const auditZeilen = (srv) => [...srv.stdout.matchAll(AUDIT_ZEILE)].map(([, summe, monat]) => ({ summe, monat }));
 
 async function warnServer({ eingangOptionen, adresse }, ablauf) {
-  const [telnyx, brevo, eingang] = await Promise.all([starteZaehler(), starteZaehler(), starteEingang(eingangOptionen)]);
-  const env = umgebung({ telnyx, brevo, adresse: adresse ?? `${eingang.url}/${GEHEIMER_PFAD}` });
+  const [erfolg, brevo, eingang] = await Promise.all([
+    starteErfolgreicheAttrappe("warnung", [BOOTSTRAP_TENANT_ID]),
+    starteZaehler(),
+    starteEingang(eingangOptionen),
+  ]);
+  geoeffnet.push(erfolg.close);
+  const telnyx = { anfragen: erfolg.attrappe.pfade };
+  const env = { ...erfolg.env, ...umgebung({ brevo, adresse: adresse ?? `${eingang.url}/${GEHEIMER_PFAD}` }) };
   const srv = await startServer({ ownerNumber: DOMESTIC_TEST_NUMBER, env });
   try {
     return await ablauf({ srv, telnyx, brevo, eingang });

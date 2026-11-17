@@ -1,12 +1,14 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteJsonAttrappe } from "../anrufe/attrappen-server.js";
-import { TELNYX_CAP_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TARGET_A = "+4915112345678";
 const TARGET_B = "+4915187654321";
+const abgelehnt = await starteAblehnendeAttrappe(400, "cap", [BOOTSTRAP_TENANT_ID]);
+after(() => abgelehnt.close());
 
 const postCall = (url, to) =>
   abrufMitFrist(`${url}/api/calls`, {
@@ -16,17 +18,8 @@ const postCall = (url, to) =>
   });
 
 test("per-Target-Cap: 3x dasselbe Ziel ok, 4. -> 429; anderes Ziel frei", async (t) => {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
   const srv = await startServer({
-    env: {
-      ALLOWED_COUNTRY_CODES: "*",
-      PER_TARGET_CALL_CAP: "3",
-      ELEVENLABS_API_BASE: abgelehnt.url,
-      TELNYX_API_BASE: abgelehnt.url,
-      TELNYX_API_KEY: TELNYX_CAP_SCHLUESSEL,
-      TELNYX_CONNECTION_ID: "conn_cap",
-      TELNYX_ACCOUNT_SID: "acct_cap",
-    },
+    env: { ...abgelehnt.env, ALLOWED_COUNTRY_CODES: "*", PER_TARGET_CALL_CAP: "3" },
   });
   try {
     for (let i = 1; i <= 3; i++) {
@@ -44,6 +37,5 @@ test("per-Target-Cap: 3x dasselbe Ziel ok, 4. -> 429; anderes Ziel frei", async 
     });
   } finally {
     await srv.stop();
-    await abgelehnt.close();
   }
 });
