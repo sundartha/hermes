@@ -22,7 +22,7 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
-import { NOT_PLACED, startRejectionReason } from "../telephony/failure-reason.ts";
+import { NOT_PLACED, WARTEFRIST_REASON, startRejectionReason } from "../telephony/failure-reason.ts";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
@@ -36,6 +36,9 @@ import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
+import { makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
+import { anrufpauseGilt } from "../utils/anrufpause.ts";
+import { sleep } from "../utils/timer.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { unsupportedLanguageBody } from "./_call-request.ts";
 import {
@@ -91,6 +94,7 @@ interface Anruf {
   provider?: string;
   diagnostic?: boolean;
   elevenlabsConversationId?: string | null;
+  maxDurationS?: number;
 }
 
 type AnrufKern = Pick<Anruf, "id" | "tenantId">;
@@ -102,8 +106,21 @@ interface Ablehnung {
 }
 
 type Anspruch =
-  | { denial: Ablehnung; call?: undefined; created?: false }
-  | { denial?: undefined; call: Anruf; created: boolean };
+  | { denial: Ablehnung; call?: undefined; created?: false; wartet?: undefined }
+  | { denial?: undefined; call: Anruf; created: boolean; wartet?: undefined };
+
+interface Abbruch {
+  grund?: string | null;
+}
+
+type Wahlausgang = { callControlId: string; abbruch?: undefined } | { callControlId?: undefined; abbruch: Abbruch };
+
+interface Wartet {
+  wartet: true;
+  denial?: undefined;
+  call?: undefined;
+  created?: undefined;
+}
 
 interface Kontext {
   req: Request;
@@ -150,6 +167,7 @@ interface Konfiguration {
     elevenLabsInbound: WegAufruf["config"]["voice"]["elevenLabsInbound"];
   };
   telephony: { telnyxCallControlAppId: string | undefined };
+  safety: { outboundFrozen: boolean };
 }
 
 interface Speicher {
@@ -168,6 +186,8 @@ interface Speicher {
   resolveProfile: (tenantId: string | undefined) => unknown;
   einstellungenNachladen?: (tenantId: string | undefined) => Promise<unknown>;
   save: () => unknown;
+  anrufpauseGelesen?: () => Promise<unknown>;
+  anrufpauseAktiv?: () => unknown;
   numberRecordByE164: WegAufruf["store"]["numberRecordByE164"];
   load: () => unknown;
 }
@@ -210,6 +230,18 @@ interface Vorspann {
   callControlId?: string;
 }
 
+type AuftragsVerbindung = Omit<
+  Parameters<typeof makeAnrufstartAuftrag<Anruf>>[0],
+  "store" | "anbieterGespraeche" | "haltAnrufStartFest" | "beendeStartUnklar" | "mandantenToken" | "wartefristMs"
+>;
+
+interface Anrufstart {
+  einreihen?: (callId: string) => Promise<boolean>;
+  macheAuftrag?: ((verbindung: AuftragsVerbindung) => unknown) | null;
+  verdrahtung?: { setzeHandler: (handler: unknown) => unknown } | null;
+  uhr?: { jetztMs: () => number; warte: (ms: number) => Promise<void> };
+}
+
 interface Abhaengigkeiten {
   store: Speicher;
   leitungsplaetze: Leitungsplaetze;
@@ -235,6 +267,7 @@ interface Abhaengigkeiten {
     armMaxDurationTimer: (call: Anruf, sid: string | null | undefined) => unknown;
     armReserveReleaseTimer: (call: Anruf) => unknown;
   };
+  anrufstart?: Anrufstart;
   tenant: {
     requestTenant: (req: Request) => string;
     requireTenant: (req: Request, res: Response) => string | null | undefined;
@@ -318,6 +351,19 @@ function elevenLabsCallNotWired(): never {
     "Der Anrufstart ist nicht verdrahtet (deps.erzeugeVorspann fehlt)",
   );
 }
+
+const GRUND_WARTESCHLANGE = "warteschlange";
+
+function anrufstartNichtVerdrahtet(): never {
+  throw new Error("Der Anrufstart-Auftrag ist nicht verdrahtet (deps.anrufstart fehlt)");
+}
+
+const ANRUFSTART_UNVERDRAHTET: Required<Anrufstart> = Object.freeze({
+  einreihen: anrufstartNichtVerdrahtet,
+  macheAuftrag: null,
+  verdrahtung: null,
+  uhr: Object.freeze({ jetztMs: Date.now, warte: sleep }),
+});
 
 function callQuotaDenialNotWired(): never {
   throw new Error(
@@ -421,21 +467,42 @@ const vorWahlAbgebrochenBody = (callId: string) => ({
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
-const platzAnfrage = ({ ctx }: { ctx: Kontext }) => ({
-  tenantId: ctx.tenantId,
+const platzAnfrage = ({ tenantId }: { tenantId?: string | undefined }) => ({
+  tenantId,
   weg: ANBIETER.ELEVENLABS,
   hoechstzahlKunde: AUSGEHEND_JE_KUNDE,
 });
 
-async function vorabAblehnung({ store, leitungsplaetze, ctx }: { store: Speicher; leitungsplaetze: Leitungsplaetze; ctx: Kontext }): Promise<Anspruch | null> {
+async function vorabAblehnung({ store, leitungsplaetze, ctx }: { store: Speicher; leitungsplaetze: Leitungsplaetze; ctx: Kontext }): Promise<Anspruch | Wartet | null> {
   const laeuftSchon = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
     nowMs: Date.now(),
   });
   if (laeuftSchon) return null;
-  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage({ ctx }));
+  const entscheidung = await leitungsplaetze.pruefenAusgehend(platzAnfrage(ctx));
   if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return null;
+  if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL) return { wartet: true };
   return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }) };
+}
+
+async function belegePlatzOderWarte({
+  leitungsplaetze,
+  ctx,
+  felder,
+  wartet,
+}: {
+  leitungsplaetze: Leitungsplaetze;
+  ctx: Kontext;
+  felder: { id: string };
+  wartet: boolean;
+}) {
+  if (wartet) return null;
+  const { entscheidung } = await leitungsplaetze.belegenAusgehend({
+    ...platzAnfrage(ctx),
+    callId: felder.id,
+    maxDauerS: ctx.maxDur,
+  });
+  return entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI ? null : entscheidung;
 }
 
 async function claimCallRecord({
@@ -445,6 +512,7 @@ async function claimCallRecord({
   felder,
   nowMs,
   callQuotaDenial,
+  wartet,
 }: {
   store: Speicher;
   leitungsplaetze: Leitungsplaetze;
@@ -452,6 +520,7 @@ async function claimCallRecord({
   felder: { id: string };
   nowMs: number;
   callQuotaDenial: (ctx: Kontext) => Promise<Ablehnung | null | undefined>;
+  wartet: boolean;
 }): Promise<Anspruch> {
   const laufender = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
     to: ctx.to,
@@ -460,13 +529,8 @@ async function claimCallRecord({
   if (laufender) return { call: laufender, created: false };
   const denial = await callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
-  const { entscheidung } = await leitungsplaetze.belegenAusgehend({
-    ...platzAnfrage({ ctx }),
-    callId: felder.id,
-    maxDauerS: ctx.maxDur,
-  });
-  if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
-    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung }), created: false };
+  const abgelehnt = await belegePlatzOderWarte({ leitungsplaetze, ctx, felder, wartet });
+  if (abgelehnt) return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: abgelehnt }), created: false };
   const call = store.createCall(felder);
   await store.persistCall(call.id);
   zaehleAnrufGestartet("outbound");
@@ -567,6 +631,7 @@ export function makeCallRoutes({
   billThunk,
   finishCall,
   arm: { armMaxDurationTimer, armReserveReleaseTimer },
+  anrufstart,
   tenant: { requestTenant, requireTenant, tenantOwnsCall },
   consultDelivery,
   internalIdentity,
@@ -574,6 +639,7 @@ export function makeCallRoutes({
 }: Abhaengigkeiten): Router {
   const router = Router();
   const bereiche: Bereiche = speicherBereiche(store);
+  const { einreihen, macheAuftrag, verdrahtung, uhr } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
   function sichtbarerAnruf<T extends AnrufKern>(call: T | null | undefined, tenantId: string | undefined) {
     return call && tenantOwnsCall(call, tenantId) ? call : null;
@@ -586,19 +652,109 @@ export function makeCallRoutes({
     return vorspann;
   }
 
-  async function brichVorWahlAb({ call, grund, res }: { call: Anruf; grund: string; res: Response }) {
-    await terminateAndBillCall({
+  async function beendeOhneAnbieter(callId: string, reason: string) {
+    return terminateAndBillCall({
       persistEnd: persistEndWithReason({
         store,
-        callId: call.id,
-        reason: `${NOT_PLACED}:${grund}`,
-        endCall: () => store.endCallRecord(call.id, "failed"),
+        callId,
+        reason,
+        endCall: () => store.endCallRecord(callId, "failed"),
       }),
+      hangUp: null,
+      bill: billThunk(finishCall, store, callId),
+      callId,
+    });
+  }
+
+  async function brichVorWahlAb({ call, grund, res }: { call: Anruf; grund: string; res: Response }) {
+    await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${grund}`);
+    return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
+  }
+
+  async function waehleAnruf(call: Anruf): Promise<Wahlausgang> {
+    await beschaffeAbsender(call);
+    const wahl = outboundWegFuer({ config, store, call });
+    meldeOutboundWeg({ callId: call.id, wahl });
+    if (!wahl.weg) return { abbruch: { grund: wahl.grund } };
+    await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
+    const vorspann = await bereiteVorspannVor(call);
+    if ((await vorspannAblauf.pruefe({ call })).grund) return { abbruch: {} };
+    if (vorspann.rueckfall) return { abbruch: { grund: vorspann.rueckfall } };
+    const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
+    return { callControlId: gewaehlt.callControlId };
+  }
+
+  function armeTimer(call: Anruf) {
+    armMaxDurationTimer(call, call.twilioSid);
+    armReserveReleaseTimer(call);
+  }
+
+  async function beendeNachStartFehler(call: Anruf, err: unknown) {
+    const providerStatus = providerStatusOf(err);
+    await terminateAndBillCall({
+      persistEnd: endFailedCallWithReason(store, call.id, providerStatus),
       hangUp: null,
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });
-    return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
+    console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, beschreibungOf(err));
+    return providerStatus;
+  }
+
+  async function starteWartendenAnruf(call: Anruf) {
+    let ausgang: Wahlausgang;
+    try {
+      ausgang = await waehleAnruf(call);
+    } catch (fehler) {
+      await beendeNachStartFehler(call, fehler);
+      throw fehler;
+    }
+    const { abbruch } = ausgang;
+    if (abbruch?.grund) await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${abbruch.grund}`);
+    if (abbruch) throw new Error(`[anrufstart] nicht gewaehlt (call=${call.id})`);
+    const aufzeichnung = await leseAnruf(store, call.id);
+    if (aufzeichnung) aufzeichnung.callControlId = ausgang.callControlId;
+    store.save();
+  }
+
+  async function belegePlatzFuer(call: Anruf) {
+    const { entscheidung } = await leitungsplaetze.belegenAusgehend({
+      ...platzAnfrage(call),
+      callId: call.id,
+      maxDauerS: call.maxDurationS,
+    });
+    return entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI;
+  }
+
+  if (macheAuftrag && verdrahtung)
+    verdrahtung.setzeHandler(
+      macheAuftrag({
+        starte: starteWartendenAnruf,
+        sperren: {
+          eingefroren: () => config.safety.outboundFrozen,
+          pausiert: () => anrufpauseGilt(store),
+          abgebrochen: (call) => call.status !== "active",
+        },
+        beendeOhneWahl: (callId, grund) => beendeOhneAnbieter(callId, `${NOT_PLACED}:${grund}`),
+        armeTimer,
+        jetztMs: uhr.jetztMs,
+        platz: {
+          belege: belegePlatzFuer,
+          beendeNachWartefrist: (callId) => beendeOhneAnbieter(callId, WARTEFRIST_REASON),
+          warte: uhr.warte,
+        },
+      }),
+    );
+
+  async function reiheWartendenAnrufEin({ call, ctx, res }: { call: Anruf; ctx: Kontext; res: Response }) {
+    try {
+      if (!(await einreihen(call.id))) throw new Error("Auftrag nicht eingereiht");
+    } catch (fehler) {
+      console.error(`[place_call] Warteschlange nicht erreichbar call=${call.id}:`, nachrichtOf(fehler));
+      await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${GRUND_WARTESCHLANGE}`);
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
+    }
+    return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
   }
 
   async function emitOpeningConsult({ req, call, context, tenantId }: { req: Request; call: Anruf; context: AnrufKontext | undefined; tenantId: string | undefined }) {
@@ -629,9 +785,11 @@ export function makeCallRoutes({
     }
 
     let call: Anruf;
+    let wartet = false;
     try {
       const vorab = await vorabAblehnung({ store, leitungsplaetze, ctx });
-      if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
+      if (vorab?.denial) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
+      wartet = vorab?.wartet === true;
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
         requestedLanguage ??
@@ -693,7 +851,7 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
+        claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
       );
       if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
       call = claim.call;
@@ -708,31 +866,19 @@ export function makeCallRoutes({
     }
 
     await emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
+    if (wartet) return await reiheWartendenAnrufEin({ call, ctx, res });
 
     try {
-      const wahl = outboundWegFuer({ config, store, call });
-      meldeOutboundWeg({ callId: call.id, wahl });
-      if (!wahl.weg) return await brichVorWahlAb({ call, grund: wahl.grund, res });
-      await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
-      const vorspann = await bereiteVorspannVor(call);
-      if ((await vorspannAblauf.pruefe({ call })).grund)
-        return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
-      if (vorspann.rueckfall) return await brichVorWahlAb({ call, grund: vorspann.rueckfall, res });
-      const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
-      call.callControlId = gewaehlt.callControlId;
+      const ausgang = await waehleAnruf(call);
+      const { abbruch } = ausgang;
+      if (abbruch?.grund) return await brichVorWahlAb({ call, grund: abbruch.grund, res });
+      if (abbruch) return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
+      call.callControlId = ausgang.callControlId;
       store.save();
-      armMaxDurationTimer(call, call.twilioSid);
-      armReserveReleaseTimer(call);
+      armeTimer(call);
       return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
     } catch (err) {
-      const providerStatus = providerStatusOf(err);
-      await terminateAndBillCall({
-        persistEnd: endFailedCallWithReason(store, call.id, providerStatus),
-        hangUp: null,
-        bill: billThunk(finishCall, store, call.id),
-        callId: call.id,
-      });
-      console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, beschreibungOf(err));
+      const providerStatus = await beendeNachStartFehler(call, err);
       const body = providerStatus
         ? {
             error: `Provider hat den Anruf abgelehnt (HTTP ${String(providerStatus)}). Account-/Nummern-Konfiguration pruefen.`,

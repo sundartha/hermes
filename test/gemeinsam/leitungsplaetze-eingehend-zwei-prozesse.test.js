@@ -9,6 +9,7 @@ import { waitForLog } from "../helpers.js";
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
+const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const WARTEGRENZE_MS = 5_000;
 const ANTWORT_FRIST_MS = 2_000;
 const LOG_FRIST_MS = WARTEGRENZE_MS + 3_000;
@@ -58,7 +59,7 @@ test(
       );
       const antwort = await neueAnrufe().rufeAn(b);
       assert.equal(antwort.status, HTTP_UNAVAILABLE);
-      assert.equal((await antwort.json()).reason, "ausgelastet");
+      assert.equal((await antwort.json()).error, KEINE_WARTESCHLANGE);
     });
   },
 );

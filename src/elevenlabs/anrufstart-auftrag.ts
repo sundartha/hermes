@@ -49,41 +49,41 @@ interface AnbieterGespraeche {
   hole: (conversationId: string) => Promise<Gespraech | null>;
 }
 
-interface Platz {
-  belege: (call: Anruf) => Promise<boolean>;
+interface Platz<A extends Anruf> {
+  belege: (call: A) => Promise<boolean>;
   beendeNachWartefrist: (callId: string) => Promise<void>;
   warte: (ms: number) => Promise<void>;
 }
 
-interface Abhaengigkeiten {
+interface Abhaengigkeiten<A extends Anruf> {
   store: {
-    leseCall: (callId: string) => Promise<Anruf | null | undefined>;
+    leseCall: (callId: string) => Promise<A | null | undefined>;
     load: () => { calls: Anruf[] };
     anrufstartMarker: {
       setze: (anfrage: { callId: string; tenantId: string; jetztIso: string }) => Promise<boolean>;
       lies: (callId: string) => Promise<string | null>;
     };
   };
-  starte: (call: Anruf) => Promise<void>;
+  starte: (call: A) => Promise<void>;
   anbieterGespraeche: AnbieterGespraeche;
-  haltAnrufStartFest: (call: Anruf, conversationId: string) => unknown;
+  haltAnrufStartFest: (call: A, conversationId: string) => unknown;
   beendeStartUnklar: (callId: string) => Promise<void>;
   sperren: {
-    eingefroren: () => boolean;
-    pausiert: (call: Anruf) => boolean;
-    abgebrochen: (call: Anruf) => boolean;
+    eingefroren: () => boolean | Promise<boolean>;
+    pausiert: (call: A) => boolean | Promise<boolean>;
+    abgebrochen: (call: A) => boolean;
   };
-  platz?: Platz;
+  platz?: Platz<A>;
   wartefristMs?: number;
   beendeOhneWahl: (callId: string, grund: string) => Promise<void>;
-  armeTimer: (call: Anruf) => void;
+  armeTimer: (call: A) => void;
   mandantenToken: (tenantId: string) => string;
   jetztMs: () => number;
 }
 
 const variablenVon = (gespraech: Gespraech | null) => gespraech?.conversation_initiation_client_data?.dynamic_variables;
 
-export function makeAnrufstartAuftrag({
+export function makeAnrufstartAuftrag<A extends Anruf>({
   store,
   starte,
   anbieterGespraeche,
@@ -96,8 +96,8 @@ export function makeAnrufstartAuftrag({
   jetztMs,
   platz,
   wartefristMs = 0,
-}: Abhaengigkeiten) {
-  async function markiereVorAnbieterAufruf(call: Anruf): Promise<void> {
+}: Abhaengigkeiten<A>) {
+  async function markiereVorAnbieterAufruf(call: A): Promise<void> {
     const gesetzt = await store.anrufstartMarker.setze({
       callId: call.id,
       tenantId: call.tenantId,
@@ -115,7 +115,7 @@ export function makeAnrufstartAuftrag({
     return variablen?.callee === call.to && erwartet !== "" && safeEqual(variablen.tenant_token, erwartet);
   }
 
-  async function gespraecheZumAnruf(call: Anruf, versuchtIso: string) {
+  async function gespraecheZumAnruf(call: A, versuchtIso: string) {
     const seitS = Math.floor(Date.parse(versuchtIso) / MS_PER_SECOND) - ABGLEICH_VORLAUF_S;
     const liste = await anbieterGespraeche.liste({
       call_start_after_unix: String(seitS),
@@ -129,7 +129,7 @@ export function makeAnrufstartAuftrag({
     return { treffer, vollstaendig: liste?.has_more !== true };
   }
 
-  async function gleicheMitAnbieterAb(call: Anruf, versuchtIso: string): Promise<AnrufstartAusgang> {
+  async function gleicheMitAnbieterAb(call: A, versuchtIso: string): Promise<AnrufstartAusgang> {
     const { treffer, vollstaendig } = await gespraecheZumAnruf(call, versuchtIso);
     if (treffer.length === 1 && vollstaendig) {
       await haltAnrufStartFest(call, String(treffer[0]));
@@ -141,14 +141,20 @@ export function makeAnrufstartAuftrag({
     return ANRUFSTART_AUSGANG.UNKLAR;
   }
 
-  async function sperreVorDemStart(call: Anruf): Promise<boolean> {
+  async function sperrGrund(call: A): Promise<string | null> {
+    if (await sperren.eingefroren()) return ANRUFSTART_SPERRE.EINGEFROREN;
+    if (await sperren.pausiert(call)) return ANRUFSTART_SPERRE.PAUSE;
+    return null;
+  }
+
+  async function sperreVorDemStart(call: A): Promise<boolean> {
     if (sperren.abgebrochen(call)) return true;
-    const grund = sperren.eingefroren() ? ANRUFSTART_SPERRE.EINGEFROREN : sperren.pausiert(call) ? ANRUFSTART_SPERRE.PAUSE : null;
+    const grund = await sperrGrund(call);
     if (grund) await beendeOhneWahl(call.id, grund);
     return grund !== null;
   }
 
-  async function wartePlatz(aktuell: Anruf, fristEnde: number): Promise<AnrufstartAusgang | null> {
+  async function wartePlatz(aktuell: A, fristEnde: number): Promise<AnrufstartAusgang | null> {
     if (await sperreVorDemStart(aktuell)) return ANRUFSTART_AUSGANG.ABGESPERRT;
     if (!platz || (await platz.belege(aktuell))) return null;
     if (!(jetztMs() < fristEnde)) {
