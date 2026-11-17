@@ -100,8 +100,11 @@ test("4898: war der Anruf schon per Webhook als nicht angenommen beendet, legt d
   assert.equal(calleeAufgelegt(callId), false);
 });
 
-const calleeAuflegeAnfragen = (callId) =>
-  umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup")).length;
+const istCalleeAuflegen = (callId) => (pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup");
+const calleeAuflegeAnfragen = (callId) => {
+  const { pfade } = umgebung.attrappe;
+  return pfade.filter(istCalleeAuflegen(callId)).length;
+};
 
 test("4898: war der Anruf schon abgebrochen, bevor die Frist ablaeuft, bleibt er abgebrochen und das Bein wird kein zweites Mal aufgelegt", async () => {
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(4));
