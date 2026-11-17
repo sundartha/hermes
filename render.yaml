@@ -58,16 +58,12 @@ services:
         value: "5000"
       - key: ELEVENLABS_ENVIRONMENT
         value: "production"
-      - key: ELEVENLABS_INBOUND_TENANT_IDS
-        sync: false
       - key: ELEVENLABS_INBOUND_SIP_USER
         sync: false
       - key: ELEVENLABS_INBOUND_SIP_PASSWORD
         sync: false
       - key: ELEVENLABS_INIT_WEBHOOK_TOKEN
         sync: false
-      - key: ELEVENLABS_INBOUND_SCOPE
-        value: "allowlist"
       - key: ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED
         value: "true"
       - key: BOOTSTRAP_E164

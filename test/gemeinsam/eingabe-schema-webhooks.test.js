@@ -10,7 +10,6 @@ import { ESLint } from "eslint";
 import { interpretStripeEvent, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "../../src/elevenlabs/inbound-scope.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";
@@ -124,7 +123,6 @@ function initConfig(tenantId) {
       elevenLabsInbound: {
         enabled: true,
         tenantIds: [tenantId],
-        scope: INBOUND_EL_SCOPE.ALLOWLIST,
         sipUser: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER,
         sipPassword: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD,
         initWebhookToken: INIT_TOKEN,
