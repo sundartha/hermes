@@ -36,7 +36,7 @@ async function nimmAn(prozess, nummer, fristMs) {
 }
 
 async function mitBelegterLeitung(t, lauf) {
-  await mitZweiHermesAufPostgres(t, {}, async (ctx) => {
+  await mitZweiHermesAufPostgres(t, { mandantGepinnt: false }, async (ctx) => {
     const { rows } = await ctx.sql(NUMMER_SQL, [BOOTSTRAP_TENANT_ID]);
     await ctx.sql(BELEGEN_SQL, ["alt_aus_", "ausgehend", AUSGEHEND_BELEGT]);
     await ctx.sql(BELEGEN_SQL, ["alt_ein_", "eingehend", EINGEHEND_BELEGT]);
