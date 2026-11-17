@@ -35,12 +35,11 @@
     "quellen": [
       "^src/(onboarding|release-reconcile)\\.[jt]s$",
       "^src/(worker|queue)/",
-      "^src/telephony/(provisioning-geo|absender-registrierung)\\.[jt]s$",
-      "^src/telephony/adapters/telnyx/numbers\\.[jt]s$",
+      "^src/telephony/provisioning-geo\\.[jt]s$",
       "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
     ],
     "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$"],
-    "fachlogik": ["^src/telephony/absender-registrierung\\.[jt]s$"]
+    "fachlogik": []
   },
   {
     "bereich": "anmeldung",
@@ -80,7 +79,7 @@
     ],
     "fachlogik": [
       "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget)\\.[jt]s$",
-      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
+      "^src/telephony/(absender-registrierung|answered-by|call-dedup|directives|failure-reason|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
       "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-scope|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|nicht-erreicht-frist|time-context|vorspann-pruefung|vorspann-erzeugen|anrufstart-auftrag)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
       "^src/research/(lookup-guard|sanitize)\\.[jt]s$"
