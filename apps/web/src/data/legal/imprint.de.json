@@ -3,27 +3,22 @@
   "metaDescription": "Anbieterkennzeichnung und Kontaktangaben zu Sundartha Hermes.",
   "eyebrow": "Rechtliches",
   "title": "Impressum",
-  "note": "Unvollständig: die mit [OFFEN] markierten Angaben nach § 5 DDG (ladungsfähige Anschrift, Telefonnummer, Register, Umsatzsteuer-Identifikationsnummer) liegen noch nicht vor und werden ergänzt, sobald die Gesellschaft eingetragen ist. Alle übrigen Angaben sind vollständig.",
   "sections": [
     {
       "heading": "Anbieter",
-      "text": "Sundartha UG (haftungsbeschränkt) (in Gründung), Sitz: Meerbusch — Anbieter des Telefon-Assistenten Hermes. [OFFEN: ladungsfähige Anschrift — Straße, Hausnummer, Postleitzahl, Ort, Land]"
+      "text": "Sundartha UG (haftungsbeschränkt) (in Gründung), Poststraße 3, 40667 Meerbusch, Deutschland — Anbieter des Telefon-Assistenten Hermes."
     },
     {
       "heading": "Vertreten durch",
-      "text": "Antonio Fotiadis dos Santos Francisco und Jonas Kroh (Geschäftsführer)"
+      "text": "Antonio Fotiadis dos Santos Francisco und Jonas Kroh (Geschäftsführer, gemeinsam vertretungsberechtigt)"
     },
     {
       "heading": "Kontakt",
-      "text": "E-Mail: kontakt@sundartha.com. Anfragen zu Vertrag, Abrechnung und Datenschutz erreichen uns unter dieser Adresse. [OFFEN: Telefonnummer des Betreibers (E.164, z. B. +49 …) — § 5 Abs. 1 Nr. 2 DDG verlangt neben der E-Mail-Adresse eine Angabe, die eine schnelle und unmittelbare Kommunikation ermöglicht; die zugeteilte Hermes-Rufnummer eignet sich dafür nicht, weil dort der Assistent abnimmt.]"
+      "text": "E-Mail: kontakt@sundartha.com. Anfragen zu Vertrag, Abrechnung und Datenschutz erreichen uns unter dieser Adresse."
     },
     {
-      "heading": "Registereintrag",
-      "text": "[OFFEN: Registergericht und Registernummer (z. B. „Amtsgericht …, HRB …“) — Pflicht bei GmbH, UG, OHG, KG und eingetragenem Kaufmann. Besteht keine Eintragung (Einzelunternehmen, GbR), entfällt dieser Abschnitt ersatzlos.]"
-    },
-    {
-      "heading": "Umsatzsteuer-Identifikationsnummer",
-      "text": "[OFFEN: entweder die Umsatzsteuer-Identifikationsnummer nach § 27a UStG (Format DE + 9 Ziffern) — oder, wenn keine erteilt wurde, der Satz „Eine Umsatzsteuer-Identifikationsnummer wurde nicht erteilt.“; bei Kleinunternehmerregelung nach § 19 UStG zusätzlich: „Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.“]"
+      "heading": "Handelsregister",
+      "text": "Die Gesellschaft befindet sich in Gründung. Die Eintragung in das Handelsregister beim Amtsgericht Neuss läuft; die Registernummer wird nach der Eintragung hier ergänzt."
     },
     {
       "heading": "Verantwortlich für den Inhalt",
@@ -31,11 +26,7 @@
     },
     {
       "heading": "Verbraucherstreitbeilegung",
-      "text": "Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 Verbraucherstreitbeilegungsgesetz). Die Online-Streitbeilegungsplattform der Europäischen Kommission wurde zum 20. Juli 2025 eingestellt; ein Verweis darauf entfällt."
-    },
-    {
-      "heading": "Hinweis zu diesem Text",
-      "text": "Dieser Entwurf ist aus dem tatsächlichen Verhalten des Dienstes abgeleitet und ersetzt keine Rechtsberatung. Solange die oben markierten Angaben fehlen, erfüllt die Seite die Anbieterkennzeichnung nach § 5 DDG nicht vollständig."
+      "text": "Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen (§ 36 Verbraucherstreitbeilegungsgesetz)."
     }
   ]
 }
