@@ -31,6 +31,17 @@ const ABGEWIESENE_BEFEHLE = [
   'echo "$(node --test test/a.test.js)"',
   "echo `node --test test/a.test.js`",
   "echo $(echo $(node --test test/a.test.js))",
+  "(node --test test/a.test.js)",
+  "{ node --test test/a.test.js; }",
+  "nohup node --test test/a.test.js &",
+  "timeout 60 node --test test/a.test.js",
+  "nice node --test test/a.test.js",
+  "nice -n 5 node --test test/a.test.js",
+  "time node --test test/a.test.js",
+  "xargs node --test < f",
+  'eval "node --test x"',
+  "eval 'node --test x'",
+  'sh -c "echo \\"hi\\"; node --test x"',
 ];
 
 const ERLAUBTE_BEFEHLE = [
@@ -41,6 +52,9 @@ const ERLAUBTE_BEFEHLE = [
   "node script.js",
   "echo $(date)",
   "bash -c 'npm test -- test/a.test.js'",
+  "(npm test -- test/a.test.js)",
+  "nohup npm test -- test/a.test.js &",
+  'eval "npm test -- x"',
 ];
 
 for (const command of ABGEWIESENE_BEFEHLE) {

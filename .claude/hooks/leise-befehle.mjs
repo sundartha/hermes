@@ -2,10 +2,10 @@ import { block, readInput } from "./lib.mjs";
 
 const QUOTED_TEXT = /"[^"]*"|'[^']*'/g;
 const SEGMENT_SEPARATOR = /&&|\|\||[;|\n]/;
-const LAUNCHER = String.raw`((env|command|exec|npx|npm\s+exec)(\s+(-\S+|\w+=\S*))*\s+)*`;
+const LAUNCHER = String.raw`((env|command|exec|npx|npm\s+exec|nohup|time|nice|timeout|xargs|eval)(\s+(-\S+|\w+=\S*|\d\S*))*\s+)*`;
 const NODE_FLAGS = String.raw`(\s+-\S+(\s+[^-\s]\S*)?)*`;
 const DIRECT_NODE_TEST = new RegExp(String.raw`^(\w+=\S*\s+)*${LAUNCHER}(\S*/)?node${NODE_FLAGS}\s+--test(\s|$|-)`);
-const SHELL_COMMAND_TEXT = /(?<![\w"'.-])(?:ba|z|da)?sh\s+(?:-\w+\s+)*-\w*c\s+(?:"([^"]*)"|'([^']*)')/;
+const SHELL_COMMAND_TEXT = /(?<![\w"'.-])(?:(?:ba|z|da)?sh\s+(?:-\w+\s+)*-\w*c|eval)\s+(?:"((?:\\.|[^"\\])*)"|'([^']*)')/;
 const COMMAND_SUBSTITUTION = /\$\(([^()]*)\)|`([^`]*)`/;
 
 function innerCommands(command) {
@@ -13,7 +13,7 @@ function innerCommands(command) {
   let rest = command;
   for (const pattern of [SHELL_COMMAND_TEXT, COMMAND_SUBSTITUTION]) {
     for (let found = pattern.exec(rest); found; found = pattern.exec(rest)) {
-      inner.push(found.slice(1).find((text) => text !== undefined));
+      inner.push(found.slice(1).find((text) => text !== undefined).replace(/\\(.)/g, "$1"));
       rest = rest.replace(found[0], " ");
     }
   }
@@ -29,7 +29,7 @@ function runsNodeTestDirectly(command) {
     text
       .replace(QUOTED_TEXT, "")
       .split(SEGMENT_SEPARATOR)
-      .some((segment) => DIRECT_NODE_TEST.test(segment.trim())),
+      .some((segment) => DIRECT_NODE_TEST.test(segment.trim().replace(/^([({]\s*)+/, ""))),
   );
 }
 
