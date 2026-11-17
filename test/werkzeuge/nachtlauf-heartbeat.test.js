@@ -73,7 +73,7 @@ test("Heartbeat: Grenze der 2xx, Exit bleibt immer 0, bei Fehlern nur der Status
   const tabelle = [
     [200, "gemeldet"],
     [299, "gemeldet"],
-    [300, "nicht zugestellt (HTTP 0)"],
+    [300, "nicht zugestellt (HTTP 300)"],
     [404, "nicht zugestellt (HTTP 404)"],
     [500, "nicht zugestellt (HTTP 500)"],
   ];
@@ -84,6 +84,18 @@ test("Heartbeat: Grenze der 2xx, Exit bleibt immer 0, bei Fehlern nur der Status
     assert.ok(sichtbar.split("\n").includes("Heartbeat nachtlauf: " + erwartet), antwort + ": " + sichtbar);
     assert.ok(!sichtbar.includes("geheim-pfad"));
   }
+});
+
+test("Heartbeat: Better Stack nicht erreichbar, Exit 0 und nicht zugestellt (HTTP 0)", async () => {
+  const { port } = await dienstStarten(200);
+  const frei = createServer();
+  await new Promise((fertig) => frei.listen(0, "127.0.0.1", fertig));
+  const toter = frei.address().port;
+  await new Promise((fertig) => frei.close(fertig));
+  assert.notEqual(port, toter);
+  const { code, sichtbar } = await aufrufen({ wert: `http://127.0.0.1:${toter}/geheim-pfad` });
+  assert.equal(code, 0);
+  assert.match(sichtbar, /^Heartbeat nachtlauf: nicht zugestellt \(HTTP 0\)$/m);
 });
 
 test("Heartbeat: unbekannter oder fehlender oder doppelter Name bricht mit Exit 1 ab und sendet nichts", async () => {
@@ -109,5 +121,5 @@ test("Workflow: genau ein Schritt Heartbeat Nachtlauf hinter der Prüfung, nur b
   assert.equal(WORKFLOW.match(/- name: Heartbeat/g).length, 1);
   const schritt = WORKFLOW.indexOf("- name: Heartbeat Nachtlauf");
   assert.ok(schritt > WORKFLOW.indexOf("deploy-weg.mjs staging --commit"));
-  assert.ok(schritt < WORKFLOW.indexOf("  lastlauf:\n"));
+  assert.ok(schritt < WORKFLOW.indexOf("\n  lastlauf:\n"));
 });
