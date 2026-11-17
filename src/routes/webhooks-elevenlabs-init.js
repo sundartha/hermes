@@ -200,7 +200,7 @@ function handleInit({ req, res, deps }) {
 
 function fehlerNachricht(err) {
   if (typeof err !== "object" || err === null || !("message" in err)) return "";
-  return String(err.message ?? "");
+  return typeof err.message === "string" ? err.message : "";
 }
 
 export function makeElevenLabsInitWebhookRoutes({ store, config, bridges, now = Date.now, outboundInitInhalt, vorspannText }) {
