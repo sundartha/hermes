@@ -7,17 +7,18 @@ const LISTE = (await ausgelieferteWidgets()).calls;
 const ANRUFE = 20;
 const MIN_ZEILENHOEHE_PX = 14 + 22 + 14;
 
+function paar(eintrag) {
+  const trenner = eintrag.indexOf(":");
+  return [eintrag.slice(0, trenner).trim(), eintrag.slice(trenner + 1).trim()];
+}
+
 function regelWerte(selektor) {
   const css = [...LISTE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
   const start = css.indexOf(selektor + "{");
   assert.notEqual(start, -1, "Regel " + selektor + " fehlt");
-  return Object.fromEntries(
-    css
-      .slice(start + selektor.length + 1, css.indexOf("}", start))
-      .split(";")
-      .filter(Boolean)
-      .map((e) => [e.slice(0, e.indexOf(":")).trim(), e.slice(e.indexOf(":") + 1).trim()]),
-  );
+  const koerper = css.slice(start + selektor.length + 1, css.indexOf("}", start));
+  const paare = koerper.split(";").filter(Boolean);
+  return Object.fromEntries(paare.map(paar));
 }
 
 test("widget-anrufliste-hoehe: die Liste mit 20 Anrufen hat eine feste Obergrenze und scrollt intern", () => {
