@@ -29,16 +29,6 @@ function stubFetch(response) {
 
 const { withBlankedConfig } = makeConfigOverrides(config);
 
-test("originateCall (TeXML): nutzt weiterhin die TeXML-connection_id in der URL", async () => {
-  const calls = stubFetch({ json: { data: { sid: "CA1" } } });
-  await telnyxVoice.originateCall({
-    from: "+13125550100",
-    to: "+4917312345678",
-    url: "https://agent.test/voice/outbound?callId=call_1",
-  });
-  assert.equal(calls[0].url, `${API_BASE}/v2/texml/calls/${CONNECTION_ID}`);
-});
-
 test("endCallViaCallControl: /v2/calls/<id>/actions/hangup, POST", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.endCallViaCallControl("cc_1");

@@ -36,69 +36,6 @@ function stubFetch(response = {}) {
 const authOf = ({ opts }) => opts.headers.Authorization;
 const FORM = "application/x-www-form-urlencoded";
 
-test("originateCall: sendet Formular mit allen Feldern an die Verbindung und liefert die Sid", async () => {
-  const calls = stubFetch({ json: { data: { sid: "sid_1" } } });
-  const res = await voice.originateCall({
-    from: "+4930123456",
-    to: "+4915112345678",
-    url: "https://agent.test/voice",
-    statusCallback: "https://agent.test/status",
-    statusCallbackEvent: ["answered", "completed"],
-    method: "POST",
-    timeLimit: 600,
-  });
-  assert.deepEqual(res, { sid: "sid_1" });
-  const [anfrage] = calls;
-  assert.equal(anfrage.url, `${API_BASE}/v2/texml/calls/${CONNECTION_ID}`);
-  assert.equal(anfrage.opts.method, "POST");
-  assert.equal(anfrage.opts.headers.Authorization, `Bearer ${API_KEY}`);
-  assert.equal(anfrage.opts.headers["Content-Type"], FORM);
-  assert.equal(
-    anfrage.body,
-    "From=%2B4930123456&To=%2B4915112345678&Url=https%3A%2F%2Fagent.test%2Fvoice" +
-      "&StatusCallback=https%3A%2F%2Fagent.test%2Fstatus&UrlMethod=POST&StatusCallbackMethod=POST" +
-      "&StatusCallbackEvent=answered&StatusCallbackEvent=completed&TimeLimit=600",
-  );
-});
-
-test("originateCall: ohne optionale Felder bleibt das Formular schlank, Sid auch aus call_sid", async () => {
-  const calls = stubFetch({ json: { call_sid: "sid_2" } });
-  const res = await voice.originateCall({ from: "+49301", to: "+49302", url: "https://agent.test/v" });
-  assert.deepEqual(res, { sid: "sid_2" });
-  assert.equal(calls[0].body, "From=%2B49301&To=%2B49302&Url=https%3A%2F%2Fagent.test%2Fv");
-});
-
-test("originateCall: Maschinenerkennung haengt Modus und Frist an, nur wenn sie eingeschaltet ist", async () => {
-  const calls = stubFetch({ json: { sid: "sid_3" } });
-  const anruf = { from: "+49301", to: "+49302", url: "https://agent.test/v" };
-  await withConfig("machineDetection", { enabled: true, timeoutS: 25 }, () => voice.originateCall(anruf));
-  await withConfig("machineDetection", { enabled: false, timeoutS: 25 }, () => voice.originateCall(anruf));
-  assert.match(calls[0].body, /&AnsweringMachineDetection=detect&MachineDetectionTimeout=25$/);
-  assert.doesNotMatch(calls[1].body, /AnsweringMachineDetection|MachineDetectionTimeout/);
-});
-
-test("originateCall: fehlende Konfiguration und HTTP-Fehler werfen, ohne zu wählen", async () => {
-  const calls = stubFetch();
-  const anruf = { from: "+49301", to: "+49302", url: "https://agent.test/v" };
-  await withConfig("telnyxApiKey", "", () =>
-    assert.rejects(() => voice.originateCall(anruf), { message: "Telnyx originateCall: TELNYX_API_KEY fehlt" }),
-  );
-  await withConfig("telnyxConnectionId", "", () =>
-    assert.rejects(() => voice.originateCall(anruf), { message: "Telnyx originateCall: TELNYX_CONNECTION_ID fehlt" }),
-  );
-  assert.equal(calls.length, 0);
-  stubFetch({ ok: false, status: 400, json: { errors: [{ code: "10015", title: "Ungueltig" }] } });
-  await assert.rejects(
-    () => voice.originateCall(anruf),
-    (err) => {
-      assert.equal(err.message, "Telnyx originateCall fehlgeschlagen: HTTP 400 (10015 Ungueltig)");
-      assert.equal(err.providerStatus, 400);
-      assert.equal(err.providerCode, "10015");
-      return true;
-    },
-  );
-});
-
 test("endCall und redirectCall: aendern den TeXML-Anruf mit genauem Formular und Frist", async () => {
   const calls = stubFetch();
   await voice.endCall("CA_1");

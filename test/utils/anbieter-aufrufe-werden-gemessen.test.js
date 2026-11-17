@@ -277,7 +277,6 @@ test("B4: ein Status-Webhook CallStatus=completed erzeugt keinen Telnyx-Zaehler"
 });
 
 const VORGAENGE = [
-  ["anruf-starten", () => voiceControl("telnyx").originateCall({})],
   ["anruf-beenden", () => voiceControl("telnyx").endCall("CAx")],
   ["anruf-beenden-callcontrol", () => voiceControl("telnyx").endCallViaCallControl("ccx")],
   ["anruf-umleiten", () => voiceControl("telnyx").redirectCall("CAx", "https://example.test/x")],

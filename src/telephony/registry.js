@@ -12,9 +12,6 @@ import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 import crypto from "node:crypto";
 
 const fakeVoice = {
-  async originateCall() {
-    return { sid: `fake_${crypto.randomBytes(8).toString("hex")}` };
-  },
   async endCall() {},
   async endCallViaCallControl() {},
   async dialCallControl() {
