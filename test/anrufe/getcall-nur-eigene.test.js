@@ -198,3 +198,45 @@ test("H7c2b3-12: nach einer gescheiterten und einer folgenden gelungenen Lesung 
   assert.deepEqual(ids(await b.activeCallsForSql(BOOTSTRAP_TENANT_ID)), []);
   assert.deepEqual(b.activeCallsFor(BOOTSTRAP_TENANT_ID), []);
 });
+
+test("H7c2b3-13: der Abbruch-Weg ueber den Traeger legt einen von der anderen Instanz beendeten Anruf nicht noch einmal auf", async () => {
+  const { store: a, runner } = await makePgTestStore();
+  const fremd = await legeAnrufAn(a, { twilioSid: ANBIETER_ID });
+  const b = await zweiteInstanz(runner);
+  a.setCallEndedAt(fremd.id, "completed", new Date().toISOString());
+  await a.persistCall(fremd.id);
+  const auflegen = [];
+  const endCarrierCall = async (callId) => {
+    const call = b.getCall(callId);
+    if (call) auflegen.push(call.twilioSid);
+  };
+  await endCarrierCall(fremd.id);
+  assert.equal(auflegen.length, 0);
+});
+
+test("H7c2b3-14: Geld-Wache und Reserve-Freigabe dieser Instanz beenden einen laufenden Anruf der anderen Instanz nicht mit der Fremdkopie", async () => {
+  const { store: a, runner } = await makePgTestStore();
+  const fremd = await legeAnrufAn(a, { reserveCents: 40, twilioSid: ANBIETER_ID });
+  const b = await zweiteInstanz(runner);
+  const beendet = [];
+  const freigegeben = [];
+  const treffer = { callId: fremd.id, tenantId: BOOTSTRAP_TENANT_ID, faelligAt: new Date(Date.now() - 60_000).toISOString(), versuche: 0 };
+  const lauf = makeFristenLauf({
+    store: {
+      getCall: b.getCall,
+      attachActiveCall: b.attachActiveCall,
+      faelligeFristen: async () => [treffer],
+      setzeGeldFrist: async () => {},
+      setzeReserveFrist: async () => {},
+    },
+    beende: async () => {},
+    limitJeMandant: 5,
+    leaseMs: 15_000,
+    geld: { blockingAxisFor: async () => false, jetzt: () => Date.now(), intervalMs: 15_000, beende: async (call) => beendet.push(call) },
+    reserve: { freigeben: async (call) => freigegeben.push(call) },
+  });
+  assert.deepEqual(await lauf.geldTakt(), { beendet: 0, offen: 0, gelesen: true });
+  assert.deepEqual(beendet, []);
+  assert.deepEqual(await lauf.reserveTakt(), { beendet: 1, offen: 0, gelesen: true });
+  assert.deepEqual(freigegeben, [{ id: fremd.id, tenantId: BOOTSTRAP_TENANT_ID }]);
+});
