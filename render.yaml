@@ -28,10 +28,6 @@ services:
         value: ""
       - key: TELNYX_ACCOUNT_SID
         sync: false
-      - key: TELNYX_SIP_TRUNK_USERNAME
-        sync: false
-      - key: TELNYX_SIP_TRUNK_PASSWORD
-        sync: false
       - key: TELNYX_ELEVENLABS_VOICE_ID
         sync: false
       - key: ELEVENLABS_PLAY_TTS_ENABLED
@@ -58,8 +54,6 @@ services:
         sync: false
       - key: ELEVENLABS_AGENT_PHONE_NUMBER_ID
         sync: false
-      - key: ELEVENLABS_NUMBER_REGISTRATION_ENABLED
-        value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
       - key: ELEVENLABS_ENVIRONMENT

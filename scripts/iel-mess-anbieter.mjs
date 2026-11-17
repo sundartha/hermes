@@ -172,8 +172,15 @@ export function wegwerfKoerperAmAgenten({ setup, agentId }) {
 
 export function wegwerfKoerperNurAusgehend({ setup, agentId, zugang }) {
   return {
-    ...registrierungsKoerper({ e164: setup.el_nummer, numberId: setup.label, agentId, sipUser: zugang.username, sipPasswort: zugang.password }),
+    ...registrierungsKoerper({ e164: setup.el_nummer, numberId: setup.label, agentId }),
     label: setup.label,
+    outbound_trunk_config: {
+      address: "sip.telnyx.com",
+      transport: "tcp",
+      media_encryption: "disabled",
+      credentials: { username: zugang.username, password: zugang.password },
+      enabled_codecs: ["PCMU/8000"],
+    },
   };
 }
 

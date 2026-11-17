@@ -8,8 +8,6 @@ export function rohwerteTelephony(env, { boolEnv, numEnv, stripTrailingSlash }) 
     telnyxConnectionId: env.TELNYX_CONNECTION_ID || "",
     telnyxCallControlAppId: (env.TELNYX_CALL_CONTROL_APP_ID || "").trim(),
     telnyxAccountSid: env.TELNYX_ACCOUNT_SID || "",
-    telnyxSipTrunkUsername: (env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
-    telnyxSipTrunkPassword: env.TELNYX_SIP_TRUNK_PASSWORD || "",
     machineDetection: {
       enabled: boolEnv("MACHINE_DETECTION_ENABLED", env.MACHINE_DETECTION_ENABLED, {
         fallback: false,

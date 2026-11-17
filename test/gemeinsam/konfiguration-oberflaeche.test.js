@@ -186,8 +186,6 @@ telephony.telnyxApiKey
 telephony.telnyxConnectionId
 telephony.telnyxCallControlAppId
 telephony.telnyxPublicKey
-telephony.telnyxSipTrunkPassword
-telephony.telnyxSipTrunkUsername
 telnyx.telnyxElevenLabs
 tenancy.assistantContextEnabled
 tenancy.consultEnabled

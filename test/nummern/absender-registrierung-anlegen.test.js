@@ -4,7 +4,7 @@ import { provisionNumber } from "../../src/onboarding.js";
 import { makeDefaultState, registerTenant, requestNumber, findNumber } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { fakeProvisioner } from "../helpers.js";
-import { makeElSipRegistrar, registrierungsKoerper } from "../../src/elevenlabs/nummern-registrierung.js";
+import { fehlendeZugangsdaten, makeElSipRegistrar, registrierungsKoerper } from "../../src/elevenlabs/nummern-registrierung.js";
 
 const EL_ACCOUNT = Object.freeze({ apiKey: "xi_test_key", apiBase: "https://api.elevenlabs.io", agentId: "agent_x" });
 const SIP_USER = "sip_user_test";
@@ -60,13 +60,7 @@ test("C1: frische DID, leere Anbieterliste -> genau 1 POST mit byte-genauem Koer
   assert.equal(posts[0].body.phone_number, TEST_DID);
   assert.equal(posts[0].body.label, "hermes-num_test1");
   assert.equal(posts[0].body.provider, "sip_trunk");
-  assert.deepEqual(posts[0].body.outbound_trunk_config, {
-    address: "sip.telnyx.com",
-    transport: "tcp",
-    media_encryption: "disabled",
-    credentials: { username: SIP_USER, password: SIP_PASSWORT },
-    enabled_codecs: ["PCMU/8000"],
-  });
+  assert.equal(posts[0].body.outbound_trunk_config, undefined, "kein Ausgangs-Trunk");
   assert.equal(posts[0].body.inbound_trunk_config, undefined, "keine Inbound-Freigabe");
 });
 
@@ -126,34 +120,27 @@ test("C6: das SIP-Passwort erscheint in keiner Log-/Warn-Zeile", async () => {
   for (const zeile of [...logs, ...warns]) assert.ok(!zeile.includes(SIP_PASSWORT), `Passwort-Leak: ${zeile}`);
 });
 
-test("C7: leere SIP-Zugangsdaten -> ensureRegistration wirft VOR jedem Netzzugriff, 0 Anbieter-Aufrufe", async () => {
-  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
-  const registrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: "", sipPasswort: "", fetchImpl });
-  await assert.rejects(
-    () => registrar.ensureRegistration({ e164: TEST_DID, numberId: "num_test7" }),
-    /TELNYX_SIP_TRUNK_USERNAME fehlt/,
-  );
-  assert.equal(calls.length, 0, "kein einziger Anbieter-Aufruf, auch kein GET");
-});
-
-test("C8: leere SIP-Zugangsdaten ueber provisionNumber -> DID bleibt active, Feld bleibt leer, benannte Warn-Zeile, 0 Anbieter-Aufrufe", async () => {
-  const { state, numberId } = seedRequested();
-  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
-  const sipRegistrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: "", sipPasswort: "", fetchImpl });
-  const { logger, warns } = captureLogger();
-  const prov = fakeProvisioner();
-  const result = await provisionNumber(state, { provisioner: prov, sipRegistrar, logger }, { numberId, ...ARGS });
-  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(calls.length, 0, "kein einziger Anbieter-Aufruf");
-  assert.equal(findNumber(state, numberId).providerAgentPhoneNumberId, undefined);
-  assert.equal(warns.length, 1, "genau eine benannte Warn-Zeile");
-  assert.match(warns[0], /FEHLGESCHLAGEN/);
-});
-
 test("C9 (Positiv-Kontrolle): vollstaendige Zugangsdaten -> genau 1 POST wie zuvor", async () => {
   const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
   const registrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: SIP_USER, sipPasswort: SIP_PASSWORT, fetchImpl });
   const ergebnis = await registrar.ensureRegistration({ e164: TEST_DID, numberId: "num_test9" });
   assert.deepEqual(ergebnis, { phoneNumberId: "phnum_new", angelegt: true });
   assert.equal(calls.filter((eintrag) => eintrag.method === "POST").length, 1);
+});
+
+test("C10: ohne SIP-Zugang wird die DID angelegt, mit genau diesem Koerper und ohne Ausgangs-Trunk", async () => {
+  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
+  const registrar = makeElSipRegistrar({ el: EL_ACCOUNT, fetchImpl });
+  const ergebnis = await registrar.ensureRegistration({ e164: TEST_DID, numberId: "num_test10" });
+  assert.deepEqual(ergebnis, { phoneNumberId: "phnum_new", angelegt: true });
+  const posts = calls.filter((eintrag) => eintrag.method === "POST");
+  assert.deepEqual(posts.map((eintrag) => eintrag.body), [
+    { phone_number: TEST_DID, label: "hermes-num_test10", provider: "sip_trunk", agent_id: "agent_x" },
+  ]);
+});
+
+test("C11: Zugangsdaten verlangen nur Schluessel und Agent von ElevenLabs", () => {
+  assert.equal(fehlendeZugangsdaten({ el: EL_ACCOUNT }), null);
+  assert.equal(fehlendeZugangsdaten({ el: { ...EL_ACCOUNT, apiKey: "" } }), "ELEVENLABS_API_KEY fehlt");
+  assert.equal(fehlendeZugangsdaten({ el: { ...EL_ACCOUNT, agentId: "" } }), "ELEVENLABS_AGENT_ID fehlt");
 });

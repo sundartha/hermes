@@ -10,10 +10,6 @@ import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inboun
 import { INBOUND_EL_SCOPE } from "./inbound-scope.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 
-const TRUNK_ADRESSE = "sip.telnyx.com";
-const TRUNK_TRANSPORT = "tcp";
-const TRUNK_MEDIA_ENCRYPTION = "disabled";
-const TRUNK_CODECS = Object.freeze(["PCMU/8000"]);
 const KEINE_NUMMER = "(keine Nummer)";
 
 export const REGISTRIERUNG_KLASSE = Object.freeze({
@@ -22,33 +18,24 @@ export const REGISTRIERUNG_KLASSE = Object.freeze({
   OHNE_INBOUND: "ohne_inbound",
 });
 
-export function registrierungsKoerper({ e164, numberId, agentId, sipUser, sipPasswort }) {
+export function registrierungsKoerper({ e164, numberId, agentId }) {
   return {
     phone_number: e164,
     label: `hermes-${numberId}`,
     provider: "sip_trunk",
     agent_id: agentId,
-    outbound_trunk_config: {
-      address: TRUNK_ADRESSE,
-      transport: TRUNK_TRANSPORT,
-      media_encryption: TRUNK_MEDIA_ENCRYPTION,
-      credentials: { username: sipUser, password: sipPasswort },
-      enabled_codecs: [...TRUNK_CODECS],
-    },
   };
 }
 
-export function fehlendeZugangsdaten({ el, sipUser, sipPasswort }) {
+export function fehlendeZugangsdaten({ el }) {
   if (!el?.apiKey) return "ELEVENLABS_API_KEY fehlt";
   if (!el?.agentId) return "ELEVENLABS_AGENT_ID fehlt";
-  if (!sipUser) return "TELNYX_SIP_TRUNK_USERNAME fehlt";
-  if (!sipPasswort) return "TELNYX_SIP_TRUNK_PASSWORD fehlt";
   return null;
 }
 
-export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = anfrage, logger = console }) {
+export function makeElSipRegistrar({ el, fetchImpl = anfrage, logger = console }) {
   async function ensureRegistration({ e164, numberId }) {
-    const grund = fehlendeZugangsdaten({ el, sipUser, sipPasswort });
+    const grund = fehlendeZugangsdaten({ el });
     if (grund) throw new Error(`ElevenLabs-Nummernregistrierung: ${grund}`);
     const bestand = (await listPhoneNumbers({ fetchImpl, account: el })).find(
       (eintrag) => eintrag.phone_number === e164,
@@ -57,7 +44,7 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = anfra
     const { phoneNumberId } = await createPhoneNumber({
       fetchImpl,
       account: el,
-      body: registrierungsKoerper({ e164, numberId, agentId: el.agentId, sipUser, sipPasswort }),
+      body: registrierungsKoerper({ e164, numberId, agentId: el.agentId }),
     });
     if (!phoneNumberId)
       throw new Error("ElevenLabs-Nummernregistrierung lieferte keine phone_number_id");
@@ -76,19 +63,9 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = anfra
   return { ensureRegistration, removeRegistration };
 }
 
-function elNummernRegistrierungAktiv(config) {
-  if (!config.provisioning.provisioningEnabled) return false;
-  const outbound = config.voice.elevenLabsOutbound;
-  return Boolean(outbound?.numberRegistrationEnabled);
-}
-
 export function sipRegistrarWennAktiv(config) {
-  if (!elNummernRegistrierungAktiv(config)) return undefined;
-  return makeElSipRegistrar({
-    el: config.voice.elevenLabsOutbound,
-    sipUser: config.telephony.telnyxSipTrunkUsername,
-    sipPasswort: config.telephony.telnyxSipTrunkPassword,
-  });
+  if (!config.provisioning.provisioningEnabled) return undefined;
+  return makeElSipRegistrar({ el: config.voice.elevenLabsOutbound });
 }
 
 export function registrierungsKlasse(registrierung) {
@@ -156,7 +133,7 @@ export function inboundTrunkKoerper({ benutzer, passwort, e164 }) {
 }
 
 export function inboundTrunkSchreibenErlaubt(config) {
-  if (!elNummernRegistrierungAktiv(config)) return false;
+  if (!config.provisioning.provisioningEnabled) return false;
   if (config.voice.elevenLabsInbound?.scope !== INBOUND_EL_SCOPE.REGISTRIERTE_DIDS) return false;
   return trunkSweepHindernis(config.voice) === null;
 }

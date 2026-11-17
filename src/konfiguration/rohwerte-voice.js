@@ -42,11 +42,6 @@ function playTts(env, { boolEnv, numEnv }, zugang) {
 function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   return {
     agentId: (env.ELEVENLABS_AGENT_ID || "").trim(),
-    numberRegistrationEnabled: boolEnv(
-      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
-      env.ELEVENLABS_NUMBER_REGISTRATION_ENABLED,
-      { fallback: false },
-    ),
     resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", env.ELEVENLABS_RESULT_POLL_MS, {
       fallback: 5000,
       min: 100,
