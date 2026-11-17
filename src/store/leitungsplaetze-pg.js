@@ -35,7 +35,7 @@ export function makePostgresLeitungsplaetze(runner) {
 
   const inTransaktion = (arbeit) => {
     let timer;
-    const frist = new Promise((_, abgelehnt) => {
+    const frist = new Promise((aufgeloest, abgelehnt) => {
       timer = setTimeout(
         () => abgelehnt(new Error(`Frist von ${LEITUNGSPLATZ_DB_FRIST_MS} ms ueberschritten`)),
         LEITUNGSPLATZ_DB_FRIST_MS,
