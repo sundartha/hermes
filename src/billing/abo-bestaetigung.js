@@ -96,11 +96,19 @@ async function sendeAboBestaetigung({ bereiche, accounts, mailer, tenant, planSl
 
 const BESTAETIGBAR = Object.freeze(new Set(["already_subscribed"]));
 
-export async function bestaetigeAbo(deps, ergebnis) {
-  if (!deps.mailer) return;
-  if (ergebnis.ok !== true && !BESTAETIGBAR.has(ergebnis.reason)) return;
+async function bestaetigeOffenesAbo(deps) {
   const { subscriptionId } = await deps.bereiche.konto.tenantSubscription(deps.tenant);
   if (!subscriptionId) return;
   if ((await deps.bereiche.konto.aboBestaetigungFuer(deps.tenant)) === subscriptionId) return;
   if (await sendeAboBestaetigung(deps)) await deps.bereiche.konto.setAboBestaetigungFuer(deps.tenant, subscriptionId);
+}
+
+export async function bestaetigeAbo(deps, ergebnis) {
+  if (!deps.mailer) return;
+  if (ergebnis.ok !== true && !BESTAETIGBAR.has(ergebnis.reason)) return;
+  try {
+    await bestaetigeOffenesAbo(deps);
+  } catch (err) {
+    console.error(`[abo-bestaetigung] Bestaetigung nicht abgeschlossen tenant=${deps.tenant}: ${fehlerText(err)}`);
+  }
 }
