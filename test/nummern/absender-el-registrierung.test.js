@@ -146,7 +146,7 @@ async function withElevenLabs(run, extraEnv = {}, optionen = {}) {
   }
 }
 
-async function withVorspann(run) {
+async function withVorspann(run, extraEnv = {}) {
   const mock = await startElevenLabsMock();
   const telnyx = await starteAttrappe();
   const srv = await startServer({
@@ -154,6 +154,7 @@ async function withVorspann(run) {
       ...vorspannUmgebung({ attrappe: telnyx, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "b" }),
       ...vorspannMandantenUmgebung([TENANT_A, TENANT_B]),
       ...EL_ENV,
+      ...extraEnv,
       ELEVENLABS_API_BASE: mock.url,
     },
     seed: seedZweiTenants(),
@@ -491,5 +492,19 @@ test("ANR: lehnt der Anbieter den Start ab, steht die Absenderquelle tenant_did 
     },
     {},
     { startAblehnung: { httpStatus: 422, body: { detail: "abgelehnt" } } },
+  );
+});
+
+test("B7: ohne Telnyx-Uebergabe und mit Vorspann-Schalter bricht der Anruf ohne Registrierung ab und behaelt das Kostenprofil el_convai_sip", async () => {
+  await withVorspann(
+    async ({ srv, telnyx }) => {
+      await placeCall(srv, SUBJECT_B);
+      const call = ownCall(srv);
+      assert.equal(call.status, "failed");
+      assert.equal(call.fromRegistrationSource, "abgebrochen:keine_eigene_registrierung");
+      assert.equal(call.costProfile, "el_convai_sip");
+      assert.equal(telnyx.waehlaufrufe.length, 0);
+    },
+    { ELEVENLABS_OUTBOUND_UEBER_TELNYX: "false" },
   );
 });
