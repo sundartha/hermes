@@ -39,14 +39,16 @@ interface WegAnruf {
   from: string;
 }
 
+type WegArt = keyof typeof KOSTENPROFIL_FUER_WEG;
+
 interface Wahl {
-  weg: string;
+  weg: WegArt;
   grund: string | null;
 }
 
 const LOG_PREFIX = "[el-outbound-weg]";
 
-function weg(art: string, grund: string | null = null): Wahl {
+function weg(art: WegArt, grund: string | null = null): Wahl {
   return { weg: art, grund };
 }
 

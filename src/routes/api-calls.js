@@ -49,6 +49,14 @@ import {
   HTTP_SERVICE_UNAVAILABLE,
 } from "../utils/http.ts";
 
+const sprachePruefen = supportedLanguageOf;
+const sprachtexteFuer = localeFor;
+const torePruefen = runOutboundGates;
+const vorabBriefing = fetchPrecallBriefing;
+const anrufSprache = callLocaleOf;
+const eroeffnungHolen = fetchOpeningLine;
+const KONSULT_OFFEN_MS = CONSULT_OPEN_MS;
+
 function contextReceivedMeta(context, config) {
   return {
     active: config.tenancy.assistantContextEnabled,
@@ -122,7 +130,7 @@ function invalidConsultAnswerStatus(status) {
 
 async function ackWorkingConsult({ bereiche, audit, req, res, call, eventId }) {
   const { outcome } = await bereiche.rueckfrage.ackConsult(call.id, { eventId });
-  audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
+  audit("consult_acked", req, `call=${call.id} event=${String(eventId)} ergebnis=${outcome}`);
   if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: 0 });
 }
@@ -137,12 +145,12 @@ async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, an
     eventId,
     facts: fakten,
     nowMs: Date.now(),
-    openMs: CONSULT_OPEN_MS,
+    openMs: KONSULT_OFFEN_MS,
   });
   audit(
     "consult_answered",
     req,
-    `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${String(mergedFacts)}`,
+    `call=${call.id} event=${String(eventId)} ergebnis=${outcome} fakten=${String(mergedFacts)}`,
   );
   if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: mergedFacts });
@@ -354,12 +362,12 @@ export function makeCallRoutes({
     if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
     if (isTrunkZeroFormatError(to)) return res.status(HTTP_BAD_REQUEST).json({ error: E164_FORMAT_ERROR });
 
-    const requestedLanguage = b.language ? supportedLanguageOf(b.language) : null;
+    const requestedLanguage = b.language ? sprachePruefen(b.language) : null;
     if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(unsupportedLanguageBody());
 
     const callId = newId("call");
     const ctx = { req, to, objective, b, callId };
-    const denial = await runOutboundGates({ gates: outboundGates, ctx });
+    const denial = await torePruefen({ gates: outboundGates, ctx });
     if (denial) {
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
       return res.status(denial.status).json(denialResponseBody(denial));
@@ -380,7 +388,7 @@ export function makeCallRoutes({
       });
 
       if (!ctx.context) {
-        const briefed = await fetchPrecallBriefing({
+        const briefed = await vorabBriefing({
           objective: ctx.objective,
           ownerNotes: b.briefing,
           constraints: b.constraints,
@@ -394,16 +402,16 @@ export function makeCallRoutes({
       }
 
       const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
-      const callLocale = callLocaleOf({
+      const callLocale = anrufSprache({
         store,
         config,
         call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
         ownerName,
       });
-      const opening = await fetchOpeningLine({
+      const opening = await eroeffnungHolen({
         objective: ctx.objective,
         tenantId: ctx.tenantId,
-        locale: localeFor(callLocale.language),
+        locale: sprachtexteFuer(callLocale.language),
         calleeIsOwner: calleeIsOwnerOfThisCall,
       });
       const openingLine = opening.line;
