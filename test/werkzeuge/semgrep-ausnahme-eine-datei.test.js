@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -11,7 +11,9 @@ const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const REGEL = "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack";
 const DATEI = "src/tts/directive-synth.js";
 
-const AUSNAHME_ZEILE = readFileSync(DATEI, "utf8").split("\n").findIndex((zeile) => zeile.includes("token === null")) + 1;
+const AUSNAHME_ZEILE = 3;
+const QUELLE = "a\nb\n  if (token === null) {\nd";
+const lies = () => QUELLE;
 
 const befund = (path, check_id, line = path === DATEI ? AUSNAHME_ZEILE : 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer", lines: "requires login" } });
 
@@ -21,22 +23,22 @@ test("Die Ausnahme gilt nur fuer die Datei der Ablage und die Timing-Regel", () 
 });
 
 test("Befund der Timing-Regel in der Ablage-Datei wird nicht gemeldet", () => {
-  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL)]), []);
+  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL)], lies), []);
 });
 
 test("Dieselbe Regel in jeder anderen Datei bleibt ein Befund", () => {
   const andere = [befund("src/auth.js", REGEL), befund("src/tts/store.js", REGEL), befund("test/src/tts/directive-synth.js", REGEL)];
-  assert.deepEqual(pruefen.semgrepOhneAusnahme(andere), andere);
+  assert.deepEqual(pruefen.semgrepOhneAusnahme(andere, lies), andere);
 });
 
 test("Jede andere Regel in der Ablage-Datei bleibt ein Befund", () => {
   const andere = [befund(DATEI, "javascript.lang.security.audit.eval"), befund(DATEI, `${REGEL}.zwei`)];
-  assert.deepEqual(pruefen.semgrepOhneAusnahme(andere), andere);
+  assert.deepEqual(pruefen.semgrepOhneAusnahme(andere, lies), andere);
 });
 
 test("Ausnahme und Befund gemischt: nur der Befund bleibt", () => {
   const echt = befund("src/auth.js", REGEL, 3);
-  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL), echt]), [echt]);
+  assert.deepEqual(pruefen.semgrepOhneAusnahme([befund(DATEI, REGEL), echt], lies), [echt]);
 });
 
 function semgrepSchritt(ergebnisse, status) {
@@ -45,7 +47,9 @@ function semgrepSchritt(ergebnisse, status) {
   const antwort = JSON.stringify({ results: ergebnisse, errors: [] });
   writeFileSync(programm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1; exit 0; fi\nprintf '%s' '${antwort}'\nexit ${status}\n`);
   chmodSync(programm, 0o755);
-  const lauf = spawnSync("node", [PRUEFEN, "semgrep", "--basis", "HEAD"], { encoding: "utf8", env: { ...process.env, PATH: `${ordner}:${process.env.PATH}` } });
+  mkdirSync(join(ordner, "src/tts"), { recursive: true });
+  writeFileSync(join(ordner, DATEI), QUELLE);
+  const lauf = spawnSync("node", [PRUEFEN, "semgrep", "--basis", "HEAD"], { encoding: "utf8", cwd: ordner, env: { ...process.env, PATH: `${ordner}:${process.env.PATH}` } });
   return { status: lauf.status, ausgabe: lauf.stdout };
 }
 
