@@ -46,6 +46,26 @@ export async function pgBossUmgebung(t, optionen = {}) {
   return { db, queue: weitereQueue(), weitereQueue };
 }
 
+export async function pgliteUmgebung(t, optionen = {}) {
+  const queues = [];
+  t.after(async () => {
+    await Promise.all(queues.map((queue) => queue.stop()));
+  });
+  const eingebettet = await neuePglite();
+  const db = {
+    art: "pglite",
+    queueOptionen: { bossOptions: { db: fromPglite(eingebettet), backend: "pglite" } },
+    abfragen: (sql, parameter) => eingebettet.query(sql, parameter),
+  };
+  const weitereQueue = (weitere = {}) =>
+    withConfigOverrides({ queueBackend: "pgboss" }, () => {
+      const queue = createQueue({ ...db.queueOptionen, ...optionen, ...weitere });
+      queues.push(queue);
+      return queue;
+    });
+  return { db, queue: weitereQueue(), weitereQueue };
+}
+
 export async function wackeligeWarteschlange(t) {
   const queues = [];
   t.after(async () => {
