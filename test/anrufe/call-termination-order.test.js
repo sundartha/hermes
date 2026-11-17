@@ -200,7 +200,7 @@ before(async () => {
   ({ withConfigNamespaces } = await import("../config-namespaces-helper.js"));
   store = await import("../../src/store.js");
   ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
-  ({ makeVoiceRoutes } = await import("../../src/routes/voice.js"));
+  ({ makeVoiceRoutes } = await import("../../src/routes/voice.ts"));
   ({ webhookEvents } = await import("../../src/telephony/registry.js"));
 });
 
