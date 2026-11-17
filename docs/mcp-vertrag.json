@@ -1344,6 +1344,7 @@
           "commitments",
           "counterparty_commitments",
           "next_step",
+          "next_steps",
           "objective_achieved",
           "open_points",
           "outcome",
@@ -1391,6 +1392,32 @@
               "null",
               "string"
             ]
+          },
+          "next_steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "at",
+                "text",
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -1942,6 +1969,12 @@
       "art": "bruch",
       "begruendung": "Anrufliste #4998 (Haeppchen 1): calls.html begrenzt die Liste auf 480 px mit internem Scrollen; nur das Anruflisten-Widget aendert sich und bekommt calls v26. Noch nichts veroeffentlicht.",
       "stand_sha256": "89e2b0e8ef7e1df1f098096867b4d5c5b536837422541c32657512d6168c30b5"
+    },
+    {
+      "datum": "2026-11-17",
+      "art": "bruch",
+      "begruendung": "Nächste Schritte #4996 (Häppchen 3): get_call_result liefert next_steps als Liste von Art, Text und optionalem Zeitpunkt neben dem unveränderten next_step; das outputSchema des Werkzeugs bekommt die neue Pflicht-Ausgabe-Eigenschaft. Noch nichts veröffentlicht.",
+      "stand_sha256": "ef27b3cccc6b1e34fb8b44291a6ba1575e9aa3c49378ae9f70cdb8d27e4753d3"
     }
   ]
 }
