@@ -11,7 +11,7 @@ const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const REGEL = "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack";
 const DATEI = "src/tts/directive-synth.js";
 
-const befund = (path, check_id, line = 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer" } });
+const befund = (path, check_id, line = 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer", lines: "if (token === null) {" } });
 
 test("Die Ausnahme gilt nur fuer die Datei der Ablage und die Timing-Regel", () => {
   assert.equal(pruefen.SEMGREP_AUSNAHME.datei, DATEI);
