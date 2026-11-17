@@ -1,4 +1,4 @@
-import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE } from "../begriffe/sprache-zeit.js";
+import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, TIMEZONE_FOR_COUNTRY } from "../begriffe/sprache-zeit.js";
 import { languageForCountry } from "../i18n/locales.js";
 
 export function normCountry(raw) {
@@ -13,12 +13,6 @@ export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCo
     normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY
   );
 }
-
-export const TIMEZONE_FOR_COUNTRY = Object.freeze({
-  DE: "Europe/Berlin", AT: "Europe/Vienna", CH: "Europe/Zurich",
-  FR: "Europe/Paris", GB: "Europe/London", IE: "Europe/Dublin",
-  US: "America/New_York", CA: "America/Toronto",
-});
 
 export function timezoneForCountry(country) {
   return TIMEZONE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_TIMEZONE;

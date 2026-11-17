@@ -8,7 +8,7 @@ import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.ts";
 import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
-import { newsletterUnsubscribeUrl } from "../newsletter-recipients.ts";
+import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
