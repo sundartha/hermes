@@ -188,7 +188,7 @@ test("Geld-Frist: Nummernkauf mit antwortender Gegenseite sendet an Stripe Frist
   assert.equal(haltung.get("payment_method"), KARTE.paymentMethodId);
   assert.equal(haltung.get("metadata[tenant_ref]"), nummer.tenantId);
   assert.equal(new URLSearchParams(String(einziehen.init.body)).get("amount_to_capture"), haltung.get("amount"));
-  assert.equal(fristen.length, 3, "Haltung, Nummernkauf und Einziehen haben je eine Frist");
+  assert.equal(fristen.length, 4, "Haltung, Nummernkauf, Einziehen und ElevenLabs-Registrierung haben je eine Frist");
   assert.ok(fristen.every((ms) => ms >= NEUE_FRIST_UNTERGRENZE_MS), `Fristen ${fristen} liegen unter 30 s`);
 });
 
