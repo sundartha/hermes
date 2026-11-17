@@ -72,9 +72,9 @@ export async function logout() {
 
 export const BILLING_SETUP_CHECKOUT_PATH = "/api/self-service/billing/setup-checkout";
 
-export async function startBillingSetupCheckout(plan) {
+export async function startBillingSetupCheckout(plan, { widerrufBeginn = false } = {}) {
   const options = { method: "POST" };
-  if (plan !== undefined) options.body = { plan };
+  if (plan !== undefined) options.body = widerrufBeginn === true ? { plan, widerrufBeginn } : { plan };
   const { url } = await apiRequest(BILLING_SETUP_CHECKOUT_PATH, options);
   if (typeof url !== "string" || url === "")
     throw new ApiError(0, "billing setup-checkout: Antwort ohne url");

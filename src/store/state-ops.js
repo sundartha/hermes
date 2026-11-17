@@ -195,6 +195,8 @@ export {
   tenantsForPaymentMethodTypeReconcile,
   setNewsletterConsent,
   tenantNewsletterConsent,
+  setWiderrufBeginn,
+  tenantWiderrufBeginn,
   tenantNewsletterRecipients,
   confirmedNewsletterRecipients,
   dailyNewsletterConfirmMailCount,

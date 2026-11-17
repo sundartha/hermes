@@ -70,6 +70,19 @@ export function tenantNewsletterConsent(state, tenantId) {
   };
 }
 
+export function setWiderrufBeginn(state, tenantId, { at, text }) {
+  const tenant = findTenant(state, tenantId);
+  if (!tenant) throw new Error(`setWiderrufBeginn: Tenant ${tenantId} nicht gefunden`);
+  tenant.widerrufBeginnAt = at;
+  tenant.widerrufBeginnText = text;
+  return tenant;
+}
+
+export function tenantWiderrufBeginn(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
+  return { at: tenant?.widerrufBeginnAt ?? null, text: tenant?.widerrufBeginnText ?? null };
+}
+
 export function tenantNewsletterRecipients(state, tenantId) {
   return findTenant(state, tenantId)?.newsletterRecipients ?? [];
 }

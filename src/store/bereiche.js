@@ -258,6 +258,8 @@ export function speicherBereiche(speicher) {
       setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
+      setWiderrufBeginn: async (tenantId, zustimmung) => speicher.setWiderrufBeginn(tenantId, zustimmung),
+      tenantWiderrufBeginn: async (tenantId) => speicher.tenantWiderrufBeginn(tenantId),
     },
     abgleich: abgleichBereich(speicher),
     kuendigung: kuendigungBereich(speicher),

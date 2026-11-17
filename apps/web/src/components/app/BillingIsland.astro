@@ -90,6 +90,13 @@ import {
        (Muster von #billing-quota-section direkt darueber). -->
   <div id="billing-plans-section" class="billing-section">
     <h3 id="sub-tiles-title" class="billing-section__title" hidden data-i18n="choosePlan">Choose your plan</h3>
+    <div id="sub-consent" class="plan-consent" hidden>
+      <label class="plan-consent__label">
+        <input id="sub-consent-box" type="checkbox" autocomplete="off" aria-describedby="sub-consent-hint" />
+        <span data-i18n="widerrufBeginnLabel">I expressly request that Sundartha begin providing the service before the withdrawal period expires. I am aware that if I withdraw, I will pay a proportionate amount for the service provided up to that point, and that my right of withdrawal expires once the contract has been fully performed.</span>
+      </label>
+      <p id="sub-consent-hint" class="plan-consent__hint" aria-live="polite" data-i18n="widerrufBeginnHint">Please tick the box above to continue to payment.</p>
+    </div>
     <div id="sub-tiles" class="plans" hidden></div>
     <p id="sub-msg" class="billing-msg" hidden></p>
   </div>
@@ -136,6 +143,7 @@ import {
   import {
     planTiles,
     quotaLine,
+    syncWiderrufBeginn,
     wireSubscribe,
     cancelConfirmText,
     cancelStatusLine,
@@ -182,6 +190,11 @@ import {
   const subTilesTitleEl = document.getElementById("sub-tiles-title");
   const subTilesEl = document.getElementById("sub-tiles");
   const subMsgEl = document.getElementById("sub-msg");
+  const subConsentEl = document.getElementById("sub-consent");
+  const subConsent = {
+    box: document.getElementById("sub-consent-box"),
+    hint: document.getElementById("sub-consent-hint"),
+  };
 
   // 312k-P3: die vier festen Kuendigungs-Steuerelemente + Nebenbereiche.
   const cancelBlockEl = document.getElementById("cancel-block");
@@ -261,6 +274,8 @@ import {
     subTilesTitleEl.hidden = !showTiles;
     subTilesEl.hidden = !showTiles;
     subTilesEl.replaceChildren(...(showTiles ? planTiles(document, numberSetupFeeFrom(data)) : []));
+    subConsentEl.hidden = !showTiles;
+    syncWiderrufBeginn(subTilesEl, subConsent);
   }
 
   // 5. 312k-P3: Kuendigungs-Region. NUR mit aktivem Abo sichtbar; cancelAtPeriodEnd
@@ -351,7 +366,7 @@ import {
   // Kein onSubscribed mehr: der Klick verlaesst die Seite Richtung Stripe-Checkout
   // (auch MIT Karte-on-file) - es gibt im Klick-Pfad keine Buchung, die ein Re-Fetch
   // zeigen koennte. Die Rueckkehr laedt die Seite ohnehin neu und meldet ?sub=ok.
-  wireSubscribe(subTilesEl, { onMessage: showSubMsg });
+  wireSubscribe(subTilesEl, { onMessage: showSubMsg, consent: subConsent });
 
   // 312k-P3: die vier festen Kuendigungs-Steuerelemente. onDone re-fetcht denselben Weg
   // wie onSubscribed (der Webhook bestaetigt den geschriebenen Zustand ohnehin kurz

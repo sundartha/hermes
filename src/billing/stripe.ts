@@ -358,6 +358,8 @@ export const stripeBilling = umhuelleVon("stripe", {
     successUrl,
     cancelUrl,
     idempotencyKey,
+    widerrufBeginnAt,
+    widerrufBeginnText,
   }: {
     tenantRef: string;
     customerId: string;
@@ -366,6 +368,8 @@ export const stripeBilling = umhuelleVon("stripe", {
     successUrl: string;
     cancelUrl: string;
     idempotencyKey?: string | undefined;
+    widerrufBeginnAt?: string | undefined;
+    widerrufBeginnText?: string | undefined;
   }) {
     const headers = idempotentHeaders(idempotencyKey);
     const body = new URLSearchParams({
@@ -381,6 +385,8 @@ export const stripeBilling = umhuelleVon("stripe", {
     body.set("metadata[tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][plan_slug]", planSlug);
+    if (widerrufBeginnAt) body.set("metadata[widerruf_beginn_at]", widerrufBeginnAt);
+    if (widerrufBeginnText) body.set("metadata[widerruf_beginn_text]", widerrufBeginnText);
     const res = await anfrage(url(CHECKOUT_SESSIONS_PATH), {
       method: "POST",
       headers,

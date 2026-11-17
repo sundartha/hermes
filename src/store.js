@@ -422,6 +422,8 @@ export const {
   bootstrapTenant,
   setNewsletterConsent,
   tenantNewsletterConsent,
+  setWiderrufBeginn,
+  tenantWiderrufBeginn,
   tenantNewsletterRecipients,
   confirmedNewsletterRecipients,
   dailyNewsletterConfirmMailCount,
