@@ -67,9 +67,20 @@ async function anrufVonAndererInstanz(store, callId, tenantId) {
 
 const leseAnruf = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
 
-const providerStatusOf = (err) => err?.providerStatus;
+function providerStatusOf(err) {
+  const status = Reflect.get(Object(err), "providerStatus");
+  return typeof status === "number" || typeof status === "string" ? status : undefined;
+}
 
-const CONSULT_ABFRAGE = z.object({ after: z.string().catch(null) });
+const nachrichtOf = (fehler) => Reflect.get(Object(fehler), "message");
+
+function beschreibungOf(fehler) {
+  const nachricht = nachrichtOf(fehler);
+  if (nachricht) return nachricht;
+  return String(fehler);
+}
+
+const CONSULT_ABFRAGE = z.object({ after: z.string().nullable().catch(null) });
 const ANRUF_KOERPER = z.object({}).passthrough().catch({});
 const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
@@ -118,18 +129,20 @@ async function ackWorkingConsult({ bereiche, audit, req, res, call, eventId }) {
 
 async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers }) {
   const validated = validateAssistantContext({ key_facts: answers });
-  if (validated.error || !validated.value?.key_facts.length)
-    return res.status(HTTP_BAD_REQUEST).json({ error: validated.error || "answers ist Pflicht" });
+  if ("error" in validated) return res.status(HTTP_BAD_REQUEST).json({ error: validated.error });
+  const fakten = validated.value?.key_facts;
+  if (!Array.isArray(fakten) || !fakten.length)
+    return res.status(HTTP_BAD_REQUEST).json({ error: "answers ist Pflicht" });
   const { outcome, mergedFacts } = await bereiche.rueckfrage.answerConsult(call.id, {
     eventId,
-    facts: validated.value.key_facts,
+    facts: fakten,
     nowMs: Date.now(),
     openMs: CONSULT_OPEN_MS,
   });
   audit(
     "consult_answered",
     req,
-    `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
+    `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${String(mergedFacts)}`,
   );
   if (outcome !== CONSULT_ANSWER.ACCEPTED) return antworteFehler(res, HTTP_CONFLICT, outcome);
   return res.json({ accepted: true, merged_facts: mergedFacts });
@@ -165,7 +178,7 @@ function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
     audit(denial.audit.event, req, denial.audit.detail);
     metrics.logCallDenied(denialDimensions({ store, grund: denial.audit.grund, tenantId }));
   } catch (fehler) {
-    console.error("[place_call] Ablehnung nicht protokollierbar:", fehler?.message);
+    console.error("[place_call] Ablehnung nicht protokollierbar:", nachrichtOf(fehler));
   }
 }
 
@@ -238,7 +251,7 @@ function antwortOhneNeuenAnruf({ claim, ctx, req, store, audit, config }) {
     return { status: claim.denial.status, body: denialResponseBody(claim.denial) };
   }
   const { call } = claim;
-  audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${ctx.tenantId}`);
+  audit("place_call_dedup", req, `to=${ctx.to} call=${call.id} tenant=${String(ctx.tenantId)}`);
   return {
     status: HTTP_OK,
     body: placeCallResponseBody({ call, ctx, config, deduplicated: true }),
@@ -255,13 +268,13 @@ async function antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierun
 async function gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservierung, callId, ctx, fehler }) {
   leitungsplaetze.freigeben(callId);
   await budgetReservierung.freigeben({ callId, tenantId: ctx.tenantId });
-  console.error(`[place_call] Anlegen fehlgeschlagen tenant=${ctx.tenantId}:`, fehler?.message);
+  console.error(`[place_call] Anlegen fehlgeschlagen tenant=${String(ctx.tenantId)}:`, nachrichtOf(fehler));
   try {
     await store.withStoreLock(() =>
       store.releaseOutboundReserveCents(ctx.tenantId, ctx.reserveCents),
     );
   } catch (freigabeFehler) {
-    console.error("[place_call] Reserve nicht freigebbar:", freigabeFehler?.message);
+    console.error("[place_call] Reserve nicht freigebbar:", nachrichtOf(freigabeFehler));
   }
 }
 
@@ -298,8 +311,8 @@ export function makeCallRoutes({
   const router = Router();
   const bereiche = speicherBereiche(store);
 
-  function callVisibleTo(call, tenantId) {
-    return Boolean(call) && tenantOwnsCall(call, tenantId);
+  function sichtbarerAnruf(call, tenantId) {
+    return call && tenantOwnsCall(call, tenantId) ? call : null;
   }
 
   async function waehleUeberTelnyx({ callId, ctx }) {
@@ -317,7 +330,10 @@ export function makeCallRoutes({
 
   async function bereiteVorspannVor(call) {
     const vorspann = await erzeugeVorspann(call);
-    if (vorspann.rueckfall) return meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
+    if (vorspann.rueckfall) {
+      meldeVorspannRueckfall({ callId: call.id, grund: vorspann.rueckfall });
+      return undefined;
+    }
     meldeVorspannBereit(call.id);
     return vorspann;
   }
@@ -327,13 +343,14 @@ export function makeCallRoutes({
     const questions = Array.isArray(context?.open_questions) ? context.open_questions : [];
     if (!questions.length) return;
     await bereiche.rueckfrage.emitConsult(call.id, questions);
-    audit("consult_emitted", req, `call=${call.id} fragen=${questions.length}`);
+    audit("consult_emitted", req, `call=${call.id} fragen=${String(questions.length)}`);
   }
 
-  router.post("/api/calls", internalOnly, async (req, res) => {
-    const b = pruefeKoerper(res, { schema: ANRUF_KOERPER }, req.body);
-    let to = normNum(b.to);
-    const objective = b.objective || b.goal;
+  const legeAnrufAn = async (req, res) => {
+    const b = ANRUF_KOERPER.parse(pruefeKoerper(res, { schema: ANRUF_KOERPER }, req.body));
+    const to = normNum(b.to);
+    let objective = b.goal;
+    if (b.objective) objective = b.objective;
     if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
     if (isTrunkZeroFormatError(to)) return res.status(HTTP_BAD_REQUEST).json({ error: E164_FORMAT_ERROR });
 
@@ -354,7 +371,7 @@ export function makeCallRoutes({
       if (vorab) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language =
-        requestedLanguage ||
+        requestedLanguage ??
         (await bereiche.anrufe.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord }));
       const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
         store,
@@ -372,7 +389,7 @@ export function makeCallRoutes({
         });
         if (briefed) {
           ctx.context = briefed.context;
-          ctx.mandate = ctx.mandate || briefed.mandate;
+          ctx.mandate = ctx.mandate ?? briefed.mandate;
         }
       }
 
@@ -390,7 +407,7 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       });
       const openingLine = opening.line;
-      console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
+      console.log(`[opening-line] quelle=${opening.source} zeichen=${String(openingLine.length)}`);
 
       const felder = {
         id: callId,
@@ -415,12 +432,12 @@ export function makeCallRoutes({
       const claim = await store.withStoreLock(() =>
         claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial }),
       );
-      call = claim.call;
       if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
+      call = claim.call;
       audit(
         "place_call",
         req,
-        `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
+        `to=${ctx.to} call=${call.id} provider=${String(ctx.outboundProvider)} requestedBy=${String(ctx.requestedBy)}`,
       );
     } catch (fehler) {
       await gibReserveZurueckUndMelde({ store, leitungsplaetze, budgetReservierung, callId, ctx, fehler });
@@ -451,7 +468,7 @@ export function makeCallRoutes({
         armMaxDurationTimer(call, call.twilioSid);
       }
       armReserveReleaseTimer(call);
-      res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
+      return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
     } catch (err) {
       const providerStatus = providerStatusOf(err);
       await terminateAndBillCall({
@@ -460,37 +477,40 @@ export function makeCallRoutes({
         bill: billThunk(finishCall, store, call.id),
         callId: call.id,
       });
-      console.error(
-        `[place_call] originate fehlgeschlagen call=${call.id}:`,
-        err?.message || String(err),
-      );
+      console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, beschreibungOf(err));
       const body = providerStatus
         ? {
-            error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
+            error: `Provider hat den Anruf abgelehnt (HTTP ${String(providerStatus)}). Account-/Nummern-Konfiguration pruefen.`,
           }
         : { error: "Anruf konnte nicht gestartet werden." };
-      res.status(providerStatus ? HTTP_BAD_GATEWAY : HTTP_SERVER_ERROR).json(body);
+      return res.status(providerStatus ? HTTP_BAD_GATEWAY : HTTP_SERVER_ERROR).json(body);
     }
+  };
+
+  router.post("/api/calls", internalOnly, (req, res, next) => {
+    legeAnrufAn(req, res).catch(next);
   });
 
   async function liefereConsultEreignis(req, res) {
     const tenantId = requestTenant(req);
-    const call =
+    const call = sichtbarerAnruf(
       (await bereiche.gespraech.getCall(req.params.id)) ??
-      (await anrufVonAndererInstanz(store, req.params.id, tenantId));
-    if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
+        (await anrufVonAndererInstanz(store, req.params.id, tenantId)),
+      tenantId,
+    );
+    if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     await bereiche.rueckfrage.noteConsultPoll(call.id);
     const event = await consultDelivery.waitForEvent({
       callId: call.id,
       tenantId: call.tenantId,
-      afterEventId: pruefeAbfrage(res, { schema: CONSULT_ABFRAGE }, req.query).after,
+      afterEventId: CONSULT_ABFRAGE.parse(pruefeAbfrage(res, { schema: CONSULT_ABFRAGE }, req.query)).after,
       signal: null,
     });
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
       await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
-    res.json(event);
+    return res.json(event);
   }
 
   router.get("/api/calls/:id/consult", internalOnly, (req, res, next) => {
@@ -499,14 +519,16 @@ export function makeCallRoutes({
 
   async function beantworteConsult(req, res) {
     const tenantId = requireTenant(req, res);
-    if (!tenantId) return;
-    const call = store.getCall(req.params.id);
-    if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
+    if (!tenantId) return undefined;
+    const call = sichtbarerAnruf(store.getCall(req.params.id), tenantId);
+    if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return res
         .status(HTTP_FORBIDDEN)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
-    const { event_id: eventId, answers, status } = pruefeKoerper(res, { schema: CONSULT_ANTWORT_KOERPER }, req.body);
+    const { event_id: eventId, answers, status } = CONSULT_ANTWORT_KOERPER.parse(
+      pruefeKoerper(res, { schema: CONSULT_ANTWORT_KOERPER }, req.body),
+    );
     if (!isConsultEventId(eventId))
       return antworteFehler(res, HTTP_BAD_REQUEST, "event_id ist ungueltig");
     const statusError = invalidConsultAnswerStatus(status);
@@ -523,11 +545,10 @@ export function makeCallRoutes({
   });
 
   async function brecheAnrufAb(req, res) {
-    const call = await leseAnruf(store, req.params.id);
-    if (!callVisibleTo(call, requestTenant(req)))
-      return antworteFehler(res, HTTP_NOT_FOUND, "not found");
+    const call = sichtbarerAnruf(await leseAnruf(store, req.params.id), requestTenant(req));
+    if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (call.status !== "active") return res.json({ status: call.status });
-    audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) || OWNER_ID}`);
+    audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) ?? OWNER_ID}`);
     const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
     const isElevenLabsCall = !providerHangUp;
     const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
@@ -540,7 +561,7 @@ export function makeCallRoutes({
       bill: billThunk(finishCall, store, call.id),
       onHangUpError: (e) => {
         auflegenGescheitert = true;
-        console.error("[cancel]", e.message);
+        console.error("[cancel]", nachrichtOf(e));
       },
       callId: call.id,
     });
@@ -552,7 +573,7 @@ export function makeCallRoutes({
         max_line_s: ELEVENLABS_PROVIDER_MAX_DURATION_S,
         hangup_attempted: Boolean(elHangUp),
       });
-    res.json({ status: "cancelled" });
+    return res.json({ status: "cancelled" });
   }
 
   router.post("/api/calls/:id/cancel", internalOnly, (req, res, next) => {
