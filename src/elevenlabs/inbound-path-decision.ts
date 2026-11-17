@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { INBOUND_PATH } from "../telephony/inbound-path.ts";
-import { INBOUND_EL_SCOPE } from "./inbound-scope.ts";
 
 interface InboundZugang {
   sipUser?: unknown;
@@ -57,12 +56,6 @@ function laengenMangel(wert: unknown, minLength: number): string | null {
   return String(wert).length < minLength ? ZUGANG_MANGEL.ZU_KURZ : null;
 }
 
-function tenantIstGepinnt(tenantId: unknown, tenantIds: unknown): boolean {
-  if (!istNichtLeererString(tenantId)) return false;
-  if (!Array.isArray(tenantIds)) return false;
-  return tenantIds.includes(tenantId);
-}
-
 export function e164Endung(e164: string): string {
   return `${DID_ENDUNG_PRAEFIX}${e164.slice(-DID_ENDUNG_ZIFFERN)}`;
 }
@@ -84,46 +77,9 @@ function inboundWegBereit(inbound: InboundKonfiguration): boolean {
   return inboundElAccessDefects(inbound).length === 0;
 }
 
-function belegGiltFuerLaufendenZugang({
-  numberRecord,
-  sipUser,
-}: {
-  numberRecord: NummernBeleg | null | undefined;
-  sipUser: unknown;
-}): boolean {
-  const laufenderFp = zugangsFingerabdruck(sipUser);
-  if (!istNichtLeererString(laufenderFp)) return false;
-  return Boolean(numberRecord?.elInboundTrunkBelegtAt) && numberRecord?.elInboundTrunkZugangFp === laufenderFp;
-}
-
-function entscheidungNachAllowlist({
-  inbound,
-  tenantId,
-}: {
-  inbound: InboundKonfiguration;
-  tenantId: unknown;
-}): string {
-  return tenantIstGepinnt(tenantId, inbound.tenantIds) ? INBOUND_PATH.ELEVENLABS : INBOUND_PATH.ABGEWIESEN;
-}
-
-function entscheidungNachBeleg({
-  inbound,
-  numberRecord,
-}: {
-  inbound: InboundKonfiguration;
-  numberRecord: NummernBeleg | null | undefined;
-}): string {
-  return belegGiltFuerLaufendenZugang({ numberRecord, sipUser: inbound.sipUser })
-    ? INBOUND_PATH.ELEVENLABS
-    : INBOUND_PATH.ABGEWIESEN;
-}
-
-export function inboundPfadEntscheidung({ config, tenantId, numberRecord }: Entscheidungsfall): string {
+export function inboundPfadEntscheidung({ config }: Entscheidungsfall): string {
   const inbound = config.voice.elevenLabsInbound;
-  if (!inboundWegBereit(inbound)) return INBOUND_PATH.ABGEWIESEN;
-  if (inbound.scope === INBOUND_EL_SCOPE.REGISTRIERTE_DIDS) return entscheidungNachBeleg({ inbound, numberRecord });
-  if (inbound.scope === INBOUND_EL_SCOPE.ALLOWLIST) return entscheidungNachAllowlist({ inbound, tenantId });
-  return INBOUND_PATH.ABGEWIESEN;
+  return inboundWegBereit(inbound) ? INBOUND_PATH.ELEVENLABS : INBOUND_PATH.ABGEWIESEN;
 }
 
 export function inboundElPathFor({ config, tenantId, numberRecord }: Entscheidungsfall): boolean {

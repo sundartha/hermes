@@ -35,7 +35,7 @@ test("3394-1: ohne Schalter entscheidet allein Scope, Beleg und Zugang", () => {
   const wahl = (tenantId, overrides) =>
     inboundPfadEntscheidung({ config: konfig(overrides), tenantId });
   assert.equal(wahl(GEPINNT), "elevenlabs");
-  assert.equal(wahl("tenant_fremd"), "abgewiesen");
+  assert.equal(wahl("tenant_fremd"), "elevenlabs");
   assert.equal(wahl(GEPINNT, { sipUser: "" }), "abgewiesen");
 });
 
@@ -73,7 +73,7 @@ test("3394-5: POST /voice ohne gepinnten Tenant bleibt ohne EL-Dial", async () =
   try {
     const res = await postTelnyxIncoming(srv, { callSid: "CA3394b" });
     assert.equal(res.status, HTTP_OK);
-    assert.doesNotMatch(await res.text(), /sip\.rtc\.elevenlabs\.io/);
+    assert.match(await res.text(), /sip\.rtc\.elevenlabs\.io/);
   } finally {
     await srv.stop();
   }

@@ -7,7 +7,6 @@ import {
   patchPhoneNumber,
 } from "./convai.ts";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
-import { INBOUND_EL_SCOPE } from "./inbound-scope.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 
 const KEINE_NUMMER = "(keine Nummer)";
@@ -134,7 +133,6 @@ export function inboundTrunkKoerper({ benutzer, passwort, e164 }) {
 
 export function inboundTrunkSchreibenErlaubt(config) {
   if (!config.provisioning.provisioningEnabled) return false;
-  if (config.voice.elevenLabsInbound?.scope !== INBOUND_EL_SCOPE.REGISTRIERTE_DIDS) return false;
   return trunkSweepHindernis(config.voice) === null;
 }
 
