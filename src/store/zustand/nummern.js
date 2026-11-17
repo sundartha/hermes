@@ -229,19 +229,20 @@ function bindingBelongsTo(binding, tenantId) {
   return binding.tenantId === tenantId;
 }
 
+export function activeCallOnNumber(state, e164) {
+  return (
+    Boolean(e164) &&
+    state.calls.some((call) => call.status === CALL_STATUS_ACTIVE && (call.from === e164 || call.to === e164))
+  );
+}
+
 export function numberBusyReason(state, number, { forTenantId = null } = {}) {
   const bindings = platformNumberBindings(state, number.e164);
   const blockedByForeignBinding = bindings.some(
     (binding) => forTenantId === null || !bindingBelongsTo(binding, forTenantId),
   );
   if (blockedByForeignBinding) return NUMBER_HOLD_REASON.PLATFORM_IN_USE;
-  if (
-    number.e164 &&
-    state.calls.some(
-      (call) => call.status === CALL_STATUS_ACTIVE && (call.from === number.e164 || call.to === number.e164),
-    )
-  )
-    return NUMBER_HOLD_REASON.ACTIVE_CALL;
+  if (activeCallOnNumber(state, number.e164)) return NUMBER_HOLD_REASON.ACTIVE_CALL;
   return null;
 }
 

@@ -54,6 +54,7 @@ import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.ts";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,
   hasPrunedSomething,
+  pendingConsult,
   tenantsOf,
   syncPlatformBindings,
 } from "./store/state-ops.js";
@@ -690,16 +691,17 @@ export function derivePlatformNumberBindings({ store }) {
 }
 
 async function expireOrphanedConsults(store) {
-  const state = store.load();
   const nowMs = Date.now();
   const lage = await store.besitzLage();
-  const orphaned = state.calls.filter(
+  const orphaned = (await anrufeAllerInstanzen(store)).filter(
     (call) =>
       call.status === "active" &&
-      store.pendingConsult(call.id) &&
+      pendingConsult({ calls: [call] }, call.id) &&
       !arbeitGehoertLebenderFremder(call.instanz, lage),
   );
   if (!orphaned.length) return;
+  for (const call of orphaned) await store.leseCall(call.id);
+  const state = store.load();
   let freed = 0;
   for (const call of orphaned)
     freed += expireOrphanedConsultsOp(state, call.id, { nowMs, openMs: CONSULT_OPEN_MS }).orphaned;
