@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { setTimeout as pause } from "node:timers/promises";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.ts";
@@ -12,7 +13,7 @@ interface Anfrage {
   headers?: Record<string, string | undefined>;
   rawBody?: string | Buffer;
   body?: { CallSid?: unknown; CallStatus?: unknown };
-  query?: { callId?: unknown; quelle?: unknown; turnToken?: unknown };
+  query: { callId?: unknown; quelle?: unknown; turnToken?: unknown };
 }
 
 interface Antwort {
@@ -171,22 +172,22 @@ export function incomingAnchors(req: Anfrage): Anker {
 
 function queryEreignisAnker(req: Anfrage, ereignis: { praefix: string; unterscheider: unknown }): Anker {
   const { praefix, unterscheider } = ereignis;
-  const callId = ankerTeil(req.query?.callId);
+  const callId = ankerTeil(req.query.callId);
   const anchors = callId ? [`${praefix}:${callId}:${ankerTeil(unterscheider)}`] : [];
   const envelope = envelopeAnchor(req);
   return envelope ? [...anchors, envelope] : anchors;
 }
-export const elRueckfallAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
+export const elRueckfallAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query.quelle });
 export const elUebergabeAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eu", unterscheider: "" });
 export const elBeinAnchors = (req: Anfrage): Anker => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 export function statusAnchors(req: Anfrage): Anker {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
   return envelope ? [`s${envelope}`] : [];
 }
 
 export function vorspannAnchors(req: Anfrage): Anker {
-  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query?.callId) });
+  const envelope = envelopeAnchor(req, { callId: ankerTeil(req.query.callId) });
   return envelope ? [`v${envelope}`] : [];
 }
 
@@ -228,10 +229,21 @@ const LESEFEHLER_PRAEFIX: Record<string, string> = { "el-uebergabe": "[voice/out
 
 function antworteMitLesefehler({ weg, req, res, err }: { weg: string; req: Anfrage; res: Antwortkanal; err: unknown }): unknown {
   const praefix = LESEFEHLER_PRAEFIX[weg];
-  const callId = ankerTeil(req.query?.callId) || "-";
+  const callId = ankerTeil(req.query.callId) || "-";
   console.error(praefix, `Anruf lesen fehlgeschlagen (callId=${callId}):`, Reflect.get(Object(err), "message"));
   res.status(HTTP_SERVER_ERROR);
   return res.send("");
+}
+
+async function leseAnrufBinnenFrist(store: WebhookStore, id: string): Promise<Anruf | null | undefined> {
+  if (!store.leseCallUngebunden) return store.getCall(id);
+  const gelesen = await ergebnisOderNull(
+    Promise.resolve(store.leseCallUngebunden(id)).then((anruf) => ({ anruf })),
+    NUTZUNG_AUFFRISCHEN_FRIST_MS,
+  );
+  if (gelesen) return gelesen.anruf;
+  console.error(`${REPLAY_LOG_PREFIX} Anruf nicht binnen der Frist gelesen, Pruefung mit dem Stand des Prozesses`);
+  return store.getCall(id);
 }
 
 interface WartendeParameter {
@@ -448,8 +460,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     };
   }
 
-  const leseAnruf = (id: string): Anruf | null | undefined | Promise<Anruf | null | undefined> =>
-    store.leseCallUngebunden ? store.leseCallUngebunden(id) : store.getCall(id);
+  const leseAnruf = (id: string) => leseAnrufBinnenFrist(store, id);
 
   const forIncoming = makeGuard({
     weg: "incoming",
@@ -469,14 +480,14 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
     ...ohneNeustartSchicht,
   });
   const uebergabeLaeuftOderEndete = async (req: Anfrage): Promise<Anruf | null | undefined> => {
-    const call = await leseAnruf(ankerTeil(req.query?.callId));
+    const call = await leseAnruf(ankerTeil(req.query.callId));
     return UEBERGABE_ZUSTAENDE.includes(bridgeStateOf(call)) ? call : null;
   };
   const forElUebergabe = makeGuard({
     weg: "el-uebergabe",
     ablage: store.webhookZustellung ?? null,
     geheimnis: elPasswort,
-    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query?.callId))) ? elUebergabeAnchors(req) : []),
+    anchorsOf: async (req) => (istOutboundElProfil(await leseAnruf(ankerTeil(req.query.callId))) ? elUebergabeAnchors(req) : []),
     seenBefore: uebergabeLaeuftOderEndete,
     remember: ohneNeustartSchicht.remember,
   });

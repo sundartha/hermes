@@ -74,6 +74,7 @@ function appMit(store, protokoll, ankuenfte = []) {
       lifecycle: {
         reattachActiveCall: async (callId) => {
           protokoll.wiederaufnahmen.push(callId);
+          await protokoll.schranke?.();
           return { call: null, logUnknown: false };
         },
       },
@@ -110,13 +111,15 @@ async function mitServer(app, fn) {
 }
 
 async function ohneLog(fn) {
-  const original = console.error;
+  const original = { error: console.error, log: console.log };
   const zeilen = [];
   console.error = (...teile) => zeilen.push(teile.join(" "));
+  console.log = (...teile) => zeilen.push(teile.join(" "));
   try {
     await fn();
   } finally {
-    console.error = original;
+    console.error = original.error;
+    console.log = original.log;
   }
   return zeilen;
 }
@@ -140,6 +143,25 @@ test("H6b-2: die Uebergabe auf Instanz B verarbeitet einen Anruf von Instanz A o
     assert.equal(antwort.status, 200);
   });
   assert.deepEqual(laeufe.wiederaufnahmen, [call.id]);
+});
+
+test("H6b-2b: zwei gleichzeitige Uebergaben verschiedener Anrufe ohne Uebergabe-Profil belegen keinen gemeinsamen Anker und laufen beide", async () => {
+  const { a, b, call } = await zweiInstanzen({});
+  const zweiter = a.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Zweiter", tenantId: KUNDE, provider: "telnyx" });
+  await a.persistCall(zweiter.id);
+  const laeufe = neuesProtokoll();
+  laeufe.schranke = () => warteBis(() => laeufe.wiederaufnahmen.length === 2);
+  await mitServer(appMit(b, laeufe), async (post) => {
+    const antworten = await Promise.all([
+      post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_2b" }),
+      post(`/voice/outbound?callId=${zweiter.id}`, { CallSid: "CA_h6b_2b" }),
+    ]);
+    assert.deepEqual(
+      antworten.map((antwort) => antwort.status),
+      [200, 200],
+    );
+  });
+  assert.deepEqual([...laeufe.wiederaufnahmen].sort(), [call.id, zweiter.id].sort());
 });
 
 test("H6b-3: /voice/incoming auf Instanz B erkennt die Zustellung eines Anrufs von Instanz A an der Anbieter-Kennung und beantwortet nur mit Keep-alive", async () => {
@@ -171,9 +193,10 @@ test("H6b-5: /voice/outbound mit Lesefehler der Datenbank antwortet 500, verarbe
     mitServer(appMit(b, laeufe), async (post) => {
       const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6b_5" });
       assert.equal(antwort.status, 500);
+      assert.equal(await antwort.text(), "");
     }),
   );
-  assert.ok(zeilen.some((zeile) => zeile.includes(`[voice/outbound] Anruf lesen fehlgeschlagen (callId=${call.id})`)));
+  assert.ok(zeilen.some((zeile) => zeile.includes(`[voice/outbound] Anruf lesen fehlgeschlagen (callId=${call.id}):`)));
   assert.deepEqual(laeufe, neuesProtokoll());
 });
 
@@ -185,13 +208,14 @@ test("H6b-6: /voice/incoming mit Lesefehler antwortet 500, verarbeitet nichts, u
     mitServer(appMit(b, laeufe), async (post) => {
       const erste = await post("/voice/incoming", { CallSid: "CA_h6b_6" });
       assert.equal(erste.status, 500);
+      assert.equal(await erste.text(), "");
       assert.deepEqual(laeufe, neuesProtokoll());
       await reparieren(db);
       const zweite = await post("/voice/incoming", { CallSid: "CA_h6b_6" });
       assert.equal(await zweite.text(), KEEPALIVE);
     }),
   );
-  assert.ok(zeilen.some((zeile) => zeile.includes("[incoming] Anruf lesen fehlgeschlagen (callId=-)")));
+  assert.ok(zeilen.some((zeile) => zeile.startsWith("[incoming] Anruf lesen fehlgeschlagen (callId=-):")));
   assert.deepEqual(laeufe, neuesProtokoll());
 });
 
@@ -218,7 +242,7 @@ test("H6b-7: ein Lesefehler gibt die Annahme in der Ablage frei und beantwortet 
   };
   const laeufe = neuesProtokoll();
   const ankuenfte = [];
-  await ohneLog(() =>
+  const zeilen = await ohneLog(() =>
     mitServer(appMit(store, laeufe, ankuenfte), async (post) => {
       const erste = post("/voice/incoming", { CallSid: "CA_h6b_7" });
       await warteBis(() => ankuenfte.length === 1);
@@ -226,10 +250,15 @@ test("H6b-7: ein Lesefehler gibt die Annahme in der Ablage frei und beantwortet 
       await warteBis(() => ankuenfte.length === 2);
       await new Promise((resolve) => setImmediate(resolve));
       ablehnen(new Error("lesen kaputt"));
-      assert.equal((await erste).status, 500);
-      assert.equal((await zweite).status, 500);
+      const ersteAntwort = await erste;
+      const zweiteAntwort = await zweite;
+      assert.equal(ersteAntwort.status, 500);
+      assert.equal(zweiteAntwort.status, 500);
+      assert.equal(await ersteAntwort.text(), "");
+      assert.equal(await zweiteAntwort.text(), "");
     }),
   );
+  assert.ok(zeilen.includes("[webhook-idempotenz] annahme_freigegeben weg=incoming grund=lesefehler"));
   assert.deepEqual(freigaben, [{ kennung: "k_h6b_7", anker: ["in:CA_h6b_7"] }]);
   assert.deepEqual(laeufe, neuesProtokoll());
 });
@@ -242,5 +271,25 @@ test("H6b-8: ein Store ohne SQL-Leser (JSON-Betrieb) findet den Anruf weiter im 
   await mitServer(appMit(store, laeufe), async (post) => {
     assert.equal(await (await post("/voice/incoming", { CallSid: "CA_h6b_8" })).text(), KEEPALIVE);
   });
+  assert.deepEqual(laeufe, neuesProtokoll());
+});
+
+test("H6b-9: haengt der SQL-Leser, antwortet /voice/incoming nach der Frist mit dem Stand des Arbeitsspeichers statt mit 500", async () => {
+  const bekannt = { id: "call_h6b_9", twilioSid: "CA_h6b_9" };
+  const { b } = await zweiInstanzen({});
+  const store = { ...b, getCall: (id) => (id === "CA_h6b_9" ? bekannt : null), leseCallUngebunden: () => new Promise(() => {}) };
+  const laeufe = neuesProtokoll();
+  const zeilen = await ohneLog(() =>
+    mitServer(appMit(store, laeufe), async (post) => {
+      const antwort = await post("/voice/incoming", { CallSid: "CA_h6b_9" });
+      assert.equal(antwort.status, 200);
+      assert.equal(await antwort.text(), KEEPALIVE);
+    }),
+  );
+  assert.ok(zeilen.includes("[webhook-idempotenz] Anruf nicht binnen der Frist gelesen, Pruefung mit dem Stand des Prozesses"));
+  assert.equal(
+    zeilen.some((zeile) => zeile.includes("Anruf lesen fehlgeschlagen")),
+    false,
+  );
   assert.deepEqual(laeufe, neuesProtokoll());
 });
