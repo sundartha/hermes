@@ -5,10 +5,6 @@ on:
     branches: [master]
   schedule:
     - cron: "17 2 * * *"
-    - cron: "43 5 * * *"
-    - cron: "43 11 * * *"
-    - cron: "43 17 * * *"
-    - cron: "43 22 * * *"
   workflow_dispatch:
     inputs:
       lastlauf:
@@ -40,7 +36,7 @@ concurrency:
 jobs:
   staging:
     name: Staging abwarten und prüfen
-    if: github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '17 2 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -82,33 +78,8 @@ jobs:
           SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node tools/deploy-weg.mjs hoertest --anlass staginglauf --commit "$GITHUB_SHA" --teile ""
 
-      - name: Heartbeat Nachtlauf
-        if: success() && github.event_name == 'schedule'
-        env:
-          BETTER_STACK_HEARTBEAT_NACHTLAUF: ${{ secrets.BETTER_STACK_HEARTBEAT_NACHTLAUF }}
-        run: node tools/deploy-weg.mjs heartbeat --name nachtlauf
-
-  probe:
-    name: Anrufprobe gegen Staging
-    needs: staging
-    if: ${{ !cancelled() && (needs.staging.result == 'success' || needs.staging.result == 'skipped' || inputs.absichtlich_rot) && (github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule != '17 2 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Node 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22
-
       - name: Anrufprobe (Kern in scripts/anruf-probe)
+        if: ${{ success() || inputs.absichtlich_rot }}
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           PROBE_ANRUFER_MODUL: ${{ github.workspace }}/scripts/anruf-probe/anrufer.mjs
@@ -121,6 +92,12 @@ jobs:
           BETTER_STACK_ALERT_URL: ${{ secrets.BETTER_STACK_ALERT_URL }}
           SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node scripts/anruf-probe/probe.mjs
+
+      - name: Heartbeat Nachtlauf
+        if: success() && github.event_name == 'schedule'
+        env:
+          BETTER_STACK_HEARTBEAT_NACHTLAUF: ${{ secrets.BETTER_STACK_HEARTBEAT_NACHTLAUF }}
+        run: node tools/deploy-weg.mjs heartbeat --name nachtlauf
 
       - name: Offene Probe-Anrufe beenden
         if: always()
