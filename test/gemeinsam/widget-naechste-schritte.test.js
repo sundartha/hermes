@@ -104,6 +104,12 @@ test("widget-naechste-schritte K1: ein Termin zeigt den Abschnitt mit Art, Text 
   assert.equal(f.zeilen()[0].zeitpunkt, new Date("2026-11-20T14:00").toLocaleString("fr", FORMAT));
 });
 
+test("widget-naechste-schritte K1: ein Zeitpunkt nur mit Datum zeigt das lokale Datum ohne Uhrzeit", () => {
+  const s = karte("de");
+  s.schicke({ next_steps: [{ type: "task", text: "x", at: "2026-11-20" }] });
+  assert.equal(s.zeilen()[0].zeitpunkt, new Date(2026, 10, 20).toLocaleDateString("de", { dateStyle: "medium" }));
+});
+
 test("widget-naechste-schritte K1: ein Zeitpunkt, der kein Datum ist, erscheint wörtlich", () => {
   const s = karte("en");
   s.schicke({ next_steps: [{ type: "task", text: "x", at: "bald" }] });
