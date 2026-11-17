@@ -870,11 +870,6 @@
       "count": 4
     }
   },
-  "test/anrufe/al-p14-in-call-consult.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/abrechnung/billing-subscribe.test.js": {
     "max-params": {
       "count": 1
@@ -1160,9 +1155,6 @@
   "test/anrufe/p11-agent-language-contract.test.js": {
     "complexity": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "test/anmeldung/p5-onboarding-funnel.test.js": {
