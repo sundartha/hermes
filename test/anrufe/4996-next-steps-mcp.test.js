@@ -84,8 +84,10 @@ test("get_call_result liefert next_steps strukturiert mit Art, Text und Zeitpunk
 
 test("get_call_result: ohne Schritte ist next_steps leer, bei Ergebniskarte ohne Feld und ohne Karte", async () => {
   const mitKarte = await getCallResult(endedCall(karte()));
-  assert.deepEqual(mitKarte.reply.structuredContent.next_steps, []);
-  assert.deepEqual(JSON.parse(mitKarte.reply.content[0].text).next_steps, []);
+  const { structuredContent } = mitKarte.reply;
+  assert.deepEqual(structuredContent.next_steps, []);
+  const textKarte = JSON.parse(mitKarte.reply.content[0].text);
+  assert.deepEqual(textKarte.next_steps, []);
 
   const altKarte = karte();
   delete altKarte.nextSteps;
@@ -100,8 +102,9 @@ test("get_call_result: Text der Schritte laeuft durch die Maskierung gesperrter 
   const { reply } = await getCallResult(
     endedCall(karte({ nextSteps: [{ type: "task", text: "Karte 4111 1111 1111 1111 pruefen", at: null }] })),
   );
-  assert.ok(!reply.structuredContent.next_steps[0].text.includes("4111 1111 1111 1111"));
-  assert.equal(reply.structuredContent.next_steps[0].type, "task");
+  const [schritt] = reply.structuredContent.next_steps;
+  assert.ok(!schritt.text.includes("4111 1111 1111 1111"));
+  assert.equal(schritt.type, "task");
 });
 
 test("Werkzeugvertrag: outputSchema von get_call_result nennt next_steps als Liste von Art, Text, Zeitpunkt", async () => {
