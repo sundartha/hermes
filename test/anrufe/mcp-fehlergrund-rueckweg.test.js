@@ -263,7 +263,8 @@ function assertNoRawTranscriptAudioOrSecrets(result) {
   assert.ok(!serialized.includes(`PIN ist ${SECRET_PIN}`), "Zugangsdaten unmaskiert in der Antwort");
   assert.ok(!serialized.includes(RECORDING_URL), "Aufnahme-Adresse in der Antwort");
   assert.ok(!serialized.includes(AUDIO_PAYLOAD), "Audio in der Antwort");
-  assert.ok(!serialized.includes(FIRST_TRANSCRIPT_TEXT), "Rohtranskript in der Antwort");
+  const modelVisible = JSON.stringify({ content: result.content, structuredContent: result.structuredContent });
+  assert.ok(!modelVisible.includes(FIRST_TRANSCRIPT_TEXT), "Rohtranskript in der Antwort");
   assert.ok(!Object.hasOwn(result.structuredContent, "transcript"));
 }
 

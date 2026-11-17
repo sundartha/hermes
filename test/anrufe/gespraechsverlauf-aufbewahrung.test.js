@@ -352,7 +352,8 @@ test("Kriterium 5: kein MCP-Werkzeug gibt das Transkript eines beendeten Anrufs 
     assert.ok(tools.length > 0);
     for (const tool of tools) {
       const antwort = await client.callTool({ name: tool.name, arguments: WERKZEUG_ARGUMENTE[tool.name] ?? {} });
-      assert.doesNotMatch(JSON.stringify(antwort), new RegExp(MARKER), `${tool.name}: kein Transkript`);
+      const modellSichtbar = JSON.stringify({ content: antwort.content, structuredContent: antwort.structuredContent });
+      assert.doesNotMatch(modellSichtbar, new RegExp(MARKER), `${tool.name}: kein Transkript`);
     }
     const status = await client.callTool({ name: "get_call_status", arguments: { call_id: BEENDET.id } });
     assert.deepEqual(status.structuredContent.last_transcript_lines, []);

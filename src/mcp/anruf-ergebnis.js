@@ -33,6 +33,13 @@ export function maskedNextSteps(result) {
   }));
 }
 
+export function maskedTranscript(lines) {
+  return lines.map((line) => ({
+    role: line.role === "agent" ? "agent" : "counterparty",
+    text: maskRestrictedText(line.text),
+  }));
+}
+
 export function maskResultCardFields(card) {
   return {
     outcome: maskRestrictedText(card.outcome),
