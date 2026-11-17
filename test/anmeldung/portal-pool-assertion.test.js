@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import pg from "pg";
-import { fehlerausgabeVon } from "../gemeinsam/fehlerausgabe.js";
+import { fehlerausgabeVon, fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";
 import { neuePglite } from "../pglite-helfer.js";
 import { assertNoBypassRls, createPortalRunner } from "../../src/portal-pool.js";
 import { portalPoolOptionen } from "../../src/utils/pg-pool.js";
@@ -164,4 +164,55 @@ test("assertNoBypassRls: PGlite NOLOGIN NOBYPASSRLS app_user -> kein Fehler", as
   } finally {
     await db.query(`RESET ROLE`);
   }
+});
+
+function installierePortalPoolMitClients(t, clients) {
+  const echterPool = pg.Pool;
+  t.after(() => {
+    pg.Pool = echterPool;
+  });
+  pg.Pool = class PortalPoolMitClients extends EventEmitter {
+    async connect() {
+      const client = clients.shift();
+      this.emit("acquire", client);
+      client.release = () => this.emit("release", undefined, client);
+      return client;
+    }
+  };
+}
+
+function neuerPortalClient(abfrage) {
+  const client = new EventEmitter();
+  client.query = abfrage;
+  return client;
+}
+
+const PORTAL_PRUEFUNG = async () => ({ rows: [{ is_su: "off", rolbypassrls: false }] });
+
+test("Portal-Client: Verbindungsabbruch waehrend withClient meldet den Verlust und beendet nur die Abfrage", async (t) => {
+  const arbeitsClient = neuerPortalClient(() => {
+    arbeitsClient.emit("error", new Error("terminating connection"));
+    return Promise.reject(new Error("Connection terminated"));
+  });
+  installierePortalPoolMitClients(t, [neuerPortalClient(PORTAL_PRUEFUNG), arbeitsClient]);
+  const runner = await createPortalRunner();
+  let abfrageFehler;
+  const zeilen = await fehlerausgabeVonAsync(async () => {
+    await runner.withClient((c) => c.query("SELECT 1", [])).catch((fehler) => (abfrageFehler = fehler));
+  });
+  assert.equal(abfrageFehler?.message, "Connection terminated");
+  assert.deepEqual(zeilen, ["[pool:portal] Verbindungsfehler: terminating connection"]);
+});
+
+test("Portal-Client: nach dem Release haengt kein Fehlerhoerer mehr am Client", async (t) => {
+  const arbeitsClient = neuerPortalClient(async () => ({ rows: [] }));
+  installierePortalPoolMitClients(t, [neuerPortalClient(PORTAL_PRUEFUNG), arbeitsClient]);
+  const runner = await createPortalRunner();
+  let waehrend;
+  await runner.withClient(async (c) => {
+    waehrend = arbeitsClient.listenerCount("error");
+    return c.query("SELECT 1", []);
+  });
+  assert.equal(waehrend, 1);
+  assert.equal(arbeitsClient.listenerCount("error"), 0);
 });
