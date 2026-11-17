@@ -108,3 +108,38 @@ for (const [name, zustand, env, warnt] of API_SCHLUESSEL_FAELLE) {
     }
   });
 }
+
+const RSA_PEM = crypto
+  .generateKeyPairSync("rsa", { modulusLength: 2048 })
+  .publicKey.export({ format: "pem", type: "spki" })
+  .toString();
+const EC_PEM = crypto
+  .generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+  .publicKey.export({ format: "pem", type: "spki" })
+  .toString();
+
+const ANDERER_TYP_FAELLE = [
+  ["RSA-PEM", RSA_PEM],
+  ["EC-PEM", EC_PEM],
+];
+
+for (const [name, wert] of ANDERER_TYP_FAELLE) {
+  test(`/intern/status: Telnyx-Schluessel ${name} -> fehlt, nie der Wert`, async () => {
+    const { code, koerper, text } = await status(gesund, wert);
+    assert.equal(code, HTTP_OK);
+    assert.equal(koerper.telnyxSignaturSchluessel, "fehlt");
+    assert.equal(text.includes(wert), false);
+  });
+
+  test(`Boot: TELNYX_PUBLIC_KEY ${name} -> Konfig-Warnung, der Wert steht nie im Log`, async () => {
+    const srv = await startServer({ env: { TELNYX_PUBLIC_KEY: wert } });
+    try {
+      const antwort = await abrufMitFrist(`${srv.localUrl}/healthz`);
+      assert.equal(antwort.status, HTTP_OK);
+      assert.equal(BOOT_WARNUNG.test(srv.stdout), true, srv.stdout);
+      assert.equal(srv.stdout.includes(wert), false);
+    } finally {
+      await srv.stop();
+    }
+  });
+}
