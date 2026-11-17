@@ -32,3 +32,7 @@ export function bewerteLauf(ergebnis) {
   ];
   return { gruen: gruende.length === 0, gruende };
 }
+
+export function nurFehlerquoteUeberGrenze(urteil) {
+  return urteil.gruende.length === 1 && urteil.gruende[0] === "fehlerquote";
+}
