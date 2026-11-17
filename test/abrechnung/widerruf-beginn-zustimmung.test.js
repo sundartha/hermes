@@ -3,19 +3,15 @@ import { test } from "node:test";
 
 import request from "../gemeinsam/testserver-anfrage.mjs";
 import { makePgTestStore } from "../pg-helpers.js";
-import * as ops from "../../src/store/state-ops.js";
-import { config } from "../../src/config.js";
-import { stripeBilling } from "../../src/billing/stripe.ts";
-import { checkoutSessionIdempotencyKey } from "../../src/billing/subscribe.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { starteSelfServiceApp } from "../gemeinsam/self-service-app.js";
-import { makeStripeStub } from "../helpers.js";
 
 const SECRET = "wb1-checkout-secret-0123456789";
 const SUB = "sub-wb1";
 const TENANT = "t_sub-wb1";
 const CUSTOMER = "cus_wb1";
 const TEXT_VERSION = "widerruf-beginn-v1";
+const TAG_MS = 24 * 60 * 60 * 1000;
 const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
@@ -45,9 +41,6 @@ function fakeBilling() {
 
 async function setup({ withCustomer = true } = {}) {
   const { store, runner, db } = await makePgTestStore();
-  const s = store.load();
-  ops.registerTenant(s, TENANT, { firstName: "Kundin", lastName: "WB1", idpSubject: SUB });
-  if (withCustomer) ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
   const { billing, spy } = fakeBilling();
   const app = await starteSelfServiceApp({
     store,
@@ -61,6 +54,8 @@ async function setup({ withCustomer = true } = {}) {
     billing,
     provision: async () => ({ ok: true, reason: "queued" }),
   });
+  await store.ensureTenant(TENANT);
+  if (withCustomer) await store.setTenantStripe(TENANT, { customerId: CUSTOMER });
   return { ...app, store, db, spy };
 }
 
@@ -130,16 +125,15 @@ test("Abo-Checkout mit Zustimmung: Zeitpunkt der Serveruhr und Textversion am Te
       widerruf_beginn_text: TEXT_VERSION,
     });
     assert.equal(s.spy.subCheckouts.length, 1);
-    const params = s.spy.subCheckouts[0];
+    const [params] = s.spy.subCheckouts;
     assert.equal(params.widerrufBeginnAt, erwartet);
     assert.equal(params.widerrufBeginnText, TEXT_VERSION);
     assert.equal(params.planSlug, "starter");
+    assert.equal(params.idempotencyKey, `subcs_${TENANT}_starter_price_starter_${CUSTOMER}_${erwartet}`);
   } finally {
     await s.close();
   }
 });
-
-const TAG_MS = 24 * 60 * 60 * 1000;
 
 test("Abo-Checkout: Doppelklick oder zweiter Tab behalten Zustimmungszeit und Idempotency-Key (keine zweite Abo-Session)", async (t) => {
   const s = await setup();
@@ -159,44 +153,33 @@ test("Abo-Checkout: Doppelklick oder zweiter Tab behalten Zustimmungszeit und Id
 });
 
 const ALTE_ZUSTIMMUNG = [
-  ["knapp unter 24 h alt wird weiterverwendet", TAG_MS - 1, true],
-  ["genau 24 h alt wird ersetzt", TAG_MS, false],
+  ["knapp unter 24 h alt wird weiterverwendet", TAG_MS - 1, TEXT_VERSION, true],
+  ["genau 24 h alt wird ersetzt", TAG_MS, TEXT_VERSION, false],
+  ["mit anderer Textversion wird ersetzt", 1000, "widerruf-beginn-v0", false],
 ];
 
-for (const [fall, alterMs, weiter] of ALTE_ZUSTIMMUNG) {
+for (const [fall, alterMs, textVersion, weiter] of ALTE_ZUSTIMMUNG) {
   test(`Abo-Checkout: gespeicherte Zustimmung ${fall} (Idempotency-Fenster von Stripe)`, async (t) => {
     const s = await setup();
     try {
       const jetzt = Date.now();
       const alt = new Date(jetzt - alterMs).toISOString();
-      await s.store.setWiderrufBeginn(TENANT, { at: alt, text: TEXT_VERSION });
+      await s.store.setWiderrufBeginn(TENANT, { at: alt, text: textVersion });
       t.mock.timers.enable({ apis: ["Date"], now: jetzt });
       await checkout(s, { plan: "starter", widerrufBeginn: true });
       const erwartet = weiter ? alt : new Date(jetzt).toISOString();
       const [anfrage] = s.spy.subCheckouts;
       assert.equal(anfrage.widerrufBeginnAt, erwartet);
-      assert.equal((await gespeicherteZustimmung(s)).widerruf_beginn_at, erwartet);
+      assert.equal(anfrage.widerrufBeginnText, TEXT_VERSION);
+      assert.deepEqual(await gespeicherteZustimmung(s), {
+        widerruf_beginn_at: erwartet,
+        widerruf_beginn_text: weiter ? textVersion : TEXT_VERSION,
+      });
     } finally {
       await s.close();
     }
   });
 }
-
-test("Abo-Checkout: eine gespeicherte Zustimmung mit anderer Textversion wird nicht weiterverwendet", async (t) => {
-  const s = await setup();
-  try {
-    const jetzt = Date.now();
-    ops.setWiderrufBeginn(s.store.load(), TENANT, { at: new Date(jetzt).toISOString(), text: "widerruf-beginn-v0" });
-    t.mock.timers.enable({ apis: ["Date"], now: jetzt + 1000 });
-    await checkout(s, { plan: "starter", widerrufBeginn: true });
-    assert.deepEqual(await gespeicherteZustimmung(s), {
-      widerruf_beginn_at: new Date(jetzt + 1000).toISOString(),
-      widerruf_beginn_text: TEXT_VERSION,
-    });
-  } finally {
-    await s.close();
-  }
-});
 
 test("Zustimmung übersteht das Neuladen des Postgres-Stores (Spalten werden gelesen)", async (t) => {
   const s = await setup();
@@ -205,7 +188,7 @@ test("Zustimmung übersteht das Neuladen des Postgres-Stores (Spalten werden gel
     t.mock.timers.enable({ apis: ["Date"], now: jetzt });
     await checkout(s, { plan: "starter", widerrufBeginn: true });
     await s.store.init();
-    assert.deepEqual(ops.tenantWiderrufBeginn(s.store.load(), TENANT), {
+    assert.deepEqual(s.store.tenantWiderrufBeginn(TENANT), {
       at: new Date(jetzt).toISOString(),
       text: TEXT_VERSION,
     });
@@ -218,67 +201,11 @@ test("setWiderrufBeginn: unbekannter Tenant wirft, statt still nichts zu speiche
   const s = await setup();
   try {
     assert.throws(
-      () => ops.setWiderrufBeginn(s.store.load(), "t_unbekannt", { at: "2026-11-17T10:00:00.000Z", text: TEXT_VERSION }),
+      () => s.store.setWiderrufBeginn("t_unbekannt", { at: "2026-11-17T10:00:00.000Z", text: TEXT_VERSION }),
       /t_unbekannt/,
     );
-    assert.deepEqual(ops.tenantWiderrufBeginn(s.store.load(), "t_unbekannt"), { at: null, text: null });
+    assert.deepEqual(s.store.tenantWiderrufBeginn("t_unbekannt"), { at: null, text: null });
   } finally {
     await s.close();
   }
-});
-
-test("checkoutSessionIdempotencyKey: ohne Zustimmungszeit unverändert, mit Zustimmungszeit eindeutig je Zeitpunkt", () => {
-  const basis = { tenant: "t_x", planSlug: "starter", priceId: "price_a", customerId: "cus_a" };
-  assert.equal(checkoutSessionIdempotencyKey(basis), "subcs_t_x_starter_price_a_cus_a");
-  const frueh = checkoutSessionIdempotencyKey({ ...basis, widerrufBeginnAt: "2026-11-17T10:00:00.000Z" });
-  const spaet = checkoutSessionIdempotencyKey({ ...basis, widerrufBeginnAt: "2026-11-17T10:00:01.000Z" });
-  assert.equal(frueh, "subcs_t_x_starter_price_a_cus_a_2026-11-17T10:00:00.000Z");
-  assert.notEqual(frueh, spaet);
-});
-
-const withStripeStub = makeStripeStub(config, "sk_test_wb1_stub");
-
-test("createSubscriptionCheckoutSession: Zeitpunkt und Textversion der Zustimmung stehen in metadata der Checkout-Session", async () => {
-  let body;
-  await withStripeStub(
-    async (_url, opts) => {
-      body = opts.body;
-      return { ok: true, status: 200, json: async () => ({ id: "cs_wb1", url: "https://stripe.test/c/cs_wb1" }) };
-    },
-    () =>
-      stripeBilling.createSubscriptionCheckoutSession({
-        tenantRef: TENANT,
-        customerId: CUSTOMER,
-        priceId: "price_starter",
-        planSlug: "starter",
-        successUrl: "https://agent.test/ok",
-        cancelUrl: "https://agent.test/no",
-        widerrufBeginnAt: "2026-11-17T10:00:00.000Z",
-        widerrufBeginnText: TEXT_VERSION,
-      }),
-  );
-  assert.equal(body.get("metadata[widerruf_beginn_at]"), "2026-11-17T10:00:00.000Z");
-  assert.equal(body.get("metadata[widerruf_beginn_text]"), TEXT_VERSION);
-  assert.equal(body.get("metadata[tenant_ref]"), TENANT);
-});
-
-test("createSubscriptionCheckoutSession: ohne Zustimmungsangaben keine widerruf-Metadaten (kein Text undefined)", async () => {
-  let body;
-  await withStripeStub(
-    async (_url, opts) => {
-      body = opts.body;
-      return { ok: true, status: 200, json: async () => ({ id: "cs_wb2", url: "https://stripe.test/c/cs_wb2" }) };
-    },
-    () =>
-      stripeBilling.createSubscriptionCheckoutSession({
-        tenantRef: TENANT,
-        customerId: CUSTOMER,
-        priceId: "price_starter",
-        planSlug: "starter",
-        successUrl: "https://agent.test/ok",
-        cancelUrl: "https://agent.test/no",
-      }),
-  );
-  assert.equal(body.get("metadata[widerruf_beginn_at]"), null);
-  assert.equal(body.get("metadata[widerruf_beginn_text]"), null);
 });

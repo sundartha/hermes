@@ -198,6 +198,7 @@
         "src/telephony/budget-watchdog.js"
       ],
       "eingaenge": [
+        "src/billing/abo-bestaetigung.js",
         "src/billing/activation.ts",
         "src/billing/cancellation-mail.ts",
         "src/billing/card-setup.ts",

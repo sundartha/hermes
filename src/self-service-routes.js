@@ -20,6 +20,7 @@ import {
 } from "./billing/subscribe.ts";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.ts";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.ts";
+import { sendeAboBestaetigung } from "./billing/abo-bestaetigung.js";
 import { setSubscriptionCancellation } from "./billing/subscription-cancellation.ts";
 import { provisionAuditDetail } from "./billing/provision-outcome.ts";
 import {
@@ -557,6 +558,8 @@ export function makeSelfServiceRoutes({
           `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ` +
             `${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
         );
+        if (result.ok === true)
+          await sendeAboBestaetigung({ bereiche, accounts, mailer, tenant, planSlug: carriedPlan });
         const returnPath = subscriptionReturnPath(result);
         res.redirect(returnPath);
       },
