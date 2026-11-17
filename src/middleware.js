@@ -227,7 +227,10 @@ export function createRateLimiter(limitPerMin, { schluessel = keyByIp } = {}) {
 
   return (req, res, next) => {
     const { allowed, retryAfterS } = rateHit(schluessel(req));
-    if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+    if (!allowed) {
+      respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+      return;
+    }
     next();
   };
 }
@@ -242,7 +245,8 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
     } catch (err) {
       console.error("[login-bremse]", maskNumbersInText(fehlerText(err)));
       res.set("Retry-After", String(LOGIN_BREMSE_RETRY_AFTER_S));
-      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
+      res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
+      return;
     }
     if (treffer.anzahl <= limitPerMin) {
       next();
@@ -250,7 +254,7 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
     }
     const verbleibendS = Math.ceil((treffer.beginnMs + RATE_WINDOW_MS - nowMs) / MS_PER_SECOND);
     const retryAfterS = Math.min(fensterS, Math.max(1, verbleibendS));
-    return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
+    respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
   };
 }
 
