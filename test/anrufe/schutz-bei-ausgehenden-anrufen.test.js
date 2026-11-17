@@ -245,14 +245,13 @@ test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterd
   await aufDemElWeg({}, async ({ srv, anbieter }) => {
     const lang = await rufeAn(srv, { to: LANGES_ZIEL, objective: LANGER_AUFTRAG, max_duration_s: 30 });
     assert.equal(lang.status, HTTP_OK);
-    const kurz = await rufeAn(srv, { max_duration_s: 2 });
-    assert.equal(kurz.status, HTTP_OK);
-    assert.equal((await kurz.json()).status, "dialing");
+    assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
     for (const aktiv of [anrufAn(srv, LANGES_ZIEL), auftragsAnruf(srv.readStore())])
       await initInhaltFuer(srv, { callId: aktiv.id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
+    assert.ok(Date.parse(anruf.endedAt) - Date.parse(anruf.startedAt) >= 2000);
     await waitUntil(() => anbieter.beendetGespraech(anruf.id), { timeoutMs: 3000 });
     const langerAnruf = anrufAn(srv, LANGES_ZIEL);
     assert.equal(langerAnruf.status, "active");
