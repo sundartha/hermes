@@ -23,7 +23,6 @@ import {
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
   elBegruessungslautUrl,
-  elStilleUrl,
   elFehlersatzDirektiven,
   elUebergabeDirektiven,
   ausgehendeRueckfallEntscheidungFuer,
@@ -34,7 +33,7 @@ import {
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
-import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/timer.js";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
@@ -67,8 +66,6 @@ const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
 const VORSPANN_LOG_PREFIX = "[vorspann]";
-const OUTBOUND_LOG_PREFIX = "[voice/outbound]";
-const EL_AUSGEHEND_LOG_PREFIX = "[el-outbound-uebergabe]";
 const INBOUND_LOG_PREFIX = "[inbound]";
 const ABHEBEN_LOG_PREFIX = "[voice] abheben schreiben fehlgeschlagen";
 
@@ -99,23 +96,6 @@ function eingehenderWartetonUrl(config) {
 async function sendElUebergabe({ res, call }, deps) {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
   await sendElDial({ res, call, did: call.to, wartetonUrl: eingehenderWartetonUrl(deps.config) }, deps);
-}
-
-async function sendAusgehendeElUebergabe({ res, call }, deps) {
-  if (call.status !== "active") return sendAuflegen({ res, call }, deps);
-  await deps.store.markAnswered(call.id);
-  deps.store.save();
-  console.log(`${EL_AUSGEHEND_LOG_PREFIX} call=${call.id}`);
-  await sendElDial({ res, call, did: call.from, wartetonUrl: elStilleUrl(deps.config.server.publicUrl) }, deps);
-}
-
-async function antworteAufAusgehendeUebergabe(anfrage, deps) {
-  try {
-    await sendAusgehendeElUebergabe(anfrage, deps);
-  } catch (err) {
-    console.error(EL_AUSGEHEND_LOG_PREFIX, err.message);
-    await legeGescheitertAuf({ res: anfrage.res, call: anfrage.call, nowMs: Date.now() }, deps);
-  }
 }
 
 const INBOUND_PFAD = Object.freeze({
@@ -474,28 +454,6 @@ export function makeVoiceRoutes({
       console.error("[incoming]", err.message);
       await sendTechnischesEnde({ res, call, provider }, voiceDeps);
     }
-  });
-
-  router.post("/voice/outbound", idempotenz.forElUebergabe, async (req, res) => {
-    const gelesen = await leseCallMitFehler(store, req.query.callId || "", OUTBOUND_LOG_PREFIX);
-    if (gelesen.fehler) return res.sendStatus(HTTP_SERVER_ERROR);
-    let call = gelesen.call;
-    if (brauchtWiederanbindung(store, call)) {
-      const reattached = await wiederanbinden({ store, lifecycle }, call, req.query.callId);
-      if (reattached.call) {
-        call = reattached.call;
-      } else {
-        if (reattached.fehlgeschlagen) return res.sendStatus(HTTP_SERVER_ERROR);
-        if (reattached.logUnknown)
-          console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
-        return res.type("text/xml").send(render([hangupD()]));
-      }
-    }
-    call.twilioSid = req.body.CallSid || call.twilioSid;
-    if (istOutboundElProfil(call)) return antworteAufAusgehendeUebergabe({ res, call }, voiceDeps);
-    await store.markAnswered(call.id);
-    store.save();
-    sendAuflegen({ res, call }, voiceDeps);
   });
 
   router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));

@@ -119,54 +119,6 @@ async function ohneLog(fn) {
   return zeilen;
 }
 
-test("H6a-1: /voice/outbound auf Instanz B findet den Anruf von Instanz A in der Datenbank und markiert ihn als angenommen", async () => {
-  const { db, b, call } = await zweiInstanzen();
-  const protokoll = neuesProtokoll();
-  await mitServer(routen(b, protokoll), async (post) => {
-    const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6a_1" });
-    assert.equal(antwort.status, 200);
-  });
-  assert.notEqual((await zeile(db, call.id)).answered_at, null);
-  assert.deepEqual(protokoll.wiederaufnahmen, [call.id]);
-});
-
-test("H6a-2: /voice/outbound mit Lesefehler der Datenbank antwortet 500 und aendert den Anruf nicht", async () => {
-  const { db, b, call } = await zweiInstanzen();
-  await kaputtMachen(db);
-  const protokoll = neuesProtokoll();
-  const zeilen = await ohneLog(() =>
-    mitServer(routen(b, protokoll), async (post) => {
-      const antwort = await post(`/voice/outbound?callId=${call.id}`, { CallSid: "CA_h6a_2" });
-      assert.equal(antwort.status, 500);
-    }),
-  );
-  assert.ok(zeilen.some((zeile) => zeile.includes(`[voice/outbound] Anruf lesen fehlgeschlagen (callId=${call.id})`)));
-  assert.deepEqual(protokoll.wiederaufnahmen, []);
-  const gespeichert = await zeile(db, call.id);
-  assert.equal(gespeichert.status, "active");
-  assert.equal(gespeichert.answered_at, null);
-});
-
-test("H6a-3: /voice/outbound mit fehlgeschlagener Wiederanbindung eines unbekannten Anrufs antwortet 500 statt aufzulegen", async () => {
-  const { b } = await zweiInstanzen();
-  const protokoll = neuesProtokoll();
-  protokoll.anbindung = { call: null, logUnknown: false, fehlgeschlagen: true };
-  await mitServer(routen(b, protokoll), async (post) => {
-    const antwort = await post("/voice/outbound?callId=call_gibt_es_nicht", { CallSid: "CA_h6a_3" });
-    assert.equal(antwort.status, 500);
-  });
-  assert.deepEqual(protokoll.wiederaufnahmen, ["call_gibt_es_nicht"]);
-});
-
-test("H6a-4: /voice/outbound mit unbekanntem Anruf ohne Lesefehler legt weiter auf (200)", async () => {
-  const { b } = await zweiInstanzen();
-  const protokoll = neuesProtokoll();
-  await mitServer(routen(b, protokoll), async (post) => {
-    const antwort = await post("/voice/outbound?callId=call_gibt_es_nicht", { CallSid: "CA_h6a_4" });
-    assert.equal(antwort.status, 200);
-  });
-});
-
 test("H6a-5: /voice/status auf Instanz B findet den Anruf von Instanz A in der Datenbank und markiert ihn als angenommen", async () => {
   const { db, b, call } = await zweiInstanzen();
   const protokoll = neuesProtokoll();
@@ -327,17 +279,4 @@ test("H6a-14: das EL-Bein-Ereignis ohne Anruf-Kennung und mit Lesefehler antwort
   );
   assert.ok(zeilen.some((zeile) => zeile.includes("[el-bein] Anruf lesen fehlgeschlagen (callId=-)")));
   assert.deepEqual(protokoll.fristen, []);
-});
-
-test("H6a-15: /voice/outbound ohne Anruf-Kennung und mit Lesefehler antwortet 500 und protokolliert callId=-", async () => {
-  const { db, b } = await zweiInstanzen();
-  await kaputtMachen(db);
-  const protokoll = neuesProtokoll();
-  const zeilen = await ohneLog(() =>
-    mitServer(routen(b, protokoll), async (post) => {
-      const antwort = await post("/voice/outbound", { CallSid: "CA_h6a_15" });
-      assert.equal(antwort.status, 500);
-    }),
-  );
-  assert.ok(zeilen.some((zeile) => zeile.includes("[voice/outbound] Anruf lesen fehlgeschlagen (callId=-)")));
 });

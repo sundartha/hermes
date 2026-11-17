@@ -229,22 +229,3 @@ test("BEFUND (Charakterisierung): /voice/status bei Altdaten-Call mit provider a
 
 const postForm = (srv, path) =>
   abrufMitFrist(`${srv.localUrl}${path}`, { method: "POST", body: new URLSearchParams({}) });
-
-test("/voice/outbound: unbekannter Call -> Hangup MIT Logzeile, PII-frei", async () => {
-  const srv = await startServer();
-  try {
-    const res = await postForm(srv, "/voice/outbound?callId=ul_missing");
-    assert.equal(res.status, HTTP_OK);
-    const xml = await res.text();
-    assert.match(xml, /<Hangup\s*\/>/, `Hangup erwartet: ${xml}`);
-    await waitForLog(srv, /\[voice\/outbound\] unbekannter Call \(callId=ul_missing\) -> Hangup/);
-
-    const lines = srv.stdout
-      .split("\n")
-      .filter((zeile) => zeile.includes("[voice/outbound]"));
-    assert.ok(lines.length >= ERWARTETE_LOGZEILEN, `eine Logzeile erwartet:\n${srv.stdout}`);
-    pruefeOhneRufnummern(lines);
-  } finally {
-    await srv.stop();
-  }
-});

@@ -140,8 +140,6 @@ test("Anfrage-ID: mit Schalter traegt auch die normale stdout-Ausgabe waehrend e
   });
 });
 
-const NUMMER_IM_LOG = "+491701234567";
-const MASKIERTE_ZEILE = /^(rid=[0-9a-f-]{36} )?\[voice\/outbound\] unbekannter Call \(callId=\*\*\*4567#[0-9a-f]+\) -> Hangup$/m;
 const UNBEKANNTE_ZIELNUMMER = "+491709876543";
 const MASKIERTE_STDOUT_ZEILE = /^(rid=[0-9a-f-]{36} )?\[audit\] inbound_unrouted ip=\S+ to=\*\*\*6543#[0-9a-f]{6}$/m;
 
@@ -149,13 +147,8 @@ test("[NIE1] mit Schalter bleibt eine Nummer in einer Logzeile waehrend der Anfr
   const optionen = { seed: seedWithTelnyxNumber({ language: "de" }), env: MIT_KENNUNG_IN_LOGS };
   await mitServer(optionen, async (srv) => {
     const nurStdout = sammleNurStdout(srv);
-    const ziel = `${srv.localUrl}/voice/outbound?callId=${encodeURIComponent(NUMMER_IM_LOG)}`;
-    await abrufMitFrist(ziel, { method: "POST" });
     await postTelnyxIncoming(srv, { callSid: "CAunbekannt", to: UNBEKANNTE_ZIELNUMMER });
-    await waitForLog(srv, /\[voice\/outbound\] unbekannter Call/);
     await waitForLog(srv, /\[audit\] inbound_unrouted/);
-    assert.ok(!srv.stdout.includes(NUMMER_IM_LOG), "die Nummer steht unmaskiert im Log");
-    assert.match(srv.stdout, MASKIERTE_ZEILE);
     assert.ok(!nurStdout.text.includes(UNBEKANNTE_ZIELNUMMER), `die Zielnummer steht unmaskiert auf stdout:\n${nurStdout.text}`);
     assert.match(nurStdout.text, MASKIERTE_STDOUT_ZEILE);
   });
@@ -206,15 +199,17 @@ function warteAufStderrZeile(srv, stderrText, muster) {
 }
 
 test("Anfrage-ID: mit Schalter beginnt eine stderr-Zeile waehrend der Anfrage mit rid=<ID> und Leerzeichen", async () => {
-  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env: MIT_KENNUNG_IN_LOGS }, async (srv) => {
+  const signierer = makeTelnyxSigner();
+  const env = { ...MIT_KENNUNG_IN_LOGS, SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signierer.publicKeyBase64 };
+  await mitServer({ seed: seedWithTelnyxNumber({ language: "de" }), env }, async (srv) => {
     const nurStderr = { text: "" };
     srv.child.stderr.on("data", (stueck) => (nurStderr.text += stueck.toString()));
-    const ziel = `${srv.localUrl}/voice/outbound?callId=erfundene-kennung-stderr`;
+    const ziel = `${srv.localUrl}/voice/incoming`;
     const antwort = await abrufMitFrist(ziel, { method: "POST" });
     const kennung = antwort.headers.get(KENNUNG_HEADER);
     assert.match(kennung, UUID);
-    await warteAufStderrZeile(srv, nurStderr,/\[voice\/outbound\] unbekannter Call/);
-    const zeilen = nurStderr.text.split("\n").filter((zeile) => zeile.includes("[voice/outbound] unbekannter Call"));
+    await warteAufStderrZeile(srv, nurStderr, /\[voice-signature\] ungueltige Inbound-Signatur/);
+    const zeilen = nurStderr.text.split("\n").filter((zeile) => zeile.includes("[voice-signature] ungueltige Inbound-Signatur"));
     assert.equal(zeilen.length, 1, `stderr:\n${nurStderr.text}`);
     assert.ok(zeilen[0].startsWith(`rid=${kennung} `), `stderr-Zeile ohne rid=${kennung} am Anfang:\n${nurStderr.text}`);
   });

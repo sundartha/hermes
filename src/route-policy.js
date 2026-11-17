@@ -224,11 +224,6 @@ export const PUBLIC_ROUTES = Object.freeze([
   },
   {
     method: "POST",
-    path: "/voice/outbound",
-    reason: VOICE_SIGNATURE_REASON,
-  },
-  {
-    method: "POST",
     path: "/voice/status",
     reason: VOICE_SIGNATURE_REASON,
   },

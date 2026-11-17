@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, seedState, seedCall } from "./helpers.js";
-import { abrufMitFrist } from "./gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./anrufe/attrappen-server.js";
 
 export const DISCLOSURE_JONAS =
@@ -19,79 +17,6 @@ export function assertDisclosureInGather(body, disclosure = DISCLOSURE_JONAS) {
     gatherIdx < discIdx,
     `Offenlegung muss IM Gather stehen (Gather oeffnet zuerst): ${body}`,
   );
-}
-
-const DEFAULT_CALL_ID = "call_harness1";
-const CALL_SID = "CAtest";
-
-async function startOutboundServer({ provider = "telnyx", call = {}, seed = {}, env = {} } = {}) {
-  const id = call.id || DEFAULT_CALL_ID;
-  const srv = await startServer({
-    env,
-    seed: seedState({
-      calls: [seedCall({ id, provider, status: "active", direction: "outbound", ...call })],
-      ...seed,
-    }),
-  });
-  return { srv, id };
-}
-
-async function fetchOutbound(srv, id) {
-  const res = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
-    method: "POST",
-    body: new URLSearchParams({ CallSid: CALL_SID }),
-  });
-  const body = await res.text();
-  return { body, status: res.status, contentType: res.headers.get("content-type") };
-}
-
-export async function runOutbound(opts = {}) {
-  const { srv, id } = await startOutboundServer(opts);
-  try {
-    const result = await fetchOutbound(srv, id);
-    return { ...result, stdout: srv.stdout };
-  } finally {
-    await srv.stop();
-  }
-}
-
-export async function runOutboundKeepOpen(opts = {}) {
-  const { srv, id } = await startOutboundServer(opts);
-  const result = await fetchOutbound(srv, id);
-  return { ...result, srv };
-}
-
-export async function runOutboundThenTurn({
-  provider = "telnyx",
-  call = {},
-  speechResult,
-  mockUrl,
-  env = {},
-} = {}) {
-  const id = call.id || DEFAULT_CALL_ID;
-  const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: mockUrl, ...env },
-    seed: seedState({
-      calls: [seedCall({ id, provider, status: "active", direction: "outbound", ...call })],
-    }),
-  });
-  try {
-    const outRes = await abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ CallSid: CALL_SID }),
-    });
-    assert.equal(outRes.status, 200);
-    const outboundBody = await outRes.text();
-
-    const turnRes = await abrufMitFrist(`${srv.localUrl}/voice/turn?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ SpeechResult: speechResult }),
-    });
-    const turnBody = await turnRes.text();
-    return { outboundBody, turnBody, turnStatus: turnRes.status, stdout: srv.stdout };
-  } finally {
-    await srv.stop();
-  }
 }
 
 export const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";

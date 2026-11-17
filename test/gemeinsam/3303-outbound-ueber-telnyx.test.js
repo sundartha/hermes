@@ -86,36 +86,6 @@ const anrufStarten = (srv) =>
     body: JSON.stringify({ to: TELNYX_TEST_PEER_NUMBER, objective: OBJECTIVE }),
   });
 
-const voiceOutbound = (srv, callId, felder = {}) =>
-  abrufMitFrist(`${srv.localUrl}/voice/outbound?callId=${callId}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ CallSid: TRAEGER_SID, ...felder }).toString(),
-  });
-
-test("3303-K11: nicht aktiver oder schon gebundener Anruf -> kein Dial, keine SIP-Zugangsdaten", async () => {
-  const bereitsGebunden = seedCall({
-    id: "call_3303_gebunden",
-    provider: "telnyx",
-    costProfile: UEBER_TELNYX,
-    streamToken: "g".repeat(32),
-    answeredAt: new Date().toISOString(),
-    elevenlabsConversationId: "conv_3303_gebunden",
-    elBoundAt: new Date().toISOString(),
-  });
-  const beendet = seedCall({ id: "call_3303_beendet", provider: "telnyx", costProfile: UEBER_TELNYX, streamToken: "b".repeat(32), status: "failed", endedAt: new Date().toISOString() });
-  await mitServer({ env: SCHALTER_AN, seed: seedState({ calls: [bereitsGebunden, beendet] }) }, async ({ srv }) => {
-    const geheimnis = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD;
-    const beendetXml = await (await voiceOutbound(srv, beendet.id)).text();
-    assert.match(beendetXml, /<Hangup\s*\/>/);
-    for (const xml of [beendetXml, await (await voiceOutbound(srv, bereitsGebunden.id)).text()]) {
-      assert.doesNotMatch(xml, /<Dial|<Sip|<Gather/);
-      assert.ok(!xml.includes(geheimnis), xml);
-      assert.doesNotMatch(xml, /elevenlabs/i);
-    }
-  });
-});
-
 test("3303-K12: Gates laufen vor beiden Waehlwegen -> OUTBOUND_FROZEN und erschoepfte Kostendecke waehlen nie", async () => {
   const kostendeckeLeer = seedState({ calls: [] });
   kostendeckeLeer.tenantBudgets = [{ tenantId: TENANT_ID, budgetCents: 0, hardCapCents: 0 }];

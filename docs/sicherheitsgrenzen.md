@@ -105,7 +105,6 @@ Die Art ist `Werkzeug` für ein registriertes MCP-Werkzeug, `Webhook` für eine 
 | Route | GET /app/* | SG-22, SG-23 |
 | Webhook | GET /voice/tts/:token | SG-02, SG-13 |
 | Webhook | POST /voice/incoming | SG-05, SG-09, SG-28 |
-| Webhook | POST /voice/outbound | SG-05, SG-11 |
 | Webhook | POST /voice/el-rueckfall | SG-05 |
 | Webhook | POST /voice/el-bein | SG-05 |
 | Webhook | POST /voice/vorspann | SG-05 |
