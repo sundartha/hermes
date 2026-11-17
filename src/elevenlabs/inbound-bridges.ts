@@ -54,7 +54,11 @@ export function makeInboundBridges({
   clearTimer = clearTimeout,
   now,
 }: {
-  store: { getCall: (id: string) => Anruf | null | undefined; load: () => { calls: Anruf[] } };
+  store: {
+    getCall: (id: string) => Anruf | null | undefined;
+    leseCallUngebunden?: (id: string) => Promise<Anruf | null | undefined>;
+    load: () => { calls: Anruf[] };
+  };
   umleiten: (umleitung: Umleitung) => unknown;
   setTimer: (fn: () => void, ms: number) => Handle;
   clearTimer?: (handle: Handle) => void;
@@ -69,12 +73,21 @@ export function makeInboundBridges({
     fristen.delete(callId);
   }
 
+  function mitAnruf(callId: string, weiter: (call: Anruf | null | undefined) => void): void {
+    if (!store.leseCallUngebunden) {
+      weiter(store.getCall(callId));
+      return;
+    }
+    store.leseCallUngebunden(callId).then(weiter, () => weiter(null));
+  }
+
   function fristAbgelaufen(callId: string, art: string): void {
-    const call = store.getCall(callId);
     clearDeadlines(callId);
-    if (!umleitungFaellig(call)) return;
-    console.log(`[${LOG_TAG}] frist_abgelaufen call=${callId} frist=${art}`);
-    void umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
+    mitAnruf(callId, (call) => {
+      if (!umleitungFaellig(call)) return;
+      console.log(`[${LOG_TAG}] frist_abgelaufen call=${callId} frist=${art}`);
+      void umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
+    });
   }
 
   function armiere(callId: string, art: string, ms: number): void {
@@ -86,9 +99,9 @@ export function makeInboundBridges({
   }
 
   function armDeadlines(callId: string): void {
-    const call = store.getCall(callId);
-    if (!call) return;
-    armiere(callId, FRIST_ART.AUSSEN, aeussereRestfristMs(call, now()));
+    mitAnruf(callId, (call) => {
+      if (call) armiere(callId, FRIST_ART.AUSSEN, aeussereRestfristMs(call, now()));
+    });
   }
 
   function armBindingDeadline(callId: string): void {
