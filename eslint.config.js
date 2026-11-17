@@ -26,7 +26,7 @@ const PROCESS_ENV_REGEL = {
     "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
 };
 const UHR_MELDUNG =
-  "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, setTimeout, setInterval, node:timers), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
+  "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, new Date(), performance.now, setTimeout, setInterval, setImmediate, node:timers, sleep und defaultSetTimer aus utils/timer), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
 const UHR_BESTAND = [
   "src/elevenlabs/outbound.js",
   "src/telephony/adapters/telnyx/numbers.js",
@@ -751,12 +751,26 @@ export default [
         "error",
         { name: "setTimeout", message: UHR_MELDUNG },
         { name: "setInterval", message: UHR_MELDUNG },
+        { name: "setImmediate", message: UHR_MELDUNG },
       ],
-      "no-restricted-imports": ["error", { paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })) }],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })),
+          patterns: [{ regex: "(^|/)utils/timer(\\.js)?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        { selector: demeterChainSelector, message: demeterChainMessage },
+        { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: UHR_MELDUNG },
+      ],
       "no-restricted-properties": [
         "error",
         PROCESS_ENV_REGEL,
         { object: "Date", property: "now", message: UHR_MELDUNG },
+        { object: "performance", property: "now", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setImmediate", message: UHR_MELDUNG },
         { object: "globalThis", property: "setTimeout", message: UHR_MELDUNG },
         { object: "globalThis", property: "setInterval", message: UHR_MELDUNG },
       ],
