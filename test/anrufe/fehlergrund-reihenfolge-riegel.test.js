@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { terminateAndBillCall, persistEndWithReason } from "../../src/telephony/call-termination.ts";
-import { endFailedCallWithReason } from "../../src/routes/api-calls.js";
+import { endFailedCallWithReason } from "../../src/routes/api-calls.ts";
 
 const PROVIDER_STATUS_403 = 403;
 

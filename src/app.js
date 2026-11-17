@@ -32,7 +32,7 @@ import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.ts";
 import { makeInboxRoutes } from "./routes/api-inbox.ts";
 import { makeBillingRoutes } from "./routes/api-billing.ts";
-import { makeCallRoutes } from "./routes/api-calls.js";
+import { makeCallRoutes } from "./routes/api-calls.ts";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeDeployInfoRoutes } from "./routes/api-deploy-info.js";
 import { makeInternAnrufeLaufendRoutes } from "./routes/intern-anrufe-laufend.js";

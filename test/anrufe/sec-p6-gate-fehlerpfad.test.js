@@ -25,7 +25,7 @@ let GATE_ERROR_MESSAGE;
 before(async () => {
   schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(seedState({}));
-  ({ makeCallRoutes } = await import("../../src/routes/api-calls.js"));
+  ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
   ({ makeOutboundGates, GATE_ERROR_GRUND, GATE_ERROR_MESSAGE } = await import(
     "../../src/telephony/outbound-gates.js"
   ));

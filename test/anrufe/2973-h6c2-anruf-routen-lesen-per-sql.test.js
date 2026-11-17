@@ -3,7 +3,7 @@ import { test } from "node:test";
 import express from "express";
 
 import { config } from "../../src/config.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 

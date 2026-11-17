@@ -5,7 +5,7 @@ import express from "express";
 import { startServer } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeLeitungsplaetze } from "../../src/store.js";
-import { makeCallRoutes } from "../../src/routes/api-calls.js";
+import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { legeMandantAn, makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { initInhaltFuer, vorspannDiAttrappe, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";

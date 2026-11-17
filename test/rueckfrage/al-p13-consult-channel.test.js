@@ -57,7 +57,7 @@ before(async () => {
     }),
     () => import("../../src/consult/delivery.js"),
     () => import("../../src/consult/gate.js"),
-    () => import("../../src/routes/api-calls.js"),
+    () => import("../../src/routes/api-calls.ts"),
     () => import("../../src/boot.js"),
     () => import("../../src/mcp-server-info.js"),
     () => import("../../src/routes/mcp.js"),

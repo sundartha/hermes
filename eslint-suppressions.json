@@ -542,7 +542,7 @@
       "count": 3
     }
   },
-  "src/routes/api-calls.js": {
+  "src/routes/api-calls.ts": {
     "complexity": {
       "count": 1
     },
