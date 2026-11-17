@@ -17,7 +17,7 @@ import {
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { mapStatus, callOutcomeView, pickTranscript } from "./anruf-ergebnis.js";
+import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps } from "./anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;
 
@@ -83,7 +83,10 @@ function summaryLanguageOf(callRecord, tenantLanguage) {
 }
 
 function callResultReply(callId, callRecord, loc) {
-  const data = pickTranscript(callId, callRecord, loc.mcp);
+  const data = {
+    ...pickTranscript(callId, callRecord, loc.mcp),
+    next_steps: maskedNextSteps(callRecord.result),
+  };
   const text = jsonText({
     result_summary: data.result_summary,
     objective_achieved: data.objective_achieved,
@@ -92,6 +95,7 @@ function callResultReply(callId, callRecord, loc) {
     counterparty_commitments: data.counterparty_commitments,
     open_points: data.open_points,
     next_step: data.next_step,
+    next_steps: data.next_steps,
   });
   return {
     content: [{ type: "text", text }],
