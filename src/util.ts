@@ -32,7 +32,7 @@ export function hashEmail(value: string | number | null | undefined): string {
   return sha256Hex(s).slice(0, EMAIL_HASH_LEN);
 }
 
-export function audit(action: string, req?: { ip?: string | undefined } | null, details = ""): void {
+export function audit(action: string, req?: { ip?: string } | null, details = ""): void {
   console.log(`[audit] ${action} ip=${req?.ip ?? "system"}${details ? " " + details : ""}`);
 }
 
@@ -47,6 +47,6 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   STATUS_TOKEN: "status_token",
 });
 
-export function auditAuthFailed(req: { ip?: string | undefined; path: string }, grund: string, detail = ""): void {
+export function auditAuthFailed(req: { ip?: string; path: string }, grund: string, detail = ""): void {
   audit("auth_failed", req, `path=${req.path} grund=${grund}${detail ? ` ${detail}` : ""}`);
 }
