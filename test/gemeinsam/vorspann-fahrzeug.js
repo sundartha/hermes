@@ -175,3 +175,13 @@ export async function starteErfolgreicheAttrappe(kennung, tenantIds) {
   };
   return { env, attrappe, close: attrappe.close };
 }
+
+export async function starteSchaltbarenAnbieter(behandeln, kennung, tenantIds) {
+  const { makeTelnyxSigner, vorspannUmgebung } = await import("../anrufe/el-bein-attrappe.js");
+  const { starteAttrappe } = await import("../anrufe/attrappen-server.js");
+  const attrappe = await starteAttrappe(behandeln);
+  const vollstaendig = vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "", kennung });
+  const ausgenommen = new Set(SIGNATUR);
+  const ohneSignatur = Object.fromEntries(Object.entries(vollstaendig).filter(([schluessel]) => !ausgenommen.has(schluessel)));
+  return { env: { ...ohneSignatur, ...vorspannMandantenUmgebung(tenantIds) }, close: attrappe.close };
+}
