@@ -195,7 +195,7 @@ test("H6b-6: /voice/incoming mit Lesefehler antwortet 500, verarbeitet nichts, u
   assert.deepEqual(laeufe, neuesProtokoll());
 });
 
-test("H6b-7: ein Lesefehler gibt die Annahme in der Ablage frei und laesst eine zeitgleich wartende Zustellung selbst verarbeiten", async () => {
+test("H6b-7: ein Lesefehler gibt die Annahme in der Ablage frei und beantwortet eine zeitgleich wartende Zustellung ebenfalls mit 500", async () => {
   const freigaben = [];
   let ablehnen;
   const lesen = new Promise((_ok, fehler) => {
@@ -227,11 +227,11 @@ test("H6b-7: ein Lesefehler gibt die Annahme in der Ablage frei und laesst eine 
       await new Promise((resolve) => setImmediate(resolve));
       ablehnen(new Error("lesen kaputt"));
       assert.equal((await erste).status, 500);
-      assert.equal((await zweite).status, 200);
+      assert.equal((await zweite).status, 500);
     }),
   );
   assert.deepEqual(freigaben, [{ kennung: "k_h6b_7", anker: ["in:CA_h6b_7"] }]);
-  assert.deepEqual(laeufe.audits, ["inbound_unrouted"]);
+  assert.deepEqual(laeufe, neuesProtokoll());
 });
 
 test("H6b-8: ein Store ohne SQL-Leser (JSON-Betrieb) findet den Anruf weiter im Arbeitsspeicher", async () => {

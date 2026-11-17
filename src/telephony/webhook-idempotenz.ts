@@ -430,7 +430,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort }: Idemp
       const gelesenBekannt = await versuche(() => seenBefore(req, anchors));
       if ("fehler" in gelesenBekannt) {
         releaseAnchors(anchors, deferred.answer);
-        deferred.settle(null);
+        deferred.settle({ status: HTTP_SERVER_ERROR, body: "" });
         freigeben(FREIGABE_GRUND.LESEFEHLER);
         return antworteMitLesefehler({ weg, req, res, err: gelesenBekannt.fehler });
       }
