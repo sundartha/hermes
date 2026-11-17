@@ -11,7 +11,7 @@ const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
 const REGEL = "ajinabraham.njsscan.crypto.timing_attack_node.node_timing_attack";
 const DATEI = "src/tts/directive-synth.js";
 
-const befund = (path, check_id, lines, line = 7) => ({ path, check_id, start: { line }, extra: { message: "Treffer", ...(lines === undefined ? {} : { lines }) } });
+const befund = (path, check_id, lines) => ({ path, check_id, start: { line: 12 }, extra: { message: "Treffer", ...(lines === undefined ? {} : { lines }) } });
 
 test("Die Ausnahme nennt den Zeileninhalt token === null", () => {
   assert.equal(pruefen.SEMGREP_AUSNAHME.zeile, "token === null");
@@ -46,7 +46,7 @@ function semgrepSchritt(ergebnisse) {
 }
 
 test("Schritt semgrep ist rot bei Timing-Befund mit anderem Zeileninhalt", () => {
-  const lauf = semgrepSchritt([befund(DATEI, REGEL, "if (token === geheimnis) {", 12)]);
+  const lauf = semgrepSchritt([befund(DATEI, REGEL, "if (token === geheimnis) {")]);
   assert.notEqual(lauf.status, 0);
   assert.match(lauf.stdout, new RegExp(`${DATEI}:12: ${REGEL}: Treffer`));
 });
