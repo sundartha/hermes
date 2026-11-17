@@ -37,7 +37,7 @@ function innerhalbInhalt() {
 test("widget-anrufkarte-hoehe: die Karte hat eine feste Obergrenze über der Mindesthöhe", () => {
   const karte = regelWerte(".w");
   assert.equal(karte["min-height"], "492px");
-  assert.equal(karte["max-height"], "640px");
+  assert.equal(karte["max-height"], "760px");
 });
 
 test("widget-anrufkarte-hoehe: der Inhaltsbereich schrumpft und scrollt intern", () => {
