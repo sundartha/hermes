@@ -334,7 +334,7 @@ test("pg-Backend: die vier Angaben UND die bestaetigte Zeitzone (Wert+Herkunft+Z
   await store.save();
 
   const reopened = await reopen(db);
-  const got = reopened.getCall(call.id);
+  const got = await reopened.leseCall(call.id);
 
   assert.ok(got, "Call ueberlebt die Re-Hydrierung");
   assert.equal(got.appointmentDate, "March 3");
@@ -357,7 +357,7 @@ test("pg-Backend: ein frischer Call ohne Data-Collection-Ergebnis hydriert alle 
   await store.save();
 
   const reopened = await reopen(db);
-  const got = reopened.getCall(call.id);
+  const got = await reopened.leseCall(call.id);
 
   for (const field of [
     "appointmentDate",

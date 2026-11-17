@@ -110,10 +110,10 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
     "stripe-Referenzen round-trippen",
   );
   assert.equal("stripeCustomerId" in rs.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID), false);
-  assert.ok(r.getCall(cb.id), "B-Call vorhanden");
-  assert.equal(r.getCall(cb.id).tenantId, TENANT_B);
-  assert.ok(r.getCall(co.id), "Owner-Call separat vorhanden");
-  assert.equal(r.getCall(co.id).tenantId, BOOTSTRAP_TENANT_ID);
+  assert.ok(await r.leseCall(cb.id), "B-Call vorhanden");
+  assert.equal((await r.leseCall(cb.id)).tenantId, TENANT_B);
+  assert.ok(await r.leseCall(co.id), "Owner-Call separat vorhanden");
+  assert.equal((await r.leseCall(co.id)).tenantId, BOOTSTRAP_TENANT_ID);
   assert.ok(rs.actionItems.some((a) => a.callId === cb.id && a.text === "B-Item"));
   assert.ok(rs.actionItems.some((a) => a.callId === co.id && a.text === "Owner-Item"));
   assert.ok(rs.notifications.some((n) => n.callId === cb.id && n.title === "B-Notif"));

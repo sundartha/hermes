@@ -65,7 +65,7 @@ test("K1+K3: bridgedAt und elCallControlId ueberleben Reopen und spaetere Flushe
   await store.drainFlushes();
 
   const erster = await speicherOeffnen(db);
-  const geladen = erster.getCall(call.id);
+  const geladen = await erster.leseCall(call.id);
   assert.equal(geladen.bridgedAt, BRUECKE_ZEIT);
   assert.equal(geladen.elCallControlId, EL_BEIN);
   assert.equal(geladen.callerIsOwner, true);
@@ -75,8 +75,8 @@ test("K1+K3: bridgedAt und elCallControlId ueberleben Reopen und spaetere Flushe
   await erster.save();
   await erster.drainFlushes();
   const zweiter = await speicherOeffnen(db);
-  assert.equal(zweiter.getCall(call.id).bridgedAt, BRUECKE_ZEIT);
-  assert.equal(zweiter.getCall(call.id).elCallControlId, EL_BEIN);
+  assert.equal((await zweiter.leseCall(call.id)).bridgedAt, BRUECKE_ZEIT);
+  assert.equal((await zweiter.leseCall(call.id)).elCallControlId, EL_BEIN);
 });
 
 test("K2: ohne Werte sind beide Felder null", async () => {
@@ -84,7 +84,7 @@ test("K2: ohne Werte sind beide Felder null", async () => {
   const call = store.createCall(neuerAnruf());
   await store.save();
   await store.drainFlushes();
-  const geladen = (await speicherOeffnen(db)).getCall(call.id);
+  const geladen = await (await speicherOeffnen(db)).leseCall(call.id);
   assert.equal(geladen.bridgedAt, null);
   assert.equal(geladen.elCallControlId, null);
 });

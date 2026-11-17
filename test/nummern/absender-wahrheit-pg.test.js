@@ -46,7 +46,7 @@ test("Call-Spalten (fromActualE164/fromSource/fromRegistrationSource) ueberleben
   await store.save();
 
   const reopened = await reopen(runner);
-  const gespeichert = reopened.getCall(call.id);
+  const gespeichert = await reopened.leseCall(call.id);
   assert.equal(gespeichert.fromActualE164, "+18643028341");
   assert.equal(gespeichert.fromSource, FROM_SOURCE.TENANT_DID);
   assert.equal(gespeichert.fromRegistrationSource, "tenant_did");
@@ -91,7 +91,7 @@ test("Bestandszeile ohne gesetzte Werte hydriert als null (kein Backfill, kein u
   await store.save();
 
   const reopened = await reopen(runner);
-  const gespeicherterCall = reopened.getCall(call.id);
+  const gespeicherterCall = await reopened.leseCall(call.id);
   assert.equal(gespeicherterCall.fromActualE164, null);
   assert.equal(gespeicherterCall.fromSource, null);
   assert.equal(gespeicherterCall.fromRegistrationSource, null);

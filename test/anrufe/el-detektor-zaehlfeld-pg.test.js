@@ -48,7 +48,7 @@ test("ST3-pg: elDetectorCounts ueberlebt flush + Reopen, ist set-once und faellt
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.deepEqual(
-    reopened.getCall(call.id).elDetectorCounts,
+    (await reopened.leseCall(call.id)).elDetectorCounts,
     { elTags: 1, elB1: 0 },
     "das Zaehlfeld MUSS hydriert werden UND im ON CONFLICT DO UPDATE SET stehen - sonst ist es nach dem Restart weg",
   );
@@ -58,11 +58,11 @@ test("ST3-pg: elDetectorCounts ueberlebt flush + Reopen, ist set-once und faellt
   const dritter = makePgStore(runner);
   await dritter.init();
   assert.deepEqual(
-    dritter.getCall(call.id).elDetectorCounts,
+    (await dritter.leseCall(call.id)).elDetectorCounts,
     { elTags: 1, elB1: 0 },
     "ein Flush nach einer Fremd-Mutation hat das Zaehlfeld verworfen",
   );
-  assert.equal(dritter.getCall(call.id).failureReason, "unreachable:probe", "Positivkontrolle: die Fremd-Mutation selbst ist da");
+  assert.equal((await dritter.leseCall(call.id)).failureReason, "unreachable:probe", "Positivkontrolle: die Fremd-Mutation selbst ist da");
 });
 
 test("ST3: publicCall streicht elDetectorCounts - Kontrollwerte reisen mit", () => {
