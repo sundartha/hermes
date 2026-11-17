@@ -367,7 +367,6 @@
     { "von": "anmeldung", "nach": "selbstbedienung" },
     { "von": "anmeldung", "nach": "start" },
     { "von": "anrufe", "nach": "anmeldung" },
-    { "von": "anrufe", "nach": "betrieb" },
     { "von": "anrufe", "nach": "nummern" },
     { "von": "anrufe", "nach": "posteingang" },
     { "von": "anrufe", "nach": "selbstbedienung" },
