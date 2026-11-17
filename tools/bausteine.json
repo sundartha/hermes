@@ -236,16 +236,12 @@
         "src/worker/",
         "src/queue/",
         "src/telephony/provisioning-geo.js",
-        "src/telephony/absender-registrierung.ts",
-        "src/telephony/adapters/telnyx/numbers.js",
         "src/elevenlabs/nummern-registrierung.js",
         "src/elevenlabs/inbound-trunk-beleg.ts"
       ],
       "eingaenge": [
         "src/elevenlabs/nummern-registrierung.js",
         "src/release-reconcile.js",
-        "src/telephony/absender-registrierung.ts",
-        "src/telephony/adapters/telnyx/numbers.js",
         "src/telephony/provisioning-geo.js"
       ],
       "nutzt": ["abrechnung"]
@@ -336,9 +332,11 @@
         "src/llm/provider.ts",
         "src/llm/registry.js",
         "src/routes/webhooks-elevenlabs-init.ts",
+        "src/telephony/absender-registrierung.ts",
         "src/telephony/adapters/telnyx/cost-parse.ts",
         "src/telephony/adapters/telnyx/errors.ts",
         "src/telephony/adapters/telnyx/http.ts",
+        "src/telephony/adapters/telnyx/numbers.js",
         "src/telephony/alert-sms.ts",
         "src/telephony/failure-reason.ts",
         "src/telephony/fristen-lauf.ts",
@@ -364,7 +362,6 @@
     { "von": "anmeldung", "nach": "nummern" },
     { "von": "anmeldung", "nach": "selbstbedienung" },
     { "von": "anmeldung", "nach": "start" },
-    { "von": "anrufe", "nach": "nummern" },
     { "von": "anrufe", "nach": "posteingang" },
     { "von": "anrufe", "nach": "selbstbedienung" },
     { "von": "basis", "nach": "konfiguration" },
