@@ -1,6 +1,6 @@
 export function defaultSetTimer(fn, ms) {
   const handle = setTimeout(fn, ms);
-  if (handle && typeof handle.unref === "function") handle.unref();
+  handle.unref();
   return handle;
 }
 
