@@ -21,5 +21,5 @@ import doc from "../data/legal/imprint.de.json";
     </div>
   </div>
 
-  <p class="doc-note">{doc.note}</p>
+  {doc.note && <p class="doc-note">{doc.note}</p>}
 </Hermes>
