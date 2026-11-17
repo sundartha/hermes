@@ -221,7 +221,7 @@ const TTS_QUOTA_SMS_PREFIX = "[Hermes] ElevenLabs-Kontingent-Warnschwelle erreic
 function onTtsQuotaWarning(warning) {
   const detail = `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`;
   audit(TTS_QUOTA_WARN_EVENT, null, detail);
-  sendBootstrapAlertSms({ messaging, config, store, prefix: TTS_QUOTA_SMS_PREFIX, detail, logTag: TTS_QUOTA_WARN_EVENT });
+  sendBootstrapAlertSms({ messaging, config, store, prefix: TTS_QUOTA_SMS_PREFIX, detail, logTag: TTS_QUOTA_WARN_EVENT, jetzt: () => new Date() });
 }
 
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });

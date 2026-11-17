@@ -30,6 +30,7 @@ const sendeAlarm: (args: {
   prefix: string;
   detail: string;
   logTag: string;
+  jetzt: () => Date;
 }) => void = sendBootstrapAlertSms;
 
 export function makeStripeWebhookRoute({
@@ -80,7 +81,7 @@ export function makeStripeWebhookRoute({
     if (outcome?.alarm)
       sendeAlarm({
         messaging, config, store, prefix: outcome.alarm.prefix, detail: outcome.alarm.detail,
-        logTag: "stripe-money-event",
+        logTag: "stripe-money-event", jetzt: () => new Date(),
       });
     res.json({ received: true });
   };
