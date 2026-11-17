@@ -226,6 +226,7 @@ test("5183-K3: ohne Vorspann traegt die Variable die Eroeffnung, first_message b
   const andere = await init(VERWAISTE.andereSprache);
   assert.equal(andere.dynamic_variables.eroeffnung_gesagt, undefined);
   assert.ok(andere.dynamic_variables.eroeffnung.length > 0);
-  assert.equal(andere.conversation_config_override.agent.first_message, andere.dynamic_variables.eroeffnung);
-  assert.ok(andere.conversation_config_override.agent.first_message.startsWith("Bonjour, ceci est un assistant IA"));
+  const ersteNachricht = andere.conversation_config_override.agent.first_message;
+  assert.equal(ersteNachricht, andere.dynamic_variables.eroeffnung);
+  assert.ok(ersteNachricht.startsWith("Bonjour, ceci est un assistant IA"));
 });
