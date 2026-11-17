@@ -1,4 +1,5 @@
 import { auditAuthFailed, AUTH_FAILED_GRUND, maskNumbersInText } from "./util.ts";
+import { fehlerText } from "./utils/fehler-text.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 import {
   HTTP_FORBIDDEN,
@@ -82,7 +83,11 @@ export function normalisierterOrigin(wert) {
 
 export function mcpErlaubteOrigins({ publicUrl, zusaetzlicheOrigins = [] }) {
   const kandidaten = [publicUrl, ...zusaetzlicheOrigins];
-  return [...new Set(kandidaten.map((wert) => normalisierterOrigin(wert)).filter(Boolean))];
+  const origins = kandidaten.flatMap((wert) => {
+    const origin = normalisierterOrigin(wert);
+    return origin ? [origin] : [];
+  });
+  return [...new Set(origins)];
 }
 
 export function mcpOriginErlaubt(originHeader, erlaubteOrigins) {
@@ -217,7 +222,7 @@ export function createGeteilterRateLimiter({ zaehlen, limitPerMin }) {
     try {
       treffer = await zaehlen({ ip: keyByIp(req), nowMs, windowMs: RATE_WINDOW_MS });
     } catch (err) {
-      console.error("[login-bremse]", maskNumbersInText(err.message));
+      console.error("[login-bremse]", maskNumbersInText(fehlerText(err)));
       res.set("Retry-After", String(LOGIN_BREMSE_RETRY_AFTER_S));
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: "service unavailable" });
     }
