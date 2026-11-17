@@ -284,3 +284,114 @@ test("3403 Eingehender Anruf mit Fehler in der Verarbeitung: Log beginnt mit [in
     fehler.mock.restore();
   }
 });
+
+function mitFehlerweg(app) {
+  const fehler = [];
+  app.use((err, req, res, _next) => {
+    fehler.push(err.message);
+    if (!res.headersSent) res.status(HTTP_SERVER_ERROR).end();
+  });
+  return { app, fehler };
+}
+
+const HTTP_SERVER_ERROR = 500;
+const postPfad = (basis, pfad, abfrage = "") =>
+  abrufMitFrist(`${basis}${pfad}${abfrage}`, { method: "POST", headers: FORMULAR, body: new URLSearchParams({ CallStatus: "in-progress" }).toString() });
+const kaputterSpeicher = () => ({
+  ...statusStore(seedCall()),
+  getCall: () => {
+    throw new Error("Speicher kaputt");
+  },
+});
+
+async function fehlerAmWeg(store, abruf, optionen = {}) {
+  const { app, fehler } = mitFehlerweg(baueApp({ store, lifecycle: {}, optionen }));
+  await mitApp(app, async (basis) => {
+    await (await abruf(basis)).text();
+    await abwarten();
+  });
+  return fehler;
+}
+
+test("3403 Statusmeldung mit kaputtem Speicher: Fehler geht an den Fehlerweg statt als unbehandelte Ablehnung", async () => {
+  const fehler = await fehlerAmWeg(kaputterSpeicher(), (basis) => postPfad(basis, "/voice/status", `?callId=${CALL_ID}`));
+  assert.deepEqual(fehler, ["Speicher kaputt"]);
+});
+
+test("3403 Beinmeldung von ElevenLabs mit kaputtem Speicher: Fehler geht an den Fehlerweg", async () => {
+  const fehler = await fehlerAmWeg(kaputterSpeicher(), (basis) => postPfad(basis, "/voice/el-bein", `?callId=${CALL_ID}`));
+  assert.deepEqual(fehler, ["Speicher kaputt"]);
+});
+
+const mitKaputtemLog = async (lauf) => {
+  const log = mock.method(console, "error", () => {
+    throw new Error("Log kaputt");
+  });
+  try {
+    return await lauf();
+  } finally {
+    log.mock.restore();
+  }
+};
+
+test("3403 Rueckfall von ElevenLabs, dessen Fehlerlog selbst scheitert: Fehler geht an den Fehlerweg", async () => {
+  const fehler = await mitKaputtemLog(() => fehlerAmWeg(kaputterSpeicher(), (basis) => postPfad(basis, "/voice/el-rueckfall", `?callId=${CALL_ID}`)));
+  assert.deepEqual(fehler, ["Log kaputt"]);
+});
+
+test("3403 Vorspann-Ereignis mit kaputtem Speicher und scheiterndem Log: Fehler geht an den Fehlerweg", async () => {
+  const fehler = await mitKaputtemLog(() => fehlerAmWeg(kaputterSpeicher(), (basis) => postPfad(basis, "/voice/vorspann", `?callId=${CALL_ID}`)));
+  assert.deepEqual(fehler, ["Log kaputt"]);
+});
+
+test("3403 Sprachausgabe-Abruf, dessen Fehlerlog selbst scheitert: Fehler geht an den Fehlerweg", async () => {
+  const optionen = { entnimm: () => Promise.reject(new Error("Ablage kaputt")) };
+  const fehler = await mitKaputtemLog(() => fehlerAmWeg(statusStore(seedCall()), (basis) => abrufMitFrist(`${basis}/voice/tts/abc`), optionen));
+  assert.deepEqual(fehler, ["Log kaputt"]);
+});
+
+test("3403 Eingehender Anruf, dessen Fehlerlog selbst scheitert: Fehler geht an den Fehlerweg", async () => {
+  const store = {
+    ...statusStore(seedCall()),
+    numberRecordByE164: async () => {
+      throw new Error("Nummernliste kaputt");
+    },
+  };
+  const fehler = await mitKaputtemLog(() => fehlerAmWeg(store, (basis) => postEingang(basis, { To: "+491", From: "+492" })));
+  assert.deepEqual(fehler, ["Log kaputt"]);
+});
+
+test("3403 Wache bei eingehendem Anruf: ein Fehler ausserhalb der Ablage-Aufrufe geht an den Fehlerweg", async () => {
+  const annahme = {
+    eigen: false,
+    kennung: "k",
+    alterMs: 0,
+    get antwort() {
+      throw new Error("Annahme kaputt");
+    },
+  };
+  const store = { ...statusStore(seedCall()), webhookZustellung: { annehmen: async () => annahme } };
+  const fehler = await fehlerAmWeg(store, (basis) => postEingang(basis, { CallSid: "CA3403wache", To: "+491", From: "+492" }));
+  assert.deepEqual(fehler, ["Annahme kaputt"]);
+});
+
+test("3403 Wache bei Statusmeldung mit Zeitstempel-Header: Umschlag-Anker mit Praefix se wird angenommen", async () => {
+  const aufrufe = [];
+  const ablage = {
+    annehmen: async (bindung) => {
+      aufrufe.push(bindung.anker);
+      return { eigen: true, kennung: "k" };
+    },
+    beantworten: async () => {},
+    freigeben: async () => {},
+  };
+  const app = express();
+  app.use(express.urlencoded({ extended: false, verify: (req, _res, puffer) => Object.assign(req, { rawBody: puffer }) }));
+  app.use(baueApp({ store: { ...statusStore(seedCall()), webhookZustellung: ablage }, lifecycle: {}, optionen: { ohneParser: true } }));
+  await mitApp(app, async (basis) => {
+    const antwort = await abrufMitFrist(`${basis}/voice/status?callId=${CALL_ID}`, { method: "POST", headers: { ...FORMULAR, "telnyx-timestamp": "1" }, body: "CallStatus=ringing" });
+    await antwort.text();
+  });
+  assert.equal(aufrufe.length, 1);
+  assert.match(aufrufe[0][0], /^se:[0-9a-f]{64}$/);
+});

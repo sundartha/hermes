@@ -398,7 +398,7 @@ export function makeVoiceRoutes({
     pause: (ms) => zeitgeber.setTimeout(ms),
   });
 
-  router.get("/voice/tts/:token", async (req, res) => {
+  const liefereTts = async (req, res) => {
     try {
       const audio = await ttsStore.takeOnce(req.params.token);
       if (!audio) {
@@ -410,6 +410,9 @@ export function makeVoiceRoutes({
       console.error("[voice/tts]", fehlerText(err));
       res.status(HTTP_NOT_FOUND).end();
     }
+  };
+  router.get("/voice/tts/:token", (req, res, next) => {
+    liefereTts(req, res).catch(next);
   });
 
   router.use("/voice", (req, res, next) => {
@@ -433,7 +436,7 @@ export function makeVoiceRoutes({
     next();
   });
 
-  router.post("/voice/incoming", idempotenz.forIncoming, async (req, res) => {
+  const nimmEingehendAn = async (req, res) => {
     const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
     let call;
     try {
@@ -483,13 +486,22 @@ export function makeVoiceRoutes({
       console.error("[incoming]", fehlerText(err));
       await sendTechnischesEnde({ res, call, provider }, voiceDeps);
     }
+  };
+  router.post("/voice/incoming", idempotenz.forIncoming, (req, res, next) => {
+    nimmEingehendAn(req, res).catch(next);
   });
 
-  router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));
-  router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
-  router.post(VORSPANN_PFAD, idempotenz.forVorspann, (req, res) => antworteAufVorspannEreignis(req, res, voiceDeps));
+  router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res, next) => {
+    antworteAufElRueckfall(req, res, voiceDeps).catch(next);
+  });
+  router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res, next) => {
+    vermerkeElBein(req, res, voiceDeps).catch(next);
+  });
+  router.post(VORSPANN_PFAD, idempotenz.forVorspann, (req, res, next) => {
+    antworteAufVorspannEreignis(req, res, voiceDeps).catch(next);
+  });
 
-  router.post("/voice/status", idempotenz.forStatus, async (req, res) => {
+  const verarbeiteStatus = async (req, res) => {
     res.sendStatus(HTTP_OK);
     let call = (await statusCallFinden(req, store)).call;
     const callId = wiederanbindungsKennung(req, call);
@@ -535,6 +547,9 @@ export function makeVoiceRoutes({
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });
+  };
+  router.post("/voice/status", idempotenz.forStatus, (req, res, next) => {
+    verarbeiteStatus(req, res).catch(next);
   });
 
   return router;

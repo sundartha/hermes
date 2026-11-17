@@ -8,7 +8,7 @@ import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.ts";
 
 interface Anfrage {
-  headers?: Record<string, string | undefined>;
+  headers?: Record<string, string | string[] | undefined>;
   rawBody?: string | Buffer;
   body?: { CallSid?: unknown; CallStatus?: unknown };
   query?: { callId?: unknown; quelle?: unknown; turnToken?: unknown };
@@ -29,7 +29,7 @@ interface Antwortkanal {
   on: (ereignis: string, rueckruf: () => void) => unknown;
 }
 
-type Weiter = () => unknown;
+type Weiter = (fehler?: unknown) => unknown;
 type Wartende = Promise<Antwort | null>;
 type Anker = string[];
 type Geheimnis = () => string | undefined;
@@ -102,7 +102,7 @@ interface WachParameter {
   geheimnis: Geheimnis;
 }
 
-type Wache = (req: Anfrage, res: Antwortkanal, next: Weiter) => Promise<unknown>;
+type Wache = (req: Anfrage, res: Antwortkanal, next: Weiter) => void;
 type Waechter = Record<"forIncoming" | "forElRueckfall" | "forElBein" | "forStatus" | "forVorspann", Wache>;
 
 interface Wartebedarf {
@@ -157,7 +157,7 @@ const REPLAY_GRUND = Object.freeze({ FRIST: "frist", FEHLER: "fehler" });
 const ankerTeil = (wert: unknown): string => z.string().catch("").parse(wert);
 
 function envelopeAnchor(req: Anfrage, { callId = "" }: { callId?: string } = {}): string | null {
-  const timestamp = req.headers?.[TS_HEADER];
+  const timestamp = ankerTeil(req.headers?.[TS_HEADER]);
   if (!timestamp || !req.rawBody) return null;
   const hash = crypto.createHash("sha256");
   hash.update(`${timestamp}|`);
@@ -423,7 +423,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort, jetzt, 
   }
 
   function makeGuard({ weg, anchorsOf, seenBefore, remember, ablage = null, geheimnis }: WachParameter): Wache {
-    return async function webhookIdempotenzGuard(req, res, next) {
+    const pruefeZustellung = async (req: Anfrage, res: Antwortkanal, next: Weiter): Promise<unknown> => {
       const ankunft = jetzt();
       const gelesenAnker = await versuche(() => anchorsOf(req));
       if ("fehler" in gelesenAnker) return antworteMitLesefehler({ weg, req, res, err: gelesenAnker.fehler });
@@ -458,6 +458,9 @@ export function makeWebhookIdempotenz({ store, keepAliveXml, elPasswort, jetzt, 
       };
       rememberAnswerOnSend({ req, res, anchors, deferred, remember, ablegen, freigeben, verwerfen });
       return next();
+    };
+    return function webhookIdempotenzGuard(req, res, next): void {
+      pruefeZustellung(req, res, next).catch(next);
     };
   }
 
