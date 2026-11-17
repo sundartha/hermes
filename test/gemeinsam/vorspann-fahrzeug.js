@@ -117,3 +117,25 @@ export async function beinLegtAuf(srv, callId, { vomElBein = false } = {}) {
   });
   assert.equal(antwort.status, HTTP_OK);
 }
+
+const TTS_PFAD = "/v1/text-to-speech/";
+const AUDIO_BYTES = 200_000;
+const ABGELEHNT_KOERPER = JSON.stringify({ errors: [{ code: "10000", title: "abgelehnt" }] });
+
+export async function starteAblehnendeAttrappe(status, kennung, tenantIds) {
+  const { makeTelnyxSigner, vorspannUmgebung } = await import("../anrufe/el-bein-attrappe.js");
+  const { starteAttrappe } = await import("../anrufe/attrappen-server.js");
+  const attrappe = await starteAttrappe((anfrage, antwort) => {
+    anfrage.resume();
+    anfrage.on("end", () => {
+      const istTts = anfrage.url.startsWith(TTS_PFAD);
+      antwort.writeHead(istTts ? HTTP_OK : status, { "content-type": istTts ? AUDIO_TYP : "application/json" });
+      antwort.end(istTts ? Buffer.alloc(AUDIO_BYTES, 1) : ABGELEHNT_KOERPER);
+    });
+  });
+  const env = {
+    ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung }),
+    ...vorspannMandantenUmgebung(tenantIds),
+  };
+  return { env, close: attrappe.close };
+}

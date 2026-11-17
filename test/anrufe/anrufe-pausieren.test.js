@@ -12,7 +12,8 @@ import {
   waitForStoreState,
   waitForLog,
 } from "../helpers.js";
-import { starteAufzeichnendeAttrappe } from "../helpers/aufzeichnende-attrappe.js";
+import { starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -27,7 +28,7 @@ const DEPLOY_TOKEN = "v6-anrufpause-deploy-token-mindestens-32";
 const FALSCHES_TOKEN = "v6-anrufpause-falsches-token-mindestens-32";
 const TELNYX_NR = "+13125550100";
 const ZIEL = "+4917312345678";
-const START_PFAD = "/v1/convai/sip-trunk/outbound-call";
+const EL_BEIN_ENDUNG = "-el";
 const PAUSE_PFAD = "/intern/anrufpause";
 const LAUFEND_PFAD = "/intern/anrufe-laufend";
 const ZWEI_MINUTEN_MS = 120_000;
@@ -36,23 +37,18 @@ const PAUSENTEXT =
 const AUFTRAG = { to: ZIEL, objective: "Termin vereinbaren" };
 const REST_PAUSENFEHLER = { error: "Ausgehende Anrufe sind pausiert (Anrufpause).", reason: "frozen" };
 
-const telnyxEnv = (attrappenUrl) => ({
+const telnyxEnv = (attrappe) => ({
+  ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "pause" }),
+  ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]),
   HERMES_DEPLOY_TOKEN: DEPLOY_TOKEN,
-  TELNYX_API_KEY: "KEYtest-secret",
-  TELNYX_CONNECTION_ID: "conn_test",
-  TELNYX_ACCOUNT_SID: "acct_test",
-  TELNYX_API_BASE: attrappenUrl,
-  ELEVENLABS_API_BASE: attrappenUrl,
 });
 
 const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx", providerAgentPhoneNumberId: "phnum_v6_pause" };
 
 async function starteTelnyxAttrappe() {
-  const attrappe = await starteAufzeichnendeAttrappe(() => ({
-    status: HTTP_OK,
-    koerper: { success: true, conversation_id: "conv_v6_call_1", sip_call_id: "sip_v6_call_1" },
-  }));
-  return { ...attrappe, starts: () => attrappe.anfragen.filter((anfrage) => anfrage.pfad.startsWith(START_PFAD)).length };
+  const attrappe = await starteAttrappe();
+  const starts = () => attrappe.waehlbefehle.filter((befehl) => !befehl.endsWith(EL_BEIN_ENDUNG)).length;
+  return { ...attrappe, starts, schliesse: attrappe.close };
 }
 
 function pauseAnfrage(srv, { methode = "GET", token = DEPLOY_TOKEN, koerper } = {}) {
@@ -95,7 +91,7 @@ async function mitTelnyx(lauf) {
   const attrappe = await starteTelnyxAttrappe();
   const servers = [];
   const starte = async (optionen = {}) => {
-    const srv = await startServer({ env: telnyxEnv(attrappe.url), ownerNumber: TELNYX_OWNER, ...optionen });
+    const srv = await startServer({ env: telnyxEnv(attrappe), ownerNumber: TELNYX_OWNER, ...optionen });
     servers.push(srv);
     return srv;
   };
@@ -212,7 +208,7 @@ test("V6 Anrufpause: ein laufender Anruf bleibt unberuehrt und sein Auflegen wir
     const srv = await starte({
       seed: seedState({ calls: [laufender] }),
       env: {
-        ...telnyxEnv(attrappe.url),
+        ...telnyxEnv(attrappe),
         SKIP_TWILIO_SIGNATURE_CHECK: "false",
         TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
       },

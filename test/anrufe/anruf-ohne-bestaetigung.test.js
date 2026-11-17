@@ -12,6 +12,7 @@ import {
   waitForLog,
   EL_OUTBOUND_BOOT_ENV,
 } from "../helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const KYC_CARD = "card";
 const TENANT_PAID = "t_ob_paid";
@@ -82,7 +83,8 @@ async function mitServer(env, lauf) {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ...vorspannMandantenUmgebung(Object.keys(SENDERS)),
       MCP_UI_ENABLED: "true",
       ...env,
     },
@@ -201,7 +203,8 @@ test("K1 place_call an die hinterlegte eigene Nummer in nationaler Schreibweise 
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       MULTI_TENANT: "true",
-      FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ...vorspannMandantenUmgebung(Object.keys(SENDERS)),
       MCP_UI_ENABLED: "true",
     },
     seed: {

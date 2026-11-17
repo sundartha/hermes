@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { seedState, startServer, waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
@@ -16,7 +17,7 @@ const MANDANT_DE = "t_herkunft_de";
 const HERKUNFT = "herkunft";
 const FORCE_US = Object.freeze({ FORCE_NUMBER_COUNTRY: "US" });
 const SERVER_ENV = Object.freeze({
-  FAKE_ORIGINATE: "true", ...EL_OUTBOUND_BOOT_ENV, FAKE_ORIGINATE_ELEVENLABS: "true",
+  ...EL_OUTBOUND_BOOT_ENV,
   VOICE_TARIFF_DEFAULT_CENTS: "30",
   VOICE_TARIFF_DOMESTIC_CENTS: "30",
 });
@@ -46,7 +47,7 @@ function startMit(mandanten, nummern, env = {}) {
       numbers: nummern,
       profiles: Object.fromEntries(mandanten.map((id) => [id, { maxCallsPerHour: 100 }])),
     }),
-    env: { ...SERVER_ENV, ...env },
+    env: { ...SERVER_ENV, ...vorspannMandantenUmgebung(mandanten), ...env },
   });
 }
 

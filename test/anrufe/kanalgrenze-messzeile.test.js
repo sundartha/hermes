@@ -1,9 +1,9 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { seedCall, seedState, startServer, waitForLog, waitForStoreState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const TO = "+4915112345678";
 const HTTP_OK = 200;
@@ -60,30 +60,11 @@ test("Messzeile call_capacity: mit METRICS_ENABLED=false schweigt sie", async ()
   assert.deepEqual(messzeilen(serverOhneMessung), []);
 });
 
-async function startMockMitStatus(status) {
-  const mock = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(JSON.stringify({ errors: [{ code: "10000", title: "Too many" }] }));
-    });
-  });
-  await new Promise((resolve) => mock.listen(0, "127.0.0.1", resolve));
-  return {
-    url: `http://127.0.0.1:${mock.address().port}`,
-    close: () => new Promise((resolve) => mock.close(resolve)),
-  };
-}
-
 test("POST /api/calls mit Anbieterstatus 429: Antwort bleibt 502, Anruf traegt at-capacity:start-429, eine Zeile call_capacity", async () => {
-  const mock = await startMockMitStatus(HTTP_TOO_MANY_REQUESTS);
+  const mock = await starteAblehnendeAttrappe(HTTP_TOO_MANY_REQUESTS, "kgm", [BOOTSTRAP_TENANT_ID]);
   const srv = await startServer({
     env: {
-      TELNYX_API_KEY: TELNYX_MESSZEILE_SCHLUESSEL,
-      TELNYX_CONNECTION_ID: "conn_test",
-      TELNYX_ACCOUNT_SID: "acct_test",
-      TELNYX_API_BASE: mock.url,
-      ELEVENLABS_API_BASE: mock.url,
+      ...mock.env,
       METRICS_ENABLED: "true",
     },
     ownerNumber: { e164: "+13125550100", provider: "telnyx", providerAgentPhoneNumberId: "phnum_kanalgrenze" },
