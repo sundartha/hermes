@@ -47,7 +47,7 @@ test("AL-P13-PG1: consults UND ein nach dem Create mutiertes context ueberleben 
 
   const reopened = makePgStore(runner);
   await reopened.init();
-  const hydrated = reopened.getCall(call.id);
+  const hydrated = await reopened.leseCall(call.id);
   assert.equal(hydrated.consults[0].id, "c0");
   assert.equal(hydrated.consults[0].status, CONSULT_STATUS.ANSWERED);
   assert.deepEqual(hydrated.consults[0].questions, QUESTIONS);
@@ -64,5 +64,5 @@ test("AL-P13-PG2: ohne Consult bleibt die Spalte NULL und hydriert als null", as
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(call.id).consults, null, "NULL -> null (json-Parity)");
+  assert.equal((await reopened.leseCall(call.id)).consults, null, "NULL -> null (json-Parity)");
 });

@@ -48,7 +48,7 @@ test("A1 (pg): actualCostMicroCents=51300 ueberlebt Flush+Reopen als NUMBER (kei
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const hydrated = reopened.getCall(created.id);
+  const hydrated = await reopened.leseCall(created.id);
   assert.equal(hydrated.actualCostMicroCents, 51300);
   assert.equal(typeof hydrated.actualCostMicroCents, "number", "BIGINT darf nicht als String hydrieren");
 });
@@ -68,7 +68,7 @@ test("B1 (pg): Call ohne Kosten-Felder -> null/0 nach Flush+Reopen, kein NaN", a
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const hydrated = reopened.getCall(created.id);
+  const hydrated = await reopened.leseCall(created.id);
   assert.equal(hydrated.estimatedCostCents, null);
   assert.equal(hydrated.actualCostMicroCents, null);
   assert.equal(hydrated.costTruedAt, null);
@@ -123,7 +123,7 @@ test("C1 (pg): costTruedSource + costTruingAttempts gesetzt NACH Create ueberleb
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const hydrated = reopened.getCall(created.id);
+  const hydrated = await reopened.leseCall(created.id);
   assert.equal(hydrated.costTruedSource, "incomplete", "Mutation nach Create muss den 2. Flush ueberleben");
   assert.equal(hydrated.costTruingAttempts, 3, "Mutation nach Create muss den 2. Flush ueberleben");
 });
@@ -141,7 +141,7 @@ test("D1 (pg): migrate() zweimal auf derselben DB -> kein Throw, geschriebene Ze
 
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(created.id).actualCostMicroCents, 777, "Zeile bleibt nach doppeltem migrate() unveraendert");
+  assert.equal((await reopened.leseCall(created.id)).actualCostMicroCents, 777, "Zeile bleibt nach doppeltem migrate() unveraendert");
 });
 
 test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stabil gegen spaeteren Tarifwechsel", async () => {

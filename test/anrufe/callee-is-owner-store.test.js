@@ -83,7 +83,7 @@ test("OC-P1-54: pg createCall(true) -> save -> Reopen -> calleeIsOwner === true"
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   assert.strictEqual(call.calleeIsOwner, true, "Spalte + Flush + Hydrat gemappt");
 });
 
@@ -93,7 +93,7 @@ test("OC-P1-55: pg createCall(false) -> save -> Reopen -> calleeIsOwner === fals
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   assert.strictEqual(call.calleeIsOwner, false);
   assert.equal(typeof call.calleeIsOwner, "boolean");
 });
@@ -105,7 +105,7 @@ test("OC-P1-56: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false"
   await db.query("UPDATE call SET callee_is_owner = DEFAULT WHERE id = $1", [created.id]);
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
@@ -144,7 +144,7 @@ test("IEP-P6-43: pg createCall(true) -> save -> Reopen -> callerIsOwner === true
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.strictEqual(reopened.getCall(created.id).callerIsOwner, true, "Spalte + Flush + Hydrat gemappt");
+  assert.strictEqual((await reopened.leseCall(created.id)).callerIsOwner, true, "Spalte + Flush + Hydrat gemappt");
 });
 
 test("IEP-P6-44: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false", async () => {
@@ -154,7 +154,7 @@ test("IEP-P6-44: pg-Bestandszeile ohne Wert (Spalten-Default) -> Reopen -> false
   await db.query("UPDATE call SET caller_is_owner = DEFAULT WHERE id = $1", [created.id]);
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   assert.strictEqual(call.callerIsOwner, false);
   assert.equal(typeof call.callerIsOwner, "boolean");
 });
@@ -170,7 +170,7 @@ test("IEP-P6-45: pg set-once - eine spaetere In-Memory-Aenderung ueberlebt KEINE
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.strictEqual(
-    reopened.getCall(created.id).callerIsOwner,
+    (await reopened.leseCall(created.id)).callerIsOwner,
     false,
     "set-once: der Create-Wert bleibt massgeblich, ein spaeterer Flush schreibt ihn nicht um",
   );
@@ -186,7 +186,7 @@ test("OC-P1-57: pg set-once - eine spaetere In-Memory-Aenderung ueberlebt KEINEN
 
   const reopened = makePgStore(runner);
   await reopened.init();
-  const call = reopened.getCall(created.id);
+  const call = await reopened.leseCall(created.id);
   assert.strictEqual(
     call.calleeIsOwner,
     false,

@@ -348,14 +348,14 @@ test("IEL-B4a-20: Neustart pg - Zustaende + Nachlauf-Marker ueberleben einen Reo
   const reopened = makePgStore(runner);
   await reopened.init();
 
-  assert.equal(bridgeStateOf(reopened.getCall(wartetCall.id)), BRIDGE_STATE.WARTET);
-  const gebunden = reopened.getCall(gebundenCall.id);
+  assert.equal(bridgeStateOf(await reopened.leseCall(wartetCall.id)), BRIDGE_STATE.WARTET);
+  const gebunden = await reopened.leseCall(gebundenCall.id);
   assert.equal(bridgeStateOf(gebunden), BRIDGE_STATE.GEBUNDEN);
   assert.equal(typeof gebunden.elBoundAt, "string");
   assert.equal(gebunden.elBoundAt, T0_ISO);
   assert.equal(typeof gebunden.elNachlaufStartedAt, "string");
   assert.equal(gebunden.elNachlaufStartedAt, T1_ISO);
-  assert.equal(bridgeStateOf(reopened.getCall(rueckfallCall.id)), BRIDGE_STATE.RUECKFALL);
+  assert.equal(bridgeStateOf(await reopened.leseCall(rueckfallCall.id)), BRIDGE_STATE.RUECKFALL);
 });
 
 test("IEL-B4a-21: pg - ein Folge-Flush setzt gebundene Marker nicht auf NULL zurueck", async () => {
@@ -375,7 +375,7 @@ test("IEL-B4a-21: pg - ein Folge-Flush setzt gebundene Marker nicht auf NULL zur
 
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(call.id).elBoundAt, T0_ISO);
+  assert.equal((await reopened.leseCall(call.id)).elBoundAt, T0_ISO);
 });
 
 test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie per init() nachgezogen", async () => {
@@ -401,7 +401,7 @@ test("IEL-B4a-22: pg - eine Bestandstabelle ohne die drei Spalten bekommt sie pe
 
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(call.id).elBoundAt, T0_ISO);
+  assert.equal((await reopened.leseCall(call.id)).elBoundAt, T0_ISO);
 });
 
 test("IEL-B4a-23: store.js (Fassade, json-Default) reicht die drei Operationen durch", async () => {

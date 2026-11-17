@@ -47,7 +47,7 @@ test("PM1: mandate round-trippt ueber Re-Hydrierung (JSONB-Spalte + rowToCall)",
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.deepEqual(
-    reopened.getCall(created.id).mandate,
+    (await reopened.leseCall(created.id)).mandate,
     MANDATE,
     "mandate ueberlebt den Reopen (Spalte + hydrate/flush gemappt)",
   );
@@ -60,7 +60,7 @@ test("PM2: ohne mandate -> null, round-trippt als null", async () => {
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(created.id).mandate, null, "NULL -> null (json-Parity)");
+  assert.equal((await reopened.leseCall(created.id)).mandate, null, "NULL -> null (json-Parity)");
 });
 
 test("PM3: json-Backend persistiert mandate auf Platte (Roundtrip-Parity)", () => {

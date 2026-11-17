@@ -123,7 +123,7 @@ test("(c) ueber Prozessgrenzen: nach einem Neustart bucht dasselbe Auflege-Ereig
 
   const zweiterProzess = verdrahteFinishCall(await oeffneStore(db));
   assert.equal(
-    zweiterProzess.store.getCall(call.id)._finished,
+    (await zweiterProzess.store.leseCall(call.id))._finished,
     undefined,
     "der In-Prozess-Marker ueberlebt den Neustart nicht - nur billedAt kann hier riegeln",
   );

@@ -46,7 +46,7 @@ test("AL-P1-1: callerTurns round-trippt ueber Re-Hydrierung (Spalte + flush + ro
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.equal(
-    reopened.getCall(created.id).callerTurns,
+    (await reopened.leseCall(created.id)).callerTurns,
     3,
     "callerTurns ueberlebt den Reopen (Spalte + ON CONFLICT DO UPDATE SET + rowToCall)",
   );
@@ -60,7 +60,7 @@ test("AL-P1-2: telnyxConversationId round-trippt (Altbestand-Spalte)", async () 
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.equal(
-    reopened.getCall(created.id).telnyxConversationId,
+    (await reopened.leseCall(created.id)).telnyxConversationId,
     "conv-first",
     "telnyxConversationId ueberlebt den Reopen",
   );
