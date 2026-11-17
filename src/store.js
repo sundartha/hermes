@@ -18,6 +18,7 @@ import {
   setzeReserveImSpiegel,
 } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
+import { makeAnrufstartMarker, makePostgresAnrufstartMarker } from "./store/anrufstart-marker.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -74,6 +75,7 @@ async function createPgBackend() {
     beanspruecheInboundElNachlauf: macheNachlaufAnspruch({ runner, store }),
     stripeEreignisRegister: makeStripeEreignisRegister(runner),
     leitungsplaetze: makePostgresLeitungsplaetze(runner),
+    anrufstartMarker: makePostgresAnrufstartMarker(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
     faelligeFristen: makePostgresFristen(runner).faellige,
@@ -122,6 +124,17 @@ export const leitungsplaetze = {
   freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
   belegung: () => aktiveLeitungsplaetze().belegung(),
 };
+
+const speicherAnrufstartMarker = makeAnrufstartMarker();
+
+const aktiverAnrufstartMarker = () => offenesBackend?.anrufstartMarker ?? speicherAnrufstartMarker;
+
+export const anrufstartMarker = {
+  setze: (anfrage) => aktiverAnrufstartMarker().setze(anfrage),
+  lies: (callId) => aktiverAnrufstartMarker().lies(callId),
+};
+
+export { makeAnrufstartMarker, makePostgresAnrufstartMarker };
 
 export const ttsAblage = {
   ablegen: (token, audio) => offenesBackend.ttsAblage.ablegen(token, audio),
