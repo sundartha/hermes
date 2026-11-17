@@ -5,6 +5,7 @@ import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testd
 
 const MANDANT = "t_start_lesefehler";
 const AKTIVE_ANRUFE_LESEN = "SELECT * FROM call WHERE tenant_id = $1 AND status = 'active'";
+const MANDANTEN_BEIM_START = 2;
 export const LESEFEHLER = "Start ohne Datenbank (lesefehler-test)";
 
 function umgebungSetzen() {
@@ -24,7 +25,7 @@ function scheiterndeDatenbank(db, scheiternde) {
       return async (text, params) => {
         if (String(text).startsWith(AKTIVE_ANRUFE_LESEN)) {
           lesungen += 1;
-          if (lesungen === scheiternde) throw new Error(LESEFEHLER);
+          if (lesungen > (scheiternde - 1) * MANDANTEN_BEIM_START) throw new Error(LESEFEHLER);
         }
         return ziel.query(text, params);
       };
@@ -32,7 +33,7 @@ function scheiterndeDatenbank(db, scheiternde) {
   });
 }
 
-export async function startMitLesefehlerBeiLesung(nummer) {
+export async function startMitLesefehlerBeiLesung(durchgang) {
   umgebungSetzen();
   let store = null;
   const anlegen = aufraeumenVormerken(() => store);
@@ -40,7 +41,7 @@ export async function startMitLesefehlerBeiLesung(nummer) {
   await db.exec(`CREATE ROLE start_lesefehler_app NOSUPERUSER NOBYPASSRLS;
     GRANT CREATE, USAGE ON SCHEMA public TO start_lesefehler_app;
     SET ROLE start_lesefehler_app;`);
-  poolAufPglite(scheiterndeDatenbank(db, nummer));
+  poolAufPglite(scheiterndeDatenbank(db, durchgang));
   store = await import("../../src/store.js");
   await store.oeffneSpeicher();
   const state = store.load();
