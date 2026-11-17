@@ -107,6 +107,21 @@ test("H7b-8: ein Lesefehler wirft und gilt nie als frei", async () => {
   );
 });
 
+test("H7b-8b: der Lesefehler wird mit seinem Text ins Log geschrieben", async () => {
+  const { b, db } = await zweiInstanzen();
+  const zeilen = [];
+  await db.exec("ALTER TABLE call RENAME TO call_weg");
+  const geloggt = console.error;
+  console.error = (...teile) => zeilen.push(teile[0]);
+  try {
+    await assert.rejects(() => b.numberHasActiveCall(NUMMER), LESEFEHLER);
+  } finally {
+    console.error = geloggt;
+    await db.exec("ALTER TABLE call_weg RENAME TO call");
+  }
+  assert.deepEqual(zeilen, ["[pg] anruf-nummern lesen fehlgeschlagen:"]);
+});
+
 const ALTE_NUMMER = "+4915799990771";
 const ERSATZ = "+12025550771";
 const NUMMERN_OBERGRENZE = 50;
@@ -184,4 +199,48 @@ test("H7b-11: ohne aktiven Anruf wird die alte Nummer freigegeben", async () => 
   await lauf;
   assert.deepEqual(freigaben, ["ext_h7b"]);
   assert.ok(ergebnis().endsWith(`ergebnis=${TAUSCH_ERGEBNIS.GETAUSCHT}`), ergebnis());
+});
+
+function nachDemSchreibenVerandern(store, veraendern) {
+  const schreiben = store.drainFlushes.bind(store);
+  Object.assign(store, {
+    drainFlushes: async () => {
+      await schreiben();
+      veraendern(store.load());
+    },
+  });
+}
+
+test("H7b-15: eine Nummer, die vor der Freigabe aus dem Zustand verschwindet, wird nicht beim Anbieter geloescht", async () => {
+  const { b } = await zweiInstanzen();
+  const { lauf, freigaben, ergebnis } = tauschFuer(b);
+  nachDemSchreibenVerandern(b, (state) => {
+    state.numbers.splice(state.numbers.findIndex((nummer) => nummer.id === "n_h7b"), 1);
+  });
+  await lauf;
+  assert.deepEqual(freigaben, []);
+  assert.ok(ergebnis().endsWith(`ergebnis=${TAUSCH_ERGEBNIS.FREIGABE_FEHLGESCHLAGEN}`), ergebnis());
+});
+
+test("H7b-16: eine Nummer, die vor der Freigabe nicht mehr aktiv ist, wird nicht beim Anbieter geloescht", async () => {
+  const { b } = await zweiInstanzen();
+  const { lauf, freigaben } = tauschFuer(b);
+  nachDemSchreibenVerandern(b, (state) => {
+    const nummer = state.numbers.find((eintrag) => eintrag.id === "n_h7b");
+    Object.assign(nummer, { status: "released" });
+  });
+  await lauf;
+  assert.deepEqual(freigaben, []);
+});
+
+test("H7b-17: eine Nummer, die vor der Freigabe plattformseitig belegt wird, bleibt beim Anbieter", async () => {
+  const { b } = await zweiInstanzen();
+  const { lauf, freigaben, ergebnis } = tauschFuer(b);
+  nachDemSchreibenVerandern(b, (state) => {
+    const belegung = { id: "pnu_h7b", e164: ALTE_NUMMER, purpose: "test", provider: "telnyx", tenantId: null };
+    state.platformNumberUse.push({ ...belegung, boundAt: new Date().toISOString(), releasedAt: null });
+  });
+  await lauf;
+  assert.deepEqual(freigaben, []);
+  assert.ok(ergebnis().endsWith(`ergebnis=${TAUSCH_ERGEBNIS.FREIGABE_FEHLGESCHLAGEN}`), ergebnis());
 });
