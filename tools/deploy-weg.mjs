@@ -48,7 +48,7 @@ function jaNeinLesen(wert) {
 }
 
 function anlassLesen(wert) {
-  return wert === "nachtlauf" || wert === "probe" ? wert : null;
+  return wert === "nachtlauf" || wert === "probe" || wert === "staginglauf" ? wert : null;
 }
 
 const ZEITPUNKT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;

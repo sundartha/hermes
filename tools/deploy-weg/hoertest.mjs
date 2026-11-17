@@ -5,11 +5,16 @@ import { anfrage, githubZugang } from "./netz.mjs";
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
 const NACHTLAUF_TITEL = "Staging-Nachtlauf rot";
+const STAGINGLAUF_TITEL = "Staging-Deploy rot";
 const PROBE_TITEL = "Staging-Anrufprobe rot";
 const HOERTEST_MELDUNGEN = Object.freeze({ ersetzt: "issue_ersetzt", angelegt: "issue_angelegt" });
 const NACHTLAUF_MELDUNGEN = Object.freeze({
   ersetzt: "nachtlauf_ersetzt",
   angelegt: "nachtlauf_angelegt",
+});
+const STAGINGLAUF_MELDUNGEN = Object.freeze({
+  ersetzt: "staginglauf_ersetzt",
+  angelegt: "staginglauf_angelegt",
 });
 const PROBE_MELDUNGEN = Object.freeze({ ersetzt: "probe_ersetzt", angelegt: "probe_angelegt" });
 const NACHKONTROLLE_MELDUNGEN = Object.freeze({
@@ -58,6 +63,16 @@ function nachkontrolleText({ commit, grund, laufUrl, revertUrl }) {
 function nachtlaufText({ commit, laufUrl }) {
   return [
     "Die Prüfung gegen Staging ist im Nachtlauf rot geworden (Commit " + commit + ").",
+    "Lauf: " + laufUrl,
+    "",
+    "Das ist kein Hörtest und keine Freigabe für Live. Die Ursache steht im Lauf.",
+    "",
+  ].join("\n");
+}
+
+function staginglaufText({ commit, laufUrl }) {
+  return [
+    "Die Prüfung gegen Staging ist nach dem Merge rot geworden (Commit " + commit + ").",
     "Lauf: " + laufUrl,
     "",
     "Das ist kein Hörtest und keine Freigabe für Live. Die Ursache steht im Lauf.",
@@ -198,6 +213,12 @@ const ANLAESSE = Object.freeze({
     meldungen: NACHTLAUF_MELDUNGEN,
     text: nachtlaufText,
     vorfallId: "nachtlauf-staging",
+  },
+  staginglauf: {
+    titel: STAGINGLAUF_TITEL,
+    meldungen: STAGINGLAUF_MELDUNGEN,
+    text: staginglaufText,
+    vorfallId: "deploy-staging",
   },
   probe: {
     titel: PROBE_TITEL,
