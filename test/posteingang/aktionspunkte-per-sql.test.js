@@ -89,11 +89,11 @@ test("Ein Schreibfehler wirft, laesst den Speicher unveraendert und rollt die Tr
   await kaputt.init();
   await assert.rejects(() => kaputt.addActionItem(callId, "Geht nicht", "todo"), /Schreibfehler/);
   assert.deepEqual(kaputt.load().actionItems, []);
-  assert.deepEqual(kaputt.getCall(callId).actionItemIds, []);
   assert.equal(protokoll.includes("ROLLBACK"), true);
   assert.equal(protokoll.includes("COMMIT"), false);
   assert.equal(protokoll.includes("BEGIN"), true);
   assert.equal(protokoll.some((text) => text.includes("pg_advisory_xact_lock")), true);
+  assert.deepEqual((await kaputt.leseCall(callId)).actionItemIds, []);
   assert.deepEqual(await zeilen(db, callId), []);
   assert.equal((await a.addActionItem(callId, "Danach", "todo")).duplicate, false);
 });

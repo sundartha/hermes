@@ -80,7 +80,7 @@ test("GQ-H1-PG-3: der Stand ueberlebt die Re-Hydrierung (Persistenz, nicht Spieg
   await store.save();
   const frisch = await reopen(db);
   assert.deepEqual(
-    frisch.getCall(call.id).transcript.map((t) => `${t.role}:${t.text}`),
+    (await frisch.leseCall(call.id)).transcript.map((t) => `${t.role}:${t.text}`),
     ["caller:Fragment", "agent:die echte Antwort"],
   );
 });

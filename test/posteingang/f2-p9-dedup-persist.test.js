@@ -36,7 +36,7 @@ test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt d
   await store.save();
 
   const reopened = await reopen(db);
-  const sentAt = reopened.getCall(c.id).summarySmsSentAt;
+  const sentAt = (await reopened.leseCall(c.id)).summarySmsSentAt;
   assert.ok(
     typeof sentAt === "string" && !Number.isNaN(Date.parse(sentAt)),
     "Marker ist eine persistierte ISO-Zeit",

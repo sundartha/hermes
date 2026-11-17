@@ -60,7 +60,7 @@ test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToC
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(created.id).inboxEntryAt, gesetzt);
+  assert.equal((await reopened.leseCall(created.id)).inboxEntryAt, gesetzt);
 });
 
 test("INBOX-P1-S3 pg: inboxSeenAt ueberlebt den Reopen EIGENSTAENDIG (R-10)", async () => {
@@ -71,7 +71,7 @@ test("INBOX-P1-S3 pg: inboxSeenAt ueberlebt den Reopen EIGENSTAENDIG (R-10)", as
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.equal(reopened.getCall(created.id).inboxSeenAt, SEEN_AT);
+  assert.equal((await reopened.leseCall(created.id)).inboxSeenAt, SEEN_AT);
 });
 
 test("INBOX-P1-S4 pg: nicht gesetzte Marker hydrieren als null, NICHT als undefined", async () => {
@@ -80,7 +80,7 @@ test("INBOX-P1-S4 pg: nicht gesetzte Marker hydrieren als null, NICHT als undefi
   await store.save();
   const reopened = makePgStore(runner);
   await reopened.init();
-  const hydriert = reopened.getCall(created.id);
+  const hydriert = await reopened.leseCall(created.id);
   assert.equal(hydriert.inboxEntryAt, null);
   assert.equal(hydriert.inboxSeenAt, null);
   assert.ok("inboxEntryAt" in hydriert && "inboxSeenAt" in hydriert, "Felder existieren im Shape");
@@ -134,7 +134,7 @@ test("INBOX-P2-S9 pg: Poll liefert den qualifizierten Call und setzt inbox_seen_
   assert.ok(store.getCall(created.id).inboxSeenAt, "inboxSeenAt steht sofort im Spiegel");
   const reopened = makePgStore(runner);
   await reopened.init();
-  assert.ok(reopened.getCall(created.id).inboxSeenAt, "inbox_seen_at ueberlebt den Reopen (Flush lief)");
+  assert.ok((await reopened.leseCall(created.id)).inboxSeenAt, "inbox_seen_at ueberlebt den Reopen (Flush lief)");
 });
 
 test("INBOX-P2-S10 pg: zweiter Poll ist leer und markiert nichts (marked=0, save() unterbleibt)", async () => {

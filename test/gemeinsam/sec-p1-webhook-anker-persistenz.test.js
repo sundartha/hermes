@@ -46,7 +46,7 @@ test("SEC-P1-9: webhookAnchors round-trippt ueber Re-Hydrierung (Spalte + flush 
   const reopened = makePgStore(runner);
   await reopened.init();
   assert.deepEqual(
-    reopened.getCall(created.id).webhookAnchors,
+    (await reopened.leseCall(created.id)).webhookAnchors,
     ["t:aaaa", "e:bbbb"],
     "Anker ueberleben den Reopen (Spalte + ON CONFLICT DO UPDATE SET + rowToCall)",
   );
