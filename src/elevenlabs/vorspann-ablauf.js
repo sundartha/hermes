@@ -145,6 +145,19 @@ async function pruefeWahl({ call, ausgehendGesperrt }) {
   return { grund };
 }
 
+async function beiKlingelfrist({ callId, store, voiceControl, zustaende, abgehobeneAnrufe, beiAufgelegt }) {
+  try {
+    const call = await store.leseCall(callId);
+    const zustand = zustaende.get(callId);
+    if (!zustand || call.status !== "active" || call.answeredAt || abgehobeneAnrufe.has(callId)) return;
+    zustand.aufgelegt.add(zustand.calleeId);
+    await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
+    await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
+  } catch (fehler) {
+    logFehler("klingelfrist", callId, fehler);
+  }
+}
+
 export function makeVorspannAblauf({
   voiceControl,
   store,
@@ -164,19 +177,6 @@ export function makeVorspannAblauf({
   const zustaende = new Map();
   const abgehobeneAnrufe = new Set();
 
-  async function beiKlingelfrist(callId) {
-    try {
-      const call = await store.leseCall(callId);
-      const zustand = zustaende.get(callId);
-      if (!zustand || call.status !== "active" || call.answeredAt || abgehobeneAnrufe.has(callId)) return;
-      zustand.aufgelegt.add(zustand.calleeId);
-      await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
-      await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
-    } catch (fehler) {
-      logFehler("klingelfrist", callId, fehler);
-    }
-  }
-
   async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
@@ -184,7 +184,7 @@ export function makeVorspannAblauf({
     if (call.status === "active") {
       const token = ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
       zustaende.set(call.id, { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() });
-      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist(call.id) });
+      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, store, voiceControl, zustaende, abgehobeneAnrufe, beiAufgelegt }) });
     } else await legeBeinAuf(steuerung, call.id, callControlId);
     return { callControlId };
   }
