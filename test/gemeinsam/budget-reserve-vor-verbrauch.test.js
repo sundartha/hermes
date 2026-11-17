@@ -4,10 +4,8 @@ import test from "node:test";
 
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "./echtes-postgres.js";
-import { pgStartUmgebung } from "./pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
-import { postgresVorhanden, seedeMandant, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
-import { startServer } from "../helpers.js";
+import { postgresVorhanden, seedeMandant, starteAnAnbieter, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 
 const MANDANT = { id: "tenant_pruef", sub: "sub-pruef", e164: "+4930555000399" };
 const ENV = Object.freeze({
@@ -58,7 +56,7 @@ test("Reserve von Anruf A bleibt, bis seine Kosten in usage stehen; Anruf B uebe
   const sql = (text, p) => verwaltung.query(text, p);
   const gestartet = [];
   const starte = async () => {
-    const i = await startServer({ env: pgStartUmgebung(db.adresse, { ...ENV, ELEVENLABS_API_BASE: anbieter.url }) });
+    const i = await starteAnAnbieter(db, anbieter, { ...ENV, ELEVENLABS_INBOUND_TENANT_IDS: MANDANT.id });
     gestartet.push(i);
     return i;
   };

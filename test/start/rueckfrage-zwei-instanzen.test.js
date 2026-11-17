@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import http from "node:http";
 import { test } from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { gemeinsameUmgebung } from "../gemeinsam/zwei-prozesse.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
 import { EL_OUTBOUND_ZUGANG_BOOT_ENV, OWNER_TEST_NUMBER, placeCall, seedCall, seedState, startServer } from "../helpers.js";
 
 const ZEITGRENZE_MS = 120_000;
@@ -57,16 +57,6 @@ async function bisErfuellt(pruefung, was) {
     stand = await pruefung();
   }
   return stand;
-}
-
-async function starteVoiceAttrappe(t) {
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => res.writeHead(HTTP_UPSTREAM_FEHLER, { "content-type": "application/json" }).end("{}"));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  return `http://127.0.0.1:${server.address().port}`;
 }
 
 const voiceUmgebung = (url) => ({
@@ -138,7 +128,9 @@ test("Anlegen: ein neuer Anruf traegt die Kennung der anlegenden Instanz, ein Ge
     const schema = await starteInstanz(t, db);
     await schema.stop();
     await sql.query(`UPDATE tenant SET owner_name = 'Jonas Beispiel', first_name = 'Jonas'`);
-    const umgebung = voiceUmgebung(await starteVoiceAttrappe(t));
+    const anbieter = await starteAblehnendeAttrappe(HTTP_UPSTREAM_FEHLER, "rueckfrage", [MANDANT]);
+    t.after(() => anbieter.close());
+    const umgebung = { ...voiceUmgebung(anbieter.env.TELNYX_API_BASE), ...anbieter.env };
     const erste = await starteInstanz(t, db, umgebung);
     await erste.stop();
     await sql.query(`UPDATE number SET provider_agent_phone_number_id = $1`, [REGISTRIERUNG]);

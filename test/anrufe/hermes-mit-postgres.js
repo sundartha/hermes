@@ -4,9 +4,9 @@ import pg from "pg";
 import { echtWarten } from "../echt-warten.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { mitVerbindung } from "../gemeinsam/echtes-postgres.js";
+import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
@@ -21,18 +21,8 @@ const ANRUFE_SQL = "SELECT id, status, failure_reason, to_e164 FROM call ORDER B
 const REGISTRIERUNG = "phnum_pg_seed";
 
 const EL_WEG = Object.freeze({
-  ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_AGENT_ID: "agent_pg",
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_pg",
-  ELEVENLABS_API_KEY: "el-pg-schluessel",
-  ELEVENLABS_RESULT_POLL_MS: "60000",
-});
-
-const VORSPANN_WEG_ENV = Object.freeze({
   ...elInboundInitSpawnEnv("agent_pg"),
   ELEVENLABS_OUTBOUND_ENABLED: "true",
-  ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
-  ELEVENLABS_OUTBOUND_VORSPANN: "true",
   TELNYX_CALL_CONTROL_APP_ID: "cc_app_pg",
   TELNYX_API_KEY: "KEYtest-pg",
   TELNYX_CONNECTION_ID: "conn_pg",
@@ -51,7 +41,7 @@ export async function starteAnAnbieter(db, anbieter, env) {
   const host = `instanz-${(instanzZaehler += 1)}.agent.test`;
   const srv = await startServer({
     env: pgStartUmgebung(db.adresse, {
-      ...VORSPANN_WEG_ENV,
+      ...EL_WEG,
       ...anbieterUmgebung(anbieter.url),
       PUBLIC_URL: `https://${host}`,
       ...env,
@@ -60,7 +50,7 @@ export async function starteAnAnbieter(db, anbieter, env) {
   anbieter.verbinde({
     host,
     url: srv.localUrl,
-    agentId: env.ELEVENLABS_AGENT_ID ?? VORSPANN_WEG_ENV.ELEVENLABS_AGENT_ID,
+    agentId: env.ELEVENLABS_AGENT_ID ?? EL_WEG.ELEVENLABS_AGENT_ID,
     leseAnruf: async (callId) => {
       const { rows } = await mitVerbindung(adminAdresse(db.adresse), (verwaltung) =>
         verwaltung.query(ANRUF_TOKEN_SQL, [callId]),
@@ -104,10 +94,7 @@ export async function mitHermesAufPostgres(t, { env = {} }, lauf) {
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();
   const anbieter = await starteAnrufstartAttrappe();
-  const starte = () =>
-    startServer({
-      env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
-    });
+  const starte = () => starteAnAnbieter(db, anbieter, env);
   const sql = (text, parameter) => verwaltung.query(text, parameter);
   let srv = await starte();
   try {
@@ -130,9 +117,7 @@ export async function mitZweiHermesAufPostgres(t, { env = {} }, lauf) {
   const sql = (text, parameter) => verwaltung.query(text, parameter);
   const gestartet = [];
   const starte = async () => {
-    const instanz = await startServer({
-      env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
-    });
+    const instanz = await starteAnAnbieter(db, anbieter, env);
     gestartet.push(instanz);
     return instanz;
   };
@@ -181,9 +166,7 @@ export function neueAnrufe() {
 
 async function starteLauf(db, env) {
   const anbieter = await starteAnrufstartAttrappe();
-  const srv = await startServer({
-    env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
-  });
+  const srv = await starteAnAnbieter(db, anbieter, env);
   return { srv, anbieter };
 }
 
@@ -320,7 +303,10 @@ export async function starteAttrappeMitGespraechsende() {
   return {
     ...anbieter,
     url: vorgeschaltet.url,
-    beendeGespraech: (konversation, zeilen) => beendete.set(konversation, zeilen),
+    beendeGespraech: (konversation, zeilen) => {
+      beendete.set(konversation, zeilen);
+      return anbieter.legtAuf(konversation);
+    },
     schliessen: async () => {
       await vorgeschaltet.close();
       await anbieter.schliessen();
@@ -372,13 +358,15 @@ export function transkriptSql(sql, anruf, anzahl) {
 
 async function starteLaufMitGespraechsende(db, env) {
   const anbieter = await starteAttrappeMitGespraechsende();
-  const srv = await startServer({
-    env: pgStartUmgebung(db.adresse, { ...EL_WEG, ELEVENLABS_API_BASE: anbieter.url, ...env }),
-  });
+  const srv = await starteAnAnbieter(db, anbieter, env);
   return { srv, anbieter };
 }
 
-export async function mitHermesAufPostgresMitMandanten(t, { env = {}, mandanten }, lauf) {
+export async function mitHermesAufPostgresMitMandanten(t, { env: zusatz = {}, mandanten }, lauf) {
+  const env = {
+    ELEVENLABS_INBOUND_TENANT_IDS: [BOOTSTRAP_TENANT_ID, ...mandanten.map((mandant) => mandant.id)].join(","),
+    ...zusatz,
+  };
   const db = await echteDatenbankMitRolle(t);
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();

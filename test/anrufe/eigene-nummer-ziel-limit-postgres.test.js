@@ -6,7 +6,8 @@ import {
   mitHermesAufPostgresMitMandanten,
   postgresVorhanden,
 } from "./hermes-mit-postgres.js";
-import { starteJsonAttrappe } from "./attrappen-server.js";
+import { starteAblehnendeAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
+import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
 const HTTP_GATE_PASSIERT = 502;
 const HTTP_TOO_MANY = 429;
@@ -28,10 +29,10 @@ const MANDANT_B = Object.freeze({
 });
 
 async function mitMandanten(t, lauf) {
-  const abgelehnt = await starteJsonAttrappe({ detail: "abgelehnt" }, 400);
+  const abgelehnt = await starteAblehnendeAttrappe(400, "eigene-nummer", [BOOTSTRAP_TENANT_ID, MANDANT_A.id, MANDANT_B.id]);
   t.after(() => abgelehnt.close());
   const env = {
-    ELEVENLABS_API_BASE: abgelehnt.url,
+    ...abgelehnt.env,
     PER_TARGET_CALL_CAP: String(ZIEL_DECKEL),
     OWNER_SELF_CALL_ENABLED: "true",
     OWNER_SELF_CALL_TENANT_IDS: MANDANT_A.id,
