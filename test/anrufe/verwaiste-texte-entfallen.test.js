@@ -3,24 +3,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 import { ROOT } from "../helpers.js";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
-
-const ENTFALLEN = ["endCallWait", "unknownTool", "takeMessageResult", "takeMessageDuplicateResult"];
-const BLEIBT = ["openingBootstrap", "silentTurn", "consultDeclined", "consultAnswered"];
-
-test("Sprachdateien: die entfallenen turnControl-Texte fehlen, die lebenden bleiben", () => {
-  for (const lang of SUPPORTED_LANGUAGES) {
-    const turnControl = LOCALES[lang].prompt.turnControl;
-    for (const schluessel of ENTFALLEN) {
-      assert.equal(schluessel in turnControl, false, `${lang}: ${schluessel}`);
-    }
-    for (const schluessel of BLEIBT) {
-      assert.ok(schluessel in turnControl, `${lang}: ${schluessel}`);
-    }
-  }
-});
 
 test("MAX_EMPTY_TURNS=4 startet unveraendert, die Konfiguration kennt maxEmptyTurns nicht mehr", () => {
   const script = [

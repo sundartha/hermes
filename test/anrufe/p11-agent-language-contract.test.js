@@ -186,3 +186,18 @@ test("P11-9 jedes Locale traegt eine funktionale, nicht-leere disclosure mit own
     assert.ok(text.includes(OWNER), `${lang}: disclosure nennt nicht den ownerName`);
   }
 });
+
+const ENTFALLEN = ["endCallWait", "unknownTool", "takeMessageResult", "takeMessageDuplicateResult"];
+const BLEIBT = ["openingBootstrap", "silentTurn", "consultDeclined", "consultAnswered"];
+
+test("Sprachdateien: die entfallenen turnControl-Texte fehlen, die lebenden bleiben", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const turnControl = LOCALES[lang].prompt.turnControl;
+    for (const schluessel of ENTFALLEN) {
+      assert.equal(schluessel in turnControl, false, `${lang}: ${schluessel}`);
+    }
+    for (const schluessel of BLEIBT) {
+      assert.ok(schluessel in turnControl, `${lang}: ${schluessel}`);
+    }
+  }
+});
