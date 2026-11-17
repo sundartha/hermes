@@ -33,14 +33,14 @@ export async function zielKenntAnrufpause({ commit, repoDir }) {
   return (await dateiAusCommit(repoDir, commit, ANRUFPAUSE_PFAD)) !== null;
 }
 
-export async function zielProbeStarten({ url, commit, repoDir }) {
+export async function zielProbeStarten({ url, commit, repoDir, ausgabe }) {
   const inhalt = await dateiAusCommit(repoDir, commit, PROBE_PFAD);
   if (inhalt === null) return null;
   const ordner = mkdtempSync(join(tmpdir(), "probe-auth-ziel-"));
   try {
     const pfad = join(ordner, "probe-auth.sh");
     writeFileSync(pfad, inhalt);
-    return await skriptStarten(pfad, [url, commit]);
+    return await skriptStarten(pfad, [url, commit], ausgabe);
   } finally {
     rmSync(ordner, { recursive: true, force: true });
   }
@@ -218,7 +218,7 @@ async function ausliefernWiederherstellen(kontext, vorher) {
 async function produktionPruefen(kontext, commit) {
   const { hermes, ausgabe, probeAuth, einstellungen } = kontext;
   const { produktionUrl: url, repoDir } = einstellungen;
-  const exit = await probeAuth({ url, commit, repoDir });
+  const exit = await probeAuth({ url, commit, repoDir, ausgabe });
   if (exit === null) {
     ausgabe.melde("rot_probe_auth_fehlt");
     return false;
