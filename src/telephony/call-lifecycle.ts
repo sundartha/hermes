@@ -218,6 +218,16 @@ function makeBudgetAxisSeam({
   return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm, rearmWatchdogs };
 }
 
+async function beendeUeberBudgetOhneWeg(
+  call: Call,
+  ohneWeg: (call: Call) => Promise<void>,
+  { terminateOverBudgetCall }: Pick<ReturnType<typeof makeBudgetAxisSeam>, "terminateOverBudgetCall">,
+): Promise<void> {
+  await ohneWeg(call);
+  const { id: callId, twilioSid: providerCallSid } = call;
+  await terminateOverBudgetCall({ callId, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG });
+}
+
 export function makeCallLifecycle({
   store, config, finishCall, releaseReserve, voiceControl, terminateAndBillCall, hangUpAction, billThunk,
   endActiveCall, awaitAndPersistInboundElResult, reattachActiveCallCore, cappedEndedAtMs, classifyCallTime,
@@ -272,11 +282,7 @@ export function makeCallLifecycle({
     await terminateCappedCall(call.id, call.twilioSid, "failed");
   }
 
-  async function terminateOverBudgetExpired(call: Call): Promise<void> {
-    await ohneWeg(call);
-    const { id: callId, twilioSid: providerCallSid } = call;
-    await budgetAxis.terminateOverBudgetCall({ callId, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG });
-  }
+  const terminateOverBudgetExpired = (call: Call) => beendeUeberBudgetOhneWeg(call, ohneWeg, budgetAxis);
 
   function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
     setTimeout(() => {
@@ -330,7 +336,6 @@ export function makeCallLifecycle({
 
   return {
     armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
-    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
-    blockingAxisFor: budgetAxis.blockingAxisFor,
+    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired, blockingAxisFor: budgetAxis.blockingAxisFor,
   };
 }
