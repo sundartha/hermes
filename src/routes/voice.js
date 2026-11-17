@@ -63,6 +63,17 @@ async function wiederanbindenMitWiederholung(callId, lifecycle) {
   return reattached;
 }
 
+function statusLifecycleFuer(call, lifecycle) {
+  if (!call) return { reattachActiveCall: (id) => wiederanbindenMitWiederholung(id, lifecycle) };
+  return {
+    reattachActiveCall: (id) =>
+      Promise.resolve(lifecycle.reattachActiveCall(id)).catch((err) => {
+        console.error(`${STATUS_LOG_PREFIX} Wiederanbindung abgelehnt (callId=${id}): ${err.message}`);
+        throw err;
+      }),
+  };
+}
+
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
@@ -508,8 +519,7 @@ export function makeVoiceRoutes({
     const callId = wiederanbindungsKennung(req, call);
     if (brauchtWiederanbindung(store, call)) {
       if (!callId) return;
-      const mitWiederholung = { reattachActiveCall: (id) => wiederanbindenMitWiederholung(id, lifecycle) };
-      const reattached = await wiederanbinden({ store, lifecycle: mitWiederholung }, call, callId);
+      const reattached = await wiederanbinden({ store, lifecycle: statusLifecycleFuer(call, lifecycle) }, call, callId);
       if (!reattached.call) return;
       call = reattached.call;
     }
