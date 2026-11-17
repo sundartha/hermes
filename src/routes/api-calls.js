@@ -65,6 +65,8 @@ async function anrufVonAndererInstanz(store, callId, tenantId) {
   return status === null ? null : { id: callId, tenantId };
 }
 
+const leseAnruf = (store, callId) => (store.leseCall ? store.leseCall(callId) : store.getCall(callId));
+
 const providerStatusOf = (err) => err?.providerStatus;
 
 const CONSULT_ABFRAGE = z.object({ after: z.string().catch(null) });
@@ -495,10 +497,10 @@ export function makeCallRoutes({
     liefereConsultEreignis(req, res).catch(next);
   });
 
-  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res) => {
+  async function beantworteConsult(req, res) {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
-    const call = store.getCall(req.params.id);
+    const call = await leseAnruf(store, req.params.id);
     if (!callVisibleTo(call, tenantId)) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return res
@@ -513,11 +515,15 @@ export function makeCallRoutes({
       status === CONSULT_ANSWER_MODE.WORKING
         ? ackWorkingConsult({ bereiche, audit, req, res, call, eventId })
         : answerConsultFinal({ bereiche, audit, req, res, call, eventId, answers });
-    antwort.catch(req.next);
+    return antwort;
+  }
+
+  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res, next) => {
+    beantworteConsult(req, res).catch(next);
   });
 
-  router.post("/api/calls/:id/cancel", internalOnly, async (req, res) => {
-    const call = store.getCall(req.params.id);
+  async function brecheAnrufAb(req, res) {
+    const call = await leseAnruf(store, req.params.id);
     if (!callVisibleTo(call, requestTenant(req)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (call.status !== "active") return res.json({ status: call.status });
@@ -547,6 +553,10 @@ export function makeCallRoutes({
         hangup_attempted: Boolean(elHangUp),
       });
     res.json({ status: "cancelled" });
+  }
+
+  router.post("/api/calls/:id/cancel", internalOnly, (req, res, next) => {
+    brecheAnrufAb(req, res).catch(next);
   });
 
   return router;
