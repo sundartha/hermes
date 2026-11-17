@@ -163,7 +163,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden });
 
-  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -442,13 +442,13 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
       if (changed) save();
       return wait;
     },
-    noteConsultPoll: (callId) => ops.noteConsultPoll(requireState(), callId),
+    noteConsultPoll: (callId) => anrufe.noteConsultPoll(requireState(), callId),
     addLookupFacts(callId, facts) {
       const { changed, added } = ops.addLookupFacts(requireState(), callId, facts);
       if (changed) save();
       return added;
     },
-    countCallLookup: (callId) => ops.countCallLookup(requireState(), callId),
+    countCallLookup: (callId) => anrufe.countCallLookup(requireState(), callId),
     recordCallLookup(callId, query) {
       const { changed, seq } = ops.recordCallLookup(requireState(), callId, query);
       if (changed) save();
@@ -459,8 +459,8 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
       if (changed) save();
       return changed;
     },
-    countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
-    clearNoSpeechStreak: (callId) => ops.clearNoSpeechStreak(requireState(), callId),
+    countNoSpeechTurn: (callId) => anrufe.countNoSpeechTurn(requireState(), callId),
+    clearNoSpeechStreak: (callId) => anrufe.clearNoSpeechStreak(requireState(), callId),
     countOutboundCallsSince: (sinceIso, filters = {}) => anrufe.zaehleAusgehend(sinceIso, filters),
     counterpartyMemory: (tenantId, e164) => ops.counterpartyMemory(requireState(), tenantId, e164),
     counterpartyMemoryGelesen: (tenantId, e164) => anrufe.gedaechtnis(requireState(), tenantId, e164),
@@ -1401,6 +1401,9 @@ function anrufKennungenFelder(zeile) {
     result: zeile.result ?? null,
     consults: zeile.consults ?? null,
     lookupLog: zeile.lookup_log ?? null,
+    noSpeechStreak: Number(zeile.no_speech_streak),
+    lookups: Number(zeile.lookups),
+    consultPolledAtMs: Number(zeile.consult_polled_at_ms),
   };
 }
 
@@ -1680,6 +1683,9 @@ function callRowValues(call, tenantId) {
     call.notPlacedMailSentAt ?? null,
     ...brueckenKennungWerte(call),
     call.instanz ?? null,
+    call.noSpeechStreak ?? 0,
+    call.lookups ?? 0,
+    call.consultPolledAtMs ?? 0,
   ];
 }
 
@@ -1708,8 +1714,9 @@ async function schreibeAnrufZeile(client, tenantId, call) {
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
           from_actual_e164, from_source, from_registration_source, cost_profile,
           el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at,
-          caller_is_owner, not_placed_mail_sent_at, bridged_at, el_call_control_id, instanz)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71)
+          caller_is_owner, not_placed_mail_sent_at, bridged_at, el_call_control_id, instanz,
+          no_speech_streak, lookups, consult_polled_at_ms)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid,
          status=CASE WHEN call.status = 'active' THEN EXCLUDED.status ELSE call.status END,

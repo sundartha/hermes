@@ -36,6 +36,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "21", name: "0021_anruf_frist_geld" },
   { version: "22", name: "0022_anruf_frist_reserve" },
   { version: "23", name: "0023_anrufstart_marker" },
+  { version: "24", name: "0024_anruf_zaehler" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -143,6 +144,7 @@ test(
         "0021_anruf_frist_geld",
         "0022_anruf_frist_reserve",
         "0023_anrufstart_marker",
+        "0024_anruf_zaehler",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
