@@ -13,7 +13,7 @@ function paar(eintrag) {
 }
 
 function regelWerte(selektor) {
-  const treffer = [...CSS.matchAll(new RegExp("(?:^|\\n)\\s*" + selektor.replace(/\./g, "\\.") + "\\{([^}]*)\\}", "g"))];
+  const treffer = [...CSS.matchAll(new RegExp("(?:^|\\n)\\s*" + selektor.split(".").join("\\.") + "\\{([^}]*)\\}", "g"))];
   assert.notEqual(treffer.length, 0, "Regel " + selektor + " fehlt");
   const eintraege = treffer.flatMap((m) => m[1].split(";").filter(Boolean));
   return Object.fromEntries(eintraege.map(paar));
