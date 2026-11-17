@@ -137,7 +137,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   function save(preFlush) {
     const snapshot = requireState();
     flushChain = flushChain
-      .then(() => messeSpeichern(() => runner.withClient((client) => flush(client, snapshot, preFlush, gebunden))))
+      .then(() => messeSpeichern(() => runner.withClient((client) => flush(client, snapshot, { preFlush, gebunden }))))
       .then(
         () => {
           lastFlushError = null;
@@ -1474,7 +1474,7 @@ function rowToNotification(r) {
   return { id: r.id, title: r.title, body: r.body, callId: r.call_id, at: r.at };
 }
 
-async function flush(client, state, preFlush, gebunden) {
+async function flush(client, state, { preFlush, gebunden }) {
   const [beginn, frist] = flushAnfang();
   await client.query(beginn.text);
   try {
