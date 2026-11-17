@@ -35,3 +35,8 @@ export function fakeTelnyxShimConfig({
     },
   });
 }
+
+export const OHNE_EL_ZUGANG = Object.freeze({
+  elevenLabsInbound: Object.freeze({}),
+  elevenLabsOutbound: Object.freeze({}),
+});

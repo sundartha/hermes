@@ -6,7 +6,7 @@ import { echteDatenbank } from "../gemeinsam/echtes-postgres.js";
 import { fakeProvisioner, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgTestStore } from "../pg-helpers.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeGracefulShutdown } from "../../src/abschalten.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
@@ -109,6 +109,7 @@ function baueOrchestrator({
   return makeProvisioningOrchestrator({
     store,
     config: withConfigNamespaces({
+      ...OHNE_EL_ZUGANG,
       paymentEnabled: false,
       provisioningEnabled: true,
       provisioningRedriveMaxAgeMs: 3_600_000,

@@ -2,7 +2,7 @@ import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung, wackeligeWarteschlange } from "../gemeinsam/pgboss-umgebung.js";
 import { fakeProvisioner } from "../helpers.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
@@ -91,6 +91,7 @@ function baueOrchestrator({ queue, state, handle, anbieter, provisioningEnabled 
   const orchestrator = makeProvisioningOrchestrator({
     store: { load: () => state, save() {} },
     config: withConfigNamespaces({
+      ...OHNE_EL_ZUGANG,
       paymentEnabled: false,
       provisioningEnabled,
       provisioningRedriveMaxAgeMs: 3_600_000,

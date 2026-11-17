@@ -31,7 +31,7 @@ await new Promise((bereit) => telnyxStub.listen(0, "127.0.0.1", bereit));
 process.env.TELNYX_API_BASE = `http://127.0.0.1:${telnyxStub.address().port}`;
 process.env.TELNYX_API_KEY = "KEYtest-nummernkauf";
 
-const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
+const { OHNE_EL_ZUGANG, withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { fakeBilling } = await import("../helpers.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
@@ -106,6 +106,7 @@ async function aufbau() {
   const billing = fakeBilling();
   const jobMarkierungen = [];
   const cfg = withConfigNamespaces({
+    ...OHNE_EL_ZUGANG,
     paymentEnabled: true,
     numberSetupFeeCents: 500,
     paymentCurrency: "eur",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 
 import { pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeConfigOverrides } from "../helpers.js";
 import { config } from "../../src/config.js";
 import { createQueue } from "../../src/queue/registry.js";
@@ -47,6 +47,7 @@ function baueOrchestrator({ queue, anrufstartHandler, provisioningEnabled = fals
   return makeProvisioningOrchestrator({
     store: { load: () => state, save() {} },
     config: withConfigNamespaces({
+      ...OHNE_EL_ZUGANG,
       paymentEnabled: false,
       provisioningEnabled,
       provisioningRedriveMaxAgeMs: 3_600_000,
