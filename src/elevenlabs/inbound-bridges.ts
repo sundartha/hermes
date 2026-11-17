@@ -78,7 +78,9 @@ export function makeInboundBridges({
       weiter(store.getCall(callId));
       return;
     }
-    store.leseCallUngebunden(callId).then(weiter, () => weiter(null));
+    store.leseCallUngebunden(callId).then(weiter, () => {
+      weiter(null);
+    });
   }
 
   function fristAbgelaufen(callId: string, art: string): void {
