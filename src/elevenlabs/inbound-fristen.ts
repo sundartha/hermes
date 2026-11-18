@@ -6,13 +6,14 @@ export const EL_BINDING_AFTER_ANSWER_MS = 8000;
 export const EL_RUECKFALL_PFAD = "/voice/el-rueckfall";
 export const EL_RUECKFALL_QUELLE = Object.freeze({ DIAL_ENDE: "dial_ende", FRIST: "frist" });
 
-const FRIST_ART = Object.freeze({ AUSSEN: "aussen", INNEN: "innen" });
+const FRIST_ART = Object.freeze({ AUSSEN: "aussen", INNEN: "innen", LAUF: "lauf" });
 export const LOG_TAG = "el-inbound";
 
 type Handle = ReturnType<typeof setTimeout>;
 
 export interface Anruf {
   id: string;
+  tenantId: string;
   status?: unknown;
   answeredAt: string;
   provider?: string;
@@ -29,6 +30,7 @@ interface InboundBridges {
   armBindingDeadline: (callId: string) => void;
   clearDeadlines: (callId: string) => void;
   rearmDeadlines: () => void;
+  uebergabeDurchLauf: (callId: string) => Promise<void>;
 }
 
 export function elRueckfallUrl({ callId, quelle }: { callId: string; quelle: string }): string {
@@ -49,9 +51,11 @@ export function makeInboundBridges({
   setTimer,
   clearTimer = clearTimeout,
   now,
+  uebernahmeMs = 0,
 }: {
   store: {
     getCall: (id: string) => Anruf | null | undefined;
+    setzeUebergabeFrist?: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
     leseCallUngebunden?: (id: string) => Promise<Anruf | null | undefined>;
     load: () => { calls: Anruf[] };
   };
@@ -59,6 +63,7 @@ export function makeInboundBridges({
   setTimer: (fn: () => void, ms: number) => Handle;
   clearTimer?: (handle: Handle) => void;
   now: () => number;
+  uebernahmeMs?: number;
 }): InboundBridges {
   const fristen = new Map<string, Record<string, Handle>>();
 
@@ -79,16 +84,36 @@ export function makeInboundBridges({
     });
   }
 
+  function leiteUmWennWartend(callId: string, art: string, call: Anruf | null | undefined): void {
+    if (!umleitungFaellig(call)) return;
+    console.log(`[${LOG_TAG}] frist_abgelaufen call=${callId} frist=${art}`);
+    void umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
+  }
+
   function fristAbgelaufen(callId: string, art: string): void {
     clearDeadlines(callId);
     mitAnruf(callId, (call) => {
-      if (!umleitungFaellig(call)) return;
-      console.log(`[${LOG_TAG}] frist_abgelaufen call=${callId} frist=${art}`);
-      void umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
+      leiteUmWennWartend(callId, art, call);
+    });
+  }
+
+  async function uebergabeDurchLauf(callId: string): Promise<void> {
+    const call = store.leseCallUngebunden ? await store.leseCallUngebunden(callId) : store.getCall(callId);
+    leiteUmWennWartend(callId, FRIST_ART.LAUF, call);
+  }
+
+  function schreibeFrist(callId: string, faelligMs: number): void {
+    mitAnruf(callId, (call) => {
+      if (!call) return;
+      const faelligAt = new Date(faelligMs + uebernahmeMs).toISOString();
+      store.setzeUebergabeFrist?.({ callId, tenantId: call.tenantId, faelligAt }).catch((fehler: unknown) => {
+        console.error(`[fristen] Uebergabe-Frist schreiben fehlgeschlagen: ${callId} ${String(fehler)}`);
+      });
     });
   }
 
   function armiere(callId: string, art: string, ms: number): void {
+    schreibeFrist(callId, now() + ms);
     const eintrag = fristen.get(callId) ?? {};
     if (eintrag[art]) clearTimer(eintrag[art]);
     fristen.set(callId, { ...eintrag, [art]: setTimer(() => {
@@ -113,5 +138,5 @@ export function makeInboundBridges({
     if (wartende.length > 0) console.log(`[${LOG_TAG}] Fristen re-armiert: ${String(wartende.length)} Anrufe`);
   }
 
-  return { armDeadlines, armBindingDeadline, clearDeadlines, rearmDeadlines };
+  return { armDeadlines, armBindingDeadline, clearDeadlines, rearmDeadlines, uebergabeDurchLauf };
 }

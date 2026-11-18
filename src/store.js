@@ -16,6 +16,7 @@ import {
   setzeGeldImSpiegel,
   setzeHoechstdauerImSpiegel,
   setzeAbfrageImSpiegel,
+  setzeUebergabeImSpiegel,
   setzeReserveImSpiegel,
 } from "./store/fristen-sql.js";
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
@@ -95,6 +96,10 @@ async function createPgBackend() {
     setzeAbfrageFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeAbfrage(anfrage);
+    },
+    setzeUebergabeFrist: async (anfrage) => {
+      await store.drainFlushes();
+      return makePostgresFristen(runner).setzeUebergabe(anfrage);
     },
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
@@ -200,6 +205,10 @@ function jsonBackendAufbauen() {
       setzeAbfrageImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
     },
+    setzeUebergabeFrist: async (anfrage) => {
+      setzeUebergabeImSpiegel(jsonBackend.load(), anfrage);
+      jsonBackend.save();
+    },
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
@@ -268,6 +277,7 @@ export const {
   setzeGeldFrist,
   setzeReserveFrist,
   setzeAbfrageFrist,
+  setzeUebergabeFrist,
   mitStartSperre,
   nummernVorhanden,
   besitzLage,

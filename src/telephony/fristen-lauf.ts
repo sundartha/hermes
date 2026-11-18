@@ -4,6 +4,7 @@ const HOECHSTDAUER = "hoechstdauer";
 const GELD = "geld";
 const RESERVE = "reserve";
 const ABFRAGE = "abfrage";
+const UEBERGABE = "uebergabe";
 const MAX_VERSUCHE = 3;
 
 interface Anruf {
@@ -33,6 +34,10 @@ interface AbfrageAbhaengigkeiten {
   pollen: (callId: string) => Promise<unknown>;
 }
 
+interface UebergabeAbhaengigkeiten {
+  umleiten: (callId: string) => Promise<unknown>;
+}
+
 interface FristenLaufAbhaengigkeiten {
   store: {
     faelligeFristen: (anfrage: { art: string; limitJeMandant: number; leaseMs: number }) => Promise<Treffer[]>;
@@ -40,11 +45,13 @@ interface FristenLaufAbhaengigkeiten {
     attachActiveCall: (callId: string) => Promise<Anruf | null | undefined>;
     setzeGeldFrist: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
     setzeReserveFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
+    setzeUebergabeFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
   };
   beende: (call: Anruf) => Promise<unknown>;
   geld?: GeldAbhaengigkeiten;
   reserve?: ReserveAbhaengigkeiten;
   abfrage?: AbfrageAbhaengigkeiten;
+  uebergabe?: UebergabeAbhaengigkeiten;
   limitJeMandant: number;
   leaseMs: number;
 }
@@ -55,11 +62,12 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
-export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage }: FristenLaufAbhaengigkeiten): {
+export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe }: FristenLaufAbhaengigkeiten): {
   takt: () => Promise<TaktErgebnis>;
   geldTakt: () => Promise<TaktErgebnis>;
   reserveTakt: () => Promise<TaktErgebnis>;
   abfrageTakt: () => Promise<TaktErgebnis>;
+  uebergabeTakt: () => Promise<TaktErgebnis>;
 } {
   function offen(callId: string, versuche: number): "offen" {
     if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
@@ -114,6 +122,17 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
     return "weg";
   }
 
+  async function leiteUm(wache: UebergabeAbhaengigkeiten, { callId, tenantId, versuche }: Treffer): Promise<"weg" | "offen"> {
+    try {
+      await wache.umleiten(callId);
+      await store.setzeUebergabeFrist({ callId, tenantId, faelligAt: null });
+    } catch (fehler) {
+      console.error(`[fristen] Uebergabe umleiten fehlgeschlagen: ${callId}`, String(fehler));
+      return offen(callId, versuche);
+    }
+    return "weg";
+  }
+
   async function lies(art: string): Promise<Treffer[] | null> {
     try {
       return await store.faelligeFristen({ art, limitJeMandant, leaseMs });
@@ -141,6 +160,7 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
     geldTakt: async () => (geld ? runde(GELD, async (treffer) => bearbeite(treffer, geldFaellig(geld), geld.beende)) : nichts),
     reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
     abfrageTakt: async () => (abfrage ? runde(ABFRAGE, async (treffer) => starteAbfrage(abfrage, treffer)) : nichts),
+    uebergabeTakt: async () => (uebergabe ? runde(UEBERGABE, async (treffer) => leiteUm(uebergabe, treffer)) : nichts),
   };
 }
 
@@ -159,6 +179,7 @@ async function alleRunden(lauf: {
   geldTakt: () => Promise<unknown>;
   reserveTakt: () => Promise<unknown>;
   abfrageTakt: () => Promise<unknown>;
+  uebergabeTakt: () => Promise<unknown>;
 }): Promise<void> {
   try {
     await lauf.takt();
@@ -169,7 +190,11 @@ async function alleRunden(lauf: {
       try {
         await lauf.reserveTakt();
       } finally {
-        await lauf.abfrageTakt();
+        try {
+          await lauf.abfrageTakt();
+        } finally {
+          await lauf.uebergabeTakt();
+        }
       }
     }
   }
