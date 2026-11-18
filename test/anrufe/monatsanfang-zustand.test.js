@@ -77,3 +77,15 @@ test("MONATSANFANG: am 01.04. 00:00:00 UTC zaehlt callsThisMonth ab 2026-04-01T0
   assert.deepEqual(abgefragt, [ANRUF_ANFANG_APRIL]);
   assert.equal(json.usage.callsThisMonth, 1);
 });
+
+test("MONATSANFANG: monthStart liefert den 1. des UTC-Monats um 00:00:00 UTC", async () => {
+  const monat = await import("../../src/utils/month.js");
+  const tabelle = [
+    ["2026-03-31T23:59:59.999Z", "2026-03-01T00:00:00.000Z"],
+    ["2026-04-01T00:00:00.000Z", "2026-04-01T00:00:00.000Z"],
+    ["2026-12-15T12:30:00.000Z", "2026-12-01T00:00:00.000Z"],
+    ["2027-01-31T23:00:00.000Z", "2027-01-01T00:00:00.000Z"],
+  ];
+  const erhalten = tabelle.map(([eingabe]) => monat.monthStart?.(new Date(eingabe)).toISOString());
+  assert.deepEqual(erhalten, tabelle.map(([, erwartet]) => erwartet));
+});
