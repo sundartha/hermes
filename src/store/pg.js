@@ -869,8 +869,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
       const geloescht = await anrufe.mandantLoeschen(tenantId);
       const removed = { ...ops.eraseTenantData(state, tenantId), ...geloescht };
       entbindeEntfernte([gebunden, eigene], state);
-      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
-        save();
+      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
       if (removed.privateNumber) mandant.schreiben(tenantId, ["privateNumber"]);
       return removed;
     },
