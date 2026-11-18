@@ -7,7 +7,7 @@ export const CHECK_INBOX_DESCRIPTION =
   "call history - use list_calls for that.";
 
 const PLACE_CALL_DESCRIPTION =
-  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call starts as soon as this tool is called - there is no confirmation step, so only call it once the user has asked for this call, and it is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits). A live-updating card is NOT guaranteed on every host - ALWAYS track the call via the call_id this tool returns, using get_call_status until it reports a final status. " +
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. The call starts as soon as this tool is called - there is no confirmation step, so only call it once the user has asked for this call, and it is NOT reversible once placed; billed per minute to the caller's account. Which destinations are allowed is decided by the server through its safety gates. It returns at once with the call_id; with no free line it waits up to 2 minutes, then ends without dialling and without charge. ALWAYS track it via get_call_status until a final status - not every host shows a live card. " +
   CALL_PURPOSE_SHORT_RULE +
   " For contracts, loans, insurance, tenancy, employment or legal matters, let decide_freely cover appointment times only and do not set 'accept_best', so the agent agrees to no terms there.";
 
