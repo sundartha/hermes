@@ -8,6 +8,10 @@ export function yearMonthKey(at) {
   return `${at.getUTCFullYear()}-${month}`;
 }
 
+export function monthStart(at) {
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), FIRST_DAY));
+}
+
 export function previousMonthStart(at) {
   return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - ONE_MONTH, FIRST_DAY));
 }
