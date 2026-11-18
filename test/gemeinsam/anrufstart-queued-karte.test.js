@@ -110,6 +110,14 @@ test("queued: die Anrufkarte zeigt queued auf Deutsch uebersetzt", () => {
   assert.equal(doc.nachSelektor.get("[data-hud-phase]").textContent, "Hermes wartet auf eine freie Leitung.");
 });
 
+test("queued: die Anrufkarte zeigt queued auf Franzoesisch uebersetzt", () => {
+  const doc = dokument();
+  const sende = starteKarte(doc);
+  sende(ergebnis("queued"), { [WIDGET_LOCALE_META_KEY]: "fr" });
+  assert.equal(doc.nachSelektor.get("[data-status-label]").textContent, "En attente d'une ligne");
+  assert.equal(doc.nachSelektor.get("[data-hud-phase]").textContent, "Hermes attend une ligne libre.");
+});
+
 test("queued: die Anrufliste beschriftet einen wartenden Anruf mit Waiting for a line", () => {
   const behaelter = { ...element(), getAttribute: () => "status" };
   const doc = { createElement: element, defaultView: null };
