@@ -8,7 +8,7 @@ import { withOpenAiToolMetadata, widgetResourceOptions, withWidgetLocale } from 
 
 export function createToolContext(
   server,
-  { identity = null, scopedTenant = null, consultAllowed = false, uiHost = null, language = null },
+  { identity = null, scopedTenant = null, consultAllowed = false, consultTore = {}, uiHost = null, language = null },
   begriffe,
 ) {
   const call = (method, path, body) => boundedHop({ method, path, body, identity, scopedTenant });
@@ -45,6 +45,7 @@ export function createToolContext(
     identity,
     scopedTenant,
     consultAllowed,
+    consultTore,
     begriffe,
     call,
     pollConsult,
