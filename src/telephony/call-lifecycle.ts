@@ -170,6 +170,11 @@ function activeCallsOf(store: Store): Call[] {
   return store.load().calls.filter((call) => call.status === ACTIVE_CALL_STATUS);
 }
 
+function abgelaufeneVon(store: Store, classifyCallTime: CallLifecycleDeps["classifyCallTime"]): Call[] {
+  const nowMs = Date.now();
+  return activeCallsOf(store).filter((call) => classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S).expired);
+}
+
 function readCall(store: Store, callId: string): Promise<Call | null | undefined> | Call | null | undefined {
   return store.leseCall ? store.leseCall(callId) : store.getCall(callId);
 }
@@ -359,13 +364,8 @@ export function makeCallLifecycle({
     });
   }
 
-  function abgelaufeneAktive(): Call[] {
-    const nowMs = Date.now();
-    return activeCallsOf(store).filter((call) => classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S).expired);
-  }
-
   return {
-    abgelaufeneAktive, armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
+    abgelaufeneAktive: () => abgelaufeneVon(store, classifyCallTime), armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
     rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
     blockingAxisFor: budgetAxis.blockingAxisFor, releaseReserve,
   };

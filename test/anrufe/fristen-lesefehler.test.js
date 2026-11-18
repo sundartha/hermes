@@ -24,7 +24,7 @@ function makeBetrieb({ beendenScheitert = false } = {}) {
   const beende = async (call) => {
     if (beendenScheitert) throw new Error("hangup weg");
     betrieb.beendet.push(call.id);
-    call.status = "completed";
+    hier.find((eintrag) => eintrag.id === call.id).status = "completed";
   };
   const abgelaufeneHier = () => {
     betrieb.fragen += 1;

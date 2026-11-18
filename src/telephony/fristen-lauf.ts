@@ -64,6 +64,27 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
+async function beendeAlle(
+  anrufe: Anruf[],
+  beende: (call: Anruf) => Promise<unknown>,
+): Promise<{ beendet: number; offen: number }> {
+  const ergebnisse = await Promise.all(
+    anrufe.map(async (call) => {
+      try {
+        await beende(call);
+        return "beendet";
+      } catch (fehler) {
+        console.error(`[fristen] Beenden fehlgeschlagen: ${call.id}`, String(fehler));
+        return "offen";
+      }
+    }),
+  );
+  return {
+    beendet: ergebnisse.filter((ergebnis) => ergebnis === "beendet").length,
+    offen: ergebnisse.filter((ergebnis) => ergebnis === "offen").length,
+  };
+}
+
 export function makeFristenLauf({
   store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe, abgelaufeneHier,
 }: FristenLaufAbhaengigkeiten): {
@@ -159,31 +180,13 @@ export function makeFristenLauf({
 
   const nichts = { beendet: 0, offen: 0, gelesen: true };
 
-  async function beendeHierGebundene(): Promise<{ beendet: number; offen: number }> {
-    const ergebnisse = await Promise.all(
-      (abgelaufeneHier?.() ?? []).map(async (call) => {
-        try {
-          await beende(call);
-          return "beendet";
-        } catch (fehler) {
-          console.error(`[fristen] Beenden fehlgeschlagen: ${call.id}`, String(fehler));
-          return "offen";
-        }
-      }),
-    );
-    return {
-      beendet: ergebnisse.filter((ergebnis) => ergebnis === "beendet").length,
-      offen: ergebnisse.filter((ergebnis) => ergebnis === "offen").length,
-    };
-  }
-
   let lesefehlerInFolge = 0;
 
   async function hoechstdauerTakt(): Promise<TaktErgebnis> {
     const ergebnis = await runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende));
     lesefehlerInFolge = ergebnis.gelesen ? 0 : lesefehlerInFolge + 1;
     if (lesefehlerInFolge < LESEFEHLER_BIS_ENDE) return ergebnis;
-    return { ...ergebnis, ...(await beendeHierGebundene()) };
+    return { ...ergebnis, ...(await beendeAlle(abgelaufeneHier?.() ?? [], beende)) };
   }
 
   return {
