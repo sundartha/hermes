@@ -726,7 +726,10 @@ export function makeCallRoutes({
   ];
 
   async function starteWartendenAnruf(call: Anruf) {
-    const bestanden = await fuehreToreAus(wartendeTore, call, (_tor, betroffen) => sperrAblehnung(betroffen, GRUND_TOR_FEHLER));
+    const bestanden = await fuehreToreAus(wartendeTore, call, (tor, betroffen, fehler) => {
+      console.error(`[anrufstart] Tor ${tor.name} nicht lesbar call=${betroffen.id}:`, beschreibungOf(fehler));
+      return sperrAblehnung(betroffen, GRUND_TOR_FEHLER);
+    });
     if (!(bestanden instanceof GatesBestanden)) {
       await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${bestanden.audit.grund}`);
       throw new Error(`[anrufstart] nicht gewaehlt (call=${call.id})`);
