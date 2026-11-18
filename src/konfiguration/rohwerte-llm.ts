@@ -1,9 +1,49 @@
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../llm/provider.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
+import type { umgebungMit } from "./umgebung.ts";
 
 const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 
-export function rohwerteLlm(env, { enumEnv, numEnv, textEnv }) {
+export function rohwerteLlm(
+  env: {
+    ANTHROPIC_API_KEY?: string | undefined;
+    LLM_PROVIDER?: string | undefined;
+    DEEPSEEK_API_KEY?: string | undefined;
+    LLM_PROVIDER_FALLBACK?: string | undefined;
+    CLAUDE_MODEL?: string | undefined;
+    LLM_REQUEST_TIMEOUT_MS?: string | undefined;
+    LLM_MAX_RETRIES?: string | undefined;
+    LLM_BACKOFF_MS?: string | undefined;
+    LLM_BREAKER_THRESHOLD?: string | undefined;
+    LLM_BREAKER_WINDOW_MS?: string | undefined;
+    LLM_BREAKER_COOLDOWN_MS?: string | undefined;
+    LLM_BILLING_LATCH_COOLDOWN_MS?: string | undefined;
+    PRECALL_BRIEFING_MODEL?: string | undefined;
+    PRECALL_BRIEFING_TIMEOUT_MS?: string | undefined;
+    CALL_SUMMARY_TIMEOUT_MS?: string | undefined;
+  },
+  {
+    enumEnv,
+    numEnv,
+    textEnv,
+  }: Pick<ReturnType<typeof umgebungMit>, "enumEnv" | "numEnv" | "textEnv">,
+): {
+  anthropicApiKey: string;
+  llmProvider: string;
+  deepseekApiKey: string;
+  llmProviderFallback: string;
+  claudeModel: string;
+  llmRequestTimeoutMs: number | undefined;
+  llmMaxRetries: number | undefined;
+  llmBackoffMs: number | undefined;
+  llmBreakerThreshold: number | undefined;
+  llmBreakerWindowMs: number | undefined;
+  llmBreakerCooldownMs: number | undefined;
+  llmBillingLatchCooldownMs: number | undefined;
+  briefingModel: string;
+  briefingTimeoutMs: number | undefined;
+  summaryTimeoutMs: number | undefined;
+} {
   return {
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? "",
     llmProvider: enumEnv("LLM_PROVIDER", env.LLM_PROVIDER, {
@@ -35,10 +75,14 @@ export function rohwerteLlm(env, { enumEnv, numEnv, textEnv }) {
       fallback: 30000,
       min: 1,
     }),
-    llmBillingLatchCooldownMs: numEnv("LLM_BILLING_LATCH_COOLDOWN_MS", env.LLM_BILLING_LATCH_COOLDOWN_MS, {
-      fallback: LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT * MS_PER_MINUTE,
-      min: 1,
-    }),
+    llmBillingLatchCooldownMs: numEnv(
+      "LLM_BILLING_LATCH_COOLDOWN_MS",
+      env.LLM_BILLING_LATCH_COOLDOWN_MS,
+      {
+        fallback: LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT * MS_PER_MINUTE,
+        min: 1,
+      },
+    ),
 
     briefingModel: textEnv(env.PRECALL_BRIEFING_MODEL, "claude-sonnet-5"),
     briefingTimeoutMs: numEnv("PRECALL_BRIEFING_TIMEOUT_MS", env.PRECALL_BRIEFING_TIMEOUT_MS, {
