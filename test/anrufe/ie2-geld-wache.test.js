@@ -23,6 +23,7 @@ function makeHarness({
   intervalMs = TAKT_MS,
   budgetExhausted = true,
   budgetAxis = blockingBudgetAxis,
+  storeErgaenzung = {},
 } = {}) {
   const call = {
     id: callId,
@@ -56,6 +57,7 @@ function makeHarness({
     },
     activeCallsFor: () => [],
     liveBudgetExceeded: () => budgetExhausted,
+    ...storeErgaenzung,
   };
   const lifecycle = makeCallLifecycle({
     store,
@@ -148,7 +150,7 @@ test("IE2-3: Geld-Wache und Max-Dauer-Cap ergeben GENAU EINE Terminalisierung", 
     harness.lifecycle.armMaxDurationTimer(call, call.twilioSid);
     await fireLatest(harness.budgetTimers);
     await harness.billed;
-    await fireLatest(harness.capTimers);
+    await harness.lifecycle.terminateExpiredCall(call);
   });
   assert.deepEqual(harness.order, TERMINATION_ORDER, "der Cap fuegt keine zweite Runde hinzu");
   assert.equal(
@@ -176,7 +178,7 @@ test("IE2-5: Takt 0 stellt nirgends einen Takt - der Rueckfall-Hebel ist byte-id
     harness.lifecycle.armMaxDurationTimer(call, call.twilioSid);
   });
   assert.deepEqual(harness.budgetTimers, [], "kein Takt am Anrufstart");
-  assert.equal(harness.capTimers.length, 1, "der Max-Dauer-Cap bleibt unberuehrt scharf");
+  assert.deepEqual(harness.capTimers, [], "der Max-Dauer-Cap steht als Frist in der Datenbank, nicht als Timer im Prozess");
   assert.equal(call.status, "active", "nichts terminalisiert");
 });
 
@@ -368,19 +370,8 @@ test("Frist-Ende: hat der Lauf eines anderen Prozesses den Anruf beendet, loest 
   const betrieb = fristBetrieb();
   const besitzer = fristProzess(betrieb);
   const call = await besitzer.store.attachActiveCall("call_ende");
-  const timer = [];
-  const echt = globalThis.setTimeout;
-  globalThis.setTimeout = (fn) => {
-    timer.push(fn);
-    return { unref() {} };
-  };
-  try {
-    besitzer.lifecycle.armMaxDurationTimer(call, call.twilioSid);
-  } finally {
-    globalThis.setTimeout = echt;
-  }
   await fristAbgelaufen(betrieb);
-  timer[0]();
+  await besitzer.lifecycle.terminateExpiredCall(call);
   await new Promise((fertig) => setImmediate(fertig));
   assert.deepEqual(betrieb.hangups, ["CA_ende"]);
   assert.deepEqual(betrieb.rechnungen, ["call_ende"]);
@@ -547,8 +538,7 @@ test("Hoechstdauer: wirft der Leser, bleibt der Anruf bewacht und die naechste F
     },
   });
   await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
-    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
-    await fireLatest(harness.capTimers);
+    await harness.lifecycle.terminateExpiredCall(harness.call);
     assert.equal(harness.call.status, "active", "ein Lesefehler gibt den Anruf nicht frei");
     assert.deepEqual(harness.order, [], "nichts beendet, nichts gebucht");
     assert.equal(harness.capTimers.length, 1, "die naechste Frist ist geplant");
@@ -568,8 +558,7 @@ test("Hoechstdauer: wirft der Leser, bleibt der Anruf bewacht und die naechste F
 test("Hoechstdauer: liest der Leser den Anruf als nicht aktiv, endet die Frist still ohne neuen Versuch", async () => {
   const harness = lesefehlerHarness({ lese: () => async () => null });
   await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
-    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
-    await fireLatest(harness.capTimers);
+    await harness.lifecycle.terminateExpiredCall(harness.call);
     assert.deepEqual(harness.capTimers, [], "kein neuer Versuch");
     assert.deepEqual(fehlerzeilen, []);
   });
@@ -774,4 +763,28 @@ test("Reserve-Frist beim Anrufstart: die Freigabe nach Ablauf bekommt den aktuel
   lifecycle.armReserveReleaseTimer({ ...call, status: "ringing" });
   t.mock.timers.tick(90_000 + GNADE_MS);
   assert.deepEqual(freigaben, []);
+});
+
+test("Hoechstdauer-Frist: der Anrufstart stellt keinen Timer im Prozess, die Hoechstdauer steht nur als Frist", async () => {
+  const geschrieben = [];
+  const harness = makeHarness({ budgetExhausted: false, storeErgaenzung: { setzeHoechstdauerFrist: async (frist) => void geschrieben.push(frist) } });
+  await withCapturedCapTimers(harness, async () => {
+    harness.lifecycle.armMaxDurationTimer(harness.call, harness.call.twilioSid);
+  });
+  assert.deepEqual(harness.capTimers, []);
+  assert.equal(geschrieben.length, 1);
+  assert.equal(harness.call.status, "active");
+});
+
+test("Hoechstdauer-Frist: die Wiederanbindung schreibt die Restzeit als Frist und stellt keinen Timer im Prozess", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2031-01-01T00:00:00.000Z") });
+  const geschrieben = [];
+  const harness = makeHarness({ budgetExhausted: false, storeErgaenzung: { setzeHoechstdauerFrist: async (frist) => void geschrieben.push(frist) } });
+  let ergebnis;
+  await withCapturedCapTimers(harness, async () => {
+    ergebnis = await harness.lifecycle.reattachActiveCall(harness.call.id);
+  });
+  assert.equal(ergebnis.call?.id, harness.call.id);
+  assert.deepEqual(harness.capTimers, []);
+  assert.deepEqual(geschrieben, [{ callId: "call_ie2", tenantId: "tenant_ie2", faelligAt: "2031-01-01T00:02:30.000Z" }]);
 });

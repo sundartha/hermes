@@ -218,6 +218,7 @@ const WACHE_ENV = Object.freeze({
   VOICE_TARIFF_DOMESTIC_CENTS: TARIF_CENT,
   VOICE_TARIFF_DEFAULT_CENTS: TARIF_CENT,
   BUDGET_WATCHDOG_INTERVAL_MS: "200",
+  FRISTEN_TAKT_MS: "40",
 });
 
 async function endeDesAuftragsAnrufs(srv) {
@@ -246,7 +247,7 @@ const LANGER_AUFTRAG = "Laengerer Anruf (GW0)";
 const LANGES_ZIEL = "+4915112340003";
 
 test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterdeckel, ein laengerer laeuft weiter", async () => {
-  await aufDemElWeg({}, async ({ srv, anbieter }) => {
+  await aufDemElWeg({ env: { FRISTEN_TAKT_MS: "40" } }, async ({ srv, anbieter }) => {
     const lang = await rufeAn(srv, { to: LANGES_ZIEL, objective: LANGER_AUFTRAG, max_duration_s: 30 });
     assert.equal(lang.status, HTTP_OK);
     await initInhaltFuer(srv, { callId: anrufAn(srv, LANGES_ZIEL).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
