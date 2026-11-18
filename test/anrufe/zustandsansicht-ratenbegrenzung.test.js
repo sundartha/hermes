@@ -28,6 +28,7 @@ function speicher({ spaet }) {
     tenantContext: () => antwort({ settings: { greeting: "hallo" }, ownerName: "Jonas" }),
     exportTenantData: () => antwort(auszug()),
     exportTenantDataGelesen: () => antwort(auszug()),
+    zaehleAnrufeSeit: () => 0,
     usageOf: () => ({ inputTokens: 1, outputTokens: 2, costCents: 3, calls: 4 }),
     tenantSubscription: () => ({
       planSlug: null,
@@ -191,6 +192,7 @@ function lesespeicher(ueberschreibung = {}) {
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
     exportTenantData: () => lesbarerAuszug(),
     exportTenantDataGelesen: () => lesbarerAuszug(),
+    zaehleAnrufeSeit: () => 0,
     usageOf: () => ({ inputTokens: 1, outputTokens: 2, costCents: 3, calls: 4 }),
     tenantSubscription: () => ({ planSlug: null, currentPeriodStart: null, currentPeriodEnd: null, periodCreditRevoked: false }),
     getCalendar: () => events,

@@ -5,7 +5,6 @@ import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
 import { speicherBereiche } from "../store.js";
-import { monthStart } from "../utils/month.js";
 
 interface Speicher {
   load: () => unknown;
@@ -90,7 +89,9 @@ async function zeigeZustand({
   const ctx = await bereiche.mandant.tenantContext(tenantId);
   const scoped = await bereiche.konto.exportTenantData(tenantId);
   const anrufe = await bereiche.zustandAnrufe.anrufeFuerZustand(tenantId, STATE_CALLS);
-  const callsThisMonth = await bereiche.zustandAnrufe.anzahlSeit(tenantId, monthStart(new Date()).toISOString());
+  const jetzt = new Date();
+  const monatsanfang = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), 1));
+  const callsThisMonth = await bereiche.zustandAnrufe.anzahlSeit(tenantId, monatsanfang.toISOString());
   const s = store.load();
   res.json({
     settings: ctx.settings,
