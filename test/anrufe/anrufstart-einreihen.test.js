@@ -458,3 +458,27 @@ test("Wartender Anruf: eine uebergebene Uhr wird benutzt", async () => {
   await verbindung.platz.warte(1000);
   assert.deepEqual(gewartet, [1000]);
 });
+
+const VERDRAHTUNGS_FAELLE = [
+  { name: "nur der Auftragsbauer", auftragGebaut: 0, handlerGesetzt: 0, nurAuftrag: true },
+  { name: "nur die Verdrahtung", auftragGebaut: 0, handlerGesetzt: 0, nurAuftrag: false },
+];
+
+for (const fall of VERDRAHTUNGS_FAELLE)
+  test(`Anrufstart-Verdrahtung: ${fall.name} gesetzt, die Routen entstehen ohne Absturz und kein Handler wird gesetzt`, async (t) => {
+    t.mock.method(console, "error", () => {});
+    const gezaehlt = { gebaut: 0, handler: 0 };
+    const macheAuftrag = () => {
+      gezaehlt.gebaut += 1;
+      return {};
+    };
+    const verdrahtung = {
+      setzeHandler: () => {
+        gezaehlt.handler += 1;
+      },
+    };
+    const anrufstart = fall.nurAuftrag ? { macheAuftrag } : { verdrahtung };
+    await assert.doesNotReject(postBeiVollerPlattform({ anrufstart }));
+    assert.equal(gezaehlt.gebaut, fall.auftragGebaut);
+    assert.equal(gezaehlt.handler, fall.handlerGesetzt);
+  });
