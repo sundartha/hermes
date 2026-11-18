@@ -247,7 +247,6 @@ const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
 const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
-const ERSTE_ANWEISUNG_DES_FRISTEN_TAKTS_NACH_BEGIN = "SELECT set_config('app.current_tenant'";
 const KLEINE_ZEITGRENZE_MS = 200;
 
 const naechsteNachAnspruch = (anweisungen) => {
@@ -255,19 +254,15 @@ const naechsteNachAnspruch = (anweisungen) => {
   return folgende.find((text) => !text.includes(ZEILEN_ANWEISUNG));
 };
 
-const anspruchskandidaten = (mitschnitt) =>
-  mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
+const anspruchskandidaten = (mitschnitt) => mitschnitt.verbindungen().map((_, nr) => nr);
 
-const eigeneNeueAnweisungenOhneFristenTakt = (mitschnitt, kandidaten, vorher) =>
-  kandidaten.filter((nr) => {
-    const neu = mitschnitt.verbindungen()[nr].slice(vorher[nr]);
-    return neu.length > 0 && !neu[0].startsWith(ERSTE_ANWEISUNG_DES_FRISTEN_TAKTS_NACH_BEGIN);
-  });
+const verbindungenMitRollbackSeit = (mitschnitt, kandidaten, vorher) =>
+  kandidaten.filter((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
 
 async function warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher) {
   let gefunden = [];
   await mitschnitt.bisBedingung(() => {
-    gefunden = eigeneNeueAnweisungenOhneFristenTakt(mitschnitt, kandidaten, vorher);
+    gefunden = verbindungenMitRollbackSeit(mitschnitt, kandidaten, vorher);
     return gefunden.length > 0;
   });
   return gefunden;

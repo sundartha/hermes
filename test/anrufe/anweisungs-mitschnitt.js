@@ -8,6 +8,8 @@ const LAENGE_BYTES = 4;
 const EINFACHE_ANFRAGE = 0x51;
 const PARSE = 0x50;
 export const BIS_BEDINGUNG_ZEITGRENZE_MS = 20_000;
+const LETZTE_ANWEISUNGEN = 8;
+const ANWEISUNG_ZEICHEN = 80;
 
 function anweisung(art, inhalt) {
   if (art === EINFACHE_ANFRAGE) return inhalt.toString("utf8", 0, inhalt.length - 1);
@@ -72,7 +74,9 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
           fehler(
             new Error(
               `bisBedingung: Zeitgrenze von ${zeitgrenzeMs}ms erreicht; mitgeschnittene Anweisungen: ` +
-                JSON.stringify(verbindungen.map((zustand) => [...zustand.anweisungen])),
+                JSON.stringify(
+                  verbindungen.map((zustand) => zustand.anweisungen.slice(-LETZTE_ANWEISUNGEN).map((text) => text.slice(0, ANWEISUNG_ZEICHEN))),
+                ),
             ),
           );
         };
