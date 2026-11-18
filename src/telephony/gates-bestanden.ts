@@ -11,17 +11,20 @@ export interface Tor<K> {
 
 export type BeiTorFehler<K> = (tor: Tor<K>, ctx: K, fehler: unknown) => Ablehnung;
 
+const SCHLUESSEL: unique symbol = Symbol("gates-bestanden");
+
 let ausstellen: () => GatesBestanden;
 
 export class GatesBestanden {
   readonly #nachweis: boolean;
 
-  private constructor() {
+  private constructor(schluessel: typeof SCHLUESSEL) {
+    if (schluessel !== SCHLUESSEL) throw new TypeError("GatesBestanden wird nur von fuehreToreAus ausgestellt");
     this.#nachweis = true;
   }
 
   static {
-    ausstellen = () => new GatesBestanden();
+    ausstellen = () => new GatesBestanden(SCHLUESSEL);
   }
 
   get gilt(): boolean {
