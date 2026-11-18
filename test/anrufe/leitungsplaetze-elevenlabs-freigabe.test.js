@@ -149,7 +149,7 @@ const VERZOEGERUNG_VOR_ABHEBEN_MS = 500;
 const VERBRAUCH_UNTER_DECKE_CENT = 765;
 
 async function s22Lauf({ verzoegerungMs }) {
-  const env = { ...WACHE_ENV, BUDGET_WATCHDOG_INTERVAL_MS: String(WACHE_TAKT_MS) };
+  const env = { ...WACHE_ENV, BUDGET_WATCHDOG_INTERVAL_MS: String(WACHE_TAKT_MS), FRISTEN_TAKT_MS: "40" };
   await aufDemElWeg({ env, seed: seedKunden({ 0: VERBRAUCH_UNTER_DECKE_CENT }) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv, 0, 1)).status, HTTP_OK);
     const erster = srv.readStore().calls.find((call) => call.tenantId === kundeVon(0) && call.goal === AUFTRAG);

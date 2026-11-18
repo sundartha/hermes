@@ -21,8 +21,7 @@
       "^src/(plans|budget-gate|llm-usage)\\.[jt]s$",
       "^src/elevenlabs/kosten-beleg\\.[jt]s$",
       "^src/store/cost-evidence\\.[jt]s$",
-      "^src/routes/(api-billing|stripe-webhook)\\.[jt]s$",
-      "^src/telephony/budget-watchdog\\.[jt]s$"
+      "^src/routes/(api-billing|stripe-webhook)\\.[jt]s$"
     ],
     "eingaenge": ["^src/billing/webhook\\.[jt]s$", "^src/billing/stripe-reconcile\\.[jt]s$"],
     "fachlogik": [

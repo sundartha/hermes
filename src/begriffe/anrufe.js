@@ -1,7 +1,5 @@
 export const MAX_CALL_DURATION_CAP_S = 1800;
 
-export const MAX_DURATION_RETRY_MS = 10000;
-
 export const MANDATE_OUT_OF_SCOPE = Object.freeze({
   TAKE_MESSAGE: "take_message",
   DECLINE: "decline",
