@@ -16,7 +16,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.js";
 import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.js";
-import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.js";
+import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { applySchema, migrate } from "../../src/db/migrate.js";
 import { languageForCountry } from "../../src/i18n/locales.js";
 
