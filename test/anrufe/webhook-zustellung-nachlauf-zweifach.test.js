@@ -248,29 +248,21 @@ const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
 const KLEINE_ZEITGRENZE_MS = 200;
-const BEOBACHTUNGSZEIT_MS = 500;
-
-function beobachtungszeitAbgelaufen(ms) {
-  const signal = AbortSignal.timeout(ms);
-  return new Promise((erfuellen) => signal.addEventListener("abort", erfuellen, { once: true }));
-}
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
   return folgende.find((text) => !text.includes(ZEILEN_ANWEISUNG));
 };
 
-const anspruchskandidaten = (mitschnitt) => mitschnitt.verbindungen().map((_, nr) => nr);
-
-const verbindungenMitRollbackSeit = (mitschnitt, kandidaten, vorher) => {
+const verbindungenMitRollbackSeit = (mitschnitt, vorher) => {
   const verbindungen = mitschnitt.verbindungen();
-  return kandidaten.filter((nr) => verbindungen[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
+  return verbindungen.map((_, nr) => nr).filter((nr) => verbindungen[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
 };
 
-async function warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher) {
+async function warteAufAnspruchsverbindung(mitschnitt, vorher) {
   let gefunden = [];
   await mitschnitt.bisBedingung(() => {
-    gefunden = verbindungenMitRollbackSeit(mitschnitt, kandidaten, vorher);
+    gefunden = verbindungenMitRollbackSeit(mitschnitt, vorher);
     return gefunden.length > 0;
   });
   return gefunden;
@@ -324,9 +316,10 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
+      const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
       relais.fortsetzen();
       await relais.abwarten();
-      await beobachtungszeitAbgelaufen(BEOBACHTUNGSZEIT_MS);
+      await warteAufAnspruchsverbindung(mitschnitt, vorher);
       const ansprueche = mitschnitt.verbindungen().flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG));
       assert.deepEqual(ansprueche, []);
     } finally {
@@ -356,10 +349,9 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
       const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
-      const kandidaten = anspruchskandidaten(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher);
+      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher);
       const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.deepEqual(spaeter.filter((text) => text !== ZURUECK), []);
@@ -390,10 +382,9 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
       const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
-      const kandidaten = anspruchskandidaten(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher);
+      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher);
       const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
