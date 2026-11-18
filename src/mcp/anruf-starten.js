@@ -45,6 +45,8 @@ export function registerPlaceCall({
       const data = {
         call_id: placed.callId,
         status: "dialing",
+        to: placed.to ?? null,
+        objective: placed.objective ?? null,
         ...callTimestamps({ startedAt: placed.startedAt }),
         duration_s: 0,
         last_transcript_lines: [],

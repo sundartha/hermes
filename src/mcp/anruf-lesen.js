@@ -43,12 +43,20 @@ function durationS(callRecord) {
 
 const RUNNING_STATUSES = new Set(["dialing", "in_progress"]);
 
+function callSubjectView(call) {
+  return {
+    to: call.to ?? null,
+    objective: call.goal ? maskRestrictedText(call.goal) : null,
+  };
+}
+
 function pickCallStatus(callId, call, texts) {
   const visibleLines = RUNNING_STATUSES.has(mapStatus(call))
     ? call.transcript.slice(-LAST_TRANSCRIPT_LINES)
     : [];
   return {
     call_id: callId,
+    ...callSubjectView(call),
     ...callOutcomeView(call),
     ...callTimestamps(call),
     duration_s: durationS(call),
@@ -85,6 +93,7 @@ function summaryLanguageOf(callRecord, tenantLanguage) {
 function callResultReply(callId, callRecord, loc) {
   const data = {
     ...pickTranscript(callId, callRecord, loc.mcp),
+    ...callSubjectView(callRecord),
     next_steps: maskedNextSteps(callRecord.result),
   };
   const text = jsonText({

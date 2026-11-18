@@ -546,6 +546,8 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anru
     twilioSid: call.twilioSid,
     startedAt: call.startedAt,
     status: "dialing",
+    to: call.to,
+    objective: call.goal,
     deduplicated,
     context_received: contextReceivedMeta(ctx.context, config),
     diagnostic: call.diagnostic,

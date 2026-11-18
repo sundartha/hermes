@@ -307,10 +307,12 @@ test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felde
       "counterparty_commitments",
       "next_step",
       "next_steps",
+      "objective",
       "objective_achieved",
       "open_points",
       "outcome",
       "result_summary",
+      "to",
     ]);
     assert.equal(result.structuredContent.outcome, "Termin am Dienstag um 14 Uhr vereinbart.");
     assert.equal(result.structuredContent.next_step, "Kalender eintragen");

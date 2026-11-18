@@ -1,8 +1,14 @@
 import { z } from "zod";
 import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
 
+const CALL_SUBJECT_OUTPUT = {
+  to: z.string().nullable().optional(),
+  objective: z.string().nullable().optional(),
+};
+
 export const CALL_STATUS_OUTPUT = {
   call_id: z.string(),
+  ...CALL_SUBJECT_OUTPUT,
   status: z.string(),
   duration_s: z.number(),
   server_time: z.string().optional(),
@@ -28,6 +34,7 @@ const NEXT_STEP_OUTPUT = z.object({
 
 export const CALL_RESULT_OUTPUT = {
   call_id: z.string(),
+  ...CALL_SUBJECT_OUTPUT,
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
   ...RESULT_CARD_OUTPUT,
