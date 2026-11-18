@@ -93,8 +93,12 @@ function messenAufruf(anrufer) {
   if (env.ABSICHTLICH_ROT === "true") return () => Promise.resolve(null);
   return async () => {
     const messung = await anrufer.anrufen({ ziel: env.STAGING_PROBE_ZIEL });
-    if (typeof anrufer.stimmenAnzahl !== "function") return messung;
-    return { ...messung, stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined) };
+    const ergebnis =
+      typeof anrufer.ergebnisVorgetragen === "function"
+        ? { ergebnisVorgetragen: await anrufer.ergebnisVorgetragen().catch(() => false) }
+        : {};
+    if (typeof anrufer.stimmenAnzahl !== "function") return { ...messung, ...ergebnis };
+    return { ...messung, ...ergebnis, stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined) };
   };
 }
 

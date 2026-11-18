@@ -17,6 +17,7 @@ const RICHTUNG = "eingehend";
 const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
 const TAG_LAENGE = 10;
 const LISTE_OBERGRENZE = 30;
+const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
@@ -106,6 +107,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
   let probeStartMs = Number.NaN;
+  let probeCallId;
 
   async function beobachten(callId) {
     const beginn = uhr.jetzt();
@@ -119,6 +121,16 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
         await abbrechen(callId);
         return { stand: await ruf("get_call_status", { call_id: callId }), ...verlaufErgebnis(verlauf, jetzt) };
       }
+      await uhr.warte(TAKT_MS);
+    }
+  }
+
+  async function ergebnisAbwarten(callId) {
+    const beginn = uhr.jetzt();
+    for (;;) {
+      const ergebnis = await ruf("get_call_result", { call_id: callId }).catch(() => undefined);
+      if (typeof ergebnis?.result_summary === "string" && ergebnis.result_summary.trim() !== "") return true;
+      if (uhr.jetzt() - beginn >= ERGEBNIS_FRIST_MS) return false;
       await uhr.warte(TAKT_MS);
     }
   }
@@ -149,6 +161,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       for (const anruf of offene) await abbrechen(anruf.id);
       return offene.length;
     },
+    ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
     stimmenAnzahl: async () => {
       const { calls } = await ruf("list_calls", {});
       for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
@@ -174,6 +187,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       }
       const { stand, begruessung, gegenseite, stillstandSekunden } = beobachtet;
       probeStartMs = Date.parse(stand.started_at);
+      probeCallId = platziert.call_id;
       return {
         annahmeSekunden: (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
         begruessung,
