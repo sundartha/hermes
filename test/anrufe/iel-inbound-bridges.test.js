@@ -631,3 +631,11 @@ test("umleitenOderAuflegen meldet true bei Umleitung und bei Auflegen als Ersatz
   });
   assert.deepEqual(ergebnis, [true, true, false]);
 });
+
+test("Uebergabe durch den Lauf: scheitern Umleitung und Auflegen, nennt die Fehlerzeile des Laufs die Anruf-ID der Uebergabe", async () => {
+  const { lauf } = ubFremderLauf({ auflegenWirft: true });
+  const zeilen = await ubFehlerzeilen(async () => {
+    await lauf.uebergabeTakt();
+  });
+  assert.ok(zeilen.some((zeile) => zeile.includes("Error: Uebergabe weder umgeleitet noch aufgelegt: call_fremd")), zeilen.join("\n"));
+});
