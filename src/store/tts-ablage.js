@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 import { TTS_ABLAGE_DB_FRIST_MS, TTS_ABLAGE_TAKT_MS } from "../begriffe/speicher.js";
-import { MS_PER_SECOND, sleep } from "../utils/timer.ts";
+import { MS_PER_SECOND } from "../utils/timer.ts";
+import { sleep } from "../utils/uhr-warten.ts";
 
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
 const RESERVIEREN_SQL = `INSERT INTO tts_ablage (token_hash, expires_at) VALUES ($1, now() + make_interval(secs => $2))`;
