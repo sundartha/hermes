@@ -56,7 +56,6 @@ export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 
 export const INBOUND_NACHLAUF_FRIST_MS = ELEVENLABS_PROVIDER_MAX_DURATION_S * MS_PER_SECOND;
 
-const FOLGETAKT_GEPLANT = Symbol("folgetakt-geplant");
 
 const ABFRAGE_UEBERNAHME_MS = 30_000;
 const ABFRAGE_FRIST_FEHLER = "[fristen] Abfrage-Frist schreiben fehlgeschlagen:";
@@ -790,12 +789,11 @@ function makeInitInhalt(inhaltsAnfrageFor) {
   };
 }
 
-function macheAnrufstartAuftragMit(verbindung, { store, config, settings, scheduleResultPoll, schreibeAbfrageFrist, beende }) {
+function macheAnrufstartAuftragMit(verbindung, { store, config, settings, schreibeAbfrageFrist, beende }) {
   async function haltAnrufStartFest(call, conversationId) {
     store.recordElevenlabsConversationId(call.id, conversationId);
     await store.markAnswered(call.id);
-    await schreibeAbfrageFrist(call);
-    scheduleResultPoll(call.id, conversationId);
+    await schreibeAbfrageFrist(call, settings().resultPollMs ?? 0);
   }
 
   return makeAnrufstartAuftrag({
@@ -829,10 +827,6 @@ export function makeElevenLabsOutbound({
 
   const resultPollMs = () => settings().resultPollMs ?? 0;
 
-  function scheduleResultPoll(callId, conversationId) {
-    setTimeout(() => void pollConversationResult(callId, conversationId), resultPollMs());
-  }
-
   const meldeMedienweg = makeMedienwegWache(() => settings().erwarteterMedienweg);
   const stimmenAnzahlFuer = (callId) => ermittleStimmenAnzahl({ store, config, callId });
 
@@ -848,19 +842,16 @@ export function makeElevenLabsOutbound({
 
   async function pollConversationResult(callId, conversationId) {
     laufendeKetten.add(callId);
-    let ausgang;
     try {
-      ausgang = await pollTakt(callId, conversationId);
+      await pollTakt(callId, conversationId);
     } finally {
-      if (ausgang !== FOLGETAKT_GEPLANT) {
-        laufendeInboundPolls.delete(callId);
-        laufendeKetten.delete(callId);
-      }
+      laufendeInboundPolls.delete(callId);
+      laufendeKetten.delete(callId);
     }
   }
 
-  async function schreibeAbfrageFrist(call) {
-    const faelligAt = new Date(Date.now() + REQUEST_TIMEOUT_MS + resultPollMs() + ABFRAGE_UEBERNAHME_MS).toISOString();
+  async function schreibeAbfrageFrist(call, abstandMs) {
+    const faelligAt = new Date(Date.now() + abstandMs).toISOString();
     try {
       await store.setzeAbfrageFrist({ callId: call.id, tenantId: call.tenantId, faelligAt });
     } catch (fehler) {
@@ -883,7 +874,7 @@ export function makeElevenLabsOutbound({
     const nowMs = Date.now();
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, stimmenAnzahlFuer, endActiveCall, endCarrierCall, callId, nowMs };
     if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
-    await schreibeAbfrageFrist(call);
+    await schreibeAbfrageFrist(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
@@ -891,8 +882,8 @@ export function makeElevenLabsOutbound({
     if (!anbieterErgebnisFertig(conversation)) {
       if (conversation && nichtErreichtNachFrist({ call, conversation, nowMs })) return finishNichtErreicht(finishDeps);
       if (conversation) await schreibeNeueAnbieterZeilen(store, callId, spokenLines(conversation));
-      scheduleResultPoll(callId, conversationId);
-      return FOLGETAKT_GEPLANT;
+      await schreibeAbfrageFrist(call, resultPollMs());
+      return;
     }
     await finishFromConversation({ ...finishDeps, conversation });
   }
@@ -911,7 +902,7 @@ export function makeElevenLabsOutbound({
   return {
     macheAnrufstartAuftrag: (verbindung) =>
       macheAnrufstartAuftragMit(verbindung, {
-        store, config, settings, scheduleResultPoll, schreibeAbfrageFrist,
+        store, config, settings, schreibeAbfrageFrist,
         beende: { terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall },
       }),
     initInhaltFor,

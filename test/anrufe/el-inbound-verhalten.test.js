@@ -229,10 +229,10 @@ test("3395-R6-7: angenommenes SIP-Bein armiert die innere Frist, nur fuer warten
       await waitForLog(srv, new RegExp(`\\[el-inbound\\] umgeleitet call=${WARTET_ID}\\n`), FRIST_WARTE_MS);
       assert.deepEqual(
         zeilenMit(srv, "[el-inbound] frist_abgelaufen"),
-        [`[el-inbound] frist_abgelaufen call=${WARTET_ID} frist=innen`],
+        [`[el-inbound] frist_abgelaufen call=${WARTET_ID} frist=lauf`],
       );
       assert.equal(anfragen.length, 1);
       assert.equal(anfragen[0].formular.get("Url"), rueckfallZiel(WARTET_ID));
-    }, env);
+    }, { ...env, FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) });
   });
 });

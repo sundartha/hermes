@@ -59,14 +59,16 @@ function fakeTimer() {
 function baueBruecken(state, { nowMs } = {}) {
   const timer = fakeTimer();
   const umleitungen = [];
+  const fristen = [];
   const bridges = makeInboundBridges({
-    store: storeOpsFacade(state),
+    store: {
+      ...storeOpsFacade(state),
+      setzeUebergabeFrist: async (frist) => fristen.push(frist.faelligAt),
+    },
     umleiten: (auftrag) => umleitungen.push(auftrag),
-    setTimer: timer.setTimer,
-    clearTimer: timer.clearTimer,
     now: () => nowMs,
   });
-  return { bridges, timer, umleitungen };
+  return { bridges, timer, umleitungen, fristen };
 }
 
 function wartenderZustand({ answeredVorS = FRISCH_BEANTWORTET_S } = {}) {
@@ -77,42 +79,47 @@ function wartenderZustand({ answeredVorS = FRISCH_BEANTWORTET_S } = {}) {
 
 const rueckfallUrlFuer = (callId) => `/voice/el-rueckfall?callId=${callId}&quelle=frist`;
 
-test("IEL-B6-20: armDeadlines armiert die Restfrist ab answeredAt; Ablauf leitet genau einmal mit quelle=frist um", () => {
+test("IEL-B6-20: armDeadlines schreibt die Restfrist ab answeredAt; der Lauf leitet genau einmal mit quelle=frist um", async () => {
   const { state, call, nowMs } = wartenderZustand();
-  const { bridges, timer, umleitungen } = baueBruecken(state, { nowMs });
+  const { bridges, umleitungen, fristen } = baueBruecken(state, { nowMs });
   bridges.armDeadlines(call.id);
-  assert.deepEqual(timer.aktive().map((auftrag) => auftrag.ms), [EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS]);
-  timer.feuereAlle();
+  await naechsterTakt();
+  assert.deepEqual(fristen, [new Date(nowMs + EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS).toISOString()]);
+  assert.deepEqual(umleitungen, []);
+  await bridges.uebergabeDurchLauf(call.id);
   assert.equal(umleitungen.length, 1);
   assert.equal(umleitungen[0].call.id, call.id);
   assert.equal(umleitungen[0].rueckfallUrl, rueckfallUrlFuer(call.id));
 });
 
-test("IEL-B6-21: die innere Frist feuert zuerst, leitet einmal um, und die aeussere feuert danach nicht mehr", () => {
+test("IEL-B6-21: aeussere und innere Frist stehen beide als Frist an der Zeile, die innere ueberschreibt die aeussere, ohne Umleitung vor dem Lauf", async () => {
   const { state, call, nowMs } = wartenderZustand();
-  const { bridges, timer, umleitungen } = baueBruecken(state, { nowMs });
+  const { bridges, umleitungen, fristen } = baueBruecken(state, { nowMs });
   bridges.armDeadlines(call.id);
   bridges.armBindingDeadline(call.id);
-  assert.equal(timer.aktive().length, BEIDE_FRISTEN);
-  timer.feuereKuerzeste();
-  assert.equal(umleitungen.length, 1);
-  assert.equal(timer.aktive().length, 0, "die aeussere Frist ist geloescht");
-  timer.feuereAlle();
-  assert.equal(umleitungen.length, 1);
-  assert.ok(timer.auftraege.some((auftrag) => auftrag.ms === EL_BINDING_AFTER_ANSWER_MS));
+  await naechsterTakt();
+  assert.equal(fristen.length, BEIDE_FRISTEN);
+  assert.deepEqual(fristen, [
+    new Date(nowMs + EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS).toISOString(),
+    new Date(nowMs + EL_BINDING_AFTER_ANSWER_MS).toISOString(),
+  ]);
+  assert.deepEqual(umleitungen, []);
 });
 
-test("IEL-B6-22: clearDeadlines -> keine Umleitung", () => {
+test("IEL-B6-22: clearDeadlines leert die Frist an der Zeile; ohne Lauf-Aufruf keine Umleitung und kein Timer im Prozess", async () => {
   const { state, call, nowMs } = wartenderZustand();
-  const { bridges, timer, umleitungen } = baueBruecken(state, { nowMs });
+  const { bridges, timer, umleitungen, fristen } = baueBruecken(state, { nowMs });
   bridges.armDeadlines(call.id);
   bridges.armBindingDeadline(call.id);
   bridges.clearDeadlines(call.id);
-  timer.feuereAlle();
+  await naechsterTakt();
+  assert.equal(fristen.length, BEIDE_FRISTEN + 1);
+  assert.equal(fristen.at(-1), null);
+  assert.deepEqual(timer.aktive(), []);
   assert.equal(umleitungen.length, 0);
 });
 
-test("IEL-B6-23: Ablauf auf GEBUNDEN, RUECKFALL, beendetem Call oder Budget-Profil ist wirkungslos", () => {
+test("IEL-B6-23: der Lauf auf GEBUNDEN, RUECKFALL, beendetem Call oder Budget-Profil ist wirkungslos", async () => {
   const zustaende = {
     gebunden: (state, call) =>
       ops.bindInboundElConversation(state, call.id, { conversationId: CONV_ID, nowIso: new Date().toISOString() }),
@@ -124,10 +131,10 @@ test("IEL-B6-23: Ablauf auf GEBUNDEN, RUECKFALL, beendetem Call oder Budget-Prof
   for (const [name, versetze] of Object.entries(zustaende)) {
     const { state, nowMs } = wartenderZustand();
     const call = name === "budget" ? budgetCall(state) : state.calls[0];
-    const { bridges, timer, umleitungen } = baueBruecken(state, { nowMs });
+    const { bridges, umleitungen } = baueBruecken(state, { nowMs });
     bridges.armDeadlines(call.id);
     versetze(state, call);
-    timer.feuereAlle();
+    await bridges.uebergabeDurchLauf(call.id);
     assert.equal(umleitungen.length, 0, name);
   }
 });
@@ -173,13 +180,14 @@ test("IEL-B6-24b: Neustart nach abgelaufener Frist -> der Fristen-Lauf leitet so
   assert.deepEqual(umleitungen.map((auftrag) => auftrag.rueckfallUrl), [rueckfallUrlFuer(call.id)]);
 });
 
-test("IEL-B6-25: unlesbares answeredAt -> Restfrist 0 (sofort umleiten, nie Stille)", () => {
+test("IEL-B6-25: unlesbares answeredAt -> Restfrist 0 (sofort faellig, nie Stille)", async () => {
   const { state, call, nowMs } = wartenderZustand();
   call.answeredAt = UNLESBAR;
   assert.equal(aeussereRestfristMs(call, nowMs), 0);
-  const { bridges, timer } = baueBruecken(state, { nowMs });
+  const { bridges, fristen } = baueBruecken(state, { nowMs });
   bridges.armDeadlines(call.id);
-  assert.deepEqual(timer.aktive().map((auftrag) => auftrag.ms), [0]);
+  await naechsterTakt();
+  assert.deepEqual(fristen, [new Date(nowMs).toISOString()]);
 });
 
 test("IEL-B6-26: EL_RUECKFALL_QUELLE und elRueckfallUrl sind gepinnt (einzige Quelle fuer B8)", () => {
@@ -332,20 +340,19 @@ test("IEL-B6-24c: Neustart ohne wartenden Call -> der Fristen-Lauf stellt keinen
 const FRISCH_ABLAGE_S = 1;
 
 function baueBrueckenMitAblage({ lesen, state }) {
-  const auftraege = [];
+  const fristen = [];
   const umleitungen = [];
   const bridges = makeInboundBridges({
-    store: { getCall: () => null, leseCallUngebunden: lesen, load: () => state },
-    umleiten: (auftrag) => umleitungen.push(auftrag),
-    setTimer: (fn, ms) => {
-      const auftrag = { fn, ms };
-      auftraege.push(auftrag);
-      return auftrag;
+    store: {
+      getCall: () => null,
+      leseCallUngebunden: lesen,
+      load: () => state,
+      setzeUebergabeFrist: async (frist) => fristen.push(frist.faelligAt),
     },
-    clearTimer: () => {},
+    umleiten: (auftrag) => umleitungen.push(auftrag),
     now: () => Date.parse(state.calls[0].answeredAt) + OFFSET_MS,
   });
-  return { bridges, auftraege, umleitungen };
+  return { bridges, fristen, umleitungen };
 }
 
 function ablageZustand() {
@@ -358,50 +365,46 @@ const naechsterTakt = () => new Promise((fertig) => setImmediate(fertig));
 
 test("Ablage-Lesung 1: armDeadlines liest den Anruf aus der Ablage, auch wenn getCall ihn nicht kennt", async () => {
   const { state, call } = ablageZustand();
-  const { bridges, auftraege } = baueBrueckenMitAblage({ state, lesen: async (id) => (id === call.id ? call : null) });
+  const { bridges, fristen } = baueBrueckenMitAblage({ state, lesen: async (id) => (id === call.id ? call : null) });
   bridges.armDeadlines(call.id);
   await naechsterTakt();
-  assert.deepEqual(auftraege.map((auftrag) => auftrag.ms), [EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS]);
+  assert.deepEqual(fristen, [new Date(Date.parse(call.answeredAt) + OFFSET_MS + EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS).toISOString()]);
 });
 
 test("Ablage-Lesung 2: armDeadlines armiert nichts, wenn die Ablage den Anruf nicht kennt", async () => {
   const { state, call } = ablageZustand();
-  const { bridges, auftraege } = baueBrueckenMitAblage({ state, lesen: async () => null });
+  const { bridges, fristen } = baueBrueckenMitAblage({ state, lesen: async () => null });
   bridges.armDeadlines(call.id);
   await naechsterTakt();
-  assert.deepEqual(auftraege, []);
+  assert.deepEqual(fristen, []);
 });
 
-test("Ablage-Lesung 3: der Fristablauf leitet nach der Ablage-Lesung genau einmal in den Rueckfall um", async () => {
+test("Ablage-Lesung 3: der Lauf leitet nach der Ablage-Lesung genau einmal in den Rueckfall um", async () => {
   const { state, call } = ablageZustand();
-  const { bridges, auftraege, umleitungen } = baueBrueckenMitAblage({ state, lesen: async () => call });
-  bridges.armBindingDeadline(call.id);
-  auftraege[0].fn();
-  await naechsterTakt();
+  const { bridges, umleitungen } = baueBrueckenMitAblage({ state, lesen: async () => call });
+  await bridges.uebergabeDurchLauf(call.id);
   assert.equal(umleitungen.length, 1);
   assert.equal(umleitungen[0].call.id, call.id);
 });
 
-test("Ablage-Lesung 4: der Fristablauf leitet nicht um, wenn die Ablage den Anruf beendet zeigt", async () => {
+test("Ablage-Lesung 4: der Lauf leitet nicht um, wenn die Ablage den Anruf beendet zeigt", async () => {
   const { state, call } = ablageZustand();
-  const { bridges, auftraege, umleitungen } = baueBrueckenMitAblage({ state, lesen: async () => ({ ...call, status: "completed" }) });
-  bridges.armBindingDeadline(call.id);
-  auftraege[0].fn();
-  await naechsterTakt();
+  const { bridges, umleitungen } = baueBrueckenMitAblage({ state, lesen: async () => ({ ...call, status: "completed" }) });
+  await bridges.uebergabeDurchLauf(call.id);
   assert.deepEqual(umleitungen, []);
 });
 
-test("Ablage-Lesung 5: scheitert die Ablage-Lesung beim Fristablauf, bleibt die Umleitung aus und nichts wirft", async () => {
+test("Ablage-Lesung 5: scheitert die Ablage-Lesung beim Armieren, bleibt Frist und Umleitung aus und nichts wirft", async () => {
   const { state, call } = ablageZustand();
-  const { bridges, auftraege, umleitungen } = baueBrueckenMitAblage({
+  const { bridges, fristen, umleitungen } = baueBrueckenMitAblage({
     state,
     lesen: async () => {
       throw new Error("Ablage nicht erreichbar");
     },
   });
   bridges.armBindingDeadline(call.id);
-  auftraege[0].fn();
   await naechsterTakt();
+  assert.deepEqual(fristen, []);
   assert.deepEqual(umleitungen, []);
 });
 
@@ -424,7 +427,7 @@ function ubAnruf(zusatz = {}) {
 }
 
 function ubBaue({ anruf = ubAnruf(), mitUngebunden = false, schreibenScheitert = false } = {}) {
-  const betrieb = { frist: [], umgeleitet: [], timer: [], lesen: 0 };
+  const betrieb = { frist: [], umgeleitet: [], lesen: 0 };
   const store = {
     getCall: () => anruf,
     load: () => ({ calls: [anruf] }),
@@ -441,8 +444,6 @@ function ubBaue({ anruf = ubAnruf(), mitUngebunden = false, schreibenScheitert =
   const bruecken = makeInboundBridges({
     store,
     umleiten: (auftrag) => betrieb.umgeleitet.push(auftrag),
-    setTimer: (fn, ms) => betrieb.timer.push(ms) && { fn },
-    clearTimer: () => {},
     now: () => UB_JETZT,
     uebernahmeMs: UB_UEBERNAHME_MS,
   });
@@ -467,18 +468,19 @@ test("Uebergabe-Frist schreiben: die innere Frist nach Annahme steht als Frist a
   assert.deepEqual(betrieb.frist, [{ callId: "call_ub", tenantId: UB_MANDANT, faelligAt: new Date(erwartet).toISOString() }]);
 });
 
-test("Uebergabe-Frist schreiben: der Timer wird auch dann sofort armiert, wenn das Schreiben der Frist noch aussteht", () => {
+test("Uebergabe-Frist schreiben: die Frist wird sofort geschrieben und kein Timer im Prozess gestellt", (t) => {
+  const setzen = t.mock.method(globalThis, "setTimeout");
   const { betrieb, bruecken } = ubBaue();
   bruecken.armBindingDeadline("call_ub");
-  assert.deepEqual(betrieb.timer, [EL_BINDING_AFTER_ANSWER_MS]);
+  assert.equal(betrieb.frist.length, 1);
+  assert.equal(setzen.mock.callCount(), 0);
 });
 
-test("Uebergabe-Frist schreiben: ohne Uebernahmezeit steht die Frist auf dem Timer-Zeitpunkt", async () => {
+test("Uebergabe-Frist schreiben: ohne Uebernahmezeit steht die Frist auf dem Fristzeitpunkt", async () => {
   const betrieb = { frist: [] };
   const bruecken = makeInboundBridges({
     store: { getCall: () => ubAnruf(), load: () => ({ calls: [] }), setzeUebergabeFrist: async (frist) => betrieb.frist.push(frist) },
     umleiten: () => {},
-    setTimer: () => ({}),
     now: () => UB_JETZT,
   });
   bruecken.armBindingDeadline("call_ub");
@@ -486,14 +488,13 @@ test("Uebergabe-Frist schreiben: ohne Uebernahmezeit steht die Frist auf dem Tim
   assert.equal(betrieb.frist[0].faelligAt, new Date(UB_JETZT + EL_BINDING_AFTER_ANSWER_MS).toISOString());
 });
 
-test("Uebergabe-Frist schreiben: scheitert das Schreiben, steht der Fehler mit Anruf-ID im Log und der Timer bleibt armiert", async (t) => {
+test("Uebergabe-Frist schreiben: scheitert das Schreiben, steht der Fehler mit Anruf-ID im Log", async (t) => {
   const zeilen = [];
   t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
-  const { betrieb, bruecken } = ubBaue({ schreibenScheitert: true });
+  const { bruecken } = ubBaue({ schreibenScheitert: true });
   bruecken.armBindingDeadline("call_ub");
   await ubTick();
   assert.deepEqual(zeilen, ["[fristen] Uebergabe-Frist schreiben fehlgeschlagen: call_ub Error: db weg"]);
-  assert.deepEqual(betrieb.timer, [EL_BINDING_AFTER_ANSWER_MS]);
 });
 
 test("Uebergabe-Frist schreiben: ein unbekannter Anruf bekommt keine Frist", async () => {

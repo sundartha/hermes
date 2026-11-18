@@ -13,7 +13,7 @@ const ANRUF_KETTE = "call_abfrage_kette";
 const ANRUF_WEG = "call_abfrage_weg";
 const EL_BASIS = "https://el.abfrage-boot.invalid";
 const FRIST_BIS_ABRUF_MS = 10_000;
-const ABFRAGE_FRIST_MS = 120_000 + 60_000 + 30_000;
+const ABFRAGE_FRIST_MS = 60_000;
 const FEHLER_ZEILE = `[fristen] Abfrage-Frist schreiben fehlgeschlagen: ${ANRUF_FEHLER} `;
 
 function umgebungSetzen() {
@@ -155,10 +155,11 @@ test("Kriterium 5: fuehrt dieser Prozess die Abfrage-Kette eines Anrufs schon, s
   await fremderAnruf(db, ANRUF_KETTE);
   await waitUntil(() => abrufeVon(ANRUF_KETTE) === 1, { timeoutMs: FRIST_BIS_ABRUF_MS });
   await frischFaellig(db, ANRUF_KETTE);
+  await waitUntil(() => abrufeVon(ANRUF_KETTE) === 2, { timeoutMs: FRIST_BIS_ABRUF_MS });
   await einenTaktAbwarten("sonde_c");
   await einenTaktAbwarten("sonde_d");
   await beenden(db, ANRUF_KETTE);
-  assert.equal(abrufeVon(ANRUF_KETTE), 1);
+  assert.equal(abrufeVon(ANRUF_KETTE), 2);
 });
 
 test("Kriterium 5: ist die Abfrage-Kette eines Anrufs in diesem Prozess zu Ende, fragt der Boot-Takt bei erneut faelliger Frist wieder ab", async () => {

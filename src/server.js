@@ -184,7 +184,6 @@ const lifecycle = makeCallLifecycle({
 const inboundBridges = makeInboundBridges({
   store,
   now: Date.now,
-  setTimer: defaultSetTimer,
   uebernahmeMs: fristenEinstellungen.fristenTaktMs,
   umleiten: ({ call, rueckfallUrl }) =>
     umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),

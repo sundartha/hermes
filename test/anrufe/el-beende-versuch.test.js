@@ -21,7 +21,7 @@ import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js"
 import { VOICE_ENGINE } from "../../src/config.js";
 import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { waitUntil, withFetch } from "../helpers.js";
+import { waitUntil, waitUntilMitLauf, withFetch } from "../helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";
@@ -607,8 +607,7 @@ for (const fall of PERMANENT_ERROR_FAELLE) {
         return { ok: false, status: fall.envelope.httpStatus, json: async () => fall.envelope.body };
       },
       async () => {
-        await el.abfrageDurchLauf(call.id);
-        await waitUntil(() => billed);
+        await waitUntilMitLauf(el, call.id, () => billed);
       },
     );
     assert.equal(call.status, "failed", "DAUERHAFT stoppt den Poll, statt endlos weiterzupollen");
@@ -672,8 +671,7 @@ test("F3: ein ungemessener Fehlerstatus (500) bleibt VORUEBERGEHEND - der Poll h
       return { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_ANALYSIS };
     },
     async () => {
-      await el.abfrageDurchLauf(call.id);
-      await waitUntil(() => billed);
+      await waitUntilMitLauf(el, call.id, () => billed);
     },
   );
   assert.ok(

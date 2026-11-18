@@ -7,7 +7,7 @@ const EL_BASIS = "https://el.abfrage-boot-json.invalid";
 const KONVERSATION = "conv_abfrage_boot_json";
 const MINUTE_MS = 60_000;
 const POLL_MS = 1500;
-const FRIST_MS = 120_000 + POLL_MS + 30_000;
+const FRIST_MS = POLL_MS;
 const MANDANT = "t_geld_boot_json";
 
 const { store } = await geldBootJsonStarten({

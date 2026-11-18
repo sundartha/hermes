@@ -9,7 +9,7 @@ import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { CONVERSATION_FAILED_UNVERIFIED_ORIGINATION } from "../fixtures/elevenlabs-conversations.js";
-import { storeOpsFacade, waitUntil, withFetch } from "../helpers.js";
+import { storeOpsFacade, waitUntil, waitUntilMitLauf, withFetch } from "../helpers.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
@@ -160,12 +160,46 @@ test("dauerhafter Abruf-Fehler (HTTP 404, 3x in Folge): failureReason traegt den
     async (_url, init) =>
       init.method === "GET" ? { ok: false, status: HTTP_NOT_FOUND, json: async () => ({}) } : { ok: true, status: HTTP_OK },
     async () => {
-      await el.abfrageDurchLauf(call.id);
-      await el.abfrageDurchLauf(call.id);
-      await el.abfrageDurchLauf(call.id);
-      await waitUntil(() => billed);
+      await waitUntilMitLauf(el, call.id, () => billed);
     },
   );
 
   assert.equal(call.failureReason, "result-unknown:poll-provider-404");
+});
+
+test("Abfrage ohne Ergebnis: die naechste Abfrage steht nur als Frist an der Anrufzeile (jetzt plus Abfrage-Takt), kein Timer im Prozess", async (t) => {
+  const { call, store } = seedActiveCall();
+  const ABFRAGE_TAKT_MS = 777;
+  const fristen = [];
+  store.setzeAbfrageFrist = async ({ faelligAt }) => fristen.push({ faelligAt, jetzt: Date.now() });
+  const timerMs = [];
+  const echtesSetTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, "setTimeout", (fn, ms, ...rest) => {
+    timerMs.push(ms);
+    return echtesSetTimeout(fn, ms, ...rest);
+  });
+  let abrufe = 0;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: { ...ACCOUNT, resultPollMs: ABFRAGE_TAKT_MS } }),
+    terminateAndBillCall,
+    billThunk: () => () => {},
+    finishCall: () => {},
+  });
+  await withFetch(
+    async (_url, init) => {
+      if (init.method === "GET") abrufe += 1;
+      return { ok: true, status: HTTP_OK, json: async () => ({ status: "in-progress", transcript: [], metadata: {} }) };
+    },
+    async () => {
+      await el.abfrageDurchLauf(call.id);
+      await waitUntil(() => fristen.length === 2);
+    },
+  );
+  assert.equal(abrufe, 1);
+  const [vorAbruf, nachAbruf] = fristen;
+  assert.ok(Date.parse(vorAbruf.faelligAt) - vorAbruf.jetzt > ABFRAGE_TAKT_MS);
+  assert.ok(Date.parse(nachAbruf.faelligAt) - nachAbruf.jetzt <= ABFRAGE_TAKT_MS);
+  assert.ok(Date.parse(nachAbruf.faelligAt) - nachAbruf.jetzt > 0);
+  assert.equal(timerMs.includes(ABFRAGE_TAKT_MS), false);
 });

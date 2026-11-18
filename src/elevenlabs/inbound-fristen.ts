@@ -6,10 +6,8 @@ export const EL_BINDING_AFTER_ANSWER_MS = 8000;
 export const EL_RUECKFALL_PFAD = "/voice/el-rueckfall";
 export const EL_RUECKFALL_QUELLE = Object.freeze({ DIAL_ENDE: "dial_ende", FRIST: "frist" });
 
-const FRIST_ART = Object.freeze({ AUSSEN: "aussen", INNEN: "innen", LAUF: "lauf" });
+const FRIST_LAUF = "lauf";
 export const LOG_TAG = "el-inbound";
-
-type Handle = ReturnType<typeof setTimeout>;
 
 export interface Anruf {
   id: string;
@@ -47,32 +45,19 @@ const umleitungFaellig = (call: Anruf | null | undefined): boolean =>
 export function makeInboundBridges({
   store,
   umleiten,
-  setTimer,
-  clearTimer = clearTimeout,
   now,
   uebernahmeMs = 0,
 }: {
   store: {
     getCall: (id: string) => Anruf | null | undefined;
-    setzeUebergabeFrist?: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
+    setzeUebergabeFrist?: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
     leseCallUngebunden?: (id: string) => Promise<Anruf | null | undefined>;
     load: () => { calls: Anruf[] };
   };
   umleiten: (umleitung: Umleitung) => unknown;
-  setTimer: (fn: () => void, ms: number) => Handle;
-  clearTimer?: (handle: Handle) => void;
   now: () => number;
   uebernahmeMs?: number;
 }): InboundBridges {
-  const fristen = new Map<string, Record<string, Handle>>();
-
-  function clearDeadlines(callId: string): void {
-    const eintrag = fristen.get(callId);
-    if (!eintrag) return;
-    for (const handle of Object.values(eintrag)) clearTimer(handle);
-    fristen.delete(callId);
-  }
-
   function mitAnruf(callId: string, weiter: (call: Anruf | null | undefined) => void): void {
     if (!store.leseCallUngebunden) {
       weiter(store.getCall(callId));
@@ -89,46 +74,34 @@ export function makeInboundBridges({
     return umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
   }
 
-  function fristAbgelaufen(callId: string, art: string): void {
-    clearDeadlines(callId);
-    mitAnruf(callId, (call) => {
-      void leiteUmWennWartend(callId, art, call);
-    });
-  }
-
   async function uebergabeDurchLauf(callId: string): Promise<void> {
     const call = store.leseCallUngebunden ? await store.leseCallUngebunden(callId) : store.getCall(callId);
-    if ((await leiteUmWennWartend(callId, FRIST_ART.LAUF, call)) === false)
+    if ((await leiteUmWennWartend(callId, FRIST_LAUF, call)) === false)
       throw new Error(`Uebergabe weder umgeleitet noch aufgelegt: ${callId}`);
   }
 
-  function schreibeFrist(callId: string, faelligMs: number): void {
+  function schreibeFrist(callId: string, faelligMs: number | null): void {
     mitAnruf(callId, (call) => {
       if (!call) return;
-      const faelligAt = new Date(faelligMs + uebernahmeMs).toISOString();
+      const faelligAt = faelligMs === null ? null : new Date(faelligMs + uebernahmeMs).toISOString();
       store.setzeUebergabeFrist?.({ callId, tenantId: call.tenantId, faelligAt }).catch((fehler: unknown) => {
         console.error(`[fristen] Uebergabe-Frist schreiben fehlgeschlagen: ${callId} ${String(fehler)}`);
       });
     });
   }
 
-  function armiere(callId: string, art: string, ms: number): void {
-    schreibeFrist(callId, now() + ms);
-    const eintrag = fristen.get(callId) ?? {};
-    if (eintrag[art]) clearTimer(eintrag[art]);
-    fristen.set(callId, { ...eintrag, [art]: setTimer(() => {
-        fristAbgelaufen(callId, art);
-      }, ms) });
-  }
-
   function armDeadlines(callId: string): void {
     mitAnruf(callId, (call) => {
-      if (call) armiere(callId, FRIST_ART.AUSSEN, aeussereRestfristMs(call, now()));
+      if (call) schreibeFrist(callId, now() + aeussereRestfristMs(call, now()));
     });
   }
 
   function armBindingDeadline(callId: string): void {
-    armiere(callId, FRIST_ART.INNEN, EL_BINDING_AFTER_ANSWER_MS);
+    schreibeFrist(callId, now() + EL_BINDING_AFTER_ANSWER_MS);
+  }
+
+  function clearDeadlines(callId: string): void {
+    schreibeFrist(callId, null);
   }
 
   return { armDeadlines, armBindingDeadline, clearDeadlines, uebergabeDurchLauf };
