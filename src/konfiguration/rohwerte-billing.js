@@ -1,4 +1,4 @@
-import { leseBetterStackAlertUrl } from "./betterstack-alarm.js";
+import { leseBetterStackAlertUrl } from "./betterstack-alarm.ts";
 import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;

@@ -35,10 +35,10 @@ import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.js";
 import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.js";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.js";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.js";
-import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.js";
+import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.ts";
 import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.js";
 import { rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
-import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.js";
+import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.ts";
 import {
   alertChannelFindings,
   alertChannelInputs,
