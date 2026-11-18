@@ -10,7 +10,7 @@ import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
 import { speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
-import { sipRegistrarWennAktiv, inboundTrunkSchreiberWennErlaubt } from "../elevenlabs/nummern-registrierung.js";
+import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 
 const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
@@ -159,8 +159,8 @@ export function makeProvisioningOrchestrator({
     if (gestoppt) return;
     const state = store.load();
     const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
-    deps.sipRegistrar = sipRegistrarWennAktiv(config);
-    deps.inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(config);
+    deps.sipRegistrar = elevenlabsNummern().sipRegistrarWennAktiv(config);
+    deps.inboundTrunkSchreiber = elevenlabsNummern().inboundTrunkSchreiberWennErlaubt(config);
     if (config.billing.paymentEnabled) deps.billing = billing;
     await queue.drain((queuedJob) => runQueuedJob(state, queuedJob, deps), PROVISION_NUMBER_JOB);
   }

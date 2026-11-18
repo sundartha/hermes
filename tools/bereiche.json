@@ -36,9 +36,9 @@
       "^src/(onboarding|release-reconcile)\\.[jt]s$",
       "^src/(worker|queue)/",
       "^src/telephony/provisioning-geo\\.[jt]s$",
-      "^src/elevenlabs/(nummern-registrierung|inbound-trunk-beleg)\\.[jt]s$"
+      "^src/elevenlabs/(nummern-registrierung|nummern-port|inbound-trunk-beleg)\\.[jt]s$"
     ],
-    "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$"],
+    "eingaenge": ["^src/worker/(provisioning-orchestrator|provisioning|nummerntausch)\\.[jt]s$", "^src/elevenlabs/nummern-port\\.ts$"],
     "fachlogik": []
   },
   {

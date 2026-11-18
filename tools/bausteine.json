@@ -235,10 +235,11 @@
         "src/queue/",
         "src/telephony/provisioning-geo.js",
         "src/elevenlabs/nummern-registrierung.js",
+        "src/elevenlabs/nummern-port.ts",
         "src/elevenlabs/inbound-trunk-beleg.ts"
       ],
       "eingaenge": [
-        "src/elevenlabs/nummern-registrierung.js",
+        "src/elevenlabs/nummern-port.ts",
         "src/release-reconcile.js",
         "src/telephony/provisioning-geo.js"
       ],
