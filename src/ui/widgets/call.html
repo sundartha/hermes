@@ -34,7 +34,7 @@
   .ph-live .pill,.ph-done .pill{clip-path:inset(0 round 22px)}
   .ph-live .pill::before,.ph-done .pill::before{opacity:0}
   .ph-done .pill{background:#f2ece3;color:#15130f}
-  .zeile[data-row="summary"]{box-sizing:border-box;max-height:120px;overflow-y:auto}
+  .zeile[data-row="summary"],.zeile[data-row="assignment"]{box-sizing:border-box;max-height:120px;overflow-y:auto}
   .ph-fail .pill,.ph-cancel .pill{background:transparent;box-shadow:none}
   .ph-fail .pill::before,.ph-cancel .pill::before{border-color:var(--line2);box-shadow:none}
   .ph-dial .ga{opacity:.5}.ph-live .ga{opacity:1}.ph-done .ga{opacity:.8}
@@ -91,6 +91,9 @@
         <div class="chat-titel" data-i18n="Conversation">Conversation</div>
         <div class="chat" data-chat role="log"></div>
       </div>
+      <div class="zeile rise" data-row="assignment" style="display:none">
+        <span data-i18n="Assignment">Assignment</span><span data-assignment-display></span>
+      </div>
       <div class="zeile rise" data-row="failure" style="display:none">
         <span data-i18n="Reason">Reason</span><span data-failure-display>—</span>
       </div>
@@ -112,6 +115,7 @@
       </div>
       </div>
       <div class="fuss">
+        <span data-number-display></span>
         <button type="button" class="quiet lens hud-cancel" data-cancel data-i18n="Cancel call">Cancel call</button>
       </div>
     </div>
@@ -687,8 +691,18 @@
     }
 
     // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
+    function applyCallSubject(data) {
+      var objective = typeof data.objective === "string" ? data.objective.trim() : "";
+      if (objective.length > 0) {
+        setDisplayText("[data-assignment-display]", objective);
+        setRowVisible("assignment", true);
+      }
+      if (typeof data.to === "string" && data.to.length > 0) setDisplayText("[data-number-display]", data.to);
+    }
+
     function applyCallStatus(data) {
       if (!isRecord(data)) return;
+      applyCallSubject(data);
       if (data.call_id) setSlotText("call_id", data.call_id);
       applyDuration(data);
       if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
@@ -731,6 +745,7 @@
     // Wendet die get_call_result-Whitelist (pickTranscript) an.
     function applyCallResult(data) {
       if (!isRecord(data)) return;
+      applyCallSubject(data);
       if (data.call_id) setSlotText("call_id", data.call_id);
       var awaiting = isAwaitPlaceholder(data);
       applyObjective(data, awaiting);

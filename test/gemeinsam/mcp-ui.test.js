@@ -165,9 +165,11 @@ test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes s
       "duration_s",
       "failure_reason",
       "last_transcript_lines",
+      "objective",
       "server_time",
       "started_at",
       "status",
+      "to",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "in_progress");
@@ -293,9 +295,11 @@ test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
       "duration_s",
       "failure_reason",
       "last_transcript_lines",
+      "objective",
       "server_time",
       "started_at",
       "status",
+      "to",
     ]);
   });
 });
@@ -396,10 +400,12 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
       "counterparty_commitments",
       "next_step",
       "next_steps",
+      "objective",
       "objective_achieved",
       "open_points",
       "outcome",
       "result_summary",
+      "to",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.objective_achieved, true);
@@ -461,10 +467,12 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
       "counterparty_commitments",
       "next_step",
       "next_steps",
+      "objective",
       "objective_achieved",
       "open_points",
       "outcome",
       "result_summary",
+      "to",
     ]);
   });
 });
@@ -1090,7 +1098,7 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     assert.ok(result.structuredContent, "structuredContent jetzt vorhanden (W0 kannte undefined)");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "answered_at", "call_id", "context_received", "deduplicated", "duration_s", "failure_reason",
-      "last_transcript_lines", "objective_achieved", "result_summary", "server_time", "started_at", "status",
+      "last_transcript_lines", "objective", "objective_achieved", "result_summary", "server_time", "started_at", "status", "to",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "dialing");
