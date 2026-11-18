@@ -1,11 +1,11 @@
 import { anfrage } from "../utils/anfrage.js";
-import { fetchPhoneNumber, type ConvaiKonto } from "../elevenlabs/convai.ts";
+import { elevenlabsConvai, type ConvaiKonto } from "../elevenlabs/registry.ts";
 
 export function makeElConfigRead(config: { voice: { elevenLabsOutbound: ConvaiKonto } }): {
-  fetchPhoneNumber: (phoneNumberId: string) => ReturnType<typeof fetchPhoneNumber>;
+  fetchPhoneNumber: (phoneNumberId: string) => ReturnType<ReturnType<typeof elevenlabsConvai>["fetchPhoneNumber"]>;
 } {
   return {
     fetchPhoneNumber: (phoneNumberId: string) =>
-      fetchPhoneNumber({ fetchImpl: anfrage, account: config.voice.elevenLabsOutbound, phoneNumberId }),
+      elevenlabsConvai().fetchPhoneNumber({ fetchImpl: anfrage, account: config.voice.elevenLabsOutbound, phoneNumberId }),
   };
 }

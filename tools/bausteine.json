@@ -327,6 +327,7 @@
         "src/elevenlabs/inbound-path-decision.ts",
         "src/elevenlabs/inbound-rueckfall.ts",
         "src/elevenlabs/outbound.js",
+        "src/elevenlabs/registry.ts",
         "src/llm.js",
         "src/llm/provider.ts",
         "src/llm/registry.js",

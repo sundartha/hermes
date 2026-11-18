@@ -31,6 +31,14 @@ module.exports = {
       to: { path: "^src/telephony/adapters/" },
     },
     {
+      name: "elevenlabs-nur-ueber-port",
+      severity: "error",
+      comment:
+        "ElevenLabs-API-Code aus src/elevenlabs/convai.ts nur über die Registry ansprechen: den Port elevenlabsConvai aus src/elevenlabs/registry.ts holen.",
+      from: { path: "^src/", pathNot: "^src/elevenlabs/" },
+      to: { path: "^src/elevenlabs/convai\\.ts$" },
+    },
+    {
       name: "speicher-nur-ueber-fassade",
       severity: "error",
       comment:

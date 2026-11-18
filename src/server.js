@@ -45,7 +45,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.ts";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.ts";
-import { fetchConversation } from "./elevenlabs/convai.ts";
+import { elevenlabsConvai } from "./elevenlabs/registry.ts";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {
   makeRequestTenant,
@@ -96,7 +96,7 @@ const durableAuditFor = (tenantId) => makeDurableAudit({ audit, auditStoreRef, t
 
 const elKostenRead = {
   fetchConversation: (conversationId) =>
-    fetchConversation({ fetchImpl: anfrage, account: config.voice.elevenLabsOutbound, conversationId }),
+    elevenlabsConvai().fetchConversation({ fetchImpl: anfrage, account: config.voice.elevenLabsOutbound, conversationId }),
 };
 
 const costTruing = makeCostTruing({
