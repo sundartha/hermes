@@ -58,6 +58,7 @@ function makeMockStore({ listSize = 1 } = {}) {
     }),
     exportTenantData: (tenantId) => auszugVon(tenantId),
     exportTenantDataGelesen: (tenantId) => auszugVon(tenantId),
+    zaehleAnrufeSeit: () => 0,
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, costCents: 200, costMicroCentsRem: 999, calls: 3 }),
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 200, remainingCents: 800 }),
     reservationOf: () => MOCK_RESERVATION_CENTS,

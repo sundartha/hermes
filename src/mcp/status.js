@@ -1,7 +1,6 @@
 import { WIDGET_AGENT_STATUS } from "../ui/adapters/mcp-native.js";
 import { WIDGET_MY_NUMBER } from "../ui/widget-catalog.js";
 import { jsonText } from "./ausgabe.js";
-import { yearMonthKey } from "../utils/month.js";
 import { requireFields } from "./gateway.js";
 import { AGENT_STATUS_OUTPUT, MY_NUMBER_OUTPUT } from "./schemata.js";
 import { AGENT_STATUS_DESCRIPTION, GET_AGENT_NUMBER_DESCRIPTION } from "./beschreibungen.js";
@@ -24,17 +23,12 @@ function permissionsSentence(settings, agentStatusTexts) {
   return allowed.length === 0 ? agentStatusTexts.permissionsNone : agentStatusTexts.permissionsAllowed(allowed);
 }
 
-function callsThisMonth(calls) {
-  const month = yearMonthKey(new Date());
-  return (calls ?? []).filter((entry) => yearMonthKey(new Date(entry.startedAt)) === month).length;
-}
-
 function pickAgentStatus(state, texts) {
   return {
     number: state.agent.number ?? null,
     owner: state.agent.owner ?? null,
     calls: state.usage.calls,
-    callsThisMonth: callsThisMonth(state.calls),
+    callsThisMonth: state.usage.callsThisMonth ?? 0,
     planUsagePercent: state.usage.planUsagePercent ?? null,
     permissions: permissionsSentence(state.settings, texts.agentStatus),
   };
