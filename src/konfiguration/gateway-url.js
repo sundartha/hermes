@@ -1,5 +1,5 @@
 export function gatewayUrlForPort(port) {
-  return `http://localhost:${port}`;
+  return `http://localhost:${String(port)}`;
 }
 
 export function gatewayUrlMit({ umgebung, stripTrailingSlash, standardPort }) {
@@ -9,9 +9,11 @@ export function gatewayUrlMit({ umgebung, stripTrailingSlash, standardPort }) {
       boundGatewayUrl = gatewayUrlForPort(port);
     },
     resolveGatewayUrl() {
-      return stripTrailingSlash(
-        umgebung.GATEWAY_URL || boundGatewayUrl || gatewayUrlForPort(standardPort()),
-      );
+      const konfiguriert = umgebung.GATEWAY_URL;
+      if (konfiguriert) {
+        return stripTrailingSlash(konfiguriert);
+      }
+      return stripTrailingSlash(boundGatewayUrl ?? gatewayUrlForPort(standardPort()));
     },
   };
 }
