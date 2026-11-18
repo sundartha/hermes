@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS } from "./begriffe/abrechnung.js";
-import { setWorldDefaultLanguageEnabled } from "./konfiguration/standardsprache.js";
+import { setWorldDefaultLanguageEnabled } from "./konfiguration/standardsprache.ts";
 import {
   EXCHANGE_RATE_DEFAULTS,
   FX_MICRO_PER_UNIT,

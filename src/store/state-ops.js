@@ -9,7 +9,7 @@ import {
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
 import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.js";
+import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { E164 } from "../begriffe/rufnummern.js";
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.js";
