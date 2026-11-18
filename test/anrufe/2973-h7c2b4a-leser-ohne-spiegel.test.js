@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { speicherBereiche } from "../../src/store/bereiche.js";
+import { speicherBereiche } from "../../src/store.js";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const KUNDE = "t_h7c2b4a_kunde";
