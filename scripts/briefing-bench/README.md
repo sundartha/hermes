@@ -1,7 +1,7 @@
 # briefing-bench
 
 Misst, wie die Werkzeugtexte von `prepare_call`/`place_call` und die Server-Instructions auf
-das **rufende** Chat-Modell wirken - das Modell, das die Anruf-Argumente befuellt. `convo-bench`
+das **rufende** Chat-Modell wirken - das Modell, das die Anruf-Argumente befuellt. Der frühere `convo-bench`
 kann das nicht: es schreibt das Briefing direkt in den Anruf-Datensatz und liest diese Texte nie.
 
 ## Was das Werkzeug tut und was nie

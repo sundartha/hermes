@@ -1,6 +1,5 @@
 {
   "test/_iel-inbound-harness.js": 1,
-  "test/gemeinsam/al-d3-consult-pump.test.js": 1,
   "test/gemeinsam/al-p7-turn-streaming.test.js": 1,
   "test/anrufe/al-p10-precall-research.test.js": 1,
   "test/anrufe/call-termination-order.test.js": 2,
