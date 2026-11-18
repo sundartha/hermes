@@ -448,12 +448,14 @@ export function fetchAgent({
   fetchImpl,
   account,
   agentId,
-}: Verbindung & { agentId: string }): Promise<ConvaiDaten | null> {
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}: MitFrist & { agentId: string }): Promise<ConvaiDaten | null> {
   return convaiFetch({
     fetchImpl,
     account,
     path: AGENT_PATH + encodeURIComponent(agentId),
     op: "Agent-Abruf",
     init: { method: "GET" },
+    timeoutMs,
   });
 }

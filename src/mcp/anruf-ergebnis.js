@@ -12,6 +12,10 @@ export function callOutcomeView(call) {
   return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
 
+export function stimmenView(call) {
+  return Number.isInteger(call.stimmenAnzahl) ? { stimmen_anzahl: call.stimmenAnzahl } : {};
+}
+
 const AWAIT_SUMMARY_PLACEHOLDER = localeFor("de").mcp.awaitSummary;
 
 export function pickTranscript(callId, call, texts = null) {
