@@ -6,6 +6,7 @@ import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
+import { istAnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
@@ -1451,7 +1452,14 @@ function anrufKennungenFelder(zeile) {
   };
 }
 
+function pruefeAnrufZustand(zeile) {
+  if (!istAnrufZustand(zeile.status)) {
+    throw new Error(`Anruf ${zeile.id}: unbekannter Zustand "${zeile.status}"`);
+  }
+}
+
 function rowToCall(zeile, segmentsByCall, itemIdsByCall) {
+  pruefeAnrufZustand(zeile);
   return {
     ...anrufStammFelder(zeile),
     ...anrufVerlaufFelder(zeile),
