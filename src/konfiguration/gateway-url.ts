@@ -8,7 +8,12 @@ interface GatewayUrlAbhaengigkeiten {
   standardPort: () => number;
 }
 
-export function gatewayUrlMit({ umgebung, stripTrailingSlash, standardPort }: GatewayUrlAbhaengigkeiten) {
+interface GatewayUrlAuswahl {
+  setBoundGatewayPort: (port: number) => void;
+  resolveGatewayUrl: () => string;
+}
+
+export function gatewayUrlMit({ umgebung, stripTrailingSlash, standardPort }: GatewayUrlAbhaengigkeiten): GatewayUrlAuswahl {
   let boundGatewayUrl: string | null = null;
   return {
     setBoundGatewayPort(port: number): void {
