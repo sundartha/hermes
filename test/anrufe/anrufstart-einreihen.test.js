@@ -482,3 +482,48 @@ for (const fall of VERDRAHTUNGS_FAELLE)
     assert.equal(gezaehlt.gebaut, fall.auftragGebaut);
     assert.equal(gezaehlt.handler, fall.handlerGesetzt);
   });
+
+const NICHT_GEWAEHLT = (anruf) => new RegExp(`\\[anrufstart\\] nicht gewaehlt \\(call=${anruf.id}\\)`);
+
+test("Wartender Anruf: ist das Einfrieren beim Entnehmen aktiv, wird nicht gewaehlt und der Anruf endet mit dem Grund", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  ergebnis.config.safety.outboundFrozen = true;
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.equal(ergebnis.wahlversuche, 0);
+  assert.deepEqual(ergebnis.gewaehlt, []);
+  assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:outbound-frozen"]]);
+  assert.deepEqual(ergebnis.protokoll.enden, [[anruf.id, "failed"]]);
+});
+
+test("Wartender Anruf: ist die Anrufpause beim Entnehmen aktiv, wird nicht gewaehlt und der Anruf endet mit dem Grund", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  ergebnis.protokoll.pause = true;
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.equal(ergebnis.wahlversuche, 0);
+  assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:anrufpause"]]);
+  assert.deepEqual(ergebnis.protokoll.enden, [[anruf.id, "failed"]]);
+});
+
+test("Wartender Anruf: Einfrieren geht der Anrufpause vor", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  ergebnis.config.safety.outboundFrozen = true;
+  ergebnis.protokoll.pause = true;
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:outbound-frozen"]]);
+});
+
+test("Wartender Anruf: scheitert das Lesen einer Sperre, wird nicht gewaehlt und der Anruf endet mit tor-fehler", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  Object.defineProperty(ergebnis.protokoll, "pause", {
+    get: () => {
+      throw new Error("Pause nicht lesbar");
+    },
+  });
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.deepEqual(ergebnis.gewaehlt, []);
+  assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:tor-fehler"]]);
+});

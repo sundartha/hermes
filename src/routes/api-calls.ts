@@ -22,7 +22,7 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
-import { GatesBestanden } from "../telephony/gates-bestanden.ts";
+import { GatesBestanden, fuehreToreAus, type Ablehnung as TorAblehnung, type Tor } from "../telephony/gates-bestanden.ts";
 import { NOT_PLACED, WARTEFRIST_REASON, startRejectionReason } from "../telephony/failure-reason.ts";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
@@ -37,7 +37,7 @@ import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
-import { makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
+import { ANRUFSTART_SPERRE, makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
@@ -357,6 +357,7 @@ function elevenLabsCallNotWired(): never {
 }
 
 const GRUND_WARTESCHLANGE = "warteschlange";
+const GRUND_TOR_FEHLER = "tor-fehler";
 
 function anrufstartNichtVerdrahtet(): never {
   throw new Error("Der Anrufstart-Auftrag ist nicht verdrahtet (deps.anrufstart fehlt)");
@@ -710,10 +711,30 @@ export function makeCallRoutes({
     return providerStatus;
   }
 
+  const sperren = {
+    eingefroren: () => config.safety.outboundFrozen,
+    pausiert: () => anrufpauseGilt(store),
+    abgebrochen: (call: Anruf) => call.status !== "active",
+  };
+
+  function sperrAblehnung(call: Anruf, grund: string): TorAblehnung {
+    return { status: HTTP_CONFLICT, body: { error: grund }, audit: { event: "anrufstart_gesperrt", grund, detail: call.id } };
+  }
+
+  const wartendeTore: Tor<Anruf>[] = [
+    { name: "eingefroren", run: (call) => (sperren.eingefroren() ? sperrAblehnung(call, ANRUFSTART_SPERRE.EINGEFROREN) : null) },
+    { name: "pausiert", run: async (call) => ((await sperren.pausiert()) ? sperrAblehnung(call, ANRUFSTART_SPERRE.PAUSE) : null) },
+  ];
+
   async function starteWartendenAnruf(call: Anruf) {
+    const bestanden = await fuehreToreAus(wartendeTore, call, (_tor, betroffen) => sperrAblehnung(betroffen, GRUND_TOR_FEHLER));
+    if (!(bestanden instanceof GatesBestanden)) {
+      await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${bestanden.audit.grund}`);
+      throw new Error(`[anrufstart] nicht gewaehlt (call=${call.id})`);
+    }
     let ausgang: Wahlausgang;
     try {
-      ausgang = await waehleKern(call);
+      ausgang = await waehleAnruf(call, bestanden);
     } catch (fehler) {
       await beendeNachStartFehler(call, fehler);
       throw fehler;
@@ -739,11 +760,7 @@ export function makeCallRoutes({
     verdrahtung.setzeHandler(
       macheAuftrag({
         starte: starteWartendenAnruf,
-        sperren: {
-          eingefroren: () => config.safety.outboundFrozen,
-          pausiert: () => anrufpauseGilt(store),
-          abgebrochen: (call) => call.status !== "active",
-        },
+        sperren,
         beendeOhneWahl: (callId, grund) => beendeOhneAnbieter(callId, `${NOT_PLACED}:${grund}`),
         armeTimer,
         jetztMs: uhr.jetztMs,
