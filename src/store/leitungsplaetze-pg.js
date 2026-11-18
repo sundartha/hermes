@@ -23,7 +23,7 @@ const BELEGTE_ANRUFE_SQL = `SELECT DISTINCT call_id AS "callId" FROM leitungspla
 const WARTEPLATZ_LOESCHEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1 AND richtung = $2`;
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
-export function makePostgresLeitungsplaetze(runner) {
+function macheInTransaktion(runner) {
   const transaktion = (arbeit, abbruch, callId) =>
     runner.withClient(async (client) => {
       await client.query("BEGIN");
@@ -58,6 +58,11 @@ export function makePostgresLeitungsplaetze(runner) {
     lauf.catch(() => {});
     return Promise.race([lauf, frist]).finally(() => clearTimeout(timer));
   };
+  return inTransaktion;
+}
+
+export function makePostgresLeitungsplaetze(runner) {
+  const inTransaktion = macheInTransaktion(runner);
 
   const imZweifelVoll = (fehler) => {
     console.error("[leitungsplaetze] Datenbank nicht erreichbar, ausgehend abgelehnt:", fehler.message);
@@ -73,17 +78,22 @@ export function makePostgresLeitungsplaetze(runner) {
     }
   }
 
+  const unterSperre = (callId, arbeit) =>
+    inTransaktion(async (client) => {
+      await client.query(SPERRE_SQL);
+      await client.query(ABGELAUFENE_LOESCHEN_SQL);
+      const { rows } = await client.query(ZEILEN_SQL);
+      return arbeit(client, rows);
+    }, callId);
+
   async function belegenWartend({ callId, tenantId }) {
     try {
-      return await inTransaktion(async (client) => {
-        await client.query(SPERRE_SQL);
-        await client.query(ABGELAUFENE_LOESCHEN_SQL);
-        const { rows } = await client.query(ZEILEN_SQL);
+      return await unterSperre(callId, async (client, rows) => {
         const entscheidung = entscheideWartendeAus(rows, { tenantId });
         if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
           await client.query(BELEGEN_SQL, [callId, tenantId, [WARTE_ANBIETER], WARTE_ABLAUF_S, RICHTUNG.WARTEND]);
         return entscheidung;
-      }, callId);
+      });
     } catch (fehler) {
       return imZweifelVoll(fehler).entscheidung;
     }
@@ -91,17 +101,14 @@ export function makePostgresLeitungsplaetze(runner) {
 
   async function belegenAusgehend({ callId, tenantId, weg, maxDauerS, hoechstzahlKunde }) {
     try {
-      return await inTransaktion(async (client) => {
-        await client.query(SPERRE_SQL);
-        await client.query(ABGELAUFENE_LOESCHEN_SQL);
-        const { rows } = await client.query(ZEILEN_SQL);
+      return await unterSperre(callId, async (client, rows) => {
         const entscheidung = entscheideAus(rows, { tenantId, weg, hoechstzahlKunde });
         if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) {
           await client.query(WARTEPLATZ_LOESCHEN_SQL, [callId, RICHTUNG.WARTEND]);
           await client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.AUSGEHEND]);
         }
         return { entscheidung };
-      }, callId);
+      });
     } catch (fehler) {
       return imZweifelVoll(fehler);
     }
