@@ -802,7 +802,13 @@ function makeInitInhalt(inhaltsAnfrageFor) {
   };
 }
 
-function macheAnrufstartAuftragMit(verbindung, { store, config, settings, haltAnrufStartFest, beende }) {
+function macheAnrufstartAuftragMit(verbindung, { store, config, settings, scheduleResultPoll, beende }) {
+  async function haltAnrufStartFest(call, conversationId) {
+    store.recordElevenlabsConversationId(call.id, conversationId);
+    await store.markAnswered(call.id);
+    scheduleResultPoll(call.id, conversationId);
+  }
+
   return makeAnrufstartAuftrag({
     ...verbindung,
     store,
@@ -910,19 +916,10 @@ export function makeElevenLabsOutbound({
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
 
-  async function haltAnrufStartFest(call, conversationId) {
-    store.recordElevenlabsConversationId(call.id, conversationId);
-    await store.markAnswered(call.id);
-    scheduleResultPoll(call.id, conversationId);
-  }
-
   return {
     macheAnrufstartAuftrag: (verbindung) =>
       macheAnrufstartAuftragMit(verbindung, {
-        store,
-        config,
-        settings,
-        haltAnrufStartFest,
+        store, config, settings, scheduleResultPoll,
         beende: { terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall },
       }),
     initInhaltFor,
