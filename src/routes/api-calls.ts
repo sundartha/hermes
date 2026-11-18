@@ -85,6 +85,7 @@ interface Anruf {
   tenantId: string;
   from: string;
   to: string;
+  goal?: string | null;
   direction: string;
   status: string;
   startedAt: string;
