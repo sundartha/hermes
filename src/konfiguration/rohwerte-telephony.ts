@@ -19,7 +19,15 @@ export function rohwerteTelephony(
     stripTrailingSlash,
     textEnv,
   }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "numEnv" | "stripTrailingSlash" | "textEnv">,
-) {
+): {
+  telnyxApiKey: string;
+  telnyxPublicKey: string;
+  telnyxApiBase: string;
+  telnyxConnectionId: string;
+  telnyxCallControlAppId: string;
+  telnyxAccountSid: string;
+  machineDetection: { enabled: boolean; timeoutS: number | undefined };
+} {
   return {
     telnyxApiKey: env.TELNYX_API_KEY ?? "",
     telnyxPublicKey: env.TELNYX_PUBLIC_KEY ?? "",
