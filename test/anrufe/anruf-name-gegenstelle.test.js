@@ -71,5 +71,6 @@ test("anruf-name-gegenstelle K3: das Eingabefeld ist optional und auf 80 Zeichen
   assert.equal(feld.isOptional(), true);
   assert.equal(feld.safeParse("a".repeat(80)).success, true);
   assert.equal(feld.safeParse("a".repeat(81)).success, false);
-  assert.equal(konfig.get("place_call").outputSchema.recipient_name.isNullable(), true);
+  const { outputSchema } = konfig.get("place_call");
+  assert.equal(outputSchema.recipient_name.isNullable(), true);
 });
