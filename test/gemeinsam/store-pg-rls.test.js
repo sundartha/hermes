@@ -195,7 +195,7 @@ async function setupSignup() {
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [SIGNUP_TENANT_ID]);
   await db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at, ended_at)
-     VALUES ($1, $2, 'tok', 'inbound', 'ended', now()::text, now()::text)`,
+     VALUES ($1, $2, 'tok', 'inbound', 'completed', now()::text, now()::text)`,
     [LOST_CALL_ID, SIGNUP_TENANT_ID],
   );
   await db.exec(
