@@ -34,7 +34,7 @@ async function mitGateway(state, fn) {
   }
 }
 
-function zustand(zusammenfassungen, persoenlich, bank, anrufe = []) {
+function zustand([zusammenfassungen, persoenlich, bank], anrufe = []) {
   return {
     calls: anrufe,
     agent: { number: "+18643028341", owner: "Antonio" },
@@ -44,7 +44,7 @@ function zustand(zusammenfassungen, persoenlich, bank, anrufe = []) {
 }
 
 async function status(sprache, einstellungen, anrufe = []) {
-  return mitGateway(zustand(...einstellungen, anrufe), () =>
+  return mitGateway(zustand(einstellungen, anrufe), () =>
     werkzeuge({ identity: null, scopedTenant: `tenant-${sprache}`, language: sprache }).get("get_agent_status")(),
   );
 }
