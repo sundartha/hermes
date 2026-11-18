@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
+import { waitUntil } from "../helpers.js";
 import { zweiProzesse } from "../gemeinsam/zwei-prozesse.js";
 
 const ZEITGRENZE_MS = 120_000;
@@ -75,6 +76,21 @@ function wartendeZaehlungen(adresse) {
   });
 }
 
+async function wartendeBis(adresse, ziel) {
+  let gelesen = -1;
+  let laeuft = true;
+  const leser = (async () => {
+    while (laeuft && gelesen !== ziel) gelesen = await wartendeZaehlungen(adresse);
+  })();
+  try {
+    await waitUntil(() => gelesen === ziel, { timeoutMs: ZEITGRENZE_MS / 2 });
+  } finally {
+    laeuft = false;
+    await leser;
+  }
+  return gelesen;
+}
+
 function sofortigeAntworten(anfragen, anzahl) {
   const frueh = [];
   return new Promise((resolve) => {
@@ -119,7 +135,7 @@ test(
       const abgewiesen = await sofortigeAntworten(anfragen, SOFORT_ABGEWIESEN);
       abgewiesen.forEach(pruefeAbweisung);
       assert.match(meldungen.text, /\[login-bremse\] login-bremse: Warteschlange voll/);
-      assert.equal(await wartendeZaehlungen(adresse), ZAEHLER_MAX, "genau 4 belegen Verbindungen");
+      assert.equal(await wartendeBis(adresse, ZAEHLER_MAX), ZAEHLER_MAX, "genau 4 belegen Verbindungen");
       await sperre.aufheben();
       const rest = (await Promise.all(anfragen)).filter(
         (antwort) => antwort.status !== HTTP_UNAVAILABLE,
