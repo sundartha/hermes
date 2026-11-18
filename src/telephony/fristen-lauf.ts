@@ -6,6 +6,7 @@ const RESERVE = "reserve";
 const ABFRAGE = "abfrage";
 const UEBERGABE = "uebergabe";
 const MAX_VERSUCHE = 3;
+const LESEFEHLER_BIS_ENDE = 2;
 
 interface Anruf {
   id: string;
@@ -52,6 +53,7 @@ interface FristenLaufAbhaengigkeiten {
   reserve?: ReserveAbhaengigkeiten;
   abfrage?: AbfrageAbhaengigkeiten;
   uebergabe?: UebergabeAbhaengigkeiten;
+  abgelaufeneHier?: () => Anruf[];
   limitJeMandant: number;
   leaseMs: number;
 }
@@ -62,7 +64,9 @@ interface TaktErgebnis {
   gelesen: boolean;
 }
 
-export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe }: FristenLaufAbhaengigkeiten): {
+export function makeFristenLauf({
+  store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe, abgelaufeneHier,
+}: FristenLaufAbhaengigkeiten): {
   takt: () => Promise<TaktErgebnis>;
   geldTakt: () => Promise<TaktErgebnis>;
   reserveTakt: () => Promise<TaktErgebnis>;
@@ -155,8 +159,35 @@ export function makeFristenLauf({ store, beende, limitJeMandant, leaseMs, geld, 
 
   const nichts = { beendet: 0, offen: 0, gelesen: true };
 
+  async function beendeHierGebundene(): Promise<{ beendet: number; offen: number }> {
+    const ergebnisse = await Promise.all(
+      (abgelaufeneHier?.() ?? []).map(async (call) => {
+        try {
+          await beende(call);
+          return "beendet";
+        } catch (fehler) {
+          console.error(`[fristen] Beenden fehlgeschlagen: ${call.id}`, String(fehler));
+          return "offen";
+        }
+      }),
+    );
+    return {
+      beendet: ergebnisse.filter((ergebnis) => ergebnis === "beendet").length,
+      offen: ergebnisse.filter((ergebnis) => ergebnis === "offen").length,
+    };
+  }
+
+  let lesefehlerInFolge = 0;
+
+  async function hoechstdauerTakt(): Promise<TaktErgebnis> {
+    const ergebnis = await runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende));
+    lesefehlerInFolge = ergebnis.gelesen ? 0 : lesefehlerInFolge + 1;
+    if (lesefehlerInFolge < LESEFEHLER_BIS_ENDE) return ergebnis;
+    return { ...ergebnis, ...(await beendeHierGebundene()) };
+  }
+
   return {
-    takt: async () => runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende)),
+    takt: hoechstdauerTakt,
     geldTakt: async () => (geld ? runde(GELD, async (treffer) => bearbeite(treffer, geldFaellig(geld), geld.beende)) : nichts),
     reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
     abfrageTakt: async () => (abfrage ? runde(ABFRAGE, async (treffer) => starteAbfrage(abfrage, treffer)) : nichts),

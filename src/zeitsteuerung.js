@@ -41,6 +41,7 @@ export function starteFristenTakt({ store, lifecycle, config, fristen, abfrage, 
   return starteFristenTaktMitUhr({
     store,
     beende: lifecycle.terminateExpiredCall,
+    abgelaufeneHier: lifecycle.abgelaufeneAktive,
     geld:
       geldWacheMs > 0
         ? {

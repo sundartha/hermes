@@ -119,6 +119,7 @@ interface CallLifecycle {
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
   releaseReserve: (call: Call) => unknown;
+  abgelaufeneAktive: () => Call[];
 }
 
 function callMaxDurationMs(call: Call): number {
@@ -358,8 +359,13 @@ export function makeCallLifecycle({
     });
   }
 
+  function abgelaufeneAktive(): Call[] {
+    const nowMs = Date.now();
+    return activeCallsOf(store).filter((call) => classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S).expired);
+  }
+
   return {
-    armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
+    abgelaufeneAktive, armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
     rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
     blockingAxisFor: budgetAxis.blockingAxisFor, releaseReserve,
   };
