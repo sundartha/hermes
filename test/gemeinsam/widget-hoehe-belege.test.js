@@ -47,7 +47,7 @@ test("Anrufkarte ohne Nächsten Schritt und mit einem bleibt unter der Obergrenz
   const { call } = await ausgelieferteWidgets();
   const keiner = await messeKarteEnde(chrome, call, mitSchrittText("voll_de", ""));
   const einer = await messeKarteEnde(chrome, call, "voll_de");
-  assert.ok(keiner.karte_px >= 492 && keiner.karte_px < einer.karte_px, `0 Schritte ${keiner.karte_px} px, 1 Schritt ${einer.karte_px} px`);
+  assert.ok(keiner.karte_px >= 492 && keiner.karte_px <= einer.karte_px, `0 Schritte ${keiner.karte_px} px, 1 Schritt ${einer.karte_px} px`);
   assert.ok(einer.karte_px < KARTE_MAX_PX);
 });
 

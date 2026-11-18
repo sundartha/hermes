@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const ANRUF = (await ausgelieferteWidgets()).call;
 const WIDGET_DICT = JSON.parse(skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {")).match(/var WIDGET_DICT = (.*);\n/)[1]);
-const NEUE_VERSION = 47;
+const NEUE_VERSION = 48;
 const ERGEBNIS = "ui/notifications/tool-result";
 
 const UEBERSCHRIFT = {
@@ -133,7 +133,7 @@ test("widget-anruf K4: bei Fehlschlag wird das Ergebnis geholt und zeigt nur Nä
   const t = karte();
   t.schicke({ status: "completed" });
   t.schicke({ result_summary: "Booked.", objective_achieved: true, outcome: "Booked", next_step: "Add it to the calendar." });
-  assert.equal(t.zeile("outcome"), "sichtbar");
+  assert.equal(t.zeile("summary"), "sichtbar");
   assert.equal(t.zeile("next_step"), "sichtbar");
   const u = karte();
   u.schicke({ status: "cancelled" });

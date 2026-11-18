@@ -96,7 +96,7 @@ async function messeErgebnis(html, szenarioWahl) {
   }
 }
 
-const LANGE_ZEILEN = ["summary", "outcome", "next_step"];
+const LANGE_ZEILEN = ["summary", "next_step"];
 
 function randBefunde(messung, wo) {
   const befunde = [];
@@ -128,7 +128,7 @@ function dauerBefunde(messung, wo) {
 function wortBefunde(messung, sprache, wo) {
   const { texte } = messung;
   const wort = WORT[sprache];
-  return ["result_summary", "outcome", "next_step"]
+  return ["result_summary", "next_step"]
     .filter((schluessel) => !texte[schluessel].includes(wort))
     .map((schluessel) => `${wo}: ${schluessel} enthält das lange Wort nicht vollständig`);
 }
@@ -139,8 +139,6 @@ function lageBefunde(messung, wo) {
     const { wert, beschriftung } = messung.zeilen[key];
     if (wert.links < beschriftung.rechts - RAND_TOLERANZ) befunde.push(`${wo}: ${key} steht nicht neben der Beschriftung`);
   }
-  const ziel = messung.zeilen.objective;
-  if (ziel.wert.links < ziel.beschriftung.rechts) befunde.push(`${wo}: Ziel-Status steht nicht rechts neben der Beschriftung`);
   return befunde;
 }
 
@@ -157,22 +155,22 @@ test("Lange Ergebnistexte bleiben in jeder Sprache und Breite im Rahmen, lange W
   assert.deepEqual(befunde, []);
 });
 
-test("Ergebnis des Anrufs steht über der Zusammenfassung", OPTIONS, async () => {
+test("Ergebnis des Anrufs steht über dem Nächsten Schritt", OPTIONS, async () => {
   const { call } = await ausgelieferteWidgets();
   for (const sprache of SPRACHEN) {
-    const messung = await messeErgebnis(call, szenario(sprache, BREITEN[1], { result_summary: "Zusammenfassung", outcome: "Ergebnis" }));
-    assert.ok(messung.zeilen.outcome.sichtbar, `${sprache}: Ergebnis sichtbar`);
-    assert.ok(messung.zeilen.summary.sichtbar, `${sprache}: Zusammenfassung sichtbar`);
-    const { outcome, summary } = messung.zeilen;
-    assert.ok(outcome.zeile.oben < summary.zeile.oben, `${sprache}: Ergebnis zuerst`);
+    const messung = await messeErgebnis(call, szenario(sprache, BREITEN[1], { result_summary: "Zusammenfassung", outcome: "Ergebnis", next_step: "Rückruf" }));
+    assert.ok(messung.zeilen.summary.sichtbar, `${sprache}: Ergebnis sichtbar`);
+    assert.ok(messung.zeilen.next_step.sichtbar, `${sprache}: Nächster Schritt sichtbar`);
+    const { next_step: schritt, summary } = messung.zeilen;
+    assert.ok(summary.zeile.oben < schritt.zeile.oben, `${sprache}: Ergebnis zuerst`);
   }
 });
 
 test("Ist das Ergebnis gleich der Zusammenfassung, erscheint der Satz nur einmal", OPTIONS, async () => {
   const { call } = await ausgelieferteWidgets();
   const gleich = await messeErgebnis(call, szenario("de", BREITEN[1], { result_summary: "Termin am Donnerstag", outcome: " Termin am Donnerstag " }));
-  assert.equal(gleich.zeilen.outcome.sichtbar, true);
-  assert.equal(gleich.zeilen.summary.sichtbar, false);
+  assert.equal(gleich.zeilen.outcome, undefined);
+  assert.equal(gleich.zeilen.summary.sichtbar, true);
   const verschieden = await messeErgebnis(call, szenario("de", BREITEN[1], { result_summary: "Termin am Donnerstag um 10 Uhr", outcome: "Termin am Donnerstag" }));
   assert.equal(verschieden.zeilen.summary.sichtbar, true);
 });

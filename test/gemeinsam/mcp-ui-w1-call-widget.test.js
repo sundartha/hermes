@@ -11,13 +11,11 @@ const SLOT_NAMES = [
   "last_transcript_lines",
   "call_id",
   "result_summary",
-  "outcome",
   "next_step",
 ];
 const DISPLAY_SELECTORS = [
   "[data-duration-display]",
   "[data-failure-display]",
-  "[data-objective-display]",
 ];
 const REMOVED_SLOT_NAMES = ["duration_s", "failure_reason", "objective_achieved", "bridge_format", "last_update"];
 const ROW_NAMES = ["lines", "failure", "summary", "objective", "outcome", "next_step"];
@@ -289,7 +287,6 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     result: { structuredContent: { call_id: "call_1", result_summary: "Termin gebucht.", objective_achieved: true } },
   });
   assert.equal(doc.slot("result_summary").textContent, "Termin gebucht.");
-  assert.equal(doc.querySelector("[data-objective-display]").textContent, "Goal reached");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
   env.emit({

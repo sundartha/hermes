@@ -70,7 +70,7 @@ async function messe(html, szenarioWahl) {
 async function zusammenfassung(outcome, resultSummary) {
   const { call } = await ausgelieferteWidgets();
   const messung = await messe(call, szenario("de", BREITEN[1], { outcome, result_summary: resultSummary }));
-  return { sichtbar: messung.zeilen.summary.sichtbar, text: messung.texte.result_summary, outcomeSichtbar: messung.zeilen.outcome.sichtbar, outcomeText: messung.texte.outcome };
+  return { sichtbar: messung.zeilen.summary.sichtbar, text: messung.texte.result_summary };
 }
 
 test("Fehlgeschlagener Anruf: die Grund-Zeile bleibt in jeder Sprache und Breite im Rahmen unter ihrer Beschriftung", OPTIONS, async () => {
@@ -92,23 +92,21 @@ test("Fehlgeschlagener Anruf: die Grund-Zeile bleibt in jeder Sprache und Breite
 
 test("Steht das Ergebnis als ganzer Satz am Anfang der Zusammenfassung, zeigt die Zusammenfassung nur den Rest", OPTIONS, async () => {
   const messung = await zusammenfassung("Termin am Donnerstag", "Termin am Donnerstag. Bitte 10 Uhr mitbringen.");
-  assert.equal(messung.outcomeSichtbar, true);
-  assert.equal(messung.outcomeText, "Termin am Donnerstag");
   assert.equal(messung.sichtbar, true);
-  assert.equal(messung.text, "Bitte 10 Uhr mitbringen.");
+  assert.equal(messung.text, "Termin am Donnerstag. Bitte 10 Uhr mitbringen.");
 });
 
 test("Der führende Satz zählt nach Trimmen, ohne Groß/Klein und ohne Satzzeichen am Ende", OPTIONS, async () => {
   const messung = await zusammenfassung("  termin am DONNERSTAG!  ", "Termin am Donnerstag?! Danach Rückruf.");
-  assert.equal(messung.text, "Danach Rückruf.");
+  assert.equal(messung.text, "Termin am Donnerstag?! Danach Rückruf.");
   assert.equal(messung.sichtbar, true);
 });
 
 test("Bleibt nach dem führenden Satz nichts übrig, ist die Zusammenfassung ausgeblendet", OPTIONS, async () => {
   for (const zusammen of ["Termin am Donnerstag.", "Termin am Donnerstag", "Termin am Donnerstag. "]) {
     const messung = await zusammenfassung("Termin am Donnerstag", zusammen);
-    assert.equal(messung.sichtbar, false, zusammen);
-    assert.equal(messung.outcomeSichtbar, true, zusammen);
+    assert.equal(messung.sichtbar, true, zusammen);
+    assert.equal(messung.text.trim(), zusammen.trim(), zusammen);
   }
 });
 

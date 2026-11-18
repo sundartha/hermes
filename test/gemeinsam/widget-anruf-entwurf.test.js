@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const ANRUF = WIDGETS.call;
-const NEUE_VERSION = 47;
+const NEUE_VERSION = 48;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
@@ -106,13 +106,13 @@ test("widget-anruf Aufbau: Schriftzug, Überschrift, Verbindungszeile, Glas mit 
 });
 
 test("widget-anruf Haken: Abbrechen, Flügel, Slots und Zeilen behalten ihre data-Attribute", () => {
-  for (const haken of ["data-cancel", "data-wing", "data-wing-canvas", "data-hud-phase", "data-duration-display", "data-failure-display", "data-objective-display"]) {
+  for (const haken of ["data-cancel", "data-wing", "data-wing-canvas", "data-hud-phase", "data-duration-display", "data-failure-display"]) {
     assert.ok(ANRUF.includes(haken), haken);
   }
-  for (const slot of ["call_id", "status", "last_transcript_lines", "outcome", "result_summary", "next_step"]) {
+  for (const slot of ["call_id", "status", "last_transcript_lines", "result_summary", "next_step"]) {
     assert.ok(ANRUF.includes(`data-mcp="${slot}"`), slot);
   }
-  for (const zeile of ["lines", "failure", "objective", "outcome", "summary", "next_step"]) {
+  for (const zeile of ["lines", "failure", "summary", "next_step"]) {
     assert.match(ANRUF, new RegExp(`class="zeile[^"]*" data-row="${zeile}"`));
   }
 });
