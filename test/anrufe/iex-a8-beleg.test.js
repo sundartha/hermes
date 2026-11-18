@@ -435,8 +435,14 @@ test("IEX-A8-10: Ergebniszeile - n gemischt, Endungen sortiert", async () => {
   assert.equal(numbers.length, MISCH_ANZAHL);
   const { logger, laeuft } = lauf({ store: fakeStore(numbers), elRead });
   await laeuft;
+  const zeilen = logger.zeilen.map((eintrag) => eintrag.zeile);
+  assert.deepEqual(zeilen.slice(0, -1).sort(), [
+    "[el-trunk] abruf_fehler endung=…0003 status=404",
+    "[el-trunk] abruf_fehler endung=…0004 status=500",
+    "[el-trunk] abruf_fehler endung=…0005 status=fehler",
+  ]);
   assert.equal(
-    logger.text(),
+    zeilen.at(-1),
     "[el-trunk] sweep fertig aktiv=6 belegt=1 repariert=0 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
       "ohne_beleg_endungen=…0002,…0003,…0004,…0005,…0006",
   );
