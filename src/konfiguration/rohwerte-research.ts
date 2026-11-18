@@ -1,4 +1,21 @@
-export function rohwerteResearch(env, { boolEnv, numEnv, stripTrailingSlash, textEnv }) {
+import type { umgebungMit } from "./umgebung.ts";
+
+export function rohwerteResearch(
+  env: {
+    RESEARCH_ENABLED?: string | undefined;
+    RESEARCH_SEARCH_FEE_CENTS?: string | undefined;
+    LOOKUP_ENABLED?: string | undefined;
+    LOOKUP_SEARCH_FEE_CENTS?: string | undefined;
+    EXA_API_KEY?: string | undefined;
+    EXA_API_BASE?: string | undefined;
+  },
+  {
+    boolEnv,
+    numEnv,
+    stripTrailingSlash,
+    textEnv,
+  }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "numEnv" | "stripTrailingSlash" | "textEnv">,
+) {
   return {
     researchEnabled: boolEnv("RESEARCH_ENABLED", env.RESEARCH_ENABLED, { fallback: false }),
     researchMaxUses: 1,

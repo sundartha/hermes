@@ -1,6 +1,25 @@
+import type { umgebungMit } from "./umgebung.ts";
+
 export const TELNYX_API_BASE_STANDARD = "https://api.telnyx.com";
 
-export function rohwerteTelephony(env, { boolEnv, numEnv, stripTrailingSlash, textEnv }) {
+export function rohwerteTelephony(
+  env: {
+    TELNYX_API_KEY?: string | undefined;
+    TELNYX_PUBLIC_KEY?: string | undefined;
+    TELNYX_API_BASE?: string | undefined;
+    TELNYX_CONNECTION_ID?: string | undefined;
+    TELNYX_CALL_CONTROL_APP_ID?: string | undefined;
+    TELNYX_ACCOUNT_SID?: string | undefined;
+    MACHINE_DETECTION_ENABLED?: string | undefined;
+    MACHINE_DETECTION_TIMEOUT_S?: string | undefined;
+  },
+  {
+    boolEnv,
+    numEnv,
+    stripTrailingSlash,
+    textEnv,
+  }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "numEnv" | "stripTrailingSlash" | "textEnv">,
+) {
   return {
     telnyxApiKey: env.TELNYX_API_KEY ?? "",
     telnyxPublicKey: env.TELNYX_PUBLIC_KEY ?? "",
