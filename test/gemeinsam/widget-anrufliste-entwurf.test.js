@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const LISTE = WIDGETS.calls;
-const NEUE_VERSION = 30;
+const NEUE_VERSION = 31;
 const ERGEBNIS = "ui/notifications/tool-result";
 const WOERTERBUCH = JSON.parse(/var WIDGET_DICT = (\{.*\});\n/.exec(LISTE)[1]);
 
@@ -202,16 +202,16 @@ test("widget-anrufliste K3: die Überschrift nennt die Anzahl, einzeln und mehrf
 test("widget-anrufliste K7: Überschrift und Fallbacks stehen in en, de und fr, auch nach einem Sprachwechsel", () => {
   const de = seite("de");
   de.meldung([{}, {}]);
-  assert.deepEqual([de.vor.text, de.zahl.text, de.nach.text], ["Hermes hat zuletzt", "2 Anrufe", "geführt."]);
+  assert.deepEqual([de.vor.text, de.zahl.text, de.nach.text], ["Hermes hat zuletzt", "zwei Anrufe", "geführt."]);
   de.meldung([{}]);
-  assert.equal(de.zahl.text, "1 Anruf");
+  assert.equal(de.zahl.text, "einen Anruf");
   de.meldung([]);
   assert.deepEqual([de.vor.text, de.zahl.text, de.nach.text], ["Hermes hat", "noch keine Anrufe", "geführt."]);
   const fr = seite("fr");
   fr.meldung([{}, {}]);
-  assert.deepEqual([fr.vor.text, fr.zahl.text, fr.nach.text], ["Hermes a traité", "2 appels", "récemment."]);
+  assert.deepEqual([fr.vor.text, fr.zahl.text, fr.nach.text], ["Hermes a traité", "deux appels", "récemment."]);
   fr.meldung([{}]);
-  assert.equal(fr.zahl.text, "1 appel");
+  assert.equal(fr.zahl.text, "un appel");
   fr.meldung([]);
   assert.deepEqual([fr.vor.text, fr.zahl.text, fr.nach.text], ["Hermes n'a traité", "aucun appel", "pour l'instant."]);
   const en = seite("en");

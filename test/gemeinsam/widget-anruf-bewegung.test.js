@@ -6,7 +6,7 @@ import { widgetPins } from "../../src/ui/registry.js";
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
 const ANRUF = (await ausgelieferteWidgets()).call;
-const NEUE_VERSION = 43;
+const NEUE_VERSION = 44;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
