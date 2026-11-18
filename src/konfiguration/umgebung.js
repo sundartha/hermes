@@ -85,7 +85,7 @@ function stripTrailingSlash(url) {
 }
 
 function csvEnv(raw) {
-  return (raw || "")
+  return (raw ?? "")
     .split(",")
     .map((eintrag) => eintrag.trim())
     .filter(Boolean);
