@@ -29,7 +29,7 @@ async function aufbau(vorQuery = () => {}) {
 async function anrufEinfuegen(db, { tenantId, id, texte }) {
   await db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
-     VALUES ($1, $2, $3, 'inbound', 'ended', now()::text)`,
+     VALUES ($1, $2, $3, 'inbound', 'completed', now()::text)`,
     [id, tenantId, `tok_${id}`],
   );
   for (const text of texte) {

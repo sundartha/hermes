@@ -35,7 +35,7 @@ async function aufbau(vorQuery) {
   return { store, db };
 }
 
-async function anrufEinfuegen(db, { tenantId, id, status = "ended", endedAt = null, diagnostic = false, result = null, texte = [] }) {
+async function anrufEinfuegen(db, { tenantId, id, status = "completed", endedAt = null, diagnostic = false, result = null, texte = [] }) {
   await setzeKontext(db, tenantId);
   await db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at, ended_at, diagnostic, result)
