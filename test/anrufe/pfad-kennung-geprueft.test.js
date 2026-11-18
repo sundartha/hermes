@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { startServer, seedState, seedCall } from "../helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_BAD_REQUEST = 400;
@@ -62,4 +63,29 @@ test("pfad-kennung-geprueft: eine gueltige Kennung verhaelt sich unveraendert", 
     const res = await rufe(srv, ROUTEN[0], "call_pfad");
     assert.deepEqual(await res.json(), { status: "completed" });
   });
+});
+
+test("pfad-kennung-geprueft: eine abgewiesene Kennung loest keine Wirkung am Anruf aus", async () => {
+  const lang = "y".repeat(GRENZE + 1);
+  const srv = await startServer({
+    env: { ...vorspannMandantenUmgebung([MANDANT]), CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true", ALLOWED_COUNTRY_CODES: "+49" },
+    seed: seedState({
+      calls: [seedCall({ id: lang, status: "active" })],
+      profiles: { [MANDANT]: { allowConsult: true } },
+    }),
+  });
+  try {
+    const antwort = await rufe(
+      srv,
+      ROUTEN[2],
+      lang,
+    );
+    assert.equal(antwort.status, HTTP_BAD_REQUEST);
+    const abbruch = await rufe(srv, ROUTEN[0], lang);
+    assert.equal(abbruch.status, HTTP_BAD_REQUEST);
+    assert.doesNotMatch(srv.stdout, /ERR_HTTP_HEADERS_SENT/);
+    assert.equal(srv.readStore().calls.find((c) => c.id === lang).status, "active");
+  } finally {
+    await srv.stop();
+  }
 });
