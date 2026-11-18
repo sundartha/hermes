@@ -229,17 +229,6 @@
       "count": 2
     }
   },
-  "scripts/convo-bench/checks.mjs": {
-    "id-length": {
-      "count": 17
-    },
-    "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "scripts/kv2-5-telnyx-belegtypen.mjs": {
     "no-restricted-properties": {
       "count": 4
