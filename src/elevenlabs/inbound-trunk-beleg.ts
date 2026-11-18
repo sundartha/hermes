@@ -79,10 +79,14 @@ type StartSperre = (
   arbeit: () => Promise<unknown>,
 ) => Promise<{ uebersprungen: boolean }>;
 
+export const TRUNK_ABRUF_FRIST_MS = 10000;
 export const SWEEP_PARALLEL = 4;
 export const SONDE_MAX_ENDUNGEN = 10;
 const LOG_PRAEFIX = "[el-trunk]";
 const SWEEP_UEBERSPRUNGEN_ANDERE_INSTANZ = "andere_instanz";
+const ABRUF_STATUS_FRIST = "timeout";
+const ABRUF_STATUS_SONST = "fehler";
+const FRIST_FEHLER_NAME = "TimeoutError";
 
 export const TRUNK_BELEG = Object.freeze({
   BELEGT: "belegt",
@@ -151,6 +155,14 @@ export function belegAusAbruffehler(fehler: unknown): string {
   return Reflect.get(Object(fehler), "providerStatus") === HTTP_NOT_FOUND
     ? TRUNK_BELEG.ABWEICHUNG
     : TRUNK_BELEG.UNBEKANNT;
+}
+
+function abrufStatus(fehler: unknown): string {
+  const providerStatus: unknown = Reflect.get(Object(fehler), "providerStatus");
+  if (typeof providerStatus === "number") return String(providerStatus);
+  return Reflect.get(Object(fehler), "name") === FRIST_FEHLER_NAME
+    ? ABRUF_STATUS_FRIST
+    : ABRUF_STATUS_SONST;
 }
 
 export async function leseTrunkBeleg({
@@ -266,7 +278,10 @@ export function makeTrunkSweep({
   store: Store;
   config: SweepConfig;
   elRead: {
-    fetchPhoneNumber: (phoneNumberId: string | null | undefined) => Promise<Registrierung>;
+    fetchPhoneNumber: (
+      phoneNumberId: string | null | undefined,
+      optionen?: { timeoutMs: number },
+    ) => Promise<Registrierung>;
   };
   reparatur?: Reparatur | null | undefined;
   mitStartSperre?: StartSperre;
@@ -284,7 +299,10 @@ export function makeTrunkSweep({
     if (!number.providerAgentPhoneNumberId)
       return mitEndung(number, SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG);
     const lies = (phoneNumberId: string | null | undefined) =>
-      elRead.fetchPhoneNumber(phoneNumberId);
+      elRead.fetchPhoneNumber(phoneNumberId, { timeoutMs: TRUNK_ABRUF_FRIST_MS }).catch((fehler: unknown) => {
+        logger.log(`${LOG_PRAEFIX} abruf_fehler nummer_id=${number.id} status=${abrufStatus(fehler)}`);
+        throw fehler;
+      });
     const abruf = await leseTrunkBeleg({ lies, number, soll: sollZugang() });
     wendeBelegAn(number, { beleg: abruf.beleg, zugangFp });
     if (abruf.beleg === TRUNK_BELEG.BELEGT || !reparatur) return mitEndung(number, abruf.beleg);
