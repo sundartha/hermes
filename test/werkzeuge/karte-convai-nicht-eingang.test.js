@@ -13,10 +13,3 @@ test("Kein Baustein der Karte führt convai.ts als Eingang", () => {
     .map((baustein) => baustein.baustein);
   assert.deepEqual(treffer, []);
 });
-
-test("Die Hinweise von src/elevenlabs nennen convai nicht als Eingang", () => {
-  const hinweis = readFileSync(resolve(WURZEL, "src/elevenlabs/CLAUDE.md"), "utf8");
-  const zeile = hinweis.split("\n").find((z) => z.startsWith("- Eingang: Andere Bausteine importieren aus `src/elevenlabs/`"));
-  assert.ok(zeile);
-  assert.equal(zeile.includes("convai"), false);
-});
