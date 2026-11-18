@@ -1,0 +1,203 @@
+[
+  {
+    "uid": "anruf-erfolgsquote",
+    "title": "Anruf-Erfolgsquote verfehlt das Ziel",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "refId": "A",
+          "expr": "(sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[1h])) / sum(increase(hermes_call_ended_total[1h])) > 0.144 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[5m])) / sum(increase(hermes_call_ended_total[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or (sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[6h])) / sum(increase(hermes_call_ended_total[6h])) > 0.06 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[30m])) / sum(increase(hermes_call_ended_total[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+        }
+      },
+      {
+        "refId": "C",
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "C",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "burnrate": {
+      "slo": 0.99,
+      "fenster": [
+        [
+          "1h",
+          "5m",
+          14.4
+        ],
+        [
+          "6h",
+          "30m",
+          6
+        ]
+      ],
+      "mindestAnrufe": 20,
+      "gesamt": "hermes_call_ended_total",
+      "fehler": "hermes_call_ended_total{ergebnis=\"failed\"}"
+    },
+    "for": "2m",
+    "labels": {
+      "bereich": "anrufe"
+    },
+    "annotations": {
+      "summary": "Anruf-Erfolgsquote verfehlt das Ziel",
+      "runbook_url": "docs/betrieb/alarme/anruf-erfolgsquote.md"
+    },
+    "notification_settings": {
+      "receiver": "bereitschaft"
+    }
+  },
+  {
+    "uid": "anruf-annahmezeit",
+    "title": "Annahmezeit der Anrufe verfehlt das Ziel",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "refId": "A",
+          "expr": "((sum(increase(hermes_call_answer_time_count[1h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[1h]))) / sum(increase(hermes_call_answer_time_count[1h])) > 0.144 and (sum(increase(hermes_call_answer_time_count[5m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[5m]))) / sum(increase(hermes_call_answer_time_count[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or ((sum(increase(hermes_call_answer_time_count[6h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[6h]))) / sum(increase(hermes_call_answer_time_count[6h])) > 0.06 and (sum(increase(hermes_call_answer_time_count[30m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[30m]))) / sum(increase(hermes_call_answer_time_count[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+        }
+      },
+      {
+        "refId": "C",
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "C",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "burnrate": {
+      "slo": 0.99,
+      "fenster": [
+        [
+          "1h",
+          "5m",
+          14.4
+        ],
+        [
+          "6h",
+          "30m",
+          6
+        ]
+      ],
+      "mindestAnrufe": 20,
+      "gesamt": "hermes_call_answer_time_count",
+      "gut": "hermes_call_answer_time_bucket{le=\"5\"}"
+    },
+    "for": "2m",
+    "labels": {
+      "bereich": "anrufe"
+    },
+    "annotations": {
+      "summary": "Annahmezeit der Anrufe verfehlt das Ziel",
+      "runbook_url": "docs/betrieb/alarme/anruf-annahmezeit.md"
+    },
+    "notification_settings": {
+      "receiver": "bereitschaft"
+    }
+  },
+  {
+    "uid": "anruf-abbruchrate",
+    "title": "Abbruchrate der Anrufe verfehlt das Ziel",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "refId": "A",
+          "expr": "(sum(increase(hermes_call_ended_total{grund=~\"canceled|result-unknown\"}[1h])) / sum(increase(hermes_call_ended_total[1h])) > 0.144 and sum(increase(hermes_call_ended_total{grund=~\"canceled|result-unknown\"}[5m])) / sum(increase(hermes_call_ended_total[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or (sum(increase(hermes_call_ended_total{grund=~\"canceled|result-unknown\"}[6h])) / sum(increase(hermes_call_ended_total[6h])) > 0.06 and sum(increase(hermes_call_ended_total{grund=~\"canceled|result-unknown\"}[30m])) / sum(increase(hermes_call_ended_total[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+        }
+      },
+      {
+        "refId": "C",
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "C",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "burnrate": {
+      "slo": 0.99,
+      "fenster": [
+        [
+          "1h",
+          "5m",
+          14.4
+        ],
+        [
+          "6h",
+          "30m",
+          6
+        ]
+      ],
+      "mindestAnrufe": 20,
+      "gesamt": "hermes_call_ended_total",
+      "fehler": "hermes_call_ended_total{grund=~\"canceled|result-unknown\"}"
+    },
+    "for": "2m",
+    "labels": {
+      "bereich": "anrufe"
+    },
+    "annotations": {
+      "summary": "Abbruchrate der Anrufe verfehlt das Ziel",
+      "runbook_url": "docs/betrieb/alarme/anruf-abbruchrate.md"
+    },
+    "notification_settings": {
+      "receiver": "bereitschaft"
+    }
+  }
+]
