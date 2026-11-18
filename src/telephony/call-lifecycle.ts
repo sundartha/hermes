@@ -6,7 +6,6 @@ import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/uhr-warten.ts";
 import { inDatenbankBeendet } from "./reattach.ts";
-import { istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
@@ -36,7 +35,6 @@ interface Call {
   tenantId: string;
   twilioSid: string;
   maxDurationS?: number;
-  transcript?: unknown[];
 }
 
 interface FristEintrag {
@@ -114,7 +112,7 @@ interface CallLifecycle {
   armMaxDurationTimer: (call: Call, providerCallSid: string) => void;
   armReserveReleaseTimer: (call: Call) => void;
   reattachActiveCall: (callId: string) => Promise<ReattachResult>;
-  terminateExpiredCall: (call: Call) => Promise<void>;
+  terminateExpiredCall: (call: Call, abgelaufenNachStart?: boolean) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
   releaseReserve: (call: Call) => unknown;
@@ -283,11 +281,9 @@ export function makeCallLifecycle({
 
   const ohneWeg = (call: Call) => loescheOhneAuflegeweg(call, { hangUpAction, voiceControl, endActiveCall });
 
-  async function terminateExpiredCall(call: Call): Promise<void> {
+  async function terminateExpiredCall(call: Call, abgelaufenNachStart = false): Promise<void> {
     await ohneWeg(call);
-    const gelesen = (await readCall(store, call.id)) ?? call;
-    const bewertbar = istOutboundElProfil(gelesen) && Boolean(gelesen.transcript?.length);
-    await terminateCappedCall(call.id, call.twilioSid, bewertbar ? "completed" : "failed");
+    await terminateCappedCall(call.id, call.twilioSid, abgelaufenNachStart ? "completed" : "failed");
   }
 
   const terminateOverBudgetExpired = (call: Call) => beendeUeberBudgetOhneWeg(call, ohneWeg, budgetAxis);
