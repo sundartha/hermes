@@ -172,3 +172,15 @@ test("Kriterium 2: ohne Namensänderung (Name schon gesetzt) schreibt die Identi
   assert.equal(fehlerausgabe.mock.calls.length, 0);
   assert.equal((await zeile(tenant)).owner_name, "Ada Lovelace");
 });
+
+test("Kriterium 2: das Löschen der Mandantendaten entfernt die eigene Nummer auch aus der Zeile", async () => {
+  const { a, tenant } = await zweiInstanzen();
+  a.setPrivateNumber(tenant, EIGENE_NUMMER);
+  await a.drainFlushes();
+
+  const entfernt = await a.eraseTenantData(tenant);
+  await a.drainFlushes();
+
+  assert.equal(entfernt.privateNumber, 1);
+  assert.equal((await zeile(tenant)).private_number, null);
+});
