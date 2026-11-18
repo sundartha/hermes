@@ -2,70 +2,34 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
-import { blockingBudgetAxis } from "../../src/budget-gate.js";
-import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
-import { billThunk, hangUpAction, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 
-const TAKT_MS = 15000;
-const ZEILEN = [{ role: "agent", text: "Preis?" }];
+const MAX_DAUER_S = 2;
+const FRIST_MS = 20000;
+const ZEILEN = [{ role: "agent", text: "Preis fuer 5 l Olivenoel?" }];
+const NICHT_ERREICHBAR = "http://127.0.0.1:9";
 
-async function endeBeiHoechstdauer(zusatz) {
-  const row = {
-    id: "call_bewertung",
-    tenantId: "tenant_bewertung",
-    status: "active",
-    provider: "telnyx",
-    twilioSid: "CA_bewertung",
-    direction: "outbound",
-    startedAt: "2026-01-01T00:00:00.000Z",
-    answeredAt: "2026-01-01T00:00:00.000Z",
-    maxDurationS: 180,
-    ...zusatz,
-  };
-  const store = {
-    load: () => ({ calls: [row] }),
-    getCall: () => row,
-    attachActiveCall: async () => (row.status === "active" ? row : null),
-    setCallEndedAt: async (_id, status) => void Object.assign(row, { status }),
-    recordFailureReason: (_id, reason) => void Object.assign(row, { failureReason: reason }),
-    activeCallsFor: () => [],
-    liveBudgetExceeded: () => false,
-  };
-  const lifecycle = makeCallLifecycle({
-    store,
-    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: TAKT_MS }),
-    finishCall: () => {},
-    releaseReserve: () => {},
-    voiceControl: () => ({ endCall: async () => {} }),
-    terminateAndBillCall,
-    hangUpAction,
-    billThunk,
-    endActiveCall: async () => {},
-    awaitAndPersistInboundElResult: async () => {},
-    reattachActiveCallCore,
-    cappedEndedAtMs,
-    classifyCallTime,
-    blockingBudgetAxis,
-    setBudgetWatchTimer: () => ({ unref() {} }),
+const anruf = (id, zusatz) => seedCall({ id, answeredAt: new Date().toISOString(), maxDurationS: MAX_DAUER_S, ...zusatz });
+
+test("Frist-Ende Bewertung: nur ein ausgehender EL-Anruf mit Gespraech endet an der Hoechstdauer als completed", async () => {
+  const srv = await startServer({
+    env: { FRISTEN_TAKT_MS: "40", ANTHROPIC_BASE_URL: NICHT_ERREICHBAR, ANTHROPIC_API_KEY: "test-frist-ende-key" },
+    seed: seedState({
+      calls: [
+        anruf("call_el_mit", { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI, transcript: ZEILEN }),
+        anruf("call_el_ohne", { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI, transcript: [] }),
+        anruf("call_fremd", { transcript: ZEILEN }),
+      ],
+    }),
   });
-  await lifecycle.terminateExpiredCall(row);
-  return row;
-}
-
-const TABELLE = [
-  { name: "ausgehender EL-Anruf mit Gespraech endet completed und wird bewertet", zusatz: { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI, transcript: ZEILEN }, status: "completed" },
-  { name: "ausgehender EL-Anruf ohne Gespraech endet failed", zusatz: { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI, transcript: [] }, status: "failed" },
-  { name: "ausgehender EL-Anruf ohne Gespraechsfeld endet failed", zusatz: { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI }, status: "failed" },
-  { name: "anderer Anruf mit Gespraech endet failed", zusatz: { transcript: ZEILEN }, status: "failed" },
-];
-
-for (const { name, zusatz, status } of TABELLE) {
-  test(`Frist-Ende Bewertung: ${name}`, async () => {
-    const row = await endeBeiHoechstdauer(zusatz);
-    assert.equal(row.status, status);
-    assert.equal(row.failureReason, "max-duration-cap");
-  });
-}
+  try {
+    const stand = await waitForStoreState(srv, (s) => s.calls.every((c) => c.status !== "active"), FRIST_MS);
+    const statusVon = (id) => stand.calls.find((c) => c.id === id).status;
+    assert.equal(statusVon("call_el_mit"), "completed");
+    assert.equal(statusVon("call_el_ohne"), "failed");
+    assert.equal(statusVon("call_fremd"), "failed");
+    for (const c of stand.calls) assert.equal(c.failureReason, "max-duration-cap");
+  } finally {
+    await srv.stop();
+  }
+});
