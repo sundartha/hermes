@@ -70,8 +70,7 @@ export function rohwerteProvisioning(
       { fallback: MS_PER_DAY, min: 0 },
     ),
     releaseGraceMs:
-      (numEnv("RELEASE_GRACE_DAYS", env.RELEASE_GRACE_DAYS, { fallback: 0, min: 0 }) ?? 0) *
-      MS_PER_DAY,
+      numEnv("RELEASE_GRACE_DAYS", env.RELEASE_GRACE_DAYS, { fallback: 0, min: 0 }) * MS_PER_DAY,
     provisioningCountry: textEnv(env.PROVISIONING_COUNTRY, "DE"),
     geoEnabled: boolEnv("GEO_ENABLED", env.GEO_ENABLED, { fallback: false }),
     geoDbPath: env.GEO_DB_PATH ?? "",

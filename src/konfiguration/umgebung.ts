@@ -40,11 +40,21 @@ interface EnumEnvOptionen {
 }
 
 function numEnvMit(fehlerliste: string[]) {
-  return (
+  function numEnv(
+    name: string,
+    raw: string | undefined,
+    optionen: NumEnvOptionen & { fallback: number },
+  ): number;
+  function numEnv(
+    name: string,
+    raw: string | undefined,
+    optionen?: NumEnvOptionen,
+  ): number | undefined;
+  function numEnv(
     name: string,
     raw: string | undefined,
     { fallback, min, max, integer = true }: NumEnvOptionen = {},
-  ): number | undefined => {
+  ): number | undefined {
     if (raw === undefined || raw === "") return fallback;
     const parsed = parseNumEnv(raw.trim(), integer);
     if (parsed === null) {
@@ -59,7 +69,8 @@ function numEnvMit(fehlerliste: string[]) {
     }
     if (max !== undefined && parsed > max) return max;
     return parsed;
-  };
+  }
+  return numEnv;
 }
 
 function boolEnvMit(fehlerliste: string[]) {
@@ -76,7 +87,11 @@ function boolEnvMit(fehlerliste: string[]) {
 }
 
 function enumEnvMit(fehlerliste: string[]) {
-  return (name: string, raw: string | undefined, { allowed, fallback }: EnumEnvOptionen): string => {
+  return (
+    name: string,
+    raw: string | undefined,
+    { allowed, fallback }: EnumEnvOptionen,
+  ): string => {
     if (raw === undefined || raw === "") return fallback;
     const trimmed = raw.trim();
     if (allowed.includes(trimmed)) return trimmed;
@@ -119,7 +134,11 @@ function csvEnv(raw: string | undefined): string[] {
 }
 
 function routeCentsEnvMit(fehlerliste: string[]) {
-  return (name: string, raw: string | undefined, gueltigeRouten: readonly string[]): Record<string, number> => {
+  return (
+    name: string,
+    raw: string | undefined,
+    gueltigeRouten: readonly string[],
+  ): Record<string, number> => {
     const karte: Record<string, number> = {};
     for (const eintrag of csvEnv(raw)) {
       const trennIndex = eintrag.lastIndexOf(":");
