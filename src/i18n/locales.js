@@ -1,4 +1,4 @@
-import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.js";
+import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { INBOUND_NOTICES, withInboundNotice } from "./inbound-notice.ts";
 import { PROMPT_DE } from "./prompts/de.js";
 import { PROMPT_FR } from "./prompts/fr.js";
