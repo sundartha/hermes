@@ -10,6 +10,8 @@ import { makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrappe.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
+const HTTP_PAYMENT_REQUIRED = 402;
+const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAVAILABLE = 503;
 const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
@@ -104,51 +106,53 @@ async function startePlaetze(srv, belegung) {
 test("S1: vier laufende ElevenLabs-Anrufe fuellen die Plaetze, der fuenfte Start erreicht ElevenLabs nie", async () => {
   await mitElWeg(4, async ({ srv, anbieter }) => {
     await startePlaetze(srv, [2, 1, 1]);
-    const abgelehnt = await rufeAn(srv, 3, zielVon(900));
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE);
+    const wartend = await rufeAn(srv, 3, zielVon(900));
+    assert.equal(wartend.status, HTTP_OK);
+    assert.equal(wartend.body.status, "dialing");
+    assert.equal(wartend.body.deduplicated, false);
     assert.equal(anbieter.starts().length, 4, "ElevenLabs sieht 4 Starts, nicht 5");
   });
 });
 
-test("S9: die Ablehnung hinterlaesst keinen Anrufdatensatz und gibt die Budget-Reserve zurueck", async () => {
+test("S9: der wartende Anruf haelt Platz und Budget-Reserve, ohne zu waehlen", async () => {
   await mitElWeg(
     4,
-    async ({ srv }) => {
+    async ({ srv, anbieter }) => {
       await startePlaetze(srv, [2, 1, 1]);
-      for (const versuch of [900, 901]) {
-        const abgelehnt = await rufeAn(srv, KNAPPER_KUNDE, zielVon(versuch));
-        assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-        assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE, "die Reserve ist zurueck: kein Budget-Grund beim zweiten Versuch");
-      }
-      const stand = await waitForStoreState(srv, (s) => s.calls.length >= 6);
-      const ohneWahl = stand.calls.filter((call) => call.failureReason === "not-placed:warteschlange");
+      const wartend = await rufeAn(srv, KNAPPER_KUNDE, zielVon(900));
+      assert.equal(wartend.status, HTTP_OK);
+      assert.equal(wartend.body.status, "dialing");
+      const zweiter = await rufeAn(srv, KNAPPER_KUNDE, zielVon(901));
+      assert.equal(zweiter.status, HTTP_PAYMENT_REQUIRED);
+      assert.equal(zweiter.body.reason, "reserve_erschoepft", "die Reserve haelt der wartende Anruf");
+      const stand = await waitForStoreState(srv, (s) => s.calls.length >= 5);
       assert.deepEqual(
-        ohneWahl.map((call) => [call.tenantId, call.status, Boolean(call.callControlId)]),
-        [
-          [kundeVon(KNAPPER_KUNDE), "failed", false],
-          [kundeVon(KNAPPER_KUNDE), "failed", false],
-        ],
+        stand.calls
+          .filter((call) => call.tenantId === kundeVon(KNAPPER_KUNDE))
+          .map((call) => [call.status, Boolean(call.callControlId), call.failureReason, call.reserveCents, call.reserveReleased]),
+        [["active", false, null, BUDGET_FUER_EINEN_ANRUF_CENTS, false]],
       );
+      assert.equal(anbieter.starts().length, 4);
     },
     { mitBudget: true },
   );
 });
 
 const HTTP_TEXT = {
-  de: "Hermes ist gerade ausgelastet. Bitte in wenigen Minuten erneut versuchen.",
-  fr: "Hermes est actuellement à pleine capacité. Veuillez réessayer dans quelques minutes.",
+  de: "Fuer dieses Hermes-Konto laufen bereits so viele Anrufe gleichzeitig wie erlaubt. Bitte warten, bis ein laufender Anruf endet.",
+  fr: "Ce compte Hermes a déjà atteint le nombre d'appels simultanés autorisé. Veuillez attendre la fin d'un appel en cours.",
 };
 
 for (const [sprache, erwartet] of Object.entries(HTTP_TEXT))
-  test(`S6: die HTTP-Ablehnung ausgelastet kommt in der Sprache des Kunden (${sprache})`, async () => {
+  test(`S6: die HTTP-Ablehnung kommt in der Sprache des Kunden (${sprache})`, async () => {
     await mitElWeg(
       4,
-      async ({ srv }) => {
-        await startePlaetze(srv, [2, 1, 1]);
+      async ({ srv, anbieter }) => {
+        await startePlaetze(srv, [0, 0, 0, 2]);
         const abgelehnt = await rufeAn(srv, KNAPPER_KUNDE, zielVon(900));
-        assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-        assert.equal(abgelehnt.body.error, KEINE_WARTESCHLANGE, erwartet);
+        assert.equal(abgelehnt.status, HTTP_TOO_MANY_REQUESTS);
+        assert.equal(abgelehnt.body.error, erwartet);
+        assert.equal(anbieter.starts().length, 2);
       },
       { sprache },
     );
@@ -170,24 +174,34 @@ async function ersterAnrufNach4(srv) {
 }
 
 test("S22: ein vom Anbieter gemeldetes Ende des Angerufenen-Beins gibt den Platz eines ElevenLabs-Anrufs frei", async () => {
-  await mitElWeg(4, async ({ srv }) => {
+  await mitElWeg(4, async ({ srv, anbieter }) => {
     await startePlaetze(srv, [2, 1, 1]);
     const callId = await ersterAnrufNach4(srv);
     await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     await beinLegtAuf(srv, callId);
     await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
-    assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_OK);
+    const startsVorher = anbieter.starts().length;
+    const neu = await rufeAn(srv, 3, zielVon(900));
+    assert.equal(neu.status, HTTP_OK);
+    await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === neu.body.callId).callControlId));
+    assert.equal(anbieter.starts().length, startsVorher + 1, "der frei gewordene Platz wird genutzt");
   });
 });
 
 test("Ende: ein ElevenLabs-Anruf mit gestarteter Sitzung bleibt auch nach einem gemeldeten failed belegt", async () => {
-  await mitElWeg(4, async ({ srv }) => {
+  await mitElWeg(4, async ({ srv, anbieter }) => {
     await startePlaetze(srv, [2, 1, 1]);
     const callId = await ersterAnrufNach4(srv);
     await initInhaltFuer(srv, { callId, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     await beinLegtAuf(srv, callId, { vomElBein: true });
     await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === callId).billedAt));
-    assert.equal((await rufeAn(srv, 3, zielVon(900))).status, HTTP_UNAVAILABLE);
+    const startsVorher = anbieter.starts().length;
+    const wartend = await rufeAn(srv, 3, zielVon(900));
+    assert.equal(wartend.status, HTTP_OK);
+    assert.equal(wartend.body.status, "dialing");
+    assert.equal(anbieter.starts().length, startsVorher, "der Platz ist belegt: es wird nicht gewaehlt");
+    const stand = srv.readStore();
+    assert.equal(stand.calls.find((call) => call.id === wartend.body.callId).callControlId, null);
   });
 });
 

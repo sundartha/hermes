@@ -14,7 +14,6 @@ import { initInhaltFuer, vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUm
 
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
-const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const AUFTRAG = "Tisch fuer zwei reservieren (EL-Freigabe)";
 const EL_PLAETZE_NUTZBAR = 4;
 const KUNDEN = EL_PLAETZE_NUTZBAR + 1;
@@ -98,10 +97,15 @@ async function fuelleElPlaetze(srv, { nachErstem = async () => {} } = {}) {
   }
 }
 
-async function assertAusgelastet(srv, nummer) {
+async function assertWartet(srv, nummer) {
   const antwort = await rufeAn(srv, KUNDEN - 1, nummer);
-  assert.equal(antwort.status, HTTP_UNAVAILABLE);
-  assert.equal(antwort.body.error, KEINE_WARTESCHLANGE);
+  assert.equal(antwort.status, HTTP_OK);
+  assert.equal(antwort.body.status, "dialing");
+  assert.equal(antwort.body.deduplicated, false);
+  const wartend = srv.readStore().calls.find((call) => call.id === antwort.body.callId);
+  assert.equal(wartend.status, "active");
+  assert.equal(wartend.callControlId, null, "bei belegten Plaetzen wird nicht gewaehlt");
+  return antwort.body.callId;
 }
 
 async function aufDemElWeg({ env = {}, seed }, lauf) {
@@ -123,7 +127,7 @@ async function aufDemElWeg({ env = {}, seed }, lauf) {
 test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt den Platz nach dem Auflegen am Telnyx-Bein frei", async () => {
   await aufDemElWeg({ env: { ELEVENLABS_RESULT_POLL_MS: "100" }, seed: seedKunden() }, async ({ srv }) => {
     await fuelleElPlaetze(srv);
-    await assertAusgelastet(srv, 900);
+    const wartendeId = await assertWartet(srv, 900);
     const erster = srv.readStore().calls.find((call) => call.tenantId === kundeVon(0));
     await initInhaltFuer(srv, { callId: erster.id, agentId: EL_ENV.ELEVENLABS_AGENT_ID });
     const abbruch = await abrufMitFrist(`${srv.localUrl}/api/calls/${erster.id}/cancel`, {
@@ -135,7 +139,8 @@ test("S17: cancel_call bei einem ElevenLabs-Anruf mit laufendem Gespraech gibt d
     assert.equal(antwort.status, "cancelled");
     assert.equal("line_hangup_confirmed" in antwort, false);
     await waitForStoreState(srv, (s) => s.calls.find((call) => call.id === erster.id).status === "cancelled");
-    assert.equal((await rufeAn(srv, KUNDEN - 1, 901)).status, HTTP_OK);
+    const gewaehlt = await waitForStoreState(srv, (s) => Boolean(s.calls.find((call) => call.id === wartendeId).callControlId));
+    assert.equal(gewaehlt.calls.find((call) => call.id === wartendeId).status, "active");
   });
 });
 
@@ -160,7 +165,7 @@ async function s22Lauf({ verzoegerungMs }) {
     const beendet = ersterAuftrag(await waitForStoreState(srv, (s) => ersterAuftrag(s).status !== "active", 6000));
     assert.equal(beendet.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(beendet.id), { timeoutMs: 3000 });
-    await assertAusgelastet(srv, 902);
+    await assertWartet(srv, 902);
   });
 }
 

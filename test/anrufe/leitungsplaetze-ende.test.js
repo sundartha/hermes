@@ -9,7 +9,6 @@ import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "../fi
 import { starteAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
-const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Ende-Regeln)";
 const EL_PLAETZE_NUTZBAR = 4;
 const KONVERSATION_PFAD = "/v1/convai/conversations/";
@@ -53,7 +52,7 @@ async function rufeAn(srv, index, ziel) {
     headers: { "Content-Type": "application/json", "X-Internal-Tenant": kundeVon(index) },
     body: JSON.stringify({ to: ziel, objective: AUFTRAG }),
   });
-  return { status: res.status };
+  return { status: res.status, body: await res.json() };
 }
 
 async function startePlaetze(srv, anzahl, kundeJeAnruf) {
@@ -99,7 +98,7 @@ function starteElAnbieter() {
   }).then((attrappe) => ({ ...attrappe, melde: (id) => fertig.add(id) }));
 }
 
-const erster = (stand) => stand.calls.find((call) => call.failureReason !== "not-placed:warteschlange");
+const erster = (stand) => stand.calls.find((call) => call.tenantId === kundeVon(0));
 
 test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch laufendes Gespraech nicht", async () => {
   const anbieter = await starteElAnbieter();
@@ -114,7 +113,11 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
   });
   try {
     await startePlaetze(srv, EL_PLAETZE_NUTZBAR, (nummer) => nummer - 1);
-    assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(900))).status, HTTP_UNAVAILABLE);
+    const erstesWarten = await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(900));
+    assert.equal(erstesWarten.status, HTTP_OK);
+    assert.equal(erstesWarten.body.status, "dialing");
+    const gewaehlt = (zustand, callId) => Boolean(zustand.calls.find((call) => call.id === callId).callControlId);
+    assert.equal(gewaehlt(srv.readStore(), erstesWarten.body.callId), false, "bei belegten Plaetzen wird nicht gewaehlt");
     const stand = await waitForStoreState(srv, (s) => s.calls.length >= EL_PLAETZE_NUTZBAR);
     await initInhaltFuer(srv, { callId: erster(stand).id, agentId: `agent_${AGENT_KENNUNG}` });
     const gebunden = await waitForStoreState(srv, (s) => Boolean(erster(s).elevenlabsConversationId));
@@ -125,8 +128,11 @@ test("Ende: ein abgeholtes ElevenLabs-Ergebnis gibt den Platz frei, ein noch lau
     anbieter.melde(erster(gebunden).elevenlabsConversationId);
     await beinLegtAuf(srv, callId);
     await waitForStoreState(srv, (s) => erster(s).status === "completed" && Boolean(erster(s).billedAt) && Boolean(erster(s).summary));
-    assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(901))).status, HTTP_OK);
-    assert.equal((await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(902))).status, HTTP_UNAVAILABLE);
+    await waitForStoreState(srv, (s) => gewaehlt(s, erstesWarten.body.callId));
+    const zweitesWarten = await rufeAn(srv, EL_PLAETZE_NUTZBAR, zielVon(901));
+    assert.equal(zweitesWarten.status, HTTP_OK);
+    assert.equal(zweitesWarten.body.status, "dialing");
+    assert.equal(gewaehlt(srv.readStore(), zweitesWarten.body.callId), false, "der eine frei gewordene Platz ist vergeben");
   } finally {
     await srv.stop();
     await anbieter.close();

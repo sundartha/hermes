@@ -8,7 +8,6 @@ import { calleeVon, makeTelnyxSigner, vorspannUmgebung } from "./el-bein-attrapp
 import { starteAttrappe } from "./attrappen-server.js";
 
 const HTTP_OK = 200;
-const HTTP_UNAVAILABLE = 503;
 const WAHL_PFAD = "/v2/calls";
 const TTS_PFAD = "/v1/text-to-speech/";
 const ANRUFE_PRO_KUNDE = 2;
@@ -67,14 +66,16 @@ function starteAnbieter({ startPfad, startNummerMitFehler, scheitertMit, erfolg 
   });
 }
 
-async function rufeAn(srv, index, nummer) {
+async function rufeAnMitKoerper(srv, index, nummer) {
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Internal-Tenant": kundeVon(index) },
     body: JSON.stringify({ to: zielVon(nummer), objective: "Tisch reservieren (Startfehler)" }),
   });
-  return res.status;
+  return { status: res.status, body: await res.json() };
 }
+
+const rufeAn = async (srv, index, nummer) => (await rufeAnMitKoerper(srv, index, nummer)).status;
 
 const WEGE = [
   {
@@ -120,7 +121,13 @@ for (const weg of WEGE)
         assert.equal(await rufeAn(srv, fehlerKunde, fehlerNummer), fall.antwort, "Antwort an den Kunden beim Startfehler");
         const stand = await waitForStoreState(srv, (s) => s.calls.some((call) => call.status === "failed" && Boolean(call.billedAt)));
         assert.deepEqual(stand.calls.filter((call) => call.status === "failed").map((call) => call.failureReason), [fall.grund]);
-        assert.equal(await rufeAn(srv, weg.kunden - 1, fehlerNummer + 1), fall.frei ? HTTP_OK : HTTP_UNAVAILABLE);
+        const folgeAnruf = await rufeAnMitKoerper(srv, weg.kunden - 1, fehlerNummer + 1);
+        assert.equal(folgeAnruf.status, HTTP_OK);
+        assert.equal(folgeAnruf.body.status, "dialing");
+        const folgeCallId = folgeAnruf.body.callId;
+        const gewaehlt = (zustand) => Boolean(zustand.calls.find((call) => call.id === folgeCallId).callControlId);
+        if (fall.frei) await waitForStoreState(srv, gewaehlt);
+        else assert.equal(gewaehlt(srv.readStore()), false, "der Platz bleibt belegt: der Folgeanruf wartet ohne Wahl");
       } finally {
         await srv.stop();
         await anbieter.close();

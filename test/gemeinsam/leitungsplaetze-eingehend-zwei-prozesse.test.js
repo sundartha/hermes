@@ -8,8 +8,6 @@ import { waitForLog } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
-const HTTP_UNAVAILABLE = 503;
-const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const WARTEGRENZE_MS = 5_000;
 const ANTWORT_FRIST_MS = 2_000;
 const LOG_FRIST_MS = WARTEGRENZE_MS + 3_000;
@@ -20,6 +18,7 @@ const NUMMER_SQL = "SELECT e164 FROM number WHERE tenant_id = $1";
 const BELEGEN_SQL = `INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um, richtung)
   SELECT $1 || n, 'telnyx', 'tenant_fremd', now() + interval '1 hour', $2 FROM generate_series(1, $3) AS n`;
 const EINGEHEND_SQL = "SELECT count(*)::int AS anzahl FROM leitungsplatz WHERE richtung = 'eingehend'";
+const GEWAEHLT_SQL = "SELECT call_control_id FROM call WHERE id = $1";
 const ANRUFE_SQL = "SELECT count(*)::int AS anzahl FROM call WHERE direction = 'inbound'";
 
 let zaehler = 0;
@@ -47,7 +46,7 @@ async function mitBelegterLeitung(t, lauf) {
 }
 
 test(
-  "Eingehend 5: ein in Prozess A angenommener eingehender Anruf zaehlt fuer den ausgehenden Start in Prozess B",
+  "Eingehend 5: ein in Prozess A angenommener eingehender Anruf laesst den ausgehenden Start in Prozess B warten",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
@@ -58,8 +57,11 @@ test(
         (anzahl) => anzahl === EINGEHEND_BELEGT + PLAETZE_JE_EL_UEBERGABE,
       );
       const antwort = await neueAnrufe().rufeAn(b);
-      assert.equal(antwort.status, HTTP_UNAVAILABLE);
-      assert.equal((await antwort.json()).error, KEINE_WARTESCHLANGE);
+      assert.equal(antwort.status, HTTP_OK);
+      const koerper = await antwort.json();
+      assert.equal(koerper.status, "dialing");
+      const { rows: gewaehlt } = await sql(GEWAEHLT_SQL, [koerper.callId]);
+      assert.deepEqual(gewaehlt, [{ call_control_id: null }], "bei belegter Leitung wird nicht gewaehlt");
     });
   },
 );

@@ -10,7 +10,6 @@ import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
 const HTTP_TOO_MANY = 429;
-const HTTP_UNAVAILABLE = 503;
 const AUFTRAG = "Tisch fuer zwei reservieren (Kunde)";
 const EL_WEG = Object.freeze({
   ...EL_OUTBOUND_BOOT_ENV,
@@ -187,16 +186,18 @@ test("Vorpruefung: eine Ablehnung wegen Kunden-Hoechstzahl kostet keinen Sprachm
   });
 });
 
-test("Vorpruefung: eine Ablehnung ausgelastet kostet keinen Sprachmodellaufruf", async () => {
-  await mitElWeg(4, async ({ srv }) => {
+test("Vorpruefung: ein Anruf bei voller Plattform wartet und kostet keinen Sprachmodellaufruf", async () => {
+  await mitElWeg(4, async ({ srv, anbieter }) => {
     const vorher = anthropicAttrappe.anfragen();
     await startePlaetze(srv, 0, 2);
     await startePlaetze(srv, 1, 1);
     await startePlaetze(srv, 2, 1);
     const fuerVierAnrufe = anthropicAttrappe.anfragen() - vorher;
-    const abgelehnt = await rufeAn(srv, 3, zielVon(900));
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
+    const wartend = await rufeAn(srv, 3, zielVon(900));
+    assert.equal(wartend.status, HTTP_OK);
+    assert.equal(wartend.body.status, "dialing");
     assert.equal(anthropicAttrappe.anfragen() - vorher, fuerVierAnrufe + 1);
+    assert.equal(anbieter.starts().length, 4);
   });
 });
 
