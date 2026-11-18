@@ -12,7 +12,7 @@ export function rohwerteResearch(env, { boolEnv, numEnv, stripTrailingSlash }) {
       fallback: 1,
       min: 0,
     }),
-    exaApiKey: (env.EXA_API_KEY || "").trim(),
+    exaApiKey: (env.EXA_API_KEY ?? "").trim(),
     exaApiBase: stripTrailingSlash((env.EXA_API_BASE || "https://api.exa.ai").trim()),
   };
 }
