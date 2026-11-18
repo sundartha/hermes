@@ -276,9 +276,13 @@ export function makeProvisioningOrchestrator({
     }
   }
 
+  const reiheAnrufstartEin = (callId) =>
+    einreihen({ kind: ANRUFSTART_JOB, payload: { callId }, idempotencyKey: `${ANRUFSTART_JOB}_${callId}` });
+
   return {
     startQueue,
     stopQueue,
+    reiheAnrufstartEin,
     plane,
     ueberfaelligeZeitplaene,
     queueProvisioning,

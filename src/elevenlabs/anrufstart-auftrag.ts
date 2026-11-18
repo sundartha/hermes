@@ -11,6 +11,8 @@ const ABGLEICH_SEITE = 50;
 
 export const ANRUFSTART_WARTE_TAKT_MS = MS_PER_SECOND;
 
+export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt" });
+
 export const ANRUFSTART_AUSGANG = Object.freeze({
   GESTARTET: "gestartet",
   ABGEGLICHEN: "abgeglichen",
@@ -97,12 +99,21 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
   platz,
   wartefristMs = 0,
 }: Abhaengigkeiten<A>) {
+  async function setzeMarker(call: A): Promise<boolean> {
+    try {
+      return await store.anrufstartMarker.setze({
+        callId: call.id,
+        tenantId: call.tenantId,
+        jetztIso: new Date(jetztMs()).toISOString(),
+      });
+    } catch (fehler) {
+      await beendeOhneWahl(call.id, ANRUFSTART_GRUND.MARKER_FEHLT);
+      throw fehler;
+    }
+  }
+
   async function markiereVorAnbieterAufruf(call: A): Promise<void> {
-    const gesetzt = await store.anrufstartMarker.setze({
-      callId: call.id,
-      tenantId: call.tenantId,
-      jetztIso: new Date(jetztMs()).toISOString(),
-    });
+    const gesetzt = await setzeMarker(call);
     if (!gesetzt) throw new Error(`[anrufstart] Start schon versucht (call=${call.id}), kein zweiter Aufruf`);
   }
 

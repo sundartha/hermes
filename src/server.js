@@ -190,6 +190,13 @@ const inboundBridges = makeInboundBridges({
     umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });
 
+let anrufstartHandler = null;
+const anrufstartVerdrahtung = {
+  setzeHandler: (handler) => {
+    anrufstartHandler = handler;
+  },
+};
+
 const provisioning = makeProvisioningOrchestrator({
   store,
   config,
@@ -204,6 +211,7 @@ const provisioning = makeProvisioningOrchestrator({
   markProvisioningJob,
   classifyQueuedProvisioningJobs,
   findNumber,
+  anrufstartHandler: (auftrag) => anrufstartHandler(auftrag),
 });
 
 const provisionRetryWatch = makeProvisionRetryWatch({
@@ -289,6 +297,7 @@ const deps = {
   messaging,
   consultDelivery,
   elevenLabsOutbound,
+  anrufstartVerdrahtung,
   vorspannErzeuger,
   vorspannAblauf,
   inboundBridges,
