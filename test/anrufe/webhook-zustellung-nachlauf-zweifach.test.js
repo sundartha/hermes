@@ -256,8 +256,10 @@ const naechsteNachAnspruch = (anweisungen) => {
 
 const anspruchskandidaten = (mitschnitt) => mitschnitt.verbindungen().map((_, nr) => nr);
 
-const verbindungenMitRollbackSeit = (mitschnitt, kandidaten, vorher) =>
-  kandidaten.filter((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
+const verbindungenMitRollbackSeit = (mitschnitt, kandidaten, vorher) => {
+  const verbindungen = mitschnitt.verbindungen();
+  return kandidaten.filter((nr) => verbindungen[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
+};
 
 async function warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher) {
   let gefunden = [];
