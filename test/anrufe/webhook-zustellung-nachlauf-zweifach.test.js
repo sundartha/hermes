@@ -392,9 +392,11 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       relais.fortsetzen();
       await relais.abwarten();
       const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
-      const spaeter = beanspruchend.flatMap((nr) => anweisungenSeit(mitschnitt, nr, vorher));
       assert.ok(beanspruchend.length >= EINMAL);
-      assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
+      for (const nr of beanspruchend) {
+        const spaeter = anweisungenSeit(mitschnitt, nr, vorher);
+        assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
+      }
     } finally {
       relais.fortsetzen();
       await a.stop();
