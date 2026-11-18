@@ -15,7 +15,15 @@ export function rohwerteResearch(
     stripTrailingSlash,
     textEnv,
   }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "numEnv" | "stripTrailingSlash" | "textEnv">,
-) {
+): {
+  researchEnabled: boolean;
+  researchMaxUses: number;
+  researchSearchFeeCents: number | undefined;
+  lookupEnabled: boolean;
+  lookupSearchFeeCents: number | undefined;
+  exaApiKey: string;
+  exaApiBase: string;
+} {
   return {
     researchEnabled: boolEnv("RESEARCH_ENABLED", env.RESEARCH_ENABLED, { fallback: false }),
     researchMaxUses: 1,

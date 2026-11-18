@@ -13,7 +13,13 @@ export function rohwerteStore(
     WEBHOOK_ZUSTELLUNG_LOESCHTAKT_MS?: string | undefined;
   },
   { numEnv, textEnv }: Pick<ReturnType<typeof umgebungMit>, "numEnv" | "textEnv">,
-) {
+): {
+  storeBackend: string;
+  databaseUrl: string;
+  kennzahlenDatabaseUrl: string;
+  queueBackend: string;
+  webhookZustellungLoeschtaktMs: number | undefined;
+} {
   return {
     storeBackend: textEnv(env.STORE_BACKEND, "json").toLowerCase(),
     databaseUrl: env.DATABASE_URL ?? "",
