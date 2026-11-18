@@ -22,7 +22,7 @@ import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
 import { KEINE_DB_RESERVIERUNG, LEITUNGSPLATZ_ENTSCHEIDUNG, RESERVIERUNG_GRUND } from "../store.js";
-import { fuehreToreAus, GatesBestanden } from "./gates-bestanden.ts";
+import { fuehreToreAus } from "./gates-bestanden.ts";
 import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.ts";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
@@ -135,8 +135,7 @@ function torFehlerAblehnung(gate, ctx, fehler) {
 }
 
 export async function runOutboundGates({ gates, ctx }) {
-  const ergebnis = await fuehreToreAus(gates, ctx, torFehlerAblehnung);
-  return ergebnis instanceof GatesBestanden ? null : ergebnis;
+  return await fuehreToreAus(gates, ctx, torFehlerAblehnung);
 }
 
 export function makeOutboundGates({

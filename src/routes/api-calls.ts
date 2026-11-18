@@ -22,6 +22,7 @@ import {
   leitungsplatzAblehnung,
   runOutboundGates,
 } from "../telephony/outbound-gates.js";
+import { GatesBestanden } from "../telephony/gates-bestanden.ts";
 import { NOT_PLACED, WARTEFRIST_REASON, startRejectionReason } from "../telephony/failure-reason.ts";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
@@ -54,11 +55,13 @@ import {
 } from "../utils/http.ts";
 
 
+export type WaehleAnruf = (call: Anruf, bestanden: GatesBestanden) => Promise<Wahlausgang>;
+
 type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
 const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
 const sprachtexteFuer: (language: string) => unknown = localeFor;
-const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | null | undefined> = runOutboundGates;
+const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | GatesBestanden> = runOutboundGates;
 const vorabBriefing: (args: {
   objective: unknown;
   ownerNotes: unknown;
@@ -676,7 +679,7 @@ export function makeCallRoutes({
     return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
   }
 
-  async function waehleAnruf(call: Anruf): Promise<Wahlausgang> {
+  async function waehleKern(call: Anruf): Promise<Wahlausgang> {
     const wahl = outboundWegFuer({ config, store, call });
     meldeOutboundWeg({ callId: call.id, wahl });
     if (!wahl.weg) return { abbruch: { grund: wahl.grund } };
@@ -687,6 +690,8 @@ export function makeCallRoutes({
     const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
     return { callControlId: gewaehlt.callControlId };
   }
+
+  const waehleAnruf: WaehleAnruf = waehleKern;
 
   function armeTimer(call: Anruf) {
     armMaxDurationTimer(call, call.twilioSid);
@@ -708,7 +713,7 @@ export function makeCallRoutes({
   async function starteWartendenAnruf(call: Anruf) {
     let ausgang: Wahlausgang;
     try {
-      ausgang = await waehleAnruf(call);
+      ausgang = await waehleKern(call);
     } catch (fehler) {
       await beendeNachStartFehler(call, fehler);
       throw fehler;
@@ -782,8 +787,9 @@ export function makeCallRoutes({
 
     const callId = newId("call");
     const ctx: Kontext = { req, to, objective, b, callId };
-    const denial = await torePruefen({ gates: outboundGates, ctx });
-    if (denial) {
+    const ergebnis = await torePruefen({ gates: outboundGates, ctx });
+    if (!(ergebnis instanceof GatesBestanden)) {
+      const denial = ergebnis;
       beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
       return res.status(denial.status).json(denialResponseBody(denial));
     }
@@ -874,7 +880,7 @@ export function makeCallRoutes({
     if (wartet) return await reiheWartendenAnrufEin({ call, ctx, res });
 
     try {
-      const ausgang = await waehleAnruf(call);
+      const ausgang = await waehleAnruf(call, ergebnis);
       const { abbruch } = ausgang;
       if (abbruch?.grund) return await brichVorWahlAb({ call, grund: abbruch.grund, res });
       if (abbruch) return res.status(HTTP_CONFLICT).json(vorWahlAbgebrochenBody(call.id));
