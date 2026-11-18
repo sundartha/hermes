@@ -3,9 +3,12 @@ import {
   BEDARF,
   LEITUNGSPLATZ_ENTSCHEIDUNG,
   RICHTUNG,
+  WARTE_ABLAUF_S,
+  WARTE_ANBIETER,
   ablaufSekunden,
   belegungAus,
   entscheideAus,
+  entscheideWartendeAus,
 } from "./leitungsplaetze.js";
 
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
@@ -16,7 +19,8 @@ const AKTUELLE_ZEILEN_SQL = `${ZEILEN_SQL} WHERE ablauf_um > now()`;
 const BELEGEN_SQL = `
   INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um, richtung)
   SELECT $1, anbieter, $2, now() + make_interval(secs => $4), $5 FROM unnest($3::text[]) AS anbieter`;
-const BELEGTE_ANRUFE_SQL = `SELECT DISTINCT call_id AS "callId" FROM leitungsplatz WHERE ablauf_um > now() AND call_id = ANY($1::text[])`;
+const BELEGTE_ANRUFE_SQL = `SELECT DISTINCT call_id AS "callId" FROM leitungsplatz WHERE ablauf_um > now() AND richtung <> $2 AND call_id = ANY($1::text[])`;
+const WARTEPLATZ_LOESCHEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1 AND richtung = $2`;
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
@@ -69,6 +73,22 @@ export function makePostgresLeitungsplaetze(runner) {
     }
   }
 
+  async function belegenWartend({ callId, tenantId }) {
+    try {
+      return await inTransaktion(async (client) => {
+        await client.query(SPERRE_SQL);
+        await client.query(ABGELAUFENE_LOESCHEN_SQL);
+        const { rows } = await client.query(ZEILEN_SQL);
+        const entscheidung = entscheideWartendeAus(rows, { tenantId });
+        if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
+          await client.query(BELEGEN_SQL, [callId, tenantId, [WARTE_ANBIETER], WARTE_ABLAUF_S, RICHTUNG.WARTEND]);
+        return entscheidung;
+      }, callId);
+    } catch (fehler) {
+      return imZweifelVoll(fehler).entscheidung;
+    }
+  }
+
   async function belegenAusgehend({ callId, tenantId, weg, maxDauerS, hoechstzahlKunde }) {
     try {
       return await inTransaktion(async (client) => {
@@ -76,8 +96,10 @@ export function makePostgresLeitungsplaetze(runner) {
         await client.query(ABGELAUFENE_LOESCHEN_SQL);
         const { rows } = await client.query(ZEILEN_SQL);
         const entscheidung = entscheideAus(rows, { tenantId, weg, hoechstzahlKunde });
-        if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI)
+        if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) {
+          await client.query(WARTEPLATZ_LOESCHEN_SQL, [callId, RICHTUNG.WARTEND]);
           await client.query(BELEGEN_SQL, [callId, tenantId, BEDARF[weg], ablaufSekunden(weg, maxDauerS), RICHTUNG.AUSGEHEND]);
+        }
         return { entscheidung };
       }, callId);
     } catch (fehler) {
@@ -109,9 +131,9 @@ export function makePostgresLeitungsplaetze(runner) {
   }
 
   async function belegteAnrufe(callIds) {
-    const { rows } = await inTransaktion((client) => client.query(BELEGTE_ANRUFE_SQL, [callIds]));
+    const { rows } = await inTransaktion((client) => client.query(BELEGTE_ANRUFE_SQL, [callIds, RICHTUNG.WARTEND]));
     return new Set(rows.map((zeile) => zeile.callId));
   }
 
-  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung, belegteAnrufe };
+  return { pruefenAusgehend, belegenAusgehend, belegenWartend, belegenEingehend, freigeben, belegung, belegteAnrufe };
 }

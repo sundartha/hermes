@@ -216,6 +216,7 @@ interface Bereiche {
 interface Leitungsplaetze {
   pruefenAusgehend: (anfrage: PlatzAnfrage) => Promise<string>;
   belegenAusgehend: (anfrage: PlatzAnfrage & { callId: string; maxDauerS: number | undefined }) => Promise<{ entscheidung: string }>;
+  belegenWartend: (anfrage: { callId: string; tenantId: string | undefined }) => Promise<string>;
   freigeben: (callId: string) => unknown;
 }
 
@@ -499,14 +500,18 @@ async function belegePlatzOderWarte({
   ctx: Kontext;
   felder: { id: string };
   wartet: boolean;
-}) {
-  if (wartet) return null;
-  const { entscheidung } = await leitungsplaetze.belegenAusgehend({
-    ...platzAnfrage(ctx),
-    callId: felder.id,
-    maxDauerS: ctx.maxDur,
-  });
-  return entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI ? null : entscheidung;
+}): Promise<{ wartet: boolean; abgelehnt: string | null }> {
+  if (!wartet) {
+    const { entscheidung } = await leitungsplaetze.belegenAusgehend({
+      ...platzAnfrage(ctx),
+      callId: felder.id,
+      maxDauerS: ctx.maxDur,
+    });
+    if (entscheidung === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return { wartet: false, abgelehnt: null };
+    if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL) return { wartet: false, abgelehnt: entscheidung };
+  }
+  const warteplatz = await leitungsplaetze.belegenWartend({ callId: felder.id, tenantId: ctx.tenantId });
+  return { wartet: true, abgelehnt: warteplatz === LEITUNGSPLATZ_ENTSCHEIDUNG.FREI ? null : warteplatz };
 }
 
 async function claimCallRecord({
@@ -533,14 +538,13 @@ async function claimCallRecord({
   if (laufender) return { call: laufender, created: false };
   const denial = await callQuotaDenial(ctx);
   if (denial) return { denial, created: false };
-  const abgelehnt = await belegePlatzOderWarte({ leitungsplaetze, ctx, felder, wartet });
-  const imRennenVerloren = abgelehnt === LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
-  if (abgelehnt && !imRennenVerloren)
-    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: abgelehnt }), created: false };
+  const platz = await belegePlatzOderWarte({ leitungsplaetze, ctx, felder, wartet });
+  if (platz.abgelehnt)
+    return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: platz.abgelehnt }), created: false };
   const call = store.createCall(felder);
   await store.persistCall(call.id);
   zaehleAnrufGestartet("outbound");
-  return { call, created: true, wartet: wartet || imRennenVerloren };
+  return { call, created: true, wartet: platz.wartet };
 }
 
 function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anruf; ctx: Kontext; config: Konfiguration; deduplicated: boolean }) {
