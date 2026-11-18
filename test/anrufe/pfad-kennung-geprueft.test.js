@@ -83,6 +83,8 @@ test("pfad-kennung-geprueft: eine abgewiesene Kennung loest keine Wirkung am Anr
     assert.equal(antwort.status, HTTP_BAD_REQUEST);
     const abbruch = await rufe(srv, ROUTEN[0], lang);
     assert.equal(abbruch.status, HTTP_BAD_REQUEST);
+    const abfrage = await rufe(srv, ROUTEN[1], lang);
+    assert.equal(abfrage.status, HTTP_BAD_REQUEST);
     assert.doesNotMatch(srv.stdout, /ERR_HTTP_HEADERS_SENT/);
     const anrufe = srv.readStore().calls;
     assert.equal(anrufe.find((c) => c.id === lang).status, "active");
