@@ -76,7 +76,7 @@ async function endeMitBudget({ srv, anbieter, sql }, ziel) {
 test("PG-MAXDAUER: ein EL-Anruf endet per SQL nach seiner Max-Dauer, ein zugleich gestarteter laengerer laeuft weiter", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   const { ziel } = neueAnrufe();
-  await mitHermesAufPostgres(t, {}, async ({ srv, anbieter, sql }) => {
+  await mitHermesAufPostgres(t, { env: FRISTEN_ENV }, async ({ srv, anbieter, sql }) => {
     const [lang, kurz] = [ziel(), ziel()];
     await startet(srv, { to: lang, max_duration_s: LANG_S });
     await startet(srv, { to: kurz, max_duration_s: KURZ_S });

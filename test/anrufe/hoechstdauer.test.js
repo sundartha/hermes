@@ -26,7 +26,9 @@ const POLL_TIMEOUT_MS = MAX_DURATION_S * MS_PER_SECOND + POLL_PUFFER_MS;
 const DOMESTIC_TO = "+4915112345678";
 
 async function placeCappedCall() {
-  const srv = await startServer({ env: vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]) });
+  const srv = await startServer({
+    env: { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), FRISTEN_TAKT_MS: "40" },
+  });
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

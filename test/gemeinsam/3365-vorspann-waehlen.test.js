@@ -113,6 +113,7 @@ const serverEinstellungen = (attrappe, env = {}) => ({
     TELNYX_ACCOUNT_SID: "acct_3365",
     PUBLIC_URL,
     HERMES_DEPLOY_TOKEN: DEPLOY_TOKEN,
+    FRISTEN_TAKT_MS: "40",
     ...env,
   },
   seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }),
