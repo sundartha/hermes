@@ -228,7 +228,14 @@ async function endeDesAuftragsAnrufs(srv) {
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
   await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40" }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
-    await initInhaltFuer(srv, { callId: auftragsAnruf(srv.readStore()).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
+    const callId = auftragsAnruf(srv.readStore()).id;
+    const ereignis = { data: { id: "evt-gw0-kostendecke", event_type: "call.answered", payload: { call_control_id: calleeVon(callId) } } };
+    const angenommen = await abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(ereignis),
+    });
+    assert.equal(angenommen.status, HTTP_OK);
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.failureReason, "budget-exhausted");
     await waitUntil(() => anbieter.beendetGespraech(anruf.id), { timeoutMs: 3000 });
