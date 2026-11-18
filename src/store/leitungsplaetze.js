@@ -8,9 +8,13 @@ export const LEITUNGSPLATZ_ENTSCHEIDUNG = Object.freeze({
   KUNDE_VOLL: "kunde_voll",
 });
 
-export const RICHTUNG = Object.freeze({ AUSGEHEND: "ausgehend", EINGEHEND: "eingehend" });
+export const RICHTUNG = Object.freeze({ AUSGEHEND: "ausgehend", EINGEHEND: "eingehend", WARTEND: "wartend" });
 
 export const AUSGEHEND_JE_KUNDE = 2;
+export const WARTENDE_JE_KUNDE = 2;
+export const WARTENDE_GESAMT = 10;
+export const WARTE_ANBIETER = "warteschlange";
+export const WARTE_ABLAUF_S = 600;
 
 const KAPAZITAET = Object.freeze({ [ANBIETER.TELNYX]: 100, [ANBIETER.ELEVENLABS]: 6 });
 const RESERVE = Object.freeze({ [ANBIETER.TELNYX]: 10, [ANBIETER.ELEVENLABS]: 2 });
@@ -41,6 +45,15 @@ export function entscheideAus(aktuell, { tenantId, weg, hoechstzahlKunde = Infin
     : LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL;
 }
 
+export function entscheideWartendeAus(aktuell, { tenantId }) {
+  const wartende = new Map(
+    aktuell.filter((zeile) => zeile.richtung === RICHTUNG.WARTEND).map((zeile) => [zeile.callId, zeile.tenantId]),
+  );
+  const vomKunden = [...wartende.values()].filter((kunde) => kunde === tenantId).length;
+  if (vomKunden >= WARTENDE_JE_KUNDE) return LEITUNGSPLATZ_ENTSCHEIDUNG.KUNDE_VOLL;
+  return wartende.size >= WARTENDE_GESAMT ? LEITUNGSPLATZ_ENTSCHEIDUNG.ANBIETER_VOLL : LEITUNGSPLATZ_ENTSCHEIDUNG.FREI;
+}
+
 export const belegungAus = (zeilen) =>
   Object.values(ANBIETER).map((anbieter) => ({
     anbieter,
@@ -63,9 +76,18 @@ export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
     return entscheide(anfrage);
   }
 
+  async function belegenWartend({ callId, tenantId }) {
+    const entscheidung = entscheideWartendeAus(aktuelleZeilen(), { tenantId });
+    if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return entscheidung;
+    const ablaufMs = jetztMs() + WARTE_ABLAUF_S * MS_PER_SECOND;
+    zeilen.set(`${callId}|${WARTE_ANBIETER}`, { anbieter: WARTE_ANBIETER, callId, tenantId, ablaufMs, richtung: RICHTUNG.WARTEND });
+    return entscheidung;
+  }
+
   async function belegenAusgehend({ callId, tenantId, weg, maxDauerS, hoechstzahlKunde }) {
     const entscheidung = entscheide({ tenantId, weg, hoechstzahlKunde });
     if (entscheidung !== LEITUNGSPLATZ_ENTSCHEIDUNG.FREI) return { entscheidung };
+    zeilen.delete(`${callId}|${WARTE_ANBIETER}`);
     const ablaufMs = jetztMs() + ablaufSekunden(weg, maxDauerS) * MS_PER_SECOND;
     for (const anbieter of BEDARF[weg])
       zeilen.set(`${callId}|${anbieter}`, { anbieter, callId, tenantId, ablaufMs, richtung: RICHTUNG.AUSGEHEND });
@@ -88,10 +110,15 @@ export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
 
   async function belegteAnrufe(callIds) {
     const gesucht = new Set(callIds);
-    return new Set(aktuelleZeilen().map((zeile) => zeile.callId).filter((callId) => gesucht.has(callId)));
+    return new Set(
+      aktuelleZeilen()
+        .filter((zeile) => zeile.richtung !== RICHTUNG.WARTEND)
+        .map((zeile) => zeile.callId)
+        .filter((callId) => gesucht.has(callId)),
+    );
   }
 
-  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung, belegteAnrufe };
+  return { pruefenAusgehend, belegenAusgehend, belegenWartend, belegenEingehend, freigeben, belegung, belegteAnrufe };
 }
 
 export const leitungsplaetze = makeLeitungsplaetze();

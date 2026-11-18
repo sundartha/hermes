@@ -119,6 +119,7 @@ const leitungsplaetzeMit = (entscheidung, aufrufe, belegenEntscheidung = entsche
     aufrufe.belegen.push(anfrage);
     return { entscheidung: belegenEntscheidung };
   },
+  belegenWartend: async () => LEITUNGSPLATZ_ENTSCHEIDUNG.FREI,
   freigeben: () => {},
 });
 
