@@ -76,7 +76,7 @@ test("[abgenommen D1] Datum, Uhrzeit und Betrag kommen als eigene Angaben im Erg
         ? { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_DATA_COLLECTION }
         : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

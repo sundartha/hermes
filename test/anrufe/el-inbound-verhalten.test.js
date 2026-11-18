@@ -24,6 +24,7 @@ const FRIST_WARTE_MS = 15000;
 const ANGENOMMEN = "in-progress";
 const ANBIETER_SCHLUESSEL = "KEYtest-r6";
 const HTTP_FEHLER = 500;
+const FRISTEN_TAKT_MS = 40;
 
 let laufnummer = 0;
 const eindeutig = () => `r6-${(laufnummer += 1)}`;
@@ -189,24 +190,23 @@ test("3395-R6-4: ausgehende Bruecke - ungebunden oder jung bindet nicht durch, d
 });
 
 test("3395-R6-5: abgelaufene aeussere Frist (Neustart) leitet den Traeger genau einmal auf den Rueckfall mit quelle=frist um", async () => {
-  const calls = [eingehend(WARTET_ID, { startedAt: isoVor(ABGELAUFEN_S), answeredAt: isoVor(ABGELAUFEN_S) })];
+  const calls = [eingehend(WARTET_ID, { startedAt: isoVor(ABGELAUFEN_S), answeredAt: isoVor(ABGELAUFEN_S), fristUebergabeAt: isoVor(ABGELAUFEN_S) })];
   await mitTraegerAnbieter(HTTP_OK, async ({ anfragen, env }) => {
     await mitServer(calls, async (srv) => {
       await waitForLog(srv, new RegExp(`\\[el-inbound\\] umgeleitet call=${WARTET_ID}\\n`), FRIST_WARTE_MS);
       assert.deepEqual(zeilenMit(srv, "[el-inbound]").slice(0, 3), [
-        "[el-inbound] Fristen re-armiert: 1 Anrufe",
-        `[el-inbound] frist_abgelaufen call=${WARTET_ID} frist=aussen`,
+        `[el-inbound] frist_abgelaufen call=${WARTET_ID} frist=lauf`,
         `[el-inbound] umgeleitet call=${WARTET_ID}`,
       ]);
       assert.equal(anfragen.length, 1);
       assert.ok(anfragen[0].pfad.includes(TRAEGER_SID), anfragen[0].pfad);
       assert.equal(anfragen[0].formular.get("Url"), rueckfallZiel(WARTET_ID));
-    }, env);
+    }, { ...env, FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) });
   });
 });
 
 test("3395-R6-6: scheitert die Umleitung, wird das Traeger-Bein aufgelegt; scheitert auch das, steht beides im Log", async () => {
-  const calls = [eingehend(WARTET_ID, { startedAt: isoVor(ABGELAUFEN_S), answeredAt: isoVor(ABGELAUFEN_S) })];
+  const calls = [eingehend(WARTET_ID, { startedAt: isoVor(ABGELAUFEN_S), answeredAt: isoVor(ABGELAUFEN_S), fristUebergabeAt: isoVor(ABGELAUFEN_S) })];
   await mitTraegerAnbieter(HTTP_FEHLER, async ({ anfragen, env }) => {
     await mitServer(calls, async (srv) => {
       await waitForLog(srv, new RegExp(`\\[el-inbound\\] auflegen_fehlgeschlagen call=${WARTET_ID}: `), FRIST_WARTE_MS);
@@ -214,7 +214,7 @@ test("3395-R6-6: scheitert die Umleitung, wird das Traeger-Bein aufgelegt; schei
       assert.equal(zeilen.filter((zeile) => zeile.includes("umgeleitet")).length, 0);
       assert.match(zeilen.find((zeile) => zeile.includes("umleitung_fehlgeschlagen")), new RegExp(`^\\[el-inbound\\] umleitung_fehlgeschlagen call=${WARTET_ID}: .+`));
       assert.ok(anfragen.length >= 2, "Umleitung und Auflegen gingen an den Anbieter");
-    }, env);
+    }, { ...env, FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) });
   });
 });
 

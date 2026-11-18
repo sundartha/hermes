@@ -379,7 +379,7 @@ async function warteBis(pruefung) {
 async function bindeGespraech(outbound, callId, conversationId) {
   jsonStore.recordElevenlabsConversationId(callId, conversationId);
   await jsonStore.markAnswered(callId);
-  outbound.rearmActiveConversationPolls();
+  await outbound.abfrageDurchLauf(callId);
 }
 
 test("KV2-4 (c): das regulaere Ende markiert nachreifbar=true, reife=vorlaeufig", async () => {

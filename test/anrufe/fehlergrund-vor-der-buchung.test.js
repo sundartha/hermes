@@ -36,6 +36,7 @@ const aktiverElAnruf = (id) => {
     provider: "telnyx",
     status: "active",
     answeredAt: jetzt,
+    fristAbfrageAt: jetzt,
     startedAt: jetzt,
     maxDurationS: LANGE_HOECHSTDAUER_S,
     elevenlabsConversationId: CONVERSATION_FAILED_UNVERIFIED_ORIGINATION.conversation_id,
@@ -49,6 +50,7 @@ async function mitElevenLabsAttrappe(antwort, id, ablauf) {
       ELEVENLABS_API_BASE: attrappe.url,
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_RESULT_POLL_MS: SCHNELLER_ABRUF_MS,
+      FRISTEN_TAKT_MS: "40",
     },
     seed: seedState({ calls: [aktiverElAnruf(id)] }),
   });

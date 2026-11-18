@@ -237,7 +237,7 @@ async function pollFixtureConversation(fixture) {
     async (_url, init) =>
       init.method === "GET" ? { ok: true, status: HTTP_OK, json: async () => fixture } : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

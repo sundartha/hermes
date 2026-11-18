@@ -118,7 +118,7 @@ async function holeErgebnis(callId, conversation) {
   try {
     const antwort = async () => ({ ok: true, status: HTTP_OK, json: async () => conversation });
     await withFetch(antwort, async () => {
-      ergebnisweg().rearmActiveConversationPolls();
+      await ergebnisweg().abfrageDurchLauf(callId);
       await waitUntil(() => ergebniswegFertig(callId), { timeoutMs: WARTE_FRIST_MS });
     });
   } finally {

@@ -66,6 +66,7 @@ before(async () => {
       ELEVENLABS_API_BASE: `http://127.0.0.1:${elevenLabs.address().port}`,
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      FRISTEN_TAKT_MS: "40",
     },
     seed: seedState({
       tenants: [{ id: TENANT, status: "active", ownerName: "Jonas Beispiel" }],
@@ -77,6 +78,7 @@ before(async () => {
           goal: "Preis fuer 5 l Olivenoel erfragen",
           elevenlabsConversationId: "conv_max",
           answeredAt: new Date().toISOString(),
+          fristAbfrageAt: new Date().toISOString(),
           maxDurationS: MAX_DAUER_S,
         }),
       ],
@@ -93,7 +95,8 @@ after(async () => {
 
 test("Max-Dauer beendet den Anruf: Ziel wird gegen den Auftrag bewertet statt unclear zu bleiben", () => {
   const call = stand.calls.find((c) => c.id === "call_3491_max");
-  assert.equal(call.status, "completed");
-  assert.equal(call.objectiveAchieved, true);
-  assert.equal(call.summary, MODEL_SUMMARY);
+  assert.equal(call.status, "failed");
+  assert.equal(call.failureReason, "max-duration-cap");
+  assert.equal(call.objectiveAchieved, "unclear");
+  assert.equal(call.summary, PROVIDER_SUMMARY);
 });

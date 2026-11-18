@@ -4,18 +4,19 @@ import {
   startServer,
   seedState,
   seedCall,
-  waitForLog,
   waitForStoreState,
   DOMESTIC_TEST_NUMBER,
 } from ".././helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
+const FRISTEN_TAKT_MS = 40;
 const DOMESTIC_TARIFF_CENTS = 20;
 const DOMESTIC_TO = "+4915112345678";
 const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
   VOICE_TARIFF_DEFAULT_CENTS: "300",
   FAKE_ORIGINATE: "true",
+  FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
 };
 
 const ZOMBIE_MAX_S = 60;
@@ -25,7 +26,7 @@ const ZOMBIE_ENDED_AT = new Date(
 ).toISOString();
 const ZOMBIE_MINUTES = 1;
 
-test("R1: Boot-Re-Arm terminalisiert einen C-Telnyx-Zombie (callControlId, kein twilioSid) gekappt + gebucht", async () => {
+test("R1: Fristen-Lauf terminalisiert einen C-Telnyx-Zombie (callControlId, kein twilioSid) gekappt + gebucht", async () => {
   const srv = await startServer({
     env: TARIFF_ENV,
     seed: seedState({
@@ -69,7 +70,7 @@ test("R1: Boot-Re-Arm terminalisiert einen C-Telnyx-Zombie (callControlId, kein 
   }
 });
 
-test("R2: Boot-Re-Arm laesst einen aktiven C-Telnyx-Call mit Restzeit active (Timer neu armiert)", async () => {
+test("R2: Fristen-Lauf laesst einen aktiven C-Telnyx-Call mit Restzeit active, waehrend er den abgelaufenen beendet", async () => {
   const answeredAt = new Date(Date.now() - 10_000).toISOString();
   const srv = await startServer({
     env: TARIFF_ENV,
@@ -87,11 +88,24 @@ test("R2: Boot-Re-Arm laesst einen aktiven C-Telnyx-Call mit Restzeit active (Ti
           endedAt: null,
           maxDurationS: 180,
         }),
+        seedCall({
+          id: "zombie_takt_cc",
+          direction: "outbound",
+          to: DOMESTIC_TO,
+          status: "active",
+          provider: "telnyx",
+          twilioSid: null,
+          callControlId: "cc_zombie_takt",
+          answeredAt: ZOMBIE_ANSWERED_AT,
+          startedAt: ZOMBIE_ANSWERED_AT,
+          endedAt: null,
+          maxDurationS: ZOMBIE_MAX_S,
+        }),
       ],
     }),
   });
   try {
-    await waitForLog(srv, /\[rearm\] aktive Calls beim Boot: 1 re-armed, 0 terminalisiert/);
+    await waitForStoreState(srv, (st) => st.calls.find((c) => c.id === "zombie_takt_cc")?.status === "failed");
     const live = srv.readStore().calls.find((c) => c.id === "live_cc");
     assert.equal(live.status, "active", "aktiver C-Telnyx-Call mit Restzeit bleibt active");
     assert.equal(live.endedAt, null, "kein Ende gesetzt (nicht terminalisiert)");

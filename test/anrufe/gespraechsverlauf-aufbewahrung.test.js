@@ -138,6 +138,7 @@ test("Kriterium 4: Mandanten sehen nur den eigenen Gesprächsverlauf, ohne Sitzu
 
 const FRIST_MS = 15000;
 const POLL_TAKT_MS = 100;
+const FRISTEN_TAKT_MS = 40;
 const MAX_DAUER_S = 3600;
 const FRISCH_S = 5;
 const GESPRAECH_S = 30;
@@ -175,6 +176,7 @@ async function mitServer({ settings = {}, anruf = {}, env = {}, zeilenImStore = 
     startedAt: answeredAt,
     elevenlabsConversationId: CONV_ID,
     elBoundAt: answeredAt,
+    fristAbfrageAt: answeredAt,
     transcript: zeilenImStore.map((zeile) => ({ ...zeile, at: answeredAt })),
     ...anruf,
   });
@@ -183,6 +185,7 @@ async function mitServer({ settings = {}, anruf = {}, env = {}, zeilenImStore = 
       ELEVENLABS_API_BASE: el.url,
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
       RETENTION_DAYS: String(RETENTION_DAYS),
       ...env,
     },

@@ -8,14 +8,15 @@ import {
   tempDataDir,
   seedState,
   seedCall,
-  waitForLog,
+  waitForStoreState,
 } from "../helpers.js";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const HTTP_SWITCHING_PROTOCOLS = 101;
-const REARM_REST_MS = 10_000;
+const REARM_ABGELAUFEN_MS = 10_000_000;
+const FRISTEN_TAKT_MS = 40;
 const REARM_MAX_DURATION_S = 180;
 const ALTER_OPENAI_SCHLUESSEL = "sk-alt-nie-gelesen";
 
@@ -109,10 +110,10 @@ test("IE6-S2-4: kein WebSocket-Upgrade auf /media/telnyx", async () => {
   }
 });
 
-test("IE6-S2-5: Boot-Re-Arm ohne Realtime-Sonderfall", async () => {
-  const answeredAt = new Date(Date.now() - REARM_REST_MS).toISOString();
+test("IE6-S2-5: Fristen-Lauf ohne Realtime-Sonderfall", async () => {
+  const answeredAt = new Date(Date.now() - REARM_ABGELAUFEN_MS).toISOString();
   const srv = await startServer({
-    env: ALTE_REALTIME_SCHALTER_AN,
+    env: { ...ALTE_REALTIME_SCHALTER_AN, FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) },
     seed: seedState({
       calls: [
         seedCall({
@@ -127,7 +128,11 @@ test("IE6-S2-5: Boot-Re-Arm ohne Realtime-Sonderfall", async () => {
     }),
   });
   try {
-    await waitForLog(srv, /\[rearm\] aktive Calls beim Boot: 1 re-armed, 0 terminalisiert/);
+    const stand = await waitForStoreState(
+      srv,
+      (state) => state.calls.find((eintrag) => eintrag.id === "call_ie6s2_rearm")?.status === "failed",
+    );
+    assert.equal(stand.calls.find((eintrag) => eintrag.id === "call_ie6s2_rearm").failureReason, "max-duration-cap");
   } finally {
     await srv.stop();
   }

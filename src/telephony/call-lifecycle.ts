@@ -46,10 +46,9 @@ interface FristEintrag {
 type FristSchreiber = (frist: FristEintrag) => Promise<unknown>;
 
 interface Store {
-  load: () => { calls: Call[]; tenants: { id: string }[] };
+  load: () => { calls: Call[] };
   getCall: (callId: string) => Call | null | undefined;
   leseCall?: (callId: string) => Promise<Call | null | undefined>;
-  activeCallsForSql?: (tenantId: string) => Promise<Call[]>;
   setCallEndedAt: (callId: string, status: AnrufZustand, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
   attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
@@ -113,8 +112,6 @@ interface CallLifecycle {
   armMaxDurationTimer: (call: Call, providerCallSid: string) => void;
   armReserveReleaseTimer: (call: Call) => void;
   reattachActiveCall: (callId: string) => Promise<ReattachResult>;
-  rearmActiveCallTimers: () => void | Promise<void>;
-  rearmBudgetWatchdogs: () => void | Promise<void>;
   terminateExpiredCall: (call: Call) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
@@ -193,20 +190,6 @@ async function readCallOrRetry(
   }
 }
 
-async function activeCallsFromDatabase(store: Store, activeCallsForSql: NonNullable<Store["activeCallsForSql"]>): Promise<Call[]> {
-  const perTenant = await Promise.all(store.load().tenants.map((tenant) => activeCallsForSql(tenant.id)));
-  return perTenant.flat();
-}
-
-function withActiveCalls(store: Store, use: (calls: Call[]) => void): void | Promise<void> {
-  const { activeCallsForSql } = store;
-  if (!activeCallsForSql) {
-    use(activeCallsOf(store));
-    return undefined;
-  }
-  return activeCallsFromDatabase(store, activeCallsForSql).then(use);
-}
-
 function makeBudgetAxisSeam({
   store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
 }: BudgetAxisSeamDeps) {
@@ -236,17 +219,7 @@ function makeBudgetAxisSeam({
     setTimer,
   });
 
-  function rearmWatchdogs(): void | Promise<void> {
-    return withActiveCalls(store, (calls) => {
-      const { armedNow } = watchdog.rearm(calls.map((call) => call.id));
-      if (armedNow)
-        console.log(
-          `[budget] Boot-Re-Arm der Geld-Wache: ${String(armedNow)} aktive Legs (Takt ${String(intervalMs)} ms)`,
-        );
-    });
-  }
-
-  return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm, rearmWatchdogs };
+  return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm };
 }
 
 async function beendeUeberBudgetOhneWeg(
@@ -344,29 +317,9 @@ export function makeCallLifecycle({
     return result;
   }
 
-  function rearmActiveCallTimers(): void | Promise<void> {
-    return withActiveCalls(store, (calls) => {
-      const nowMs = Date.now();
-      let reArmed = 0;
-      let terminalized = 0;
-      for (const call of calls) {
-        const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
-        if (expired) {
-          terminateCappedCall(call.id, call.twilioSid, "failed").catch(() => undefined);
-          terminalized++;
-        } else {
-          scheduleMaxDurationEnd(call, call.twilioSid, remaining);
-          reArmed++;
-        }
-      }
-      if (reArmed || terminalized)
-        console.log(`[rearm] aktive Calls beim Boot: ${String(reArmed)} re-armed, ${String(terminalized)} terminalisiert (Zombie)`);
-    });
-  }
-
   return {
-    abgelaufeneAktive: () => abgelaufeneVon(store, classifyCallTime), armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers,
-    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs, terminateExpiredCall, terminateOverBudgetExpired,
+    abgelaufeneAktive: () => abgelaufeneVon(store, classifyCallTime), armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall,
+    terminateExpiredCall, terminateOverBudgetExpired,
     blockingAxisFor: budgetAxis.blockingAxisFor, releaseReserve,
   };
 }

@@ -388,7 +388,7 @@ test("IEL-B5-7: Poll -> Status - ein nach dem Abschluss eintreffender Status-Cal
   const anbieter = makeAnbieter(fertig);
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
-    laufend.harness.el.rearmActiveConversationPolls();
+    await laufend.harness.el.abfrageDurchLauf(call.id);
     await warteAufBuchung(laufend);
     await ruhe(RUHE_TAKTE);
     const getsVorStatus = anbieter.gets;
@@ -409,7 +409,7 @@ test("IEL-B5-8: laufender Re-Arm-Poll -> Status - keine zweite Schleife, genau e
   const anbieter = makeAnbieter(laeuftNoch);
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
-    laufend.harness.el.rearmActiveConversationPolls();
+    await laufend.harness.el.abfrageDurchLauf(call.id);
     await waitUntil(() => anbieter.gets >= ZWEIMAL, WARTE);
     const freigeben = haltAbrufFest(anbieter);
     await waitUntil(() => anbieter.offen === EINMAL, WARTE);
@@ -450,7 +450,7 @@ test("IEL-B5-10: Cap -> Status - Traeger aufgelegt, Ergebnis vor der Buchung per
   const freigeben = haltAbrufFest(anbieter);
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
-    laufend.lifecycle.rearmActiveCallTimers();
+    laufend.lifecycle.terminateExpiredCall(call).catch(() => undefined);
     await waitUntil(() => anbieter.offen === EINMAL, WARTE);
     await laufend.postStatus(call.id, "completed");
     await ruhe(RUHE_TAKTE);
@@ -473,7 +473,7 @@ test("IEL-B5-11: Cap waehrend des Nachlaufs - Ende-Anker ist der Marker, gebucht
   const anbieter = makeAnbieter(fertig);
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
-    laufend.lifecycle.rearmActiveCallTimers();
+    laufend.lifecycle.terminateExpiredCall(call).catch(() => undefined);
     await warteAufBuchung(laufend);
   });
 
@@ -489,7 +489,7 @@ test("IEL-B5-11P: Positiv-Kontrolle - Budget-Inbound mit denselben Ankern behael
   const anbieter = makeAnbieter(fertig);
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
-    laufend.lifecycle.rearmActiveCallTimers();
+    laufend.lifecycle.terminateExpiredCall(call).catch(() => undefined);
     await waitUntil(() => Boolean(call.billedAt), WARTE);
   });
 
@@ -508,8 +508,7 @@ test("IEL-B5-12: Geld-Wache -> Poll - der Beende-Thunk persistiert einmal, die S
     await laufend.postStatus(call.id, "completed");
     await waitUntil(() => anbieter.offen === EINMAL, WARTE);
     anbieter.setzeAntwort(fertig);
-    laufend.lifecycle.rearmBudgetWatchdogs();
-    await laufend.feuereGeldWache();
+    laufend.lifecycle.terminateOverBudgetExpired(call).catch(() => undefined);
     await warteAufBuchung(laufend);
     freigeben(okAntwort(CONVERSATION_DONE_WITH_ANALYSIS));
     await waitUntil(() => anbieter.offen === 0, WARTE);
@@ -608,6 +607,7 @@ test("IEL-B5-16: cancel_call Budget-Inbound - Kurzantwort, kein Abruf, Store-Fol
 
 const SPAWN_CALL_ID = "call_iel_b5";
 const SPAWN_FRIST_MS = 15000;
+const FRISTEN_TAKT_MS = 40;
 const SPAWN_WARTE = { timeoutMs: SPAWN_FRIST_MS, pollIntervalMs: 20 };
 const POLL_TAKT_MS = 500;
 const SCHNELLER_TAKT_MS = 100;
@@ -635,6 +635,7 @@ function gebundenerSeed({ answeredVorS = FRISCH_BEANTWORTET_S, maxDurationS = KU
         costProfile: EL_INBOUND,
         elevenlabsConversationId: CONV_ID,
         elBoundAt: new Date().toISOString(),
+        fristAbfrageAt: answeredAt,
         ...extra,
       }),
     ],
@@ -644,7 +645,7 @@ function gebundenerSeed({ answeredVorS = FRISCH_BEANTWORTET_S, maxDurationS = KU
 async function mitServer({ env, seed }, run) {
   const attrappe = await starteAnbieterAttrappe();
   const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ...env },
+    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS), ...env },
     seed,
   });
   try {

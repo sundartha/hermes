@@ -24,6 +24,7 @@ const EL_ANRUFWEG = Object.freeze({
   ELEVENLABS_AGENT_ID: "agent_x",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phone_x",
   ELEVENLABS_API_KEY: "key_x",
+  FRISTEN_TAKT_MS: "40",
 });
 
 const laufenderElAnruf = seedCall({
@@ -32,6 +33,7 @@ const laufenderElAnruf = seedCall({
   direction: "outbound",
   maxDurationS: 600,
   answeredAt: new Date().toISOString(),
+  fristAbfrageAt: new Date().toISOString(),
   elevenlabsConversationId: "conv_ohne_internet",
 });
 

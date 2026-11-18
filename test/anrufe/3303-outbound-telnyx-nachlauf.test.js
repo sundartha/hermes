@@ -16,6 +16,7 @@ const OUTBOUND_EL = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 const FRIST_MS = 15000;
 const WARTE = { timeoutMs: FRIST_MS, pollIntervalMs: 20 };
 const POLL_TAKT_MS = 200;
+const FRISTEN_TAKT_MS = 40;
 const LANGER_TAKT_MS = 60000;
 const MAX_DAUER_S = 3600;
 const FRISCH_S = 5;
@@ -53,14 +54,14 @@ const abgehoben = (id, extra = {}) => {
   const answeredAt = isoVor(FRISCH_S);
   return ausgehend(id, { answeredAt, startedAt: answeredAt, ...extra });
 };
-const gebunden = (id, vorS = FRISCH_S) => abgehoben(id, { elevenlabsConversationId: CONV_ID, elBoundAt: isoVor(vorS) });
+const gebunden = (id, vorS = FRISCH_S) => abgehoben(id, { elevenlabsConversationId: CONV_ID, elBoundAt: isoVor(vorS), fristAbfrageAt: isoVor(vorS) });
 
 async function mitServer({ calls, pollMs = POLL_TAKT_MS }, run) {
   const el = await starteAnbieterAttrappe();
   const telnyx = await startTelnyxProvisioningMock();
   const telnyxEnv = { TELNYX_API_BASE: telnyx.url, TELNYX_API_KEY: "KEYtest-3303", TELNYX_ACCOUNT_SID: "acct_3303" };
   const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: el.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: String(pollMs), DIAGNOSTIC_RETENTION_DAYS: "7", ...telnyxEnv },
+    env: { ELEVENLABS_API_BASE: el.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: String(pollMs), FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS), DIAGNOSTIC_RETENTION_DAYS: "7", ...telnyxEnv },
     seed: seedState({ settings: { allowSummaries: false }, calls }),
   });
   try {

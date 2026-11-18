@@ -29,7 +29,6 @@ interface InboundBridges {
   armDeadlines: (callId: string) => void;
   armBindingDeadline: (callId: string) => void;
   clearDeadlines: (callId: string) => void;
-  rearmDeadlines: () => void;
   uebergabeDurchLauf: (callId: string) => Promise<void>;
 }
 
@@ -132,12 +131,5 @@ export function makeInboundBridges({
     armiere(callId, FRIST_ART.INNEN, EL_BINDING_AFTER_ANSWER_MS);
   }
 
-  function rearmDeadlines(): void {
-    const wartende = store.load().calls.filter(umleitungFaellig);
-    const nowMs = now();
-    for (const call of wartende) armiere(call.id, FRIST_ART.AUSSEN, aeussereRestfristMs(call, nowMs));
-    if (wartende.length > 0) console.log(`[${LOG_TAG}] Fristen re-armiert: ${String(wartende.length)} Anrufe`);
-  }
-
-  return { armDeadlines, armBindingDeadline, clearDeadlines, rearmDeadlines, uebergabeDurchLauf };
+  return { armDeadlines, armBindingDeadline, clearDeadlines, uebergabeDurchLauf };
 }

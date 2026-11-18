@@ -11,6 +11,7 @@ import {
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const HTTP_OK = 200;
 const CALL_ID = "call_boot_rearm";
+const FRISTEN_TAKT_MS = 40;
 
 const CONV_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
 const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
@@ -48,6 +49,7 @@ function activeElCallSeed() {
         startedAt: ANSWERED_AT,
         maxDurationS: 3600,
         elevenlabsConversationId: CONV_ID,
+        fristAbfrageAt: ANSWERED_AT,
       }),
     ],
   });
@@ -56,7 +58,7 @@ function activeElCallSeed() {
 test("EL-BOOT-REARM: ein aktiver EL-Call mit conversation_id wird nach dem Boot fertiggestellt (Transkript+Zusammenfassung, Status verlaesst 'active')", async () => {
   const mock = await startResultMock();
   const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: mock.url, ELEVENLABS_API_KEY: "test-key" },
+    env: { ELEVENLABS_API_BASE: mock.url, ELEVENLABS_API_KEY: "test-key", FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) },
     seed: activeElCallSeed(),
   });
   try {

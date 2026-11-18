@@ -118,7 +118,7 @@ test("persistiert wird die sip_call_id aus dem Gespraechs-Datensatz, nicht der c
     async () => {
       jsonStore.recordElevenlabsConversationId(call.id, CONVERSATION_ID);
       await jsonStore.markAnswered(call.id);
-      outbound.rearmActiveConversationPolls();
+      await outbound.abfrageDurchLauf(call.id);
       return warteBis(() => Boolean(jsonStore.getCall(call.id)?.sipCallId));
     },
   );

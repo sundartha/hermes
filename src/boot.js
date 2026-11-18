@@ -765,11 +765,6 @@ export async function bootServer({
     provisioning,
   );
 
-  await lifecycle.rearmActiveCallTimers();
-
-  await lifecycle.rearmBudgetWatchdogs();
-
-  elevenLabsOutbound.rearmActiveConversationPolls();
   const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
   starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf } });
 
@@ -778,8 +773,6 @@ export async function bootServer({
   if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 
   await expireOrphanedConsults(store);
-
-  inboundBridges.rearmDeadlines();
 
   void starteNummerntausch({ store, config, numberProvisioning, audit: auditStore });
 

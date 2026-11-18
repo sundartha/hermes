@@ -61,7 +61,7 @@ test("Cap-Grund: terminateCappedCall persistiert das Cap-Token gemeinsam mit dem
     classifyCallTime,
   });
 
-  lifecycle.rearmActiveCallTimers();
+  await lifecycle.terminateExpiredCall(call);
   await billed;
 
   assert.equal(call.failureReason, CAP_FAILURE_REASON, "am Cap gestorbener Anruf traegt den Cap-Grund");

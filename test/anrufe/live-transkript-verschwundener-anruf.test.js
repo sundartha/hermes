@@ -34,7 +34,7 @@ test("live-transkript-verschwundener-anruf: verschwindet der Anruf während des 
   process.on("unhandledRejection", merke);
   try {
     await mitAnbieter({ state, anbieter }, async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => abgelehnt.length > 0 || abfragenDanach >= 2, WARTE);
     });
   } finally {
