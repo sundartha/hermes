@@ -1,4 +1,4 @@
-import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.js";
+import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
 import { hangUpAction, persistEndWithReason } from "../telephony/call-termination.ts";
 import { STAND } from "./vorspann-bruecke.js";
 import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
