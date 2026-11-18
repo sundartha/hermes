@@ -275,23 +275,6 @@
       "count": 9
     }
   },
-  "scripts/convo-bench/runner.mjs": {
-    "complexity": {
-      "count": 2
-    },
-    "id-length": {
-      "count": 12
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 4
-    },
-    "no-unsafe-finally": {
-      "count": 1
-    }
-  },
   "scripts/convo-bench/scenarios/anrufbeantworter.mjs": {
     "no-magic-numbers": {
       "count": 1
