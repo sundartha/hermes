@@ -45,3 +45,5 @@ keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `
 - Darf nutzen: basis, begriffe, konfiguration, texte, mail, sperrdaten
 - Ort für Neues: Neue Dateien in `src/store/` gehören zu speicher, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von speicher: `src/db/`.
 - Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, portal.js, state-ops.js, views.js.
+
+Die Spalte `call.status` hat die Pruefregel `call_status_zustand_check` (Migration `0026_anruf_zustand_pruefregel.sql`, `NOT VALID`: neue und geaenderte Zeilen sind geprueft, Bestandszeilen noch nicht); die erlaubten Werte stehen in `ANRUF_ZUSTAENDE` (`begriffe/anruf-zustand.ts`).
