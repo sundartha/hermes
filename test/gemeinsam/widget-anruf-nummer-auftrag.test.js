@@ -7,7 +7,8 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 const ANRUF = (await ausgelieferteWidgets()).call;
 const WIDGET_DICT = JSON.parse(skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {")).match(/var WIDGET_DICT = (.*);\n/)[1]);
 const ERGEBNIS = "ui/notifications/tool-result";
-const NUMMER = "+49 211 5550142";
+const NUMMER = "+492115550142";
+const ANZEIGE = "+49 211 5550142";
 const AUFTRAG = "Ich möchte einen Haarschnitt für Donnerstagvormittag buchen.";
 
 function knoten() {
@@ -64,7 +65,7 @@ test("widget-anruf-nummer-auftrag K2: im Zustand Wählt zeigt die Karte die Zeil
   s.schicke({ status: "dialing", to: NUMMER, objective: AUFTRAG });
   assert.equal(s.zeile("assignment"), "sichtbar");
   assert.equal(s.hole("[data-assignment-display]").text, AUFTRAG);
-  assert.equal(s.hole("[data-number-display]").text, NUMMER);
+  assert.equal(s.hole("[data-number-display]").text, ANZEIGE);
   assert.equal(s.hole("[data-cancel]").style.display, "");
 });
 
@@ -73,14 +74,14 @@ test("widget-anruf-nummer-auftrag K2: die Antwort von place_call mit result_summ
   s.schicke({ status: "dialing", result_summary: null, to: NUMMER, objective: AUFTRAG });
   assert.equal(s.zeile("assignment"), "sichtbar");
   assert.equal(s.hole("[data-assignment-display]").text, AUFTRAG);
-  assert.equal(s.hole("[data-number-display]").text, NUMMER);
+  assert.equal(s.hole("[data-number-display]").text, ANZEIGE);
 });
 
 test("widget-anruf-nummer-auftrag K2: im Endzustand bleibt die Nummer im Fuß, der Abbrechen-Knopf ist weg", () => {
   const s = karte();
   s.schicke({ status: "dialing", to: NUMMER, objective: AUFTRAG });
   s.schicke({ status: "completed", to: NUMMER, objective: AUFTRAG });
-  assert.equal(s.hole("[data-number-display]").text, NUMMER);
+  assert.equal(s.hole("[data-number-display]").text, ANZEIGE);
   assert.equal(s.hole("[data-cancel]").style.display, "none");
 });
 
@@ -100,4 +101,22 @@ test("widget-anruf-nummer-auftrag K2: die Zeile heißt Auftrag und die Nummer st
   assert.match(ANRUF, /<div class="fuss">\s*<span data-number-display><\/span>\s*<button[^>]*data-cancel/);
   assert.equal(WIDGET_DICT.de.Assignment, "Auftrag");
   assert.equal(WIDGET_DICT.fr.Assignment, "Mission");
+});
+
+test("widget-anruf-nummer-auftrag K2: die Nummer wird nur bei +49 mit Vorwahl und Rest von mindestens vier Ziffern gruppiert", () => {
+  const faelle = [
+    ["+492115550142", "+49 211 5550142"],
+    ["+4921155", "+4921155"],
+    ["+492115555", "+49 211 5555"],
+    ["+49211555", "+49211555"],
+    ["+14155550142", "+14155550142"],
+    ["x+492115550142", "x+492115550142"],
+    ["+492115550142x", "+492115550142x"],
+    ["+49 211 5550142", "+49 211 5550142"],
+  ];
+  for (const [eingabe, erwartet] of faelle) {
+    const s = karte();
+    s.schicke({ status: "dialing", to: eingabe });
+    assert.equal(s.hole("[data-number-display]").text, erwartet, eingabe);
+  }
 });

@@ -691,13 +691,18 @@
     }
 
     // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
+    function groupNumber(raw) {
+      var match = /^\+49(\d{3})(\d{4,})$/.exec(raw);
+      return match ? "+49 " + match[1] + " " + match[2] : raw;
+    }
+
     function applyCallSubject(data) {
       var objective = typeof data.objective === "string" ? data.objective.trim() : "";
       if (objective.length > 0) {
         setDisplayText("[data-assignment-display]", objective);
         setRowVisible("assignment", true);
       }
-      if (typeof data.to === "string" && data.to.length > 0) setDisplayText("[data-number-display]", data.to);
+      if (typeof data.to === "string" && data.to.length > 0) setDisplayText("[data-number-display]", groupNumber(data.to));
     }
 
     function applyCallStatus(data) {
