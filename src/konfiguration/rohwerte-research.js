@@ -1,4 +1,4 @@
-export function rohwerteResearch(env, { boolEnv, numEnv, stripTrailingSlash }) {
+export function rohwerteResearch(env, { boolEnv, numEnv, stripTrailingSlash, textEnv }) {
   return {
     researchEnabled: boolEnv("RESEARCH_ENABLED", env.RESEARCH_ENABLED, { fallback: false }),
     researchMaxUses: 1,
@@ -13,6 +13,6 @@ export function rohwerteResearch(env, { boolEnv, numEnv, stripTrailingSlash }) {
       min: 0,
     }),
     exaApiKey: (env.EXA_API_KEY ?? "").trim(),
-    exaApiBase: stripTrailingSlash((env.EXA_API_BASE || "https://api.exa.ai").trim()),
+    exaApiBase: stripTrailingSlash(textEnv(env.EXA_API_BASE, "https://api.exa.ai").trim()),
   };
 }

@@ -1918,3 +1918,12 @@ test("Rohwerte Abrechnung: ungueltiger Schalter und ungueltige Tarifkarte melden
     assert.equal(ist.fehler.filter((befund) => befund.includes(name)).length, 1, name);
   }
 });
+
+test("Rohwerte: leere Werte für EXA_API_BASE, STORE_BACKEND, QUEUE_BACKEND und TELNYX_API_BASE ergeben den Standardwert", () => {
+  const klein = ladeRohwerte({ EXA_API_BASE: "", STORE_BACKEND: "", QUEUE_BACKEND: "" });
+  assert.equal(klein.research.exaApiBase, "https://api.exa.ai");
+  assert.equal(klein.store.storeBackend, "json");
+  assert.equal(klein.store.queueBackend, "memory");
+  const gross = ladeGrosseRohwerte({ TELNYX_API_BASE: "" });
+  assert.equal(gross.telephony.telnyxApiBase, "https://api.telnyx.com");
+});

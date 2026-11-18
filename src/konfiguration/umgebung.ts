@@ -104,6 +104,13 @@ function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");
 }
 
+function textEnv(raw: string | undefined, standard: string): string {
+  if (raw === undefined || raw === "") {
+    return standard;
+  }
+  return raw;
+}
+
 function csvEnv(raw: string | undefined): string[] {
   return (raw ?? "")
     .split(",")
@@ -138,6 +145,7 @@ interface UmgebungsHelfer {
   isoInstantEnv: ReturnType<typeof isoInstantEnvMit>;
   routeCentsEnv: ReturnType<typeof routeCentsEnvMit>;
   csvEnv: typeof csvEnv;
+  textEnv: typeof textEnv;
   stripTrailingSlash: typeof stripTrailingSlash;
   detectProduction: () => boolean;
 }
@@ -153,6 +161,7 @@ export function umgebungMit(
     isoInstantEnv: isoInstantEnvMit(fehlerliste),
     routeCentsEnv: routeCentsEnvMit(fehlerliste),
     csvEnv,
+    textEnv,
     stripTrailingSlash,
     detectProduction: () => !!env.RENDER_EXTERNAL_URL,
   };
