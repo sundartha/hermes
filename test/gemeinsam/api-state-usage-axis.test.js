@@ -13,6 +13,7 @@ function makeMockStore(bucket = { inputTokens: 5, outputTokens: 7, costCents: 35
     load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [], usageEvents: [] }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
     exportTenantData: () => ({ calls: [], actionItems: [], notifications: [] }),
+    zaehleAnrufeSeit: () => 0,
     usageOf: () => bucket,
     tenantSubscription: () => ({
       planSlug: null,
@@ -63,7 +64,7 @@ test("GET /api/state usage: planUsagePercent ersetzt alle Geldfelder ersatzlos, 
     assert.ok(!("maxBudgetEur" in body.usage), "maxBudgetEur entfaellt ersatzlos (harte Migration)");
     assert.deepEqual(
       Object.keys(body.usage).sort(),
-      ["calls", "inputTokens", "outputTokens", "planUsagePercent"],
+      ["calls", "callsThisMonth", "inputTokens", "outputTokens", "planUsagePercent"],
       "Whitelist beweist: keine Plattform-Groesse, kein Geldfeld in der Usage-Projektion",
     );
     assert.ok(

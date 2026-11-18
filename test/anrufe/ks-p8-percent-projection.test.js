@@ -43,6 +43,7 @@ function makeMockStore({ state, subscription = {} } = {}) {
     load: () => ({ ...state, calls: [], actionItems: [], notifications: [], numbers: [] }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
     exportTenantData: () => ({ calls: [], actionItems: [], notifications: [] }),
+    zaehleAnrufeSeit: () => 0,
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, calls: 3 }),
     tenantSubscription: () => ({
       planSlug: null,
@@ -89,7 +90,7 @@ test("K1: usage-Whitelist traegt genau calls/inputTokens/outputTokens/planUsageP
     const body = await (await abrufMitFrist(`${srv.base}/api/state`)).json();
     assert.deepEqual(
       Object.keys(body.usage).sort(),
-      ["calls", "inputTokens", "outputTokens", "planUsagePercent"],
+      ["calls", "callsThisMonth", "inputTokens", "outputTokens", "planUsagePercent"],
     );
   } finally {
     await srv.stop();
