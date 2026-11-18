@@ -100,7 +100,7 @@ const WORT_NUR_IN_EINTRAEGE = [
     name: "tote-wahlwege",
     nurIn: [],
     meldung:
-      "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.js.",
+      "originateViaCallControl und originateAiAssistantCall sind stillgelegte Wahlwege ohne Gates (SEC-P6); Anrufe starten nur über originateCall und originateElevenLabsCall in src/routes/api-calls.ts.",
   },
   {
     name: "sprachkosten-buchen",
@@ -112,9 +112,9 @@ const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "anruf-starten",
     art: "aufruf",
-    nurIn: ["src/routes/api-calls.js"],
+    nurIn: ["src/routes/api-calls.ts"],
     meldung:
-      "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.js auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
+      "originateCall und originateElevenLabsCall ruft nur src/routes/api-calls.ts auf, hinter allen Outbound-Gates (SEC-P6); ein neuer Wahlweg braucht dieselben Gates und eine Freigabe der Owner.",
   },
   {
     name: "inbound-tarif",
