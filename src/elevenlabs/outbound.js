@@ -858,7 +858,12 @@ export function makeElevenLabsOutbound({
   }
 
   async function endActiveCall(callId) {
-    const conversationRef = await saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId });
+    const conversationRef = await saveProviderResultIfFetched({
+      store,
+      fetchConversationSoft,
+      stimmenAnzahlFuer: async () => null,
+      callId,
+    });
     if (!conversationRef) return;
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
