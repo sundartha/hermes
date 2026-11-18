@@ -7,6 +7,7 @@ const KOPF_BYTES = 5;
 const LAENGE_BYTES = 4;
 const EINFACHE_ANFRAGE = 0x51;
 const PARSE = 0x50;
+export const BIS_BEDINGUNG_ZEITGRENZE_MS = 20_000;
 
 function anweisung(art, inhalt) {
   if (art === EINFACHE_ANFRAGE) return inhalt.toString("utf8", 0, inhalt.length - 1);
@@ -63,13 +64,25 @@ export async function starteAnweisungsMitschnitt(datenbankAdresse) {
   return {
     adresse: adresse.href,
     verbindungen: () => verbindungen.map((zustand) => [...zustand.anweisungen]),
-    bisBedingung(bedingung) {
-      return new Promise((fertig) => {
+    bisBedingung(bedingung, zeitgrenzeMs = BIS_BEDINGUNG_ZEITGRENZE_MS) {
+      return new Promise((fertig, fehler) => {
+        const zeitgrenzeSignal = AbortSignal.timeout(zeitgrenzeMs);
+        const beiZeitgrenze = () => {
+          beobachter.delete(pruefe);
+          fehler(
+            new Error(
+              `bisBedingung: Zeitgrenze von ${zeitgrenzeMs}ms erreicht; mitgeschnittene Anweisungen: ` +
+                JSON.stringify(verbindungen.map((zustand) => [...zustand.anweisungen])),
+            ),
+          );
+        };
         const pruefe = () => {
           if (!bedingung()) return;
+          zeitgrenzeSignal.removeEventListener("abort", beiZeitgrenze);
           beobachter.delete(pruefe);
           fertig();
         };
+        zeitgrenzeSignal.addEventListener("abort", beiZeitgrenze);
         beobachter.add(pruefe);
         pruefe();
       });
