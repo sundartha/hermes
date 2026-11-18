@@ -35,7 +35,7 @@ test("anrufe behält registry.ts als Eingang", () => {
   assert.ok(anrufe.eingaenge.includes("src/elevenlabs/registry.ts"));
 });
 
-test("anrufe behält convai.ts als Eingang, weil nummern-registrierung.js innerhalb von src/elevenlabs/ daran hängt", () => {
+test("anrufe führt convai.ts nicht mehr als Eingang, weil elevenlabs-nur-ueber-port ihn außerhalb von src/elevenlabs/ sperrt", () => {
   const anrufe = karte.bausteine.find((baustein) => baustein.baustein === "anrufe");
-  assert.ok(anrufe.eingaenge.includes(EINGANG_MIT_EINZIGEM_IMPORTEUR_INNERHALB_ELEVENLABS));
+  assert.equal(anrufe.eingaenge.includes(EINGANG_MIT_EINZIGEM_IMPORTEUR_INNERHALB_ELEVENLABS), false);
 });
