@@ -121,6 +121,12 @@ to an external party on at least one path is `true`, even if some invocations se
 - **place_call** (registered `src/mcp-tools.js#uiTool("place_call")`, handler in the same call, REST
   `POST /api/calls`). The call starts as soon as the tool is called; there is no confirmation
   step - see "No confirmation step before placing a call" below.
+  - Answer time: after all safety checks the route answers at once with the `call_id`; the start
+    at the provider runs as a background job, at most once. The hop limit of the tool is
+    `src/mcp/gateway.js#PLACE_CALL_HOP_TIMEOUT_MS`. With no line free, the call waits in a
+    queue for at most the time in `src/konfiguration/rohwerte-voice.js` (`anrufstartWartefristMs`,
+    env `ANRUFSTART_WARTEFRIST_MS`), then ends without dialling and without cost; the waiting calls
+    per customer are limited by `src/store/leitungsplaetze.js#WARTENDE_JE_KUNDE`.
   - `readOnlyHint: false` - it starts a real outbound phone call by the AI agent.
   - `destructiveHint: true` - the call reaches a real person, is billed per minute to the
     account, and cannot be undone once placed (its description says "NOT reversible once

@@ -7,7 +7,6 @@ import {
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
 import { config } from "../../src/config.js";
-import { REQUEST_TIMEOUT_MS } from "../../src/elevenlabs/convai.ts";
 import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.ts";
 
 const BRIEFING_STEPS = 2;
@@ -27,10 +26,9 @@ function captureTools(ctx) {
 }
 
 test("1: PLACE_CALL_HOP_TIMEOUT_MS liegt STRUKTURELL ueber dem Vorwahl-Budget des Servers", () => {
-  assert.ok(REQUEST_TIMEOUT_MS > 0, "REQUEST_TIMEOUT_MS muss positiv sein");
   assert.ok(config.llm.briefingTimeoutMs > 0, "config.llm.briefingTimeoutMs muss positiv sein");
 
-  const vorwahlBudget = REQUEST_TIMEOUT_MS + BRIEFING_STEPS * config.llm.briefingTimeoutMs;
+  const vorwahlBudget = BRIEFING_STEPS * config.llm.briefingTimeoutMs;
   assert.ok(
     PLACE_CALL_HOP_TIMEOUT_MS > vorwahlBudget,
     `PLACE_CALL_HOP_TIMEOUT_MS (${PLACE_CALL_HOP_TIMEOUT_MS}) muss > Vorwahl-Budget (${vorwahlBudget}) sein`,

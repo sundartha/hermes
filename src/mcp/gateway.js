@@ -48,7 +48,7 @@ export function requireFields(obj, specs) {
 const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
 const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
 
-export const PLACE_CALL_HOP_TIMEOUT_MS = 180000;
+export const PLACE_CALL_HOP_TIMEOUT_MS = MS_PER_MINUTE;
 
 export const MCP_HOP_TIMEOUT_MS = MS_PER_MINUTE;
 
