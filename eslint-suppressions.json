@@ -240,16 +240,6 @@
       "count": 3
     }
   },
-  "scripts/convo-bench/scenarios/anrufbeantworter.mjs": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "scripts/convo-bench/scenarios/hold-warteschleife.mjs": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "scripts/kv2-5-telnyx-belegtypen.mjs": {
     "no-restricted-properties": {
       "count": 4
