@@ -143,9 +143,9 @@ function assertSttProfile(config) {
   abortOnFatal(sttProfileFindings(config.voice.sttProfile));
 }
 
-async function currentCoverage(config, store) {
+function currentCoverage(config, store, calls) {
   return {
-    coveragePercent: costTruingCoveragePercent({ ...store.load(), calls: await anrufeAllerInstanzen(store) }),
+    coveragePercent: costTruingCoveragePercent({ ...store.load(), calls }),
     minCoveragePercent: config.billing.costTruingMinCoveragePercent,
   };
 }
@@ -200,14 +200,20 @@ function anrufeAllerInstanzen(store) {
   return speicherBereiche(store).berichtAnrufe.anrufeFuerBericht();
 }
 
-async function checkCoverageGates(config, store) {
-  const coverage = await currentCoverage(config, store);
+async function checkCallsGates(config, store) {
+  const calls = await anrufeAllerInstanzen(store);
+  checkCoverageGates(config, store, calls);
+  warnTariffDrift(config, calls);
+}
+
+function checkCoverageGates(config, store, calls) {
+  const coverage = currentCoverage(config, store, calls);
   assertCostTruingBooking(config, coverage);
   warnVoiceTariffBelowFullCost(config, coverage);
 }
 
-async function warnTariffDrift(config, store) {
-  const report = tariffDriftReportFromConfig(await anrufeAllerInstanzen(store), config.billing);
+function warnTariffDrift(config, calls) {
+  const report = tariffDriftReportFromConfig(calls, config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
   if (report.some((entry) => entry.code !== null)) console.warn(line);
   else console.log(line);
@@ -720,8 +726,7 @@ export async function bootServer({
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
-  await checkCoverageGates(config, store);
-  await warnTariffDrift(config, store);
+  await checkCallsGates(config, store);
 
   const taktBefund = loeschtaktBefund(config);
   if (taktBefund) {
