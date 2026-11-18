@@ -7,7 +7,8 @@ function countedText(lang, singular, plural) {
 }
 
 function joinWithAnd(items, and) {
-  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
+  const front = items.slice(0, -1);
+  return front.length === 0 ? items.join("") : `${front.join(", ")} ${and} ${items.at(-1)}`;
 }
 
 export const MCP_ERROR_CODE = Object.freeze({
