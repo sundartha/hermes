@@ -11,7 +11,7 @@ import {
   preiseMit,
   todayIsoDate,
 } from "./konfiguration/preise.js";
-import { gatewayUrlForPort, gatewayUrlMit } from "./konfiguration/gateway-url.js";
+import { gatewayUrlForPort, gatewayUrlMit } from "./konfiguration/gateway-url.ts";
 import {
   attachNamespaces,
   buildNamespaceSurface,
