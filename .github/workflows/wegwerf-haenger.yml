@@ -22,16 +22,28 @@ jobs:
       - uses: ./.github/actions/node-npm-ci
         with:
           web: "false"
-      - name: Datei für Datei mit Zeitgrenze
+      - name: Echter Teil-Lauf mit Wächter
         env:
           TEIL: ${{ matrix.teil }}
         run: |
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 12 == teil % 12')
-          for d in "${dateien[@]}"; do
-            s=$(date +%s)
-            NODE_ENV=test timeout -k 5 150 node --test --test-concurrency=1 "$d" > /tmp/out.txt 2>&1 && rc=0 || rc=$?
-            e=$(( $(date +%s) - s ))
-            echo "ERGEBNIS teil=$TEIL rc=$rc sek=$e $d"
-            if [ $rc -ne 0 ]; then echo "::group::HAENGT $d"; tail -40 /tmp/out.txt; echo "::endgroup::"; fi
+          s=$(date +%s)
+          npm test -- "${dateien[@]}" -- --test-concurrency=4 > /tmp/teil.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 100); do
+            sleep 6
+            kill -0 $pid 2>/dev/null || break
+            if [ $i -eq 60 ]; then
+              echo "::group::HAENGT nach 6 Min: Prozesse"
+              ps -eo pid,ppid,etime,pcpu,args --sort=start_time | grep -E 'node|npm' | grep -v grep | cut -c1-260
+              echo "::endgroup::"
+              echo "::group::HAENGT Log-Ende"
+              tail -60 /tmp/teil.log | cut -c1-260
+              ls -la .pruefung 2>/dev/null
+              echo "::endgroup::"
+              break
+            fi
           done
+          wait $pid && rc=0 || rc=$?
+          echo "TEILERGEBNIS teil=$TEIL rc=$rc sek=$(( $(date +%s) - s ))"
           exit 0
