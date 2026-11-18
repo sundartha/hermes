@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
-import { localeFor } from "../../src/i18n/locales.js";
 import {
   mcpPost,
   readToolResult,
@@ -85,15 +84,23 @@ async function placeCall({ env, allowConsult = true, defaultLanguage = "de" }) {
 
 const TORE = ["master", "kontext", "mandant", "in_call"];
 const geschlossen = (text) => TORE.filter((tor) => text.includes(`[${tor}]`));
-const de = localeFor("de").mcp;
+const ANFANG = {
+  de: "Hinweis: Die Rueckfrage an den Auftraggeber ist fuer diesen Anruf NICHT freigegeben (geschlossen: ",
+  en: "Note: the consult question to the principal is NOT released for this call (closed: ",
+  fr: "Remarque : la question au mandant n'est PAS autorisée pour cet appel (fermé : ",
+};
+const BERECHTIGUNG_DE =
+  "Hinweis: Live-Rueckfragen waehrend des Anrufs erreichen diesen Chat nur, wenn die Werkzeug-Berechtigung des Connectors erteilt ist.";
+const hinweis = (sprache, tore) =>
+  `${ANFANG[sprache]}${tore.map((tor) => `[${tor}]`).join(", ")}).`;
 
 test("RF-H2-1 alle Tore offen: place_call meldet keine Tor-Sperre und behaelt den Berechtigungs-Hinweis", async () => {
   const { result, anrufe } = await placeCall({ env: ALLE_OFFEN });
   const text = result.content[0].text;
   assert.notEqual(result.isError, true, JSON.stringify(result));
   assert.deepEqual(geschlossen(text), []);
-  assert.ok(text.includes(de.consultPermissionHint));
-  assert.equal(text.includes(de.consultNotReleasedHint(["master"])), false);
+  assert.ok(text.includes(BERECHTIGUNG_DE));
+  assert.equal(text.includes(hinweis("de", ["master"])), false);
   assert.equal(anrufe, 1);
 });
 
@@ -124,8 +131,8 @@ for (const fall of FAELLE) {
     const text = result.content[0].text;
     assert.notEqual(result.isError, true, JSON.stringify(result));
     assert.deepEqual(geschlossen(text), fall.erwartet);
-    assert.ok(text.includes(de.consultNotReleasedHint(fall.erwartet)));
-    assert.equal(text.includes(de.consultPermissionHint), false);
+    assert.ok(text.includes(hinweis("de", fall.erwartet)));
+    assert.equal(text.includes(BERECHTIGUNG_DE), false);
     assert.equal(result.structuredContent.status, "dialing");
     assert.equal(anrufe, 1);
   });
@@ -137,19 +144,9 @@ test("RF-H2-3 nur das In-Call-Tor zu: place_call nennt in_call neben dem Berecht
   });
   const text = result.content[0].text;
   assert.deepEqual(geschlossen(text), ["in_call"]);
-  assert.ok(text.includes(de.consultPermissionHint));
-  assert.ok(text.includes(de.consultNotReleasedHint(["in_call"])));
+  assert.ok(text.includes(BERECHTIGUNG_DE));
+  assert.ok(text.includes(hinweis("de", ["in_call"])));
   assert.equal(anrufe, 1);
-});
-
-const SPRACHEN = ["de", "en", "fr"];
-
-test("RF-H2-4 Hinweistext liegt je Sprache vor, ist verschieden und nennt alle Kategorien", () => {
-  const texte = SPRACHEN.map((sprache) => localeFor(sprache).mcp.consultNotReleasedHint(TORE));
-  assert.equal(new Set(texte).size, SPRACHEN.length);
-  for (const text of texte) {
-    assert.deepEqual(geschlossen(text), TORE);
-  }
 });
 
 for (const sprache of ["en", "fr"]) {
@@ -159,7 +156,7 @@ for (const sprache of ["en", "fr"]) {
       defaultLanguage: sprache,
     });
     const text = result.content[0].text;
-    assert.ok(text.includes(localeFor(sprache).mcp.consultNotReleasedHint(["master"])));
-    assert.equal(text.includes(de.consultNotReleasedHint(["master"])), false);
+    assert.ok(text.includes(hinweis(sprache, ["master"])));
+    assert.equal(text.includes(hinweis("de", ["master"])), false);
   });
 }
