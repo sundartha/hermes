@@ -265,9 +265,11 @@ test("(g) zwei ueberlappende Laeufe (haengender Provider-Call) -> zweiter Lauf i
   let callCount = 0;
   let resolvePool;
   const pending = new Promise((resolve) => { resolvePool = resolve; });
+  let adapterGerufen;
+  const ersterAbruf = new Promise((resolve) => { adapterGerufen = resolve; });
   const control = fakeCostRecordAdapter(
     (legId) => [{ recordType: "sip-trunking", costMicroCents: 1000, currency: "USD", billedSec: 60, legId }],
-    { onFetch: () => callCount++, poolResult: pending },
+    { onFetch: () => { callCount++; adapterGerufen(); }, poolResult: pending },
   );
   const config = fakeConfig();
   const { runCostTruingSweep } = makeCostTruing({
@@ -276,6 +278,7 @@ test("(g) zwei ueberlappende Laeufe (haengender Provider-Call) -> zweiter Lauf i
 
   const run1 = runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   const run2 = runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL });
+  await ersterAbruf;
   const result2 = await run2;
   assert.deepEqual(result2, { skipped: true, reason: "sweep_running" });
   assert.equal(callCount, 1, "der zweite Lauf darf den Adapter nicht (erneut) rufen");
