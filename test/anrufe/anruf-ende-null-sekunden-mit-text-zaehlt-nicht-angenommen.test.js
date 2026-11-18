@@ -18,12 +18,12 @@ const EL_ENV = {
 };
 
 const labelsVon = (punkt) => Object.fromEntries(punkt.attributes.map((a) => [a.key, a.value.stringValue]));
+const metrikenVon = (export_) => export_.resourceMetrics.flatMap((r) => r.scopeMetrics).flatMap((s) => s.metrics);
+const punkteVon = (metrik) => metrik.sum.dataPoints;
 const endeSummen = (export_) =>
-  export_.resourceMetrics
-    .flatMap((r) => r.scopeMetrics)
-    .flatMap((s) => s.metrics)
+  metrikenVon(export_)
     .filter((m) => m.name === ENDE && m.sum)
-    .flatMap((m) => m.sum.dataPoints)
+    .flatMap(punkteVon)
     .map((p) => ({ labels: labelsVon(p), wert: Number(p.asInt ?? p.asDouble) }));
 
 function warteAufEnde(empfaenger) {
