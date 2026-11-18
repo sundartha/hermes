@@ -125,6 +125,7 @@ const serverEnv = (attrappe, signer, zusatz = {}) => ({
   SKIP_TWILIO_SIGNATURE_CHECK: "false",
   TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
   PUBLIC_URL,
+  FRISTEN_TAKT_MS: "40",
   ...zusatz,
 });
 
