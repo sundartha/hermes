@@ -283,7 +283,7 @@ function basisVerstoesse(basis, zwischenspeichern) {
   const ordner = mkdtempSync(join(tmpdir(), "architektur-basis-"));
   try {
     git(["worktree", "add", "--quiet", "--detach", ordner, basis]);
-    symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
+    if (!existsSync(join(ordner, "node_modules"))) symlinkSync(join(process.cwd(), "node_modules"), join(ordner, "node_modules"));
     const bekannt = verstoesseAus(abhaengigkeiten(ordner));
     if (!zwischenspeichern) return bekannt;
     const entwurf = `${ablage}.${process.pid}`;
