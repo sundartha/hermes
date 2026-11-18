@@ -3,7 +3,7 @@ import { MAX_CALL_DURATION_CAP_S, MAX_DURATION_RETRY_MS } from "../begriffe/anru
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
-import { defaultSetTimer } from "../utils/timer.ts";
+import { defaultSetTimer } from "../utils/uhr-warten.ts";
 import { inDatenbankBeendet } from "./reattach.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";

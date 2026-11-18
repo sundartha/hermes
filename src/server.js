@@ -62,7 +62,7 @@ import { bootServer } from "./boot.js";
 import { anfrage } from "./utils/anfrage.js";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.ts";
 import { starteTelemetrie } from "./utils/telemetrie.js";
-import { defaultSetTimer } from "./utils/timer.ts";
+import { defaultSetTimer } from "./utils/uhr-warten.ts";
 
 await store.oeffneSpeicher();
 

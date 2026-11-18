@@ -26,7 +26,7 @@ const PROCESS_ENV_REGEL = {
     "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
 };
 const UHR_MELDUNG =
-  "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, new Date(), performance.now, setTimeout, setInterval, setImmediate, node:timers, sleep und defaultSetTimer aus utils/timer), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
+  "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, new Date(), performance.now, setTimeout, setInterval, setImmediate, node:timers, sleep und defaultSetTimer aus utils/uhr-warten), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
 const UHR_BESTAND = [
   "src/elevenlabs/outbound.js",
   "src/telephony/adapters/telnyx/numbers.js",
@@ -757,7 +757,7 @@ export default [
         "error",
         {
           paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })),
-          patterns: [{ regex: "(^|/)utils/timer(\\.(js|ts))?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
+          patterns: [{ regex: "(^|/)utils/(timer|uhr-warten)(\\.(js|ts))?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
         },
       ],
       "no-restricted-syntax": [
