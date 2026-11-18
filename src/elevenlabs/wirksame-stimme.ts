@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { anfrage } from "../utils/anfrage.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND } from "../utils/timer.ts";
 import { callLocaleFor } from "./call-locale.ts";
 import { fetchAgent, type ConvaiKonto } from "./convai.ts";
 
@@ -21,19 +21,18 @@ const OVERRIDE_FREIGEGEBEN = z.object({
 });
 
 export function stimmenAnzahlVon({ angefordert, agent }: { angefordert: string; agent: unknown }): number | null {
-  const eigene = EIGENE_STIMME.safeParse(agent);
-  if (!eigene.success) return null;
+  const eigene = EIGENE_STIMME.safeParse(agent).data?.conversation_config.tts.voice_id;
+  if (eigene === undefined) return null;
   const freigegeben = OVERRIDE_FREIGEGEBEN.safeParse(agent).success;
-  const { tts } = eigene.data.conversation_config;
-  const wirksam = freigegeben ? angefordert : tts.voice_id;
-  return new Set([...(angefordert ? [angefordert] : []), wirksam]).size;
+  const wirksam = freigegeben ? angefordert : eigene;
+  return new Set([angefordert, wirksam]).size;
 }
 
 interface Anruf {
   direction?: string;
   tenantId: string;
   from?: string;
-  to?: string;
+  to: string;
   language?: string;
 }
 
@@ -57,7 +56,7 @@ function angeforderteStimme({ store, config, call }: { store: Speicher; config: 
     numberRecord: store.numberRecordByE164(eingehend ? call.to : call.from),
     ownerName: "",
     defaultVoiceId: standardStimme,
-    to: "",
+    to: call.to,
     callLanguage: call.language,
   }).voiceId;
 }
