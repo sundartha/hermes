@@ -22,7 +22,7 @@ async function befunde(datei, quelltext) {
 async function erwarteBefund(quelltext, datei = "src/probe-zeit.js", anzahl = 1) {
   const gefunden = await befunde(datei, quelltext);
   assert.equal(gefunden.length, anzahl, `Zeiteinheiten-Regel: ${quelltext} wurde nicht ${anzahl}-mal gemeldet`);
-  assert.match(gefunden[0].message, /src\/utils\/timer\.js/);
+  assert.match(gefunden[0].message, /src\/utils\/timer\.ts/);
 }
 
 async function erwarteKeinen(datei, quelltext) {
