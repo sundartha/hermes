@@ -10,14 +10,14 @@ export function guardedConfig(target, path = "config") {
       }
       if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
       throw new TypeError(
-        `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
+        `${path}.${prop} existiert nicht (verschobener/entfernter Config-Key? ` +
           "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
       );
     },
     set(obj, prop, value) {
       if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value);
       throw new TypeError(
-        `${path}.${String(prop)} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
+        `${path}.${prop} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
           "config.<namespace>.<key> nutzen).",
       );
     },
