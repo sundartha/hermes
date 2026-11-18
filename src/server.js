@@ -1,6 +1,7 @@
 import "./process-guards.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
+import { fruehwarnung } from "./routes/intern-anrufe-laufend.js";
 import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
@@ -293,7 +294,10 @@ const deps = {
   inboundTrunkSweep,
   telemetrie,
   abschaltweiche: makeAbschaltweiche(),
-  healthzOptionen: { zeitplaene: provisioning.ueberfaelligeZeitplaene },
+  healthzOptionen: {
+    zeitplaene: provisioning.ueberfaelligeZeitplaene,
+    fruehwarnung: () => fruehwarnung(store, Date.now()),
+  },
 };
 const { app, accounts, auditStore, zeitplaeneAnmelden } = await buildApp(deps);
 accountsRef.current = accounts;

@@ -11,7 +11,7 @@ const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 
 function speicher() {
-  return { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true };
+  return { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true, load: () => ({ calls: [] }) };
 }
 
 function einstellung({ eingefroren, attrappe, elevenLabs, telnyx } = {}) {

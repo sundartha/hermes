@@ -20,8 +20,8 @@ const PEM = SCHLUESSELPAAR.publicKey.export({ format: "pem", type: "spki" }).toS
 const UNGUELTIG = "abc-nicht-der-schluessel-wert";
 const BOOT_WARNUNG = /\[boot\] Konfig-Warnung: [^\n]*TELNYX_PUBLIC_KEY[^\n]*Telnyx-Rueckmeldung wird mit 403 abgewiesen/;
 
-const gesund = { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true };
-const krank = { pruefeVerbindung: async () => Promise.reject(new Error("aus")), letzterFlushGelungen: async () => true };
+const gesund = { pruefeVerbindung: async () => undefined, letzterFlushGelungen: async () => true, load: () => ({ calls: [] }) };
+const krank = { pruefeVerbindung: async () => Promise.reject(new Error("aus")), letzterFlushGelungen: async () => true, load: () => ({ calls: [] }) };
 
 function konfig(telnyxPublicKey) {
   return {
