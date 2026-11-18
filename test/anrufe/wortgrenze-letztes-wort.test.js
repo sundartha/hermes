@@ -2,9 +2,30 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { startExaFake } from "../../scripts/convo-bench/exa-fake.mjs";
+import http from "node:http";
 
 const HTTP_OK = 200;
+
+async function startExaFake({ facts }) {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      const results = facts.map((fact, index) => ({
+        id: `res_${index}`,
+        title: fact.title,
+        url: "https://exa.example",
+        highlights: [fact.highlight],
+      }));
+      res.end(JSON.stringify({ requestId: "req_wortgrenze", results }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
 const LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 const TOOL_TOKEN = "wortgrenze-token-testgeheim";
