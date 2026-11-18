@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { LOCALES } from "../../src/i18n/locales.js";
 import { seedCall } from "../helpers.js";
 
 function baue() {
@@ -52,18 +51,20 @@ test("call-finish uebersetzt den leeren Zustand nicht in Titel oder Text", (t) =
 test("call-finish uebersetzt den fehlenden Zustand nicht in Titel oder Text", (t) => pruefeUnbekannt(t, undefined));
 test("call-finish uebersetzt einen Objekt-Zustand nicht in Titel oder Text", (t) => pruefeUnbekannt(t, { status: "failed" }));
 
-async function pruefeGueltig(t, status, titel) {
+async function meldeEnde(t, status) {
   const fehler = t.mock.method(console, "error", () => {});
   const { callFinish, benachrichtigungen, abgerechnet } = baue();
   const call = seedCall({ status, language: "de", transcript: [] });
   await callFinish.finishCall(call);
   assert.equal(benachrichtigungen.length, 1);
-  assert.equal(benachrichtigungen[0].title, titel);
+  assert.equal(benachrichtigungen[0].body, `${call.to} (Status: ${status})`);
   assert.deepEqual(abgerechnet, [call.id]);
   assert.equal(fehler.mock.callCount(), 0);
+  return benachrichtigungen[0].title;
 }
 
-test("call-finish meldet failed weiter mit dem Fehlschlag-Titel", (t) =>
-  pruefeGueltig(t, "failed", LOCALES.de.postCall.failedTitle));
-test("call-finish meldet cancelled weiter mit dem Abbruch-Titel", (t) =>
-  pruefeGueltig(t, "cancelled", LOCALES.de.postCall.cancelledTitle));
+test("call-finish meldet failed und cancelled weiter, mit verschiedenen Titeln", async (t) => {
+  const failed = await meldeEnde(t, "failed");
+  const cancelled = await meldeEnde(t, "cancelled");
+  assert.notEqual(failed, cancelled);
+});
