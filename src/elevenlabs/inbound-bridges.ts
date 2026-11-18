@@ -21,16 +21,17 @@ export async function umleitenOderAuflegen({
   url,
 }: {
   voiceControl: (provider: string | undefined) => Telefonie;
-  endCarrierCall: (callId: string) => unknown;
+  endCarrierCall: (callId: string, call: Anruf) => unknown;
   call: Anruf;
   url: string;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     await leiteUm(voiceControl(call.provider), call, url);
     console.log(`[${LOG_TAG}] umgeleitet call=${call.id}`);
+    return true;
   } catch (err) {
     console.warn(`[${LOG_TAG}] umleitung_fehlgeschlagen call=${call.id}: ${fehlertext(err)}`);
-    await legeTraegerAuf(endCarrierCall, call.id);
+    return legeTraegerAuf(endCarrierCall, call);
   }
 }
 
@@ -40,11 +41,13 @@ async function leiteUm(port: Telefonie, call: Anruf, url: string): Promise<void>
   await port.redirectCall(call.twilioSid, url);
 }
 
-async function legeTraegerAuf(endCarrierCall: (callId: string) => unknown, callId: string): Promise<void> {
+async function legeTraegerAuf(endCarrierCall: (callId: string, call: Anruf) => unknown, call: Anruf): Promise<boolean> {
   try {
-    await endCarrierCall(callId);
+    await endCarrierCall(call.id, call);
+    return true;
   } catch (err) {
-    console.warn(`[${LOG_TAG}] auflegen_fehlgeschlagen call=${callId}: ${fehlertext(err)}`);
+    console.warn(`[${LOG_TAG}] auflegen_fehlgeschlagen call=${call.id}: ${fehlertext(err)}`);
+    return false;
   }
 }
 

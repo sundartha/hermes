@@ -12,6 +12,8 @@ import {
   umleitenOderAuflegen,
 } from "../../src/elevenlabs/inbound-bridges.ts";
 import * as ops from "../../src/store/state-ops.js";
+import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
+import { hangUpAction } from "../../src/telephony/call-termination.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -543,4 +545,91 @@ test("Uebergabe durch den Lauf: ein Lesefehler wird nicht als nichts faellig ver
     now: () => UB_JETZT,
   });
   await assert.rejects(() => bruecken.uebergabeDurchLauf("call_ub"), /db weg/);
+});
+
+function ubFremderLauf({ auflegenWirft }) {
+  const zeile = ubAnruf({ id: "call_fremd", twilioSid: "CA_gelesen_fremd" });
+  const beobachtung = { aufgelegt: [], frist: [], fehler: [] };
+  const voiceControl = () => ({
+    redirectCall: () => Promise.reject(new Error("umleitung-defekt")),
+    endCall: async (sid) => {
+      beobachtung.aufgelegt.push(sid);
+      if (auflegenWirft) throw new Error("auflegen-defekt");
+    },
+  });
+  const store = {
+    getCall: () => undefined,
+    load: () => ({ calls: [] }),
+    leseCallUngebunden: async () => zeile,
+  };
+  const endCarrierCall = (callId, gelesen) => {
+    const call = store.getCall(callId) ?? gelesen;
+    const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
+    return auflegen?.();
+  };
+  const bruecken = makeInboundBridges({
+    store,
+    now: () => UB_JETZT,
+    setTimer: () => ({}),
+    umleiten: ({ call, rueckfallUrl }) =>
+      umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `https://agent.test${rueckfallUrl}` }),
+  });
+  const lauf = makeFristenLauf({
+    store: {
+      faelligeFristen: async () => [{ callId: "call_fremd", tenantId: UB_MANDANT, versuche: 1 }],
+      setzeUebergabeFrist: async (frist) => beobachtung.frist.push(frist),
+    },
+    beende: async () => {},
+    limitJeMandant: 10,
+    leaseMs: 1000,
+    uebergabe: { umleiten: bruecken.uebergabeDurchLauf },
+  });
+  return { beobachtung, lauf };
+}
+
+async function ubFehlerzeilen(fn) {
+  const zeilen = [];
+  const original = console.error;
+  console.error = (...a) => zeilen.push(a.map(String).join(" "));
+  try {
+    await captureConsole(fn);
+  } finally {
+    console.error = original;
+  }
+  return zeilen.filter((zeile) => zeile.startsWith("[fristen]"));
+}
+
+test("Uebergabe durch den Lauf eines fremden Prozesses: scheitert die Umleitung, legt der Lauf ueber die gelesene Zeile auf", async () => {
+  const { beobachtung, lauf } = ubFremderLauf({ auflegenWirft: false });
+  let ergebnis;
+  await ubFehlerzeilen(async () => {
+    ergebnis = await lauf.uebergabeTakt();
+  });
+  assert.deepEqual(beobachtung.aufgelegt, ["CA_gelesen_fremd"]);
+  assert.deepEqual(ergebnis, { beendet: 0, offen: 0, gelesen: true });
+});
+
+test("Uebergabe durch den Lauf: scheitern Umleitung und Auflegen, bleibt die Uebergabe-Frist stehen und der naechste Takt versucht es erneut", async () => {
+  const { beobachtung, lauf } = ubFremderLauf({ auflegenWirft: true });
+  let ergebnis;
+  const zeilen = await ubFehlerzeilen(async () => {
+    ergebnis = await lauf.uebergabeTakt();
+  });
+  assert.deepEqual(beobachtung.frist, []);
+  assert.equal(ergebnis.offen, 1);
+  assert.ok(zeilen.some((zeile) => zeile.startsWith("[fristen] Uebergabe umleiten fehlgeschlagen: call_fremd")));
+});
+
+test("umleitenOderAuflegen meldet true bei Umleitung und bei Auflegen als Ersatz, false wenn auch das Auflegen scheitert", async () => {
+  const call = { id: "call_rueck", provider: "telnyx", twilioSid: "sid_rueck" };
+  const url = "https://agent.test/voice/el-rueckfall";
+  const geht = { redirectCall: async () => {} };
+  const kaputt = { redirectCall: () => Promise.reject(new Error("x")) };
+  const ergebnis = [];
+  await captureConsole(async () => {
+    ergebnis.push(await umleitenOderAuflegen({ voiceControl: () => geht, endCarrierCall: async () => {}, call, url }));
+    ergebnis.push(await umleitenOderAuflegen({ voiceControl: () => kaputt, endCarrierCall: async () => {}, call, url }));
+    ergebnis.push(await umleitenOderAuflegen({ voiceControl: () => kaputt, endCarrierCall: () => Promise.reject(new Error("y")), call, url }));
+  });
+  assert.deepEqual(ergebnis, [true, true, false]);
 });
