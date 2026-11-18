@@ -2,6 +2,11 @@ import { fetchConversation, fetchPhoneNumber } from "./convai.ts";
 
 export type { ConvaiKonto } from "./convai.ts";
 
-const ADAPTER_CONVAI = Object.freeze({ fetchConversation, fetchPhoneNumber });
+interface KontoPort {
+  fetchConversation: typeof fetchConversation;
+  fetchPhoneNumber: typeof fetchPhoneNumber;
+}
 
-export const elevenlabsConvai = () => ADAPTER_CONVAI;
+const ADAPTER_CONVAI: KontoPort = Object.freeze({ fetchConversation, fetchPhoneNumber });
+
+export const elevenlabsConvai = (): KontoPort => ADAPTER_CONVAI;
