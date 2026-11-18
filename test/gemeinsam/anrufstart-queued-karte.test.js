@@ -64,8 +64,15 @@ function skriptKoerper(skript) {
   return skript.match(/<script>([\s\S]*)<\/script>/)[1];
 }
 
+const nachricht = (structuredContent, meta) => ({
+  jsonrpc: "2.0",
+  method: "ui/notifications/tool-result",
+  params: { structuredContent, _meta: meta },
+});
+
 function starteKarte(doc) {
-  const eigenes = [...widgetHtml(WIDGET_CALL).replace(BIND_SCRIPT, "").matchAll(/<script>([\s\S]*?)<\/script>/g)].pop()[1];
+  const skripte = [...widgetHtml(WIDGET_CALL).replace(BIND_SCRIPT, "").matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const eigenes = skripte.pop()[1];
   const sandbox = { document: doc, parent: { postMessage() {} }, CustomEvent: function CustomEvent(typ) { this.type = typ; } };
   sandbox.window = sandbox;
   const lauscher = [];
@@ -79,7 +86,7 @@ function starteKarte(doc) {
   vm.runInContext(skriptKoerper(I18N_SCRIPT), sandbox);
   vm.runInContext(eigenes, sandbox);
   return (structuredContent, meta) =>
-    lauscher.forEach((handler) => handler({ data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent, _meta: meta } } }));
+    lauscher.forEach((handler) => handler({ data: nachricht(structuredContent, meta) }));
 }
 
 const ergebnis = (status) => ({ call_id: "call_q", status, duration_s: 0, last_transcript_lines: [], failure_reason: null });
@@ -92,7 +99,8 @@ test("queued: die Anrufkarte zeigt bei queued Beschriftung und HUD-Text, und der
   assert.equal(doc.nachSelektor.get("[data-hud-phase]").textContent, "Hermes is waiting for a free line.");
   assert.equal(doc.nachSelektor.get("[data-ring]").className, RING_DIALING);
   assert.equal(doc.nachSelektor.get("[data-status-pill]").className, "pill pill--active");
-  assert.equal(doc.nachSelektor.get("[data-status-dot]").style.display, "");
+  const punkt = doc.nachSelektor.get("[data-status-dot]");
+  assert.equal(punkt.style.display, "");
 });
 
 test("queued: die Anrufkarte zeigt queued auf Deutsch uebersetzt", () => {
@@ -107,7 +115,8 @@ test("queued: die Anrufliste beschriftet einen wartenden Anruf mit Waiting for a
   const behaelter = { ...element(), getAttribute: () => "status" };
   const doc = { createElement: element, defaultView: null };
   renderRows(doc, behaelter, [{ status: "queued" }]);
-  const zelle = behaelter.children[0].children[0];
+  const [zeile] = behaelter.children;
+  const [zelle] = zeile.children;
   assert.equal(zelle.textContent, "Waiting for a line");
   assert.equal(zelle.attrs["data-i18n"], "Waiting for a line");
 });
