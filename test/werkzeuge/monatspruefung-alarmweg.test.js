@@ -67,7 +67,7 @@ test("Monatserster: je Schicht 1, 2a und 3 genau eine gekennzeichnete Probe im S
   const erwartet = ["1", "2a", "3"];
   erwartet.forEach((schicht, i) => {
     assert.match(empfangen[i], new RegExp(`^Probe, kein echter Fehler \\(Prüfung der Prüfung, Schicht ${schicht} `));
-    assert.ok(empfangen[i].includes("https://github.com/sundartha/hermes/actions/runs/4242"));
+    assert.match(empfangen[i], /https:\/\/github\.com\/sundartha\/hermes\/actions\/runs\/4242/);
     assert.ok(zeilen.includes(`Zeit bis Alarm Schicht ${schicht}: ${SCHRITT_MS} ms`), zeilen.join("|"));
   });
 });
