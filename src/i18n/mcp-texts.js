@@ -6,6 +6,10 @@ function countedText(lang, singular, plural) {
   return (count) => (new Intl.PluralRules(lang).select(count) === "one" ? singular(count) : plural(count));
 }
 
+function joinWithAnd(items, and) {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
+}
+
 export const MCP_ERROR_CODE = Object.freeze({
   UPSTREAM_INVALID: "upstream_invalid",
   UPSTREAM_INCOMPLETE: "upstream_incomplete",
@@ -104,6 +108,13 @@ export const MCP_TEXTS = Object.freeze({
       owner: "Besitzer",
       calls: "Calls bisher",
       permissions: "Berechtigungen",
+      permissionItems: Object.freeze({
+        summaries: "Zusammenfassungen",
+        personalData: "persönliche Daten",
+        bankData: "Bankdaten",
+      }),
+      permissionsAllowed: (items) => `Darf ${joinWithAnd(items, "und")} weitergeben`,
+      permissionsNone: "Gibt keine Daten weiter",
       planUsage: (percent) => `Monatsnutzung: ${percent} % des Minuten-Kontingents`,
       planUsageUnknown: "Monatsnutzung: kein Kontingent hinterlegt",
     }),
@@ -189,6 +200,13 @@ export const MCP_TEXTS = Object.freeze({
       owner: "Owner",
       calls: "Calls so far",
       permissions: "Permissions",
+      permissionItems: Object.freeze({
+        summaries: "summaries",
+        personalData: "personal data",
+        bankData: "bank data",
+      }),
+      permissionsAllowed: (items) => `May share ${joinWithAnd(items, "and")}`,
+      permissionsNone: "Shares no data",
       planUsage: (percent) => `Monthly usage: ${percent}% of your included minutes`,
       planUsageUnknown: "Monthly usage: no plan quota on file",
     }),
@@ -274,6 +292,13 @@ export const MCP_TEXTS = Object.freeze({
       owner: "Propriétaire",
       calls: "Appels jusqu'ici",
       permissions: "Autorisations",
+      permissionItems: Object.freeze({
+        summaries: "les résumés",
+        personalData: "les données personnelles",
+        bankData: "les données bancaires",
+      }),
+      permissionsAllowed: (items) => `Peut partager ${joinWithAnd(items, "et")}`,
+      permissionsNone: "Ne partage aucune donnée",
       planUsage: (percent) => `Utilisation mensuelle : ${percent} % des minutes incluses`,
       planUsageUnknown: "Utilisation mensuelle : aucun forfait enregistré",
     }),

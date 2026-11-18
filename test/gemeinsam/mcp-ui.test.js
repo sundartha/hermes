@@ -673,7 +673,7 @@ const RICH_STATE = {
 };
 const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS);
 const AGENT_KEYS = ["calls", "number", "owner", "permissions", "planUsagePercent"];
-const PERMISSIONS_STR_DE = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
+const PERMISSIONS_STR_DE = "Darf Zusammenfassungen weitergeben";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
   owner: z.string().nullable(),
