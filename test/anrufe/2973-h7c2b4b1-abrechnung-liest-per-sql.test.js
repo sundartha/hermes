@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { captureConsole } from "../helpers.js";
 import { starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
 const HTTP_OK = 200;
@@ -8,6 +9,8 @@ const ALT_MIN = 600;
 const MS_JE_MIN = 60_000;
 const ANRUF_ABSENDER = "+4930555000312";
 const ANRUF_ZIEL = "+4915112349934";
+const MANDANTEN_LESEN = "SELECT id FROM tenant ORDER BY id";
+const LESEFEHLER = "Berichtsanrufe lesen kaputt (h7c2b4b1-6)";
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@kv2.invalid" });
 const store = await import("../../src/store.js");
@@ -61,6 +64,60 @@ async function schluesselZurueck(rows) {
   }
 }
 
+function mandantenLesenScheitertEinmal() {
+  const aushaengen = () => {
+    delete db.query;
+    delete db.exec;
+  };
+  const haengeEin = (name) => {
+    const eingehaengt = (text, ...rest) => {
+      if (String(text) === MANDANTEN_LESEN) {
+        aushaengen();
+        throw new Error(LESEFEHLER);
+      }
+      delete db[name];
+      const ergebnis = db[name](text, ...rest);
+      db[name] = eingehaengt;
+      return ergebnis;
+    };
+    db[name] = eingehaengt;
+  };
+  haengeEin("query");
+  haengeEin("exec");
+  return aushaengen;
+}
+
+test("H7c2b4b1-6: scheitert das Lesen der Berichtsanrufe, endet der Sweep mit diesem Fehler ohne Antwort 200 und ohne Sweep-Zeile mit leerer Kandidatenliste", async () => {
+  const abgelehnt = [];
+  let erster;
+  const ersteAblehnung = new Promise((erfuellen) => {
+    erster = erfuellen;
+  });
+  const merke = (grund) => {
+    abgelehnt.push(grund);
+    erster();
+  };
+  const bisherige = process.listeners("unhandledRejection");
+  process.removeAllListeners("unhandledRejection");
+  process.on("unhandledRejection", merke);
+  const zuruecksetzen = mandantenLesenScheitertEinmal();
+  let ausstehend;
+  let beendet;
+  const zeilen = await captureConsole(async () => {
+    ausstehend = sweep();
+    beendet = await Promise.race([ersteAblehnung.then(() => null), ausstehend]);
+  }).finally(() => {
+    zuruecksetzen();
+    process.off("unhandledRejection", merke);
+    for (const listener of bisherige) process.on("unhandledRejection", listener);
+  });
+  const stand = await Promise.race([ausstehend.then(() => "beantwortet"), Promise.resolve("offen")]);
+  assert.equal(beendet, null);
+  assert.equal(abgelehnt[0].message, LESEFEHLER);
+  assert.equal(stand, "offen");
+  assert.doesNotMatch(zeilen.join("\n"), /\[cost-truing\] sweep trigger=\S+ kandidaten=/);
+});
+
 test("H7c2b4b1-5: ein Anruf, der beim Binden nicht mehr in der Datenbank steht, ist kein Kandidat und der Sweep laeuft weiter", async () => {
   const schluessel = await schluesselEntnehmen();
   assert.ok(schluessel.length > 0);
@@ -77,3 +134,4 @@ test("H7c2b4b1-1: der Sweep einer Instanz nimmt einen beendeten Anruf auf, den n
   assert.equal(ergebnis.candidates, 1);
   assert.equal(ergebnis.failed, 0);
 });
+
