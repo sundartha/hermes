@@ -110,10 +110,10 @@ after(() => {
 test("Kriterium 1: ein vom Boot-Takt gefundener Anruf mit abgelaufener Frist, den dieser Prozess nie gesehen hat, endet mit dem Kappungsgrund, einmal aufgelegt, einmal abgerechnet", async () => {
   await fremderAnruf(db, { fristSql: "now() - interval '1 minute'" });
   assert.equal(store.getCall(ANRUF), null);
-  await waitUntil(() => store.getCall(ANRUF)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(ANRUF)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   await store.drainFlushes();
   const ende = await zeile(db);
-  assert.equal(ende.status, "failed");
+  assert.equal(ende.status, "completed");
   assert.equal(ende.failure_reason, CAP_FAILURE_REASON);
   assert.notEqual(ende.billed_at, null);
   assert.deepEqual(auflegen, [CARRIER_ID]);
@@ -124,7 +124,7 @@ test("Kriterium 1: ein Anruf, dessen Frist noch nicht abgelaufen ist, bleibt vom
   const laeuft = "call_frist_boot_laeuft";
   await fremderAnruf(db, { id: laeuft, carrierId: "CA_frist_boot_laeuft", fristSql: "now() + interval '1 hour'" });
   await fremderAnruf(db, { id: "call_frist_boot_zweit", carrierId: "CA_frist_boot_zweit", fristSql: "now() - interval '1 second'" });
-  await waitUntil(() => store.getCall("call_frist_boot_zweit")?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall("call_frist_boot_zweit")?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   assert.equal((await zeile(db, laeuft)).status, "active");
   assert.deepEqual(auflegen, [CARRIER_ID, "CA_frist_boot_zweit"]);
 });

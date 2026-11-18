@@ -167,7 +167,7 @@ test("3395-R1-5: der Fristen-Lauf terminalisiert einen abgelaufenen Anruf mit Ca
   const lebend = seedCall({ id: "boot_lebend", answeredAt: new Date().toISOString(), maxDurationS: 180 });
   const srv = await startServer({ env: { FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) }, seed: zustand([zombie, lebend], []) });
   try {
-    await waitUntil(() => anrufVon(srv, "boot_zombie").failureReason, { timeoutMs: WARTEZEIT_MS });
+    await waitUntil(() => anrufVon(srv, "boot_zombie").status === "failed", { timeoutMs: WARTEZEIT_MS });
     const [z, l] = ["boot_zombie", "boot_lebend"].map((id) => anrufVon(srv, id));
     assert.equal(z.failureReason, "max-duration-cap");
     assert.equal(z.status, "failed");
