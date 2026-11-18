@@ -22,7 +22,7 @@ import {
   pruefungenProduktionMit,
 } from "./konfiguration/pruefungen-produktion.js";
 import { pruefungenStartMit } from "./konfiguration/pruefungen-start.js";
-import { umgebungMit } from "./konfiguration/umgebung.js";
+import { umgebungMit } from "./konfiguration/umgebung.ts";
 import { rohwerteAuth } from "./konfiguration/rohwerte-auth.js";
 import { rohwerteBilling } from "./konfiguration/rohwerte-billing.js";
 import { rohwerteLlm } from "./konfiguration/rohwerte-llm.js";
