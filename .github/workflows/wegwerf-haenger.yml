@@ -4,6 +4,10 @@ on:
     branches: ['wegwerf/**']
 permissions:
   contents: read
+env:
+  BASIS: a775666d7641622ccebae214d90f0a3ee3cf24a8
+  OBERGRENZE_BAUSYSTEM_DATEIEN: 65
+  HERMES_TEST_POSTGRES_URL: postgres://postgres@localhost:5432/postgres
 jobs:
   datei:
     name: Teil ${{ matrix.teil }}
@@ -45,5 +49,6 @@ jobs:
             fi
           done
           wait $pid && rc=0 || rc=$?
+          echo "::group::LOGENDE"; tail -40 /tmp/teil.log | cut -c1-240; echo "::endgroup::"
           echo "TEILERGEBNIS teil=$TEIL rc=$rc sek=$(( $(date +%s) - s ))"
           exit 0
