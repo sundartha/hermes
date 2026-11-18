@@ -156,3 +156,21 @@ test("keine voice_id steht in der Ausgabe der Werkzeuge", async () => {
     }
   });
 });
+
+for (const [name, antwort] of [
+  ["Agent ohne Konfiguration", {}],
+  ["Agent ohne Stimme in der Konfiguration", { conversation_config: { tts: {} } }],
+  ["Agent mit leerer Stimmenkennung", { conversation_config: { tts: { voice_id: "" } } }],
+]) {
+  test(`${name}: stimmen_anzahl fehlt, auch wenn das Override freigegeben ist`, async () => {
+    const mitFreigabe = { ...antwort, platform_settings: { overrides: { conversation_config_override: { tts: { voice_id: true } } } } };
+    for (const agentAntwort of [antwort, mitFreigabe]) {
+      await mitAnruf({ richtung: "outbound", agentAntwort }, async ({ werkzeug }) => {
+        const status = await werkzeug("get_call_status");
+        const ergebnis = await werkzeug("get_call_result");
+        assert.equal("_meta" in status, false);
+        assert.equal(META_SCHLUESSEL in ergebnis._meta, false);
+      });
+    }
+  });
+}
