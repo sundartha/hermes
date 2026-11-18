@@ -84,22 +84,23 @@ export function makeInboundBridges({
     });
   }
 
-  function leiteUmWennWartend(callId: string, art: string, call: Anruf | null | undefined): void {
-    if (!umleitungFaellig(call)) return;
+  function leiteUmWennWartend(callId: string, art: string, call: Anruf | null | undefined): unknown {
+    if (!umleitungFaellig(call)) return undefined;
     console.log(`[${LOG_TAG}] frist_abgelaufen call=${callId} frist=${art}`);
-    void umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
+    return umleiten({ call, rueckfallUrl: elRueckfallUrl({ callId, quelle: EL_RUECKFALL_QUELLE.FRIST }) });
   }
 
   function fristAbgelaufen(callId: string, art: string): void {
     clearDeadlines(callId);
     mitAnruf(callId, (call) => {
-      leiteUmWennWartend(callId, art, call);
+      void leiteUmWennWartend(callId, art, call);
     });
   }
 
   async function uebergabeDurchLauf(callId: string): Promise<void> {
     const call = store.leseCallUngebunden ? await store.leseCallUngebunden(callId) : store.getCall(callId);
-    leiteUmWennWartend(callId, FRIST_ART.LAUF, call);
+    if ((await leiteUmWennWartend(callId, FRIST_ART.LAUF, call)) === false)
+      throw new Error(`Uebergabe weder umgeleitet noch aufgelegt: ${callId}`);
   }
 
   function schreibeFrist(callId: string, faelligMs: number): void {

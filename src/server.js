@@ -148,8 +148,8 @@ const callFinish = {
   finishCall: elevenlabsOutbound().mitAuftragsurteil({ finishCall: callFinishOhneUrteil.finishCall, summarizeCall }),
 };
 
-const endCarrierCall = (callId) => {
-  const call = store.getCall(callId);
+const endCarrierCall = (callId, gelesen) => {
+  const call = store.getCall(callId) ?? gelesen;
   const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
   return auflegen?.();
 };
