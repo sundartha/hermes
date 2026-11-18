@@ -4,7 +4,7 @@ Quelle: Issue-Verlauf von #3410 (S7.5, ElevenLabs-Port) und seine PRs #5254, #52
 
 ## Testanruf
 
-Beleg ausstehend. Den Testanruf auf Staging löst Hermes-Produkt aus (Antonios Ja vom 17.11.) und trägt call_id und Ergebnis als Kommentar in #3412 ein. Dieser Abschnitt bekommt die call_id und den Link zum Beleg-Kommentar, sobald der Kommentar existiert; bis dahin bleibt das Kriterium „Testanruf erfolgreich, Beleg im Issue“ offen.
+Beleg: [Kommentar von Hermes-Produkt vom 18.11. 10:14 Uhr in #3412](https://github.com/sundartha/hermes/issues/3412#issuecomment-6974188618). call_id: call_mwlwn6zqbsli. Weg: Staging-Werkzeug place_call, Ziel ist Antonios eigene freigegebene Nummer (Ja vom 17.11.). Ergebnis wie gemeldet: Der Anruf wurde aufgebaut und beendet, Status completed. Die Zusammenfassung des Systems lautet: Der Assistent begrüßte und nannte sich als KI-Assistent, wollte die Verbindung prüfen, das Gespräch endete abrupt. objective_achieved: unklar, es gab keine bestätigte Antwort der Gegenseite. Der Anruf lief technisch durch die typisierten Wege bis zum Gespräch, ist aber nicht als erfolgreich zu werten, nur als belegt. Das Kriterium „Testanruf erfolgreich, Beleg im Issue“ bleibt deshalb offen. Getrennt davon bekannt: die doppelte Ansage am Anrufanfang (Kette 5321).
 
 Staging stand seit 18.11. 07:39 UTC auf master (617f8625) und enthält die ElevenLabs-Schnittstellen aus den PRs #5254, #5269 und #5280.
 
