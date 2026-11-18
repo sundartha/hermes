@@ -1,10 +1,10 @@
-const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
+const SAFE_DUCK_TYPING_PROPS = new Set<string>(["then", "toJSON"]);
 
-export function guardedConfig(target, path = "config") {
+export function guardedConfig<T extends object>(target: T, path = "config"): T {
   return new Proxy(target, {
     get(obj, prop, receiver) {
       if (typeof prop === "symbol" || prop in obj) {
-        const value = Reflect.get(obj, prop, receiver);
+        const value: unknown = Reflect.get(obj, prop, receiver);
         const isNestedGroup = value && typeof value === "object" && !Array.isArray(value);
         return isNestedGroup ? guardedConfig(value, `${path}.${String(prop)}`) : value;
       }
@@ -24,13 +24,13 @@ export function guardedConfig(target, path = "config") {
   });
 }
 
-function makeNamespaceGroup(keys, storage) {
+function makeNamespaceGroup(keys: readonly string[], storage: Record<string, unknown>): object {
   const group = {};
   for (const key of keys) {
     Object.defineProperty(group, key, {
       enumerable: true,
       get: () => storage[key],
-      set: (value) => {
+      set: (value: unknown) => {
         Object.assign(storage, { [key]: value });
       },
     });
@@ -38,7 +38,7 @@ function makeNamespaceGroup(keys, storage) {
   return group;
 }
 
-export function attachNamespaces(target, namespaces) {
+export function attachNamespaces(target: Record<string, unknown>, namespaces: Record<string, readonly string[]>): void {
   for (const [namespace, keys] of Object.entries(namespaces)) {
     Object.defineProperty(target, namespace, {
       enumerable: false,
@@ -48,7 +48,7 @@ export function attachNamespaces(target, namespaces) {
   }
 }
 
-export function buildNamespaceSurface(storage, namespaces) {
+export function buildNamespaceSurface(storage: Record<string, unknown>, namespaces: Record<string, readonly string[]>): object {
   const surface = {};
   for (const [namespace, keys] of Object.entries(namespaces)) {
     Object.defineProperty(surface, namespace, {

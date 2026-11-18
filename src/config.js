@@ -16,7 +16,7 @@ import {
   attachNamespaces,
   buildNamespaceSurface,
   guardedConfig,
-} from "./konfiguration/oberflaeche.js";
+} from "./konfiguration/oberflaeche.ts";
 import {
   isSelfServiceLive,
   pruefungenProduktionMit,
