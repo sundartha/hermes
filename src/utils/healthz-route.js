@@ -20,12 +20,22 @@ const HEALTHZ_SCHWELLEN = Object.freeze({
 
 const MONOTONE_UHR = () => performance.now();
 
+function fruehwarnungsFelder({ webhooksAbgewiesen, anrufeUeberHoechstdauer }) {
+  if (webhooksAbgewiesen === 0 && anrufeUeberHoechstdauer === 0) return {};
+  console.error(`[fruehwarnung] webhooksAbgewiesen=${webhooksAbgewiesen} anrufeUeberHoechstdauer=${anrufeUeberHoechstdauer}`);
+  const felder = {};
+  if (webhooksAbgewiesen > 0) felder.webhooksAbgewiesen = webhooksAbgewiesen;
+  if (anrufeUeberHoechstdauer > 0) felder.anrufeUeberHoechstdauer = anrufeUeberHoechstdauer;
+  return felder;
+}
+
 export function makeHealthzRoutes({
   config,
   poolZustand,
   schwellen = HEALTHZ_SCHWELLEN,
   uhr = MONOTONE_UHR,
   zeitplaene = async () => [],
+  fruehwarnung = () => ({ webhooksAbgewiesen: 0, anrufeUeberHoechstdauer: 0 }),
 }) {
   const router = Router();
   const loopFestgefahren = starteLoopWache({
@@ -49,9 +59,10 @@ export function makeHealthzRoutes({
     const grund = schaden();
     if (grund) return res.status(HTTP_SERVICE_UNAVAILABLE).json({ ok: false, schaden: grund, commit });
     const ueberfaellig = await zeitplaene();
-    if (ueberfaellig.length === 0) return res.json({ ok: true, commit });
-    console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
-    return res.json({ ok: true, commit, zeitplaeneUeberfaellig: ueberfaellig.length });
+    const warnung = fruehwarnungsFelder(fruehwarnung());
+    if (ueberfaellig.length > 0) console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
+    const felder = ueberfaellig.length > 0 ? { zeitplaeneUeberfaellig: ueberfaellig.length } : {};
+    return res.json({ ok: true, commit, ...felder, ...warnung });
   });
 
   return router;

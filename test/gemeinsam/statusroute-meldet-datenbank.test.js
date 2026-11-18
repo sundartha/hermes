@@ -96,6 +96,8 @@ function pruefeZustand(antwort, status, datenbankAntwortet) {
     flush: true,
     commit: COMMIT,
     telnyxSignaturSchluessel: "fehlt",
+    webhooksAbgewiesen: 0,
+    anrufeUeberHoechstdauer: 0,
   });
   assert.equal(antwort.text.includes(FEHLERDETAIL), false);
 }

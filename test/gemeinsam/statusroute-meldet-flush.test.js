@@ -77,7 +77,14 @@ function pruefeZustand(antwort, status, { datenbank, flush }) {
   assert.equal(antwort.status, status);
   assert.equal(antwort.kopf, KEIN_ZWISCHENSPEICHER);
   assert.equal(koerperVon(antwort).flush, flush, MELDUNG);
-  assert.deepEqual(koerperVon(antwort), { datenbank, flush, commit: COMMIT, telnyxSignaturSchluessel: "fehlt" });
+  assert.deepEqual(koerperVon(antwort), {
+    datenbank,
+    flush,
+    commit: COMMIT,
+    telnyxSignaturSchluessel: "fehlt",
+    webhooksAbgewiesen: 0,
+    anrufeUeberHoechstdauer: 0,
+  });
   assert.equal(antwort.text.includes(FEHLERDETAIL), false);
 }
 
@@ -120,7 +127,7 @@ test("[NIE2] die Antwort enthaelt nie einen Fehlertext, auch wenn der Flush mit 
   );
   assert.equal(antwort.text.includes(FEHLERDETAIL), false);
   assert.equal(antwort.text.includes(db.constructor.name), false);
-  assert.deepEqual(Object.keys(koerperVon(antwort)).sort(), ["commit", "datenbank", "flush", "telnyxSignaturSchluessel"]);
+  assert.deepEqual(Object.keys(koerperVon(antwort)).sort(), ["anrufeUeberHoechstdauer", "commit", "datenbank", "flush", "telnyxSignaturSchluessel", "webhooksAbgewiesen"]);
   assert.equal(typeof koerperVon(antwort).flush, "boolean");
   assert.equal(antwort.text.includes("cost_cross_check"), false);
 });
@@ -179,5 +186,12 @@ test("[NIE5] haengt die Flush-Abfrage, antwortet die Route in der Frist mit 503 
 test("[NIE6] am laufenden Server mit JSON-Speicher antwortet /intern/status mit Schluessel 200 mit datenbank true, flush true und commit", async () => {
   const antwort = await abrufen(jsonServer.localUrl);
   assert.equal(antwort.status, HTTP_OK);
-  assert.deepEqual(koerperVon(antwort), { datenbank: true, flush: true, commit: COMMIT, telnyxSignaturSchluessel: "fehlt" });
+  assert.deepEqual(koerperVon(antwort), {
+    datenbank: true,
+    flush: true,
+    commit: COMMIT,
+    telnyxSignaturSchluessel: "fehlt",
+    webhooksAbgewiesen: 0,
+    anrufeUeberHoechstdauer: 0,
+  });
 });

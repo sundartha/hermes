@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
+import { fruehwarnung } from "./intern-anrufe-laufend.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 import { createRateLimiter } from "../middleware.ts";
 import { HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
@@ -63,7 +64,7 @@ export function makeInternStatusRoutes({ config, store, datenbankFristMs = DATEN
     const [datenbank, flush] = await innerhalbDerFrist([probeDerDatenbank(), flushAbfrage], datenbankFristMs);
     const { inboundSignatureVerifier } = await import("../telephony/registry.js");
     const telnyxSignaturSchluessel = inboundSignatureVerifier().schluesselGueltig(config.telephony?.telnyxPublicKey) ? "ok" : "fehlt";
-    return { datenbank, flush, commit: config.server.deployedCommit, telnyxSignaturSchluessel };
+    return { datenbank, flush, commit: config.server.deployedCommit, telnyxSignaturSchluessel, ...fruehwarnung(store, Date.now()) };
   }
 
   router.get(STATUS_PATH, begrenzer, (req, res, next) => {

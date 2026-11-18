@@ -39,6 +39,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/uhr-warten.ts";
+import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
 
@@ -663,6 +664,7 @@ export function makeVoiceRoutes({
       params: req.body ?? {},
     });
     if (!ok) {
+      zaehleAbgewiesenenWebhook();
       console.warn(
         `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) ?? "unknown"})`,
       );
