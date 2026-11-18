@@ -11,6 +11,7 @@ export function makeAbschaltweiche() {
     einschalten: () => {
       eingeschaltet = true;
     },
+    laeuft: () => eingeschaltet,
     middleware: (req, res, next) => {
       if (!eingeschaltet || isTrustedLocalCaller(req)) return next();
       res

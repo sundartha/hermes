@@ -245,6 +245,7 @@ interface Anrufstart {
   macheAuftrag?: ((verbindung: AuftragsVerbindung) => unknown) | null;
   verdrahtung?: { setzeHandler: (handler: unknown) => unknown } | null;
   uhr?: { jetztMs: () => number; warte: (ms: number) => Promise<void> };
+  abschaltend?: (() => boolean) | undefined;
 }
 
 interface Abhaengigkeiten {
@@ -364,7 +365,7 @@ function anrufstartNichtVerdrahtet(): never {
   throw new Error("Der Anrufstart-Auftrag ist nicht verdrahtet (deps.anrufstart fehlt)");
 }
 
-const ANRUFSTART_UNVERDRAHTET: Required<Anrufstart> = Object.freeze({
+const ANRUFSTART_UNVERDRAHTET: Required<Omit<Anrufstart, "abschaltend">> = Object.freeze({
   einreihen: anrufstartNichtVerdrahtet,
   macheAuftrag: null,
   verdrahtung: null,
@@ -652,7 +653,7 @@ export function makeCallRoutes({
 }: Abhaengigkeiten): Router {
   const router = Router();
   const bereiche: Bereiche = speicherBereiche(store);
-  const { einreihen, macheAuftrag, verdrahtung, uhr } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
+  const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
   function sichtbarerAnruf<T extends AnrufKern>(call: T | null | undefined, tenantId: string | undefined) {
     return call && tenantOwnsCall(call, tenantId) ? call : null;
@@ -718,6 +719,7 @@ export function makeCallRoutes({
     eingefroren: () => config.safety.outboundFrozen,
     pausiert: () => anrufpauseGilt(store),
     abgebrochen: (call: Anruf) => call.status !== "active",
+    abschaltend,
   };
 
   function sperrAblehnung(call: Anruf, grund: string): TorAblehnung {
