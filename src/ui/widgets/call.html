@@ -208,15 +208,6 @@
     var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
 
     var STATUS_VIEW = {
-      queued: {
-        phase: "dial",
-        wingStatus: "connecting",
-        pillLabel: "Waiting for a line",
-        pillClass: "pill pill--active",
-        dot: true,
-        hudPhase: "Hermes is waiting for a free line.",
-        ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
-      },
       dialing: {
         phase: "dial",
         wingStatus: "connecting",
