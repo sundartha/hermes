@@ -1,5 +1,5 @@
 import "./process-guards.js";
-import { config } from "./config.js";
+import { config, fristenEinstellungen } from "./config.js";
 import * as store from "./store.js";
 import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
@@ -184,6 +184,7 @@ const inboundBridges = makeInboundBridges({
   store,
   now: Date.now,
   setTimer: defaultSetTimer,
+  uebernahmeMs: fristenEinstellungen.fristenTaktMs,
   umleiten: ({ call, rueckfallUrl }) =>
     umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });

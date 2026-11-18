@@ -36,7 +36,7 @@ export function runSweepTick(waechter) {
   for (const { logTag, lauf } of TEILLAEUFE) void lauf(waechter).catch((err) => console.error(logTag, err.message));
 }
 
-export function starteFristenTakt({ store, lifecycle, config, fristen, abfrage }) {
+export function starteFristenTakt({ store, lifecycle, config, fristen, abfrage, uebergabe }) {
   const geldWacheMs = config.safety.budgetWatchdogIntervalMs;
   return starteFristenTaktMitUhr({
     store,
@@ -52,6 +52,7 @@ export function starteFristenTakt({ store, lifecycle, config, fristen, abfrage }
         : undefined,
     reserve: { freigeben: lifecycle.releaseReserve },
     abfrage,
+    uebergabe,
     limitJeMandant: fristen.fristenLimitJeMandant,
     leaseMs: fristen.fristenTaktMs,
     taktMs: fristen.fristenTaktMs,

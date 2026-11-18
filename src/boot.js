@@ -771,7 +771,7 @@ export async function bootServer({
 
   elevenLabsOutbound.rearmActiveConversationPolls();
   const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
-  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage });
+  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf } });
 
   const instanzTakt = await store.starteInstanzTakt();
 

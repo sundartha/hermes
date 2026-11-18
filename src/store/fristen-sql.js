@@ -52,6 +52,17 @@ const FRISTEN = Object.freeze({
     faelligUm: "frist_abfrage_at",
     parameter: [],
   },
+  uebergabe: {
+    feld: "fristUebergabeAt",
+    leaseFeld: "fristUebergabeLeaseBis",
+    versucheFeld: "fristUebergabeVersuche",
+    leaseSpalte: "frist_uebergabe_lease_bis",
+    versucheSpalte: "frist_uebergabe_versuche",
+    bedingung: `${AKTIV_SQL} AND frist_uebergabe_at IS NOT NULL`,
+    offen: (call) => istAktiv(call) && Boolean(call.fristUebergabeAt),
+    faelligUm: "frist_uebergabe_at",
+    parameter: [],
+  },
 });
 const SETZEN_SQL = "UPDATE call SET frist_hoechstdauer_at = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const SETZEN_GELD_SQL =
@@ -60,6 +71,9 @@ const SETZEN_RESERVE_SQL =
   "UPDATE call SET frist_reserve_at = $3, frist_reserve_versuche = 0 WHERE tenant_id = $1 AND id = $2";
 const SETZEN_ABFRAGE_SQL =
   "UPDATE call SET frist_abfrage_at = $3, frist_abfrage_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
+const SETZEN_UEBERGABE_SQL = `UPDATE call SET frist_uebergabe_versuche = 0,
+  frist_uebergabe_at = CASE WHEN $3::timestamptz IS NULL THEN NULL ELSE LEAST(COALESCE(frist_uebergabe_at, $3::timestamptz), $3::timestamptz) END
+  WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
 const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
 const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
@@ -116,6 +130,8 @@ export function macheFristenSql({ runner, einreihen }) {
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_RESERVE_SQL, [tenantId, callId, faelligAt]])),
     setzeAbfrage: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_ABFRAGE_SQL, [tenantId, callId, faelligAt]])),
+    setzeUebergabe: ({ callId, tenantId, faelligAt }) =>
+      einreihen((client) => imMandanten(client, tenantId, [SETZEN_UEBERGABE_SQL, [tenantId, callId, faelligAt]])),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const eintrag = frist(art);
       const sql = holenSql(eintrag);
@@ -183,4 +199,12 @@ export function setzeAbfrageImSpiegel(state, { callId, faelligAt }) {
   if (call?.status !== "active") return;
   call.fristAbfrageAt = faelligAt;
   call.fristAbfrageVersuche = 0;
+}
+
+export function setzeUebergabeImSpiegel(state, { callId, faelligAt }) {
+  const call = state.calls.find((eintrag) => eintrag.id === callId);
+  if (call?.status !== "active") return;
+  const bleibt = faelligAt !== null && call.fristUebergabeAt && alsMs(call.fristUebergabeAt) < alsMs(faelligAt);
+  if (!bleibt) call.fristUebergabeAt = faelligAt;
+  call.fristUebergabeVersuche = 0;
 }
