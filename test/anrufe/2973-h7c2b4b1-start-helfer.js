@@ -25,8 +25,8 @@ function umgebungSetzen() {
 function mitBerichtsausfall(db, zustand) {
   const pruefen = (text) => {
     if (String(text) !== MANDANTEN_LESEN || zustand.scheiternAb === undefined) return;
-    zustand.gelesen += 1;
-    if (zustand.gelesen >= zustand.scheiternAb) throw new Error(LESEFEHLER);
+    zustand.lesungen.push(text);
+    if (zustand.lesungen.length >= zustand.scheiternAb) throw new Error(LESEFEHLER);
   };
   return new Proxy(db, {
     get(ziel, name) {
@@ -90,11 +90,10 @@ export async function startMitFremdemAnruf({ scheiternAb } = {}) {
   await db.exec(`CREATE ROLE h7c2b4b1_app NOSUPERUSER NOBYPASSRLS;
     GRANT CREATE, USAGE ON SCHEMA public TO h7c2b4b1_app;
     SET ROLE h7c2b4b1_app;`);
-  const zustand = {};
+  const zustand = { lesungen: [] };
   poolAufPglite(mitBerichtsausfall(db, zustand));
   store = await eigeneInstanzOeffnen();
   await andereInstanzLegtBelegtenAnrufAn(db);
-  zustand.gelesen = 0;
   zustand.scheiternAb = scheiternAb;
   let lauscht = 0;
   const echtesListen = http.Server.prototype.listen;

@@ -13,13 +13,18 @@ const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@k
 const store = await import("../../src/store.js");
 const { makePgStore } = await import("../pg-helpers.js");
 
+function ersterMandant() {
+  const [erster] = store.load().tenants;
+  return erster.id;
+}
+
 const kontext = (db, tenantId) => db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
 
 async function anrufEinerAnderenInstanz(db) {
   const runner = { withClient: (arbeit) => arbeit({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }) };
   const fremd = makePgStore(runner);
   await fremd.init();
-  const tenantId = store.load().tenants[0].id;
+  const tenantId = ersterMandant();
   const call = fremd.createCall({ direction: "outbound", from: ANRUF_ABSENDER, to: ANRUF_ZIEL, goal: "Test", tenantId });
   await fremd.persistCall(call.id);
   const angelegt = fremd.getCall(call.id);
@@ -43,7 +48,7 @@ async function aufbau() {
 const { db, callId, sweep } = await aufbau();
 
 async function schluesselEntnehmen() {
-  await kontext(db, store.load().tenants[0].id);
+  await kontext(db, ersterMandant());
   const { rows } = await db.query("DELETE FROM anruf_schluessel WHERE call_id = $1 RETURNING *", [callId]);
   return rows;
 }
