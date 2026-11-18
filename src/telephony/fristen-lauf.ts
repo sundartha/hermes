@@ -48,7 +48,7 @@ interface FristenLaufAbhaengigkeiten {
     setzeReserveFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
     setzeUebergabeFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
   };
-  beende: (call: Anruf) => Promise<unknown>;
+  beende: (call: Anruf, abgelaufenNachStart?: boolean) => Promise<unknown>;
   geld?: GeldAbhaengigkeiten;
   reserve?: ReserveAbhaengigkeiten;
   abfrage?: AbfrageAbhaengigkeiten;
@@ -183,7 +183,7 @@ export function makeFristenLauf({
   let lesefehlerInFolge = 0;
 
   async function hoechstdauerTakt(): Promise<TaktErgebnis> {
-    const ergebnis = await runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, beende));
+    const ergebnis = await runde(HOECHSTDAUER, async (treffer) => bearbeite(treffer, hoechstdauerFaellig, (call) => beende(call, true)));
     lesefehlerInFolge = ergebnis.gelesen ? 0 : lesefehlerInFolge + 1;
     if (lesefehlerInFolge < LESEFEHLER_BIS_ENDE) return ergebnis;
     return { ...ergebnis, ...(await beendeAlle(abgelaufeneHier?.() ?? [], beende)) };
