@@ -67,6 +67,7 @@ const CONTEXT_RECEIVED_OUTPUT = z.object({
 
 export const CALL_OUTPUT = {
   ...CALL_STATUS_OUTPUT,
+  recipient_name: z.string().nullable().optional(),
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
   context_received: CONTEXT_RECEIVED_OUTPUT,
@@ -209,6 +210,13 @@ export function placeCallRequestSchema(begriffe) {
       .string()
       .describe(
         "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
+      ),
+    recipient_name: z
+      .string()
+      .max(80)
+      .optional()
+      .describe(
+        "Optional: the name of the person or business being called, exactly as the user gave it (e.g. 'Salon Mia'). Only shown in the call card's headline; never spoken, never stored. Leave it out if the user did not name the party.",
       ),
     briefing: z
       .string()
