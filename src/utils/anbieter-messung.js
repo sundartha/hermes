@@ -1,7 +1,7 @@
+import { HTTP_TOO_MANY_REQUESTS } from "./http.ts";
 import { anbieterMesser } from "./telemetrie.js";
 
 const NANOSEKUNDEN_JE_MS = 1_000_000;
-const HTTP_ZU_VIELE_ANFRAGEN = 429;
 const TELNYX_DROSSEL_CODE = "10011";
 const BREVO_DROSSEL_CODE = "http_429";
 const FRIST_FEHLERNAME = "TimeoutError";
@@ -27,7 +27,7 @@ const ANBIETER = Object.freeze({
       findPhoneNumber: "nummer-nachschlagen",
     }),
     istDrosselung: (fehler) =>
-      fehler.providerStatus === HTTP_ZU_VIELE_ANFRAGEN || fehler.providerCode === TELNYX_DROSSEL_CODE,
+      fehler.providerStatus === HTTP_TOO_MANY_REQUESTS || fehler.providerCode === TELNYX_DROSSEL_CODE,
   }),
   brevo: Object.freeze({
     vorgaenge: Object.freeze({ sendMail: "mail-senden" }),
@@ -51,7 +51,7 @@ const ANBIETER = Object.freeze({
       retrievePaymentMethodType: "zahlart-lesen",
       retrievePriceAmount: "preis-lesen",
     }),
-    istDrosselung: (fehler) => fehler.providerStatus === HTTP_ZU_VIELE_ANFRAGEN,
+    istDrosselung: (fehler) => fehler.providerStatus === HTTP_TOO_MANY_REQUESTS,
   }),
   workos: Object.freeze({
     vorgaenge: Object.freeze({

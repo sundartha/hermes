@@ -524,6 +524,9 @@ const speicherFassade = {
 
 const STATUS_MELDUNG =
   "Der Statuscode in res.status() kommt aus {{quelle}}: einen Namen wie HTTP_NOT_FOUND importieren oder antworteFehler nutzen, keine Zahl und keine eigene Zahlen-Konstante.";
+const STATUS_KONSTANTE_MELDUNG =
+  "Statuscodes wie {{name}} kommen aus {{quelle}}: den Namen von dort importieren, keine eigene HTTP_*-Zahlen-Konstante.";
+const STATUS_NAME = /^HTTP_[A-Z_]+$/;
 const STATUS_ZWEIGE = { ConditionalExpression: ["consequent", "alternate"], LogicalExpression: ["left", "right"] };
 
 function istZahl(knoten) {
@@ -540,7 +543,7 @@ function lokaleZahl(context, node, name) {
 
 function statusAlsZahl(context, knoten) {
   if (istZahl(knoten)) return true;
-  if (knoten.type === "Identifier") return lokaleZahl(context, knoten, knoten.name);
+  if (knoten.type === "Identifier") return !STATUS_NAME.test(knoten.name) && lokaleZahl(context, knoten, knoten.name);
   return (STATUS_ZWEIGE[knoten.type] ?? []).some((zweig) => statusAlsZahl(context, knoten[zweig]));
 }
 
@@ -555,12 +558,16 @@ const statusAusHttp = {
         additionalProperties: false,
       },
     ],
-    messages: { zahl: STATUS_MELDUNG },
+    messages: { zahl: STATUS_MELDUNG, konstante: STATUS_KONSTANTE_MELDUNG },
   },
   create(context) {
     const [{ quelle }] = context.options;
     if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
     return {
+      VariableDeclarator(node) {
+        if (node.id.type === "Identifier" && STATUS_NAME.test(node.id.name) && istZahl(node.init))
+          context.report({ node, messageId: "konstante", data: { quelle, name: node.id.name } });
+      },
       CallExpression(node) {
         const { callee, arguments: argumente } = node;
         const istStatus = callee.type === "MemberExpression" && !callee.computed && callee.property.name === "status";
