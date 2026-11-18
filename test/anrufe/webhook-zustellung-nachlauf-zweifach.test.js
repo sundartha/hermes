@@ -248,6 +248,12 @@ const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
 const KLEINE_ZEITGRENZE_MS = 200;
+const BEOBACHTUNGSZEIT_MS = 500;
+
+function beobachtungszeitAbgelaufen(ms) {
+  const signal = AbortSignal.timeout(ms);
+  return new Promise((erfuellen) => signal.addEventListener("abort", erfuellen, { once: true }));
+}
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
@@ -318,11 +324,9 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
-      const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
-      const kandidaten = anspruchskandidaten(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      await warteAufAnspruchsverbindung(mitschnitt, kandidaten, vorher);
+      await beobachtungszeitAbgelaufen(BEOBACHTUNGSZEIT_MS);
       const ansprueche = mitschnitt.verbindungen().flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG));
       assert.deepEqual(ansprueche, []);
     } finally {
