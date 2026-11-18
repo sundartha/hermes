@@ -13,7 +13,6 @@ import {
 } from "../../src/elevenlabs/inbound-bridges.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
-import { hangUpAction } from "../../src/telephony/call-termination.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -564,8 +563,7 @@ function ubFremderLauf({ auflegenWirft }) {
   };
   const endCarrierCall = (callId, gelesen) => {
     const call = store.getCall(callId) ?? gelesen;
-    const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
-    return auflegen?.();
+    return call ? voiceControl(call.provider).endCall(call.twilioSid) : undefined;
   };
   const bruecken = makeInboundBridges({
     store,
