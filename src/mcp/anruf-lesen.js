@@ -41,7 +41,7 @@ function durationS(callRecord) {
   return Math.max(0, Math.round((Date.parse(end) - Date.parse(answeredAt)) / MS_PER_SECOND));
 }
 
-const RUNNING_STATUSES = new Set(["dialing", "in_progress"]);
+const RUNNING_STATUSES = new Set(["queued", "dialing", "in_progress"]);
 
 function callSubjectView(call) {
   return {
