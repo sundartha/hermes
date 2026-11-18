@@ -110,6 +110,12 @@ jobs:
           BETTER_STACK_HEARTBEAT_PROBE: ${{ secrets.BETTER_STACK_HEARTBEAT_PROBE }}
         run: node tools/deploy-weg.mjs heartbeat --name probe
 
+      - name: Prüfung der Prüfung (monatlich)
+        if: success() && github.event_name == 'schedule'
+        env:
+          SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
+        run: node tools/deploy-weg.mjs pruefung
+
       - name: Heartbeat Nachtlauf
         if: success() && github.event_name == 'schedule'
         env:

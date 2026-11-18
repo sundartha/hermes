@@ -15,6 +15,7 @@ import {
   alarmprobe,
   heartbeatMelden,
   hoertestIssueAnlegenOderErsetzen,
+  monatspruefung,
 } from "./deploy-weg/hoertest.mjs";
 import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
@@ -145,6 +146,7 @@ const BEFEHLE = new Map([
     },
   ],
   ["alarmprobe", { argumente: [], ausfuehren: alarmprobe }],
+  ["pruefung", { argumente: [], ausfuehren: monatspruefung }],
   ["heartbeat", { argumente: ["--name"], ausfuehren: heartbeatMelden }],
   [
     "anrufpause",

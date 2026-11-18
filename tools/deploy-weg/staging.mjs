@@ -126,11 +126,17 @@ async function webhooksProbieren({ hermes, commit, ausgabe, uhr }) {
   return ergebnisse.every(Boolean);
 }
 
-function fruehwarnungOk({ stand, basis, eigene, ausgabe }) {
+export function fruehwarnungOk({ stand, basis, eigene, ausgabe }) {
   const zuviel = stand.webhooksAbgewiesen - basis - eigene;
   const rot = zuviel > 0 || stand.anrufeUeberHoechstdauer >= 1;
   if (rot) ausgabe.melde("fruehwarnung", { abgewiesen: zuviel, anrufe: stand.anrufeUeberHoechstdauer });
   return !rot;
+}
+
+export function absichtlichRotMelden({ einstellungen, ausgabe }) {
+  if (!einstellungen.absichtlichRot) return false;
+  ausgabe.melde("absichtlich_rot");
+  return true;
 }
 
 async function standProbieren({ hermes, einstellungen, commit, ausgabe, basis }) {
@@ -160,9 +166,6 @@ export async function staging({
   const basis = await hermes.abgewieseneWebhooks();
   const webhooks = await webhooksProbieren({ hermes, commit, ausgabe, uhr });
   const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe, basis });
-  if (einstellungen.absichtlichRot) {
-    ausgabe.melde("absichtlich_rot");
-    return false;
-  }
+  if (absichtlichRotMelden({ einstellungen, ausgabe })) return false;
   return exit === EXIT_OK && http === HTTP_NICHT_ANGEMELDET && webhooks && stand;
 }
