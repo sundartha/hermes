@@ -1,13 +1,3 @@
-export function defaultSetTimer(fn: () => void, ms: number): NodeJS.Timeout {
-  const handle = setTimeout(fn, ms);
-  handle.unref();
-  return handle;
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export const MS_PER_SECOND = 1000;
 
 export const MS_PER_MINUTE = 60 * MS_PER_SECOND;

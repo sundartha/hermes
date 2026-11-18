@@ -10,7 +10,8 @@ import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, pollProviderErrorReason, provi
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
-import { MS_PER_SECOND, sleep } from "../utils/timer.ts";
+import { MS_PER_SECOND } from "../utils/timer.ts";
+import { sleep } from "../utils/uhr-warten.ts";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
 import { assertEroeffnungGeprueft, endConversation, fetchConversation } from "./convai.ts";
