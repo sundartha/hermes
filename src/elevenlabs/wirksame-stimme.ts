@@ -21,7 +21,8 @@ const OVERRIDE_FREIGEGEBEN = z.object({
 });
 
 export function stimmenAnzahlVon({ angefordert, agent }: { angefordert: string; agent: unknown }): number | null {
-  const eigene = EIGENE_STIMME.safeParse(agent).data?.conversation_config.tts.voice_id;
+  const gelesen = EIGENE_STIMME.safeParse(agent).data;
+  const eigene = gelesen?.conversation_config.tts.voice_id;
   if (eigene === undefined) return null;
   const freigegeben = OVERRIDE_FREIGEGEBEN.safeParse(agent).success;
   const wirksam = freigegeben ? angefordert : eigene;
