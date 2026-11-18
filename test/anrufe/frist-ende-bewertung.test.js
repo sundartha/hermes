@@ -34,6 +34,7 @@ test("Frist-Ende Bewertung: ein nach dem Start abgelaufener Anruf endet an der H
     assert.equal(statusVon("call_el_ohne"), "completed");
     assert.equal(statusVon("call_fremd"), "completed");
     for (const c of stand.calls) assert.equal(c.failureReason, "max-duration-cap");
+    assert.doesNotMatch(srv.stdout, /\[rearm\] aktive Calls beim Boot/);
   } finally {
     await srv.stop();
   }
