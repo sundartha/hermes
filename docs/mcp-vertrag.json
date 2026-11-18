@@ -2067,6 +2067,12 @@
       "art": "bruch",
       "begruendung": "Anrufkarte #5278 (Häppchen 4a): get_agent_status nennt die Berechtigungen als lesbaren Satz statt als Rohtext (Feld permissions, weiter ein String), agent-status.html zeigt die Anrufzahl mit dem Zeitraum, das Widget-Wörterbuch bekommt den Schlüssel {n} this month; alle vier Widgets bekommen eine neue Version (agent-status v31, my-number v32, calls v32, call v45). Noch nichts veröffentlicht.",
       "stand_sha256": "3bf5fc02b4d0cd5dc345e5a8f7ab0f919b6d4efe0efbd664956f408b9307948b"
+    },
+    {
+      "datum": "2026-11-18",
+      "art": "bruch",
+      "begruendung": "Anrufkarte #5278 (Häppchen 4a): get_agent_status liefert das neue Ausgabefeld callsThisMonth (Anrufe seit Monatsbeginn UTC) und nennt es in der Beschreibung; agent-status.html zeigt es. Noch nichts veröffentlicht.",
+      "stand_sha256": "89cd9a3053186efa5eb02fe4dfd7576e61f9eb3247e2db5fcc3b958c178cc41c"
     }
   ]
 }
