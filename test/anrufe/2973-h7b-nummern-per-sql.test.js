@@ -69,7 +69,7 @@ test("H7b-3: eine Nummer ohne Anruf ist auf B frei, auch wenn A einen Anruf mit 
 test("H7b-4: ein beendeter Anruf von A sperrt die Nummer auf B nicht mehr", async () => {
   const { a, b } = await zweiInstanzen();
   const call = await aktiverAnruf(a);
-  await a.endCallRecord(call.id, { status: "completed" });
+  await a.endCallRecord(call.id, "completed");
   assert.equal(await b.numberHasActiveCall(NUMMER), false);
 });
 
@@ -89,7 +89,7 @@ test("H7b-6b: ein im Spiegel beendeter Anruf sperrt die Nummer nicht", async () 
   const { b } = await zweiInstanzen();
   const call = b.createCall({ direction: "outbound", from: NUMMER, to: GEGENSTELLE, goal: "Test", tenantId: KUNDE, provider: "telnyx" });
   await b.persistCall(call.id);
-  await b.endCallRecord(call.id, { status: "completed" });
+  await b.endCallRecord(call.id, "completed");
   assert.equal(await b.numberHasActiveCall(NUMMER), false);
 });
 

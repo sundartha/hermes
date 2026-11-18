@@ -18,7 +18,7 @@ async function mandantMitAnrufen(db, tenantId, anrufe) {
   for (const [id, texte] of Object.entries(anrufe)) {
     await db.query(
       `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
-       VALUES ($1, $2, $3, 'inbound', 'ended', now()::text)`,
+       VALUES ($1, $2, $3, 'inbound', 'completed', now()::text)`,
       [id, tenantId, `tok_${id}`],
     );
     for (const text of texte) {

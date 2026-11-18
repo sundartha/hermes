@@ -19,6 +19,7 @@ async function aufgesetzt() {
   await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'active', $1)`, [KUNDE]);
   const store = makePgStore(runnerFuer(db));
   await store.init();
+  await db.query("ALTER TABLE call DROP CONSTRAINT call_status_zustand_check");
   return { db, store };
 }
 
