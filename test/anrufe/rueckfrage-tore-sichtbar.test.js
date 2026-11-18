@@ -101,6 +101,7 @@ test("RF-H2-1 alle Tore offen: place_call meldet keine Tor-Sperre und behaelt de
   assert.deepEqual(geschlossen(text), []);
   assert.ok(text.includes(BERECHTIGUNG_DE));
   assert.equal(text.includes(hinweis("de", ["master"])), false);
+  assert.equal(text.includes(ANFANG.de), false);
   assert.equal(anrufe, 1);
 });
 
