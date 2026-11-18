@@ -52,6 +52,23 @@ function messgrund(call) {
   return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_SONSTIG;
 }
 
+function messeEnde(call) {
+  const grund = messgrund(call);
+  messeAnrufEnde({
+    richtung: call.direction,
+    ergebnis: grund === GRUND_KEINER ? "completed" : "failed",
+    grund,
+    dauerS: abstandS(call.answeredAt, call.endedAt),
+    annahmeS: abstandS(call.startedAt, call.answeredAt),
+  });
+}
+
+function lehneUnbekanntenZustandAb(call) {
+  if (anrufZustandVon(call.status) !== null) return false;
+  console.error(`[call-finish] Anruf ${call.id}: unbekannter Zustand, kein Ende gemeldet`);
+  return true;
+}
+
 function abstandS(vonIso, bisIso) {
   const abstandMs = Date.parse(bisIso) - Date.parse(vonIso);
   return Number.isFinite(abstandMs) && abstandMs >= 0 ? abstandMs / MS_PER_SECOND : null;
@@ -316,18 +333,8 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
-    if (anrufZustandVon(call.status) === null) {
-      console.error(`[call-finish] Anruf ${call.id}: unbekannter Zustand, kein Ende gemeldet`);
-      return;
-    }
-    const grund = messgrund(call);
-    messeAnrufEnde({
-      richtung: call.direction,
-      ergebnis: grund === GRUND_KEINER ? "completed" : "failed",
-      grund,
-      dauerS: abstandS(call.answeredAt, call.endedAt),
-      annahmeS: abstandS(call.startedAt, call.answeredAt),
-    });
+    if (lehneUnbekanntenZustandAb(call)) return;
+    messeEnde(call);
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
     const texts = localeFor(call.language).postCall;
     await settleBilling(call).catch((err) => console.error("[billing] settle:", err.message));

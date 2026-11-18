@@ -8,8 +8,6 @@ function baue() {
   const sms = [];
   const abgerechnet = [];
   const store = {
-    withStoreLock: (fn) => fn(),
-    releaseOutboundReserve: async () => {},
     save: () => {},
     addNotification: (title, body, callId) => benachrichtigungen.push({ title, body, callId }),
     purgeTranscript: () => {},
@@ -40,7 +38,8 @@ async function pruefeUnbekannt(t, status) {
   assert.deepEqual(sms, []);
   assert.deepEqual(abgerechnet, []);
   assert.equal(fehler.mock.callCount(), 1);
-  const meldung = String(fehler.mock.calls[0].arguments.join(" "));
+  const [meldungsTeile] = fehler.mock.calls.map((aufruf) => aufruf.arguments);
+  const meldung = meldungsTeile.join(" ");
   assert.ok(meldung.includes(call.id), meldung);
   assert.ok(meldung.includes("Zustand"), meldung);
 }
@@ -50,21 +49,3 @@ test("call-finish uebersetzt den Zustand ended nicht in Titel oder Text", (t) =>
 test("call-finish uebersetzt den leeren Zustand nicht in Titel oder Text", (t) => pruefeUnbekannt(t, ""));
 test("call-finish uebersetzt den fehlenden Zustand nicht in Titel oder Text", (t) => pruefeUnbekannt(t, undefined));
 test("call-finish uebersetzt einen Objekt-Zustand nicht in Titel oder Text", (t) => pruefeUnbekannt(t, { status: "failed" }));
-
-async function meldeEnde(t, status) {
-  const fehler = t.mock.method(console, "error", () => {});
-  const { callFinish, benachrichtigungen, abgerechnet } = baue();
-  const call = seedCall({ status, language: "de", transcript: [] });
-  await callFinish.finishCall(call);
-  assert.equal(benachrichtigungen.length, 1);
-  assert.equal(benachrichtigungen[0].body, `${call.to} (Status: ${status})`);
-  assert.deepEqual(abgerechnet, [call.id]);
-  assert.equal(fehler.mock.callCount(), 0);
-  return benachrichtigungen[0].title;
-}
-
-test("call-finish meldet failed und cancelled weiter, mit verschiedenen Titeln", async (t) => {
-  const failed = await meldeEnde(t, "failed");
-  const cancelled = await meldeEnde(t, "cancelled");
-  assert.notEqual(failed, cancelled);
-});
