@@ -37,8 +37,8 @@ test("312k-P1 pg: Ruecknahme (cancelAtPeriodEnd:false) ueberlebt ebenfalls den R
   ops.registerTenant(s, TENANT, { firstName: "Max" });
   ops.setTenantSubscription(s, TENANT, { subscriptionId: "sub_312k_pg2", cancelAtPeriodEnd: true });
   await store.save();
-  ops.setTenantSubscription(store.load(), TENANT, { cancelAtPeriodEnd: false });
-  await store.save();
+  store.setTenantSubscription(TENANT, { cancelAtPeriodEnd: false });
+  await store.drainFlushes();
 
   const store2 = makePgStore(runner);
   await store2.init();
