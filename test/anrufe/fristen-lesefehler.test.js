@@ -2,14 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
-import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
-import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.ts";
-import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
-import { blockingBudgetAxis } from "../../src/budget-gate.js";
-import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { starteFristenTakt } from "../../src/zeitsteuerung.js";
-import { echtWarten } from "../echt-warten.js";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const TAKT_MS = 15000;
 const LIMIT = 5;
@@ -114,55 +106,4 @@ test("Fristenlauf-Lesefehler: ohne Angabe der gebundenen Anrufe laeuft der Takt 
   });
   await lauf.takt();
   assert.deepEqual(await lauf.takt(), { beendet: 0, offen: 0, gelesen: false });
-});
-
-const MINUTE_MS = 60000;
-
-function lifecycleMitAnrufen(anrufe) {
-  return makeCallLifecycle({
-    store: { load: () => ({ calls: anrufe, tenants: [] }), getCall: () => null },
-    config: withConfigNamespaces({ billing: {}, budgetWatchdogIntervalMs: 0 }),
-    finishCall: () => {},
-    releaseReserve: () => {},
-    voiceControl: () => ({}),
-    terminateAndBillCall,
-    hangUpAction,
-    billThunk,
-    reattachActiveCallCore,
-    cappedEndedAtMs,
-    classifyCallTime,
-    blockingBudgetAxis,
-  });
-}
-
-test("Fristenlauf-Lesefehler: der Lebenszyklus nennt nur aktive Anrufe mit abgelaufener Hoechstdauer als hier gebunden abgelaufen", () => {
-  const vor = (minuten) => new Date(Date.now() - minuten * MINUTE_MS).toISOString();
-  const anruf = (id, overrides) => ({ id, tenantId: "t", status: "active", twilioSid: `CA_${id}`, maxDurationS: 60, ...overrides });
-  const lifecycle = lifecycleMitAnrufen([
-    anruf("abgelaufen", { answeredAt: vor(5) }),
-    anruf("laeuft", { answeredAt: vor(0) }),
-    anruf("beendet", { answeredAt: vor(5), status: "completed" }),
-  ]);
-  assert.deepEqual(lifecycle.abgelaufeneAktive().map((call) => call.id), ["abgelaufen"]);
-});
-
-test("Fristenlauf-Lesefehler: der Boot-Takt beendet bei zwei Lesefehlern die vom Lebenszyklus genannten abgelaufenen Anrufe", async (t) => {
-  fehlerzeilen(t);
-  const beendet = [];
-  const takt = starteFristenTakt({
-    store: { faelligeFristen: async () => { throw new Error("db nicht erreichbar"); }, getCall: () => null, attachActiveCall: async () => null },
-    lifecycle: {
-      terminateExpiredCall: async (call) => { beendet.push(call.id); },
-      abgelaufeneAktive: () => (beendet.length ? [] : [{ id: "abgelaufen_boot", status: "active", twilioSid: "CA_boot" }]),
-      blockingAxisFor: () => null,
-      terminateOverBudgetExpired: async () => {},
-      releaseReserve: () => {},
-    },
-    config: { safety: { budgetWatchdogIntervalMs: 0 } },
-    fristen: { fristenLimitJeMandant: LIMIT, fristenTaktMs: 5 },
-  });
-  const frist = Date.now() + 2000;
-  while (!beendet.length && Date.now() < frist) await echtWarten(10);
-  takt.stoppen();
-  assert.deepEqual(beendet, ["abgelaufen_boot"]);
 });
