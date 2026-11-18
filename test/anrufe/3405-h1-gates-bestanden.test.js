@@ -55,3 +55,12 @@ test("der Nachweis laesst sich ausserhalb des Moduls nicht erzeugen", async () =
   assert.deepEqual(Object.getOwnPropertyNames(GatesBestanden).sort(), ["length", "name", "prototype"]);
   assert.deepEqual(Object.keys(await lade()).sort(), ["GatesBestanden", "fuehreToreAus"]);
 });
+
+test("das Erzeugen des Nachweises von aussen wirft, mit und ohne fremden Schluessel", async () => {
+  const { GatesBestanden } = await lade();
+  assert.equal(typeof GatesBestanden, "function");
+  assert.throws(() => new GatesBestanden(), TypeError);
+  assert.throws(() => new GatesBestanden(Symbol("gates-bestanden")), TypeError);
+  assert.throws(() => Reflect.construct(GatesBestanden, []), TypeError);
+  assert.throws(() => Reflect.construct(GatesBestanden, [Symbol.for("gates-bestanden")]), TypeError);
+});
