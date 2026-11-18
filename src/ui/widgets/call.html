@@ -97,12 +97,6 @@
       <div class="zeile rise" data-row="failure" style="display:none">
         <span data-i18n="Reason">Reason</span><span data-failure-display>—</span>
       </div>
-      <div class="zeile rise" data-row="objective" style="display:none">
-        <span data-i18n="Goal">Goal</span><span data-objective-display>—</span>
-      </div>
-      <div class="zeile rise" data-row="outcome" style="display:none">
-        <span data-i18n="Outcome">Outcome</span><span data-mcp="outcome">—</span>
-      </div>
       <div class="zeile rise" data-row="summary" style="display:none">
         <span data-i18n="Result">Result</span><span data-mcp="result_summary">—</span>
       </div>
@@ -292,7 +286,6 @@
     var anyResponseReceived = false;
     var callResultFetched = false;
     var resultRetries = 0;
-    var objectiveVisible = true;
     var recipientName = "";
     var summaryHidden = false;
     var pendingRequests = {}; // rpcId -> Tool-Name (Antwort-Zuordnung, s. handleMessage)
@@ -408,13 +401,6 @@
     function failureReasonKey(raw) {
       if (raw === null || raw === undefined) return null;
       return FAILURE_REASON_LABELS[String(raw).split(":")[0]] || "Failed";
-    }
-
-    function objectiveKey(value, hasResultText) {
-      if (value === true) return "Goal reached";
-      if (value === false) return "Goal not reached";
-      if ((value === "unclear" || value === undefined) && !hasResultText) return "Result being evaluated";
-      return null;
     }
 
     function setKeyedText(el, key, plain) {
@@ -629,7 +615,6 @@
       setRowVisible("lines", !terminal);
       setRowVisible("failure", status === "failed" || status === "cancelled");
       setRowVisible("summary", status === "completed" && !summaryHidden);
-      setRowVisible("objective", status === "completed" && objectiveVisible);
       setCancelDisabled(terminal);
       if (terminal) stopPolling();
       else retunePolling();
@@ -670,28 +655,9 @@
       return data.objective_achieved === "unclear" && AWAIT_SUMMARIES.indexOf(data.result_summary) !== -1;
     }
 
-    function applyObjective(data, awaiting) {
-      var hasText = !awaiting && typeof data.result_summary === "string" && data.result_summary.trim().length > 0;
-      var key = objectiveKey(data.objective_achieved, hasText);
-      if (awaiting && resultRetries >= MAX_RESULT_RETRIES) key = null;
-      objectiveVisible = key !== null;
-      setKeyedDisplay("[data-objective-display]", key, null);
-      setRowVisible("objective", objectiveVisible && currentStatus === "completed");
-    }
-
-    function summaryAfterOutcome(outcome, summary) {
-      var head = outcome.replace(/[\s.!?\u2026]+$/, "");
-      if (head.length === 0 || summary.slice(0, head.length).toLowerCase() !== head.toLowerCase()) return summary;
-      var boundary = /^(?:[.!?\u2026]+(?:\s+|$)|$)/.exec(summary.slice(head.length));
-      return boundary ? summary.slice(head.length + boundary[0].length) : summary;
-    }
-
     function applySummaryRow(data, awaiting) {
-      var outcome = typeof data.outcome === "string" ? data.outcome.trim() : "";
-      var summary = typeof data.result_summary === "string" ? data.result_summary.trim() : "";
-      var rest = summaryAfterOutcome(outcome, summary);
-      summaryHidden = awaiting || (outcome.length > 0 && rest.length === 0);
-      if ("result_summary" in data && !awaiting) setSlotText("result_summary", outcome.length > 0 ? rest : data.result_summary);
+      summaryHidden = awaiting;
+      if ("result_summary" in data && !awaiting) setSlotText("result_summary", data.result_summary);
       setRowVisible("summary", currentStatus === "completed" && !summaryHidden);
     }
 
@@ -700,10 +666,8 @@
       applyCallSubject(data);
       if (data.call_id) setSlotText("call_id", data.call_id);
       var awaiting = isAwaitPlaceholder(data);
-      applyObjective(data, awaiting);
       applySummaryRow(data, awaiting);
       if (awaiting) scheduleResultRetry();
-      applyResultRow("outcome", data.outcome, currentStatus === "completed");
       applyResultRow("next_step", data.next_step, true);
       applyNextSteps(data);
     }

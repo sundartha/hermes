@@ -154,7 +154,7 @@ test("Ergebnis nachladen: nach fuenf Wiederholungen ohne Ergebnis kein sechster 
   }
   assert.equal(widget.abrufe().length, 1 + MAX_NACHLADEN);
   assert.equal(widget.nachladeUhren().length, MAX_NACHLADEN);
-  assert.equal(widget.ziel().sichtbar, false);
+  assert.equal(widget.zusammenfassungSichtbar(), false);
   assert.notEqual(widget.zusammenfassung(), platzhalter);
 });
 

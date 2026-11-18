@@ -53,7 +53,7 @@ test("widget-anrufkarte-hoehe: das Blatt darf unter die Inhaltshöhe schrumpfen"
 
 test("widget-anrufkarte-hoehe: Live-Zeilen, Ergebnis, nächster Schritt und Grund liegen im scrollenden Bereich, der Abbrechen-Knopf nicht", () => {
   const bereich = innerhalbInhalt();
-  for (const zeile of ["lines", "failure", "objective", "outcome", "summary", "next_step"]) {
+  for (const zeile of ["lines", "failure", "summary", "next_step"]) {
     assert.ok(bereich.includes('data-row="' + zeile + '"'), zeile + " liegt im Inhaltsbereich");
   }
   assert.ok(!bereich.includes("data-cancel"), "Abbrechen scrollt nicht weg");

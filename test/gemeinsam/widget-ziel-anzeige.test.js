@@ -90,14 +90,13 @@ for (const sprache of Object.keys(WORTE)) {
     test(`Ziel-Anzeige ${sprache}: ${zustand.name}`, () => {
       const widget = widgetImBrowser(sprache);
       widget.ergebnis(zustand.daten);
-      assert.equal(widget.zeile() === "none", !zustand.sichtbar);
-      if (zustand.sichtbar) assert.equal(widget.wert(), WORTE[sprache][zustand.wert]);
-      else assert.ok(!Object.values(WORTE[sprache]).includes(widget.wert()));
+      assert.equal(widget.zeile(), undefined);
+      assert.ok(!Object.values(WORTE[sprache]).includes(widget.wert()));
     });
   }
   test(`Ziel-Anzeige ${sprache}: Beschriftung der Zeile`, () => {
     if (sprache !== "en") assert.equal(WIDGET_DICT[sprache].Goal, WORTE[sprache].beschriftung);
-    assert.ok(CALL_HTML.includes('data-i18n="Goal"'));
+    assert.ok(!CALL_HTML.includes('data-i18n="Goal"'));
   });
 }
 
