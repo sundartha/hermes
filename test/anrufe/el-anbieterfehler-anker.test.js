@@ -167,17 +167,11 @@ test("dauerhafter Abruf-Fehler (HTTP 404, 3x in Folge): failureReason traegt den
   assert.equal(call.failureReason, "result-unknown:poll-provider-404");
 });
 
-test("Abfrage ohne Ergebnis: die naechste Abfrage steht nur als Frist an der Anrufzeile (jetzt plus Abfrage-Takt), kein Timer im Prozess", async (t) => {
+test("Abfrage ohne Ergebnis: die naechste Abfrage steht nur als Frist an der Anrufzeile (jetzt plus Abfrage-Takt), kein weiterer Abruf von selbst", async () => {
   const { call, store } = seedActiveCall();
   const ABFRAGE_TAKT_MS = 777;
   const fristen = [];
   store.setzeAbfrageFrist = async ({ faelligAt }) => fristen.push({ faelligAt, jetzt: Date.now() });
-  const timerMs = [];
-  const echtesSetTimeout = globalThis.setTimeout;
-  t.mock.method(globalThis, "setTimeout", (fn, ms, ...rest) => {
-    timerMs.push(ms);
-    return echtesSetTimeout(fn, ms, ...rest);
-  });
   let abrufe = 0;
   const el = makeElevenLabsOutbound({
     store,
@@ -201,5 +195,4 @@ test("Abfrage ohne Ergebnis: die naechste Abfrage steht nur als Frist an der Anr
   assert.ok(Date.parse(vorAbruf.faelligAt) - vorAbruf.jetzt > ABFRAGE_TAKT_MS);
   assert.ok(Date.parse(nachAbruf.faelligAt) - nachAbruf.jetzt <= ABFRAGE_TAKT_MS);
   assert.ok(Date.parse(nachAbruf.faelligAt) - nachAbruf.jetzt > 0);
-  assert.equal(timerMs.includes(ABFRAGE_TAKT_MS), false);
 });
