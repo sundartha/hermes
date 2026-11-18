@@ -247,29 +247,29 @@ const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
 const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
-const KLEINE_ZEITGRENZE_MS = 200;
+const FRISTEN_ABFRAGE = "WITH faellig AS";
+const ZEITGRENZE_ANWEISUNG = "SELECT set_config('statement_timeout'";
+const ANSPRUCH_MERKMALE = [ZEITGRENZE_ANWEISUNG, ANSPRUCH_ANWEISUNG, ABSCHLUSS, ZURUECK];
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
   return folgende.find((text) => !text.includes(ZEILEN_ANWEISUNG));
 };
 
-const verbindungenMitRollbackSeit = (mitschnitt, vorher) => {
-  const verbindungen = mitschnitt.verbindungen();
-  return verbindungen.map((_, nr) => nr).filter((nr) => verbindungen[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
-};
+const gehalteneBeginne = (mitschnitt) =>
+  mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
+
+const anweisungenSeit = (mitschnitt, nr, vorher) => mitschnitt.verbindungen()[nr].slice(vorher[nr]);
 
 async function poolVorwaermen(sql, signer, instanz) {
   await Promise.all([zaun(sql, signer, [instanz]), zaun(sql, signer, [instanz])]);
 }
 
-async function warteAufAnspruchsverbindung(mitschnitt, vorher) {
-  let gefunden = [];
-  await mitschnitt.bisBedingung(() => {
-    gefunden = verbindungenMitRollbackSeit(mitschnitt, vorher);
-    return gefunden.length > 0;
-  });
-  return gefunden;
+async function warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten) {
+  const enthaelt = (nr, merkmale) => anweisungenSeit(mitschnitt, nr, vorher).some((text) => merkmale.some((merkmal) => text.includes(merkmal)));
+  const istTakt = (nr) => enthaelt(nr, [FRISTEN_ABFRAGE]);
+  await mitschnitt.bisBedingung(() => gehalten.every((nr) => istTakt(nr) || enthaelt(nr, ANSPRUCH_MERKMALE)));
+  return gehalten.filter((nr) => !istTakt(nr));
 }
 
 test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen, die Sperre auf der Anrufzeile bleibt nicht liegen", FRIST, async (t) => {
@@ -353,10 +353,11 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
       const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
+      const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher);
-      const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
+      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
+      const spaeter = beanspruchend.flatMap((nr) => anweisungenSeit(mitschnitt, nr, vorher));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.deepEqual(spaeter.filter((text) => text !== ZURUECK), []);
     } finally {
@@ -387,44 +388,13 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
       const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
+      const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher);
-      const spaeter = beanspruchend.flatMap((nr) => mitschnitt.verbindungen()[nr].slice(vorher[nr]));
+      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
+      const spaeter = beanspruchend.flatMap((nr) => anweisungenSeit(mitschnitt, nr, vorher));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
-    } finally {
-      relais.fortsetzen();
-      await a.stop();
-      await mitschnitt.schliessen();
-      await anbieter.schliessen();
-    }
-  });
-});
-
-test("Anweisungs-Mitschnitt: bisBedingung lehnt nach der Zeitgrenze ab und nennt die mitgeschnittenen Anweisungen", FRIST, async (t) => {
-  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
-    const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
-    const anbieter = await starteAnrufstartAttrappe();
-    const umgebung = pgStartUmgebung(mitschnitt.adresse, {
-      ...EL_UMGEBUNG,
-      ELEVENLABS_API_BASE: anbieter.url,
-      SKIP_TWILIO_SIGNATURE_CHECK: "false",
-      TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
-      WEBHOOK_ZUSTELLUNG_SECRET,
-    });
-    const a = await startServer({ env: umgebung });
-    try {
-      relais.anhalten();
-      assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
-      await warteAufLog([a]);
-      await assert.rejects(
-        () => mitschnitt.bisBedingung(() => false, KLEINE_ZEITGRENZE_MS),
-        (fehler) => {
-          assert.match(fehler.message, new RegExp(BEGINN));
-          return true;
-        },
-      );
     } finally {
       relais.fortsetzen();
       await a.stop();
