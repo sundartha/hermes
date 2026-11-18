@@ -55,6 +55,7 @@ test("Anrufstart-Abgleich: ein wartender Anruf mit gesetztem Marker fragt den An
     ELEVENLABS_API_BASE: konto.url,
     ELEVENLABS_TOOL_TOKEN: GEHEIMNIS,
     ELEVENLABS_RESULT_POLL_MS: POLL_MS,
+    FRISTEN_TAKT_MS: "40",
   };
   await mitHermesAufPostgres(t, { env }, async ({ srv, sql }) => {
     for (let index = 0; index < EL_PLAETZE; index += 1) await sql(PLATZ_SQL, [`voll_${index}`, `t_voll_${index}`]);
