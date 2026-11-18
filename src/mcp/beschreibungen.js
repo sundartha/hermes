@@ -45,7 +45,7 @@ export const CALL_RESULT_DESCRIPTION =
 export const AGENT_STATUS_DESCRIPTION =
   "Returns the status of the phone agent with these fields: number (the agent's phone " +
   "number, or null), owner (the account owner's name, or null), calls (number of calls so " +
-  "far), callsThisMonth (number of calls started since the beginning of the current month, UTC), planUsagePercent (share of the monthly minute quota used, in percent, or null if " +
+  "far), callsThisMonth (number of calls started since the beginning of the current calendar month), planUsagePercent (share of the monthly minute quota used, in percent, or null if " +
   "no quota is set), permissions (what the agent may share: summaries, personal data, bank " +
   "data).";
 
