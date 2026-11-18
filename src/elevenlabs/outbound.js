@@ -23,6 +23,7 @@ import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
+import { ermittleStimmenAnzahl } from "./wirksame-stimme.ts";
 
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
@@ -383,11 +384,16 @@ function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
   return ergebnis;
 }
 
-async function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
+async function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik, stimmenAnzahlFuer }) {
   const zeilen = spokenLines(conversation);
   const audioTagMarken = reportAudioTags(callId, zeilen);
   const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
-  await store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
+  const stimmenAnzahl = await stimmenAnzahlFuer(callId);
+  await store.recordElDetectorCounts(callId, {
+    elTags: audioTagMarken.length,
+    elB1: b1Treffer.length,
+    ...(stimmenAnzahl === null ? {} : { stimmenAnzahl }),
+  });
   await schreibeNeueAnbieterZeilen(store, callId, zeilen);
   store.recordProviderCallResult(callId, {
     summary: providerSummaryOf(conversation, politik),
@@ -621,9 +627,9 @@ async function finishFromConversation(deps) {
   }
 }
 
-async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
+async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, stimmenAnzahlFuer, callId, nowMs, conversation }) {
   const politik = nachlaufPolitikFuer(await store.leseCall(callId));
-  await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+  await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik, stimmenAnzahlFuer });
   const vorlaeufig = ankerFuerPolitik(politik, answeredAnchorOutcome(new Date(nowMs).toISOString(), conversation));
   const status = endeGrundFuer(vorlaeufig, conversation) ? CALL_FAILED : endStatusOf(conversation);
   const endCall = endeSchreiberFuer({ store, callId, status, politik, nowMs });
@@ -649,14 +655,14 @@ async function startInboundNachlauf({ store, laufendeInboundPolls, pollConversat
   void pollConversationResult(callId, call.elevenlabsConversationId);
 }
 
-async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
+async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, stimmenAnzahlFuer, pollMs, callId }) {
   const conversationId = (await store.leseCall(callId))?.elevenlabsConversationId;
   if (!conversationId) return;
   for (let versuch = 1; versuch <= EL_TERMINATION_RESULT_ATTEMPTS; versuch += 1) {
     const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (anbieterErgebnisFertig(conversation)) {
       const politik = nachlaufPolitikFuer(await store.leseCall(callId));
-      await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+      await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik, stimmenAnzahlFuer });
       return;
     }
     if (versuch < EL_TERMINATION_RESULT_ATTEMPTS) await sleep(pollMs);
@@ -711,14 +717,14 @@ function rearmActiveConversationPolls({ store, pollConversationResult, laufendeI
     console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
 }
 
-async function saveProviderResultIfFetched({ store, fetchConversationSoft, callId }) {
+async function saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId }) {
   const call = await store.leseCall(callId);
   const conversationId = call?.elevenlabsConversationId;
   if (!conversationId) return null;
   const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
   if (conversation) {
     const politik = nachlaufPolitikFuer(call);
-    await persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
+    await persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik, stimmenAnzahlFuer });
     await applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
   }
   return { callId, conversationId };
@@ -811,6 +817,7 @@ export function makeElevenLabsOutbound({
   }
 
   const meldeMedienweg = makeMedienwegWache(() => settings().erwarteterMedienweg);
+  const stimmenAnzahlFuer = (callId) => ermittleStimmenAnzahl({ store, config, callId });
 
   async function fetchConversationSoft(conversationId, callId, timeoutMs) {
     const ausgang = await fetchConversationOutcome({ account: settings(), conversationId, callId, timeoutMs });
@@ -835,7 +842,7 @@ export function makeElevenLabsOutbound({
     if (!pollDarfWirken(call)) return;
     const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
-    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
+    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, stimmenAnzahlFuer, endActiveCall, endCarrierCall, callId, nowMs };
     if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
@@ -851,7 +858,7 @@ export function makeElevenLabsOutbound({
   }
 
   async function endActiveCall(callId) {
-    const conversationRef = await saveProviderResultIfFetched({ store, fetchConversationSoft, callId });
+    const conversationRef = await saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId });
     if (!conversationRef) return;
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
@@ -862,6 +869,6 @@ export function makeElevenLabsOutbound({
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
     awaitAndPersistInboundElResult: (callId) =>
-      awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs: settings().resultPollMs, callId }),
+      awaitAndPersistInboundElResult({ store, fetchConversationSoft, stimmenAnzahlFuer, pollMs: settings().resultPollMs, callId }),
   };
 }
