@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const EXIT_ROT = 1;
 const ARGV_OFFSET = 2;
 const REGELN = "docs/betrieb/grafana/alarmregeln.json";
+const ANRUFREGELN = "docs/betrieb/grafana/anrufregeln.json";
+const NACHKOMMA = 6;
 const DASHBOARD = "docs/betrieb/grafana/dashboard.json";
 const QUELLEN = ["src/utils/telemetrie.js", "src/utils/betriebsmessung.js"];
 const SEITEN = "docs/betrieb/alarme";
@@ -30,9 +32,66 @@ function befundeFuer(wurzel, regel) {
   );
 }
 
+const GESTARTET = "hermes_call_started_total";
+
+function anrufRegeln(wurzel) {
+  const datei = path.join(wurzel, ANRUFREGELN);
+  return fs.existsSync(datei) ? JSON.parse(fs.readFileSync(datei, "utf8")) : [];
+}
+
+function fehlerquote(burnrate, fenster) {
+  const gesamt = `sum(increase(${burnrate.gesamt}[${fenster}]))`;
+  const teil = burnrate.fehler
+    ? `sum(increase(${burnrate.fehler}[${fenster}]))`
+    : `(${gesamt} - sum(increase(${burnrate.gut}[${fenster}])))`;
+  return `${teil} / ${gesamt}`;
+}
+
+function schwelle(burnrate, faktor) {
+  return Number((faktor * (1 - burnrate.slo)).toFixed(NACHKOMMA));
+}
+
+export function burnrateAusdruck(burnrate) {
+  const paare = burnrate.fenster.map(([lang, kurz, faktor]) => {
+    const grenze = schwelle(burnrate, faktor);
+    const menge = `sum(increase(${GESTARTET}[${lang}])) >= ${burnrate.mindestAnrufe}`;
+    return `(${fehlerquote(burnrate, lang)} > ${grenze} and ${fehlerquote(burnrate, kurz)} > ${grenze} and ${menge})`;
+  });
+  return paare.join(" or ");
+}
+
+function ausdruckBefund(regel) {
+  const modell = regel.data.find((zeile) => zeile.refId === "A").model;
+  if (modell.expr === burnrateAusdruck(regel.burnrate)) return [];
+  return [`${regel.uid}: expr weicht von burnrate ab`];
+}
+
 export function pruefeAlarme(wurzel) {
   const regeln = JSON.parse(fs.readFileSync(path.join(wurzel, REGELN), "utf8"));
-  return regeln.flatMap((regel) => befundeFuer(wurzel, regel));
+  const anruf = anrufRegeln(wurzel);
+  return [
+    ...regeln.flatMap((regel) => befundeFuer(wurzel, regel)),
+    ...anruf.flatMap((regel) => [...befundeFuer(wurzel, regel), ...ausdruckBefund(regel)]),
+  ];
+}
+
+function ausgeloest(regel, fenster) {
+  const burnrate = regel.burnrate;
+  const paar = burnrate.fenster.find(([lang, kurz, faktor]) => {
+    const grenze = schwelle(burnrate, faktor);
+    return (
+      fenster[lang].quote > grenze &&
+      fenster[kurz].quote > grenze &&
+      fenster[lang].anrufe >= burnrate.mindestAnrufe
+    );
+  });
+  return paar ? [{ uid: regel.uid, fenster: `${paar[0]}+${paar[1]}` }] : [];
+}
+
+export function probeAnrufregeln(wurzel, daten) {
+  return anrufRegeln(wurzel).flatMap((regel) =>
+    daten[regel.uid] ? ausgeloest(regel, daten[regel.uid]) : [],
+  );
 }
 
 function kennzahlNamen(wurzel) {
@@ -81,6 +140,11 @@ export function pruefePanels(wurzel) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(ARGV_OFFSET);
   const wurzel = parseWurzel(argv);
+  const probe = argv.indexOf("--probe");
+  if (probe !== -1) {
+    console.log(JSON.stringify(probeAnrufregeln(wurzel, JSON.parse(argv[probe + 1]))));
+    process.exit(0);
+  }
   const befunde = [
     ...pruefeAlarme(wurzel),
     ...(argv.includes("--panels") ? pruefePanels(wurzel) : []),
