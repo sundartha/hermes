@@ -38,7 +38,10 @@ export function macheAnrufExport({ runner, zeilenZuAnrufen }) {
         return anrufe;
       }),
     zaehleSeit: (tenantId, seitIso) =>
-      imKontext(tenantId, async (client) => (await client.query(SEIT_SQL, [tenantId, seitIso])).rows[0].anzahl),
+      imKontext(tenantId, async (client) => {
+        const { rows } = await client.query(SEIT_SQL, [tenantId, seitIso]);
+        return rows[0].anzahl;
+      }),
     neueste: (tenantId, limit) =>
       imKontext(tenantId, async (client) => {
         const anrufe = (await client.query(NEUESTE_SQL, [tenantId, limit])).rows;
