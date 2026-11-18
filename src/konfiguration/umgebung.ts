@@ -4,27 +4,47 @@ const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 const ISO_INSTANT_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
-function parseIntegerEnv(trimmed) {
+function parseIntegerEnv(trimmed: string): number | null {
   const parsed = parseInt(trimmed, 10);
   return NUM_ENV_INTEGER_PATTERN.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseDecimalEnv(trimmed) {
+function parseDecimalEnv(trimmed: string): number | null {
   const parsed = parseFloat(trimmed);
   return NUM_ENV_DECIMAL_PATTERN.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseNumEnv(trimmed, integer) {
+function parseNumEnv(trimmed: string, integer: boolean): number | null {
   return integer ? parseIntegerEnv(trimmed) : parseDecimalEnv(trimmed);
 }
 
-function numEnvExpectation(integer, min) {
+function numEnvExpectation(integer: boolean, min: number | undefined): string {
   const art = integer ? "Ganzzahl" : "Zahl";
   return min === undefined ? art : `${art}, >= ${String(min)}`;
 }
 
-function numEnvMit(fehlerliste) {
-  return (name, raw, { fallback, min, max, integer = true } = {}) => {
+interface NumEnvOptionen {
+  fallback?: number;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+}
+
+interface BoolEnvOptionen {
+  fallback: boolean;
+}
+
+interface EnumEnvOptionen {
+  allowed: readonly string[];
+  fallback: string;
+}
+
+function numEnvMit(fehlerliste: string[]) {
+  return (
+    name: string,
+    raw: string | undefined,
+    { fallback, min, max, integer = true }: NumEnvOptionen = {},
+  ): number | undefined => {
     if (raw === undefined || raw === "") return fallback;
     const parsed = parseNumEnv(raw.trim(), integer);
     if (parsed === null) {
@@ -42,8 +62,8 @@ function numEnvMit(fehlerliste) {
   };
 }
 
-function boolEnvMit(fehlerliste) {
-  return (name, raw, { fallback }) => {
+function boolEnvMit(fehlerliste: string[]) {
+  return (name: string, raw: string | undefined, { fallback }: BoolEnvOptionen): boolean => {
     if (raw === undefined || raw === "") return fallback;
     const normalized = raw.trim().toLowerCase();
     if (normalized === "true") return true;
@@ -55,8 +75,8 @@ function boolEnvMit(fehlerliste) {
   };
 }
 
-function enumEnvMit(fehlerliste) {
-  return (name, raw, { allowed, fallback }) => {
+function enumEnvMit(fehlerliste: string[]) {
+  return (name: string, raw: string | undefined, { allowed, fallback }: EnumEnvOptionen): string => {
     if (raw === undefined || raw === "") return fallback;
     const trimmed = raw.trim();
     if (allowed.includes(trimmed)) return trimmed;
@@ -65,8 +85,8 @@ function enumEnvMit(fehlerliste) {
   };
 }
 
-function isoInstantEnvMit(fehlerliste) {
-  return (name, raw) => {
+function isoInstantEnvMit(fehlerliste: string[]) {
+  return (name: string, raw: string | undefined): string | null => {
     if (raw === undefined || raw === "") return null;
     const trimmed = raw.trim();
     const at = new Date(trimmed);
@@ -80,20 +100,20 @@ function isoInstantEnvMit(fehlerliste) {
   };
 }
 
-function stripTrailingSlash(url) {
+function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");
 }
 
-function csvEnv(raw) {
+function csvEnv(raw: string | undefined): string[] {
   return (raw ?? "")
     .split(",")
     .map((eintrag) => eintrag.trim())
     .filter(Boolean);
 }
 
-function routeCentsEnvMit(fehlerliste) {
-  return (name, raw, gueltigeRouten) => {
-    const karte = {};
+function routeCentsEnvMit(fehlerliste: string[]) {
+  return (name: string, raw: string | undefined, gueltigeRouten: readonly string[]): Record<string, number> => {
+    const karte: Record<string, number> = {};
     for (const eintrag of csvEnv(raw)) {
       const trennIndex = eintrag.lastIndexOf(":");
       const profil = trennIndex === -1 ? "" : eintrag.slice(0, trennIndex);
@@ -111,7 +131,21 @@ function routeCentsEnvMit(fehlerliste) {
   };
 }
 
-export function umgebungMit(fehlerliste, env) {
+interface UmgebungsHelfer {
+  numEnv: ReturnType<typeof numEnvMit>;
+  boolEnv: ReturnType<typeof boolEnvMit>;
+  enumEnv: ReturnType<typeof enumEnvMit>;
+  isoInstantEnv: ReturnType<typeof isoInstantEnvMit>;
+  routeCentsEnv: ReturnType<typeof routeCentsEnvMit>;
+  csvEnv: typeof csvEnv;
+  stripTrailingSlash: typeof stripTrailingSlash;
+  detectProduction: () => boolean;
+}
+
+export function umgebungMit(
+  fehlerliste: string[],
+  env: { RENDER_EXTERNAL_URL?: string | undefined },
+): UmgebungsHelfer {
   return {
     numEnv: numEnvMit(fehlerliste),
     boolEnv: boolEnvMit(fehlerliste),
