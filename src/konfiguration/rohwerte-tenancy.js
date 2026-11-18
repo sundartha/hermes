@@ -46,6 +46,6 @@ export function rohwerteTenancy(env, { boolEnv, numEnv }) {
     selfServiceEnabled: boolEnv("SELF_SERVICE_ENABLED", env.SELF_SERVICE_ENABLED, {
       fallback: false,
     }),
-    profilesSeed: env.PROFILES_JSON || "",
+    profilesSeed: env.PROFILES_JSON ?? "",
   };
 }

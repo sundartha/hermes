@@ -1,30 +1,30 @@
 function mcpUndOauth(env, { stripTrailingSlash }) {
   return {
-    mcpAuthToken: env.MCP_AUTH_TOKEN || "",
-    mcpAuth: (env.MCP_AUTH || "").toLowerCase(),
-    oauthIssuerUrl: stripTrailingSlash(env.OAUTH_ISSUER_URL || ""),
-    oauthAudience: env.OAUTH_AUDIENCE || "",
+    mcpAuthToken: env.MCP_AUTH_TOKEN ?? "",
+    mcpAuth: (env.MCP_AUTH ?? "").toLowerCase(),
+    oauthIssuerUrl: stripTrailingSlash(env.OAUTH_ISSUER_URL ?? ""),
+    oauthAudience: env.OAUTH_AUDIENCE ?? "",
   };
 }
 
-function sitzungUndOidc(env, { stripTrailingSlash }) {
+function sitzungUndOidc(env, { stripTrailingSlash, textEnv }) {
   return {
-    sessionSecret: env.SESSION_SECRET || "",
-    oidcClientId: env.OIDC_CLIENT_ID || "",
-    oidcClientSecret: env.OIDC_CLIENT_SECRET || "",
-    workosApiBase: stripTrailingSlash(env.WORKOS_API_BASE || "https://api.workos.com"),
-    workosManagementApiKey: env.WORKOS_MANAGEMENT_API_KEY || "",
+    sessionSecret: env.SESSION_SECRET ?? "",
+    oidcClientId: env.OIDC_CLIENT_ID ?? "",
+    oidcClientSecret: env.OIDC_CLIENT_SECRET ?? "",
+    workosApiBase: stripTrailingSlash(textEnv(env.WORKOS_API_BASE, "https://api.workos.com")),
+    workosManagementApiKey: env.WORKOS_MANAGEMENT_API_KEY ?? "",
   };
 }
 
 function betreiberZugaenge(env, { boolEnv, csvEnv }) {
   return {
-    webhookZustellungSecret: env.WEBHOOK_ZUSTELLUNG_SECRET || "",
-    deployToken: (env.HERMES_DEPLOY_TOKEN || "").trim(),
-    statusToken: (env.HERMES_STATUS_TOKEN || "").trim(),
+    webhookZustellungSecret: env.WEBHOOK_ZUSTELLUNG_SECRET ?? "",
+    deployToken: (env.HERMES_DEPLOY_TOKEN ?? "").trim(),
+    statusToken: (env.HERMES_STATUS_TOKEN ?? "").trim(),
     adminEmails: csvEnv(env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
-    ownerIdpSubject: env.OWNER_IDP_SUBJECT || "",
-    dashboardPassword: env.DASHBOARD_PASSWORD || "",
+    ownerIdpSubject: env.OWNER_IDP_SUBJECT ?? "",
+    dashboardPassword: env.DASHBOARD_PASSWORD ?? "",
     devLoginEnabled:
       boolEnv("DEV_LOGIN_ENABLED", env.DEV_LOGIN_ENABLED, { fallback: false }) &&
       !env.RENDER_EXTERNAL_URL,

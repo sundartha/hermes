@@ -1934,3 +1934,8 @@ test("Rohwerte: leere Werte für PROVISIONING_COUNTRY, CLAUDE_MODEL und PRECALL_
   assert.equal(leer.llm.briefingModel, "claude-sonnet-5");
   assert.equal(ladeGrosseRohwerte({ PROVISIONING_COUNTRY: "" }).provisioning.provisioningCountry, "DE");
 });
+
+test("Rohwerte: leeres WORKOS_API_BASE ergibt https://api.workos.com", () => {
+  assert.equal(ladeAuthLlmRohwerte({ WORKOS_API_BASE: "" }).auth.workosApiBase, "https://api.workos.com");
+  assert.equal(ladeAuthLlmRohwerte({ WORKOS_API_BASE: "https://x.test/" }).auth.workosApiBase, "https://x.test");
+});
