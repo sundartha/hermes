@@ -59,3 +59,9 @@ export const macheRueckfrageSql = (optionen) => pgSpeicher.macheRueckfrageSql(op
 
 export { BOOTSTRAP_TENANT_ID };
 export { makePgStore };
+
+export function makePgStoreMitSperre(runner, optionen) {
+  const store = makePgStore(runner, optionen);
+  store.withStoreLock = macheSpeicherSperre();
+  return store;
+}
