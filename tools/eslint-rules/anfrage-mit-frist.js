@@ -5,7 +5,12 @@ const MELDUNG =
   "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
 const MELDUNG_PRODUKT =
   "Anfrage nach außen nur über `anfrage(url, { fristMs })` aus src/utils/anfrage.js: kein eigenes `fetch` und kein `http(s).request`, damit jede Anfrage eine benannte Antwortfrist hat.";
+const MELDUNG_OHNE_FRIST_OPTION =
+  "Aufruf von `anfrage` ohne `fristMs`: das zweite Argument ist ein Objekt-Literal mit `fristMs`, siehe src/utils/anfrage.js; sonst wirft `AbortSignal.timeout(undefined)` erst im Betrieb.";
 const ANFRAGE_DATEI = "src/utils/anfrage.js";
+const ANFRAGE = "anfrage";
+const FRIST_OPTION = "fristMs";
+const ANFRAGE_MODUL = /(^|\/)anfrage\.js$/;
 const FETCH = "fetch";
 const TEST_ORDNER = "test/";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);
@@ -97,6 +102,51 @@ function istGlobalesFetch(scope, ausdruck, besucht = new Set()) {
   if (ausdruck.type !== "Identifier") return false;
   const variable = bindung(scope, ausdruck.name);
   return variable !== undefined && istAliasVonFetch(variable, besucht);
+}
+
+function istAnfrageImport(definition) {
+  if (definition.type !== "ImportBinding" || definition.node.type !== "ImportSpecifier") {
+    return false;
+  }
+  const importiert = definition.node.imported;
+  return (
+    (importiert.name ?? importiert.value) === ANFRAGE &&
+    ANFRAGE_MODUL.test(definition.parent.source.value)
+  );
+}
+
+function istAnfrageBezug(scope, ausdruck, besucht = new Set()) {
+  if (ausdruck.type !== "Identifier") return false;
+  const variable = bindung(scope, ausdruck.name);
+  if (variable === undefined || besucht.has(variable)) return false;
+  besucht.add(variable);
+  return (
+    variable.defs.some(istAnfrageImport) ||
+    variable.references.some(
+      (zugriff) =>
+        zugriff.isWrite() &&
+        weistZu(zugriff) &&
+        istAnfrageBezug(zugriff.from, zugriff.writeExpr, besucht),
+    )
+  );
+}
+
+function hatFristOption(optionen) {
+  return (
+    optionen?.type === "ObjectExpression" &&
+    optionen.properties.some((eigenschaft) => schluesselName(eigenschaft) === FRIST_OPTION)
+  );
+}
+
+export function anfragenOhneFristOption(sourceCode) {
+  return alleKnoten(sourceCode)
+    .filter(
+      (knoten) =>
+        knoten.type === "CallExpression" &&
+        istAnfrageBezug(sourceCode.getScope(knoten), knoten.callee) &&
+        !hatFristOption(knoten.arguments[ZWEITES_ARGUMENT]),
+    )
+    .sort(nachAnfang);
 }
 
 function enthaeltFrist(signale) {
@@ -244,7 +294,11 @@ export default {
   meta: {
     type: "problem",
     schema: [],
-    messages: { ohneFrist: MELDUNG, ohneFristImProdukt: MELDUNG_PRODUKT },
+    messages: {
+      ohneFrist: MELDUNG,
+      ohneFristImProdukt: MELDUNG_PRODUKT,
+      ohneFristOption: MELDUNG_OHNE_FRIST_OPTION,
+    },
   },
   create(context) {
     return {
@@ -260,6 +314,9 @@ export default {
         if (datei === ANFRAGE_DATEI) return;
         for (const node of anfragenAusserhalbDerEinenStelle(sourceCode)) {
           context.report({ node, messageId: "ohneFristImProdukt" });
+        }
+        for (const node of anfragenOhneFristOption(sourceCode)) {
+          context.report({ node, messageId: "ohneFristOption" });
         }
       },
     };
