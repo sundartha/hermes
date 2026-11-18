@@ -357,6 +357,15 @@ test("Wartender Anruf: der Auftrag waehlt ueber die Wahlfolge der Route genau ei
   assert.deepEqual(ergebnis.protokoll.gruende, []);
 });
 
+test("Wartender Anruf: ist der Anruf nach der Wahl nicht mehr gespeichert, endet der Auftrag ohne Fehler", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  ergebnis.protokoll.angelegt.splice(0);
+  await verbindung.starte(anruf);
+  assert.deepEqual(ergebnis.gewaehlt, [anruf.id]);
+  assert.equal(anruf.callControlId, undefined);
+});
+
 test("Wartender Anruf: ein Wahlfehler beendet den Anruf als gescheitert, rechnet ab und wird weitergereicht", async (t) => {
   t.mock.method(console, "error", () => {});
   t.mock.method(console, "log", () => {});
