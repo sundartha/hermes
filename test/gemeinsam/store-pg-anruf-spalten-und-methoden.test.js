@@ -118,7 +118,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "seedBootstrapNumber", "setBillingHold", "setCallEndedAt", "setCancellationMailPending",
   "setContractEndCleanupPending", "setKycLevel", "setNewsletterConsent", "setPrivateNumber", "setProfile",
   "setSuspendedAtIfAbsent", "setTenantBudget", "setTenantGeo", "setTenantStripe", "setTenantSubscription",
-  "setzeAnrufpause", "stampBudgetPeriod", "takeInboxEntries", "tenantActiveSubscriber", "tenantBudgetSnapshot",
+  "setzeAnrufpause", "stammdatenSchreiben", "stampBudgetPeriod", "takeInboxEntries", "tenantActiveSubscriber", "tenantBudgetSnapshot",
   "tenantContext", "tenantExists", "tenantGeo", "tenantIdpSubject", "tenantInactive", "tenantLanguage",
   "tenantNewsletterConsent", "tenantNewsletterRecipients", "tenantPrivateNumber", "tenantStripe",
   "tenantSubscription", "tenantSuspendedAt", "tenantTimezone", "tenantsPendingCancellationMail",
