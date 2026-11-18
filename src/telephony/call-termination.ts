@@ -26,6 +26,23 @@ interface TerminateRequest {
   callId?: string | null;
 }
 
+const offeneAbrechnungen = new Set<Promise<void>>();
+
+export async function warteAufOffeneAbrechnungen(): Promise<void> {
+  await Promise.allSettled([...offeneAbrechnungen]);
+}
+
+function verfolgeAbrechnung(bill: () => unknown, callId: string | null | undefined): void {
+  const meldeFehler = (fehler: unknown) => {
+    const meldung: unknown = Reflect.get(Object(fehler), "message");
+    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, meldung);
+  };
+  const abrechnung: Promise<void> = Promise.resolve(bill())
+    .then(() => undefined, meldeFehler)
+    .finally(() => offeneAbrechnungen.delete(abrechnung));
+  offeneAbrechnungen.add(abrechnung);
+}
+
 export async function terminateAndBillCall({
   persistEnd,
   hangUp,
@@ -46,9 +63,7 @@ export async function terminateAndBillCall({
       }
     }
   }
-  Promise.resolve(bill()).catch((fehler: unknown) => {
-    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, Reflect.get(Object(fehler), "message"));
-  });
+  verfolgeAbrechnung(bill, callId);
 }
 
 export function billThunk(

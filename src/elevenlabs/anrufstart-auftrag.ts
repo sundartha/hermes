@@ -13,6 +13,8 @@ export const ANRUFSTART_WARTE_TAKT_MS = MS_PER_SECOND;
 
 export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt" });
 
+export const ANRUFSTART_GRUND_ABSCHALTEN = "abschalten";
+
 export const ANRUFSTART_AUSGANG = Object.freeze({
   GESTARTET: "gestartet",
   ABGEGLICHEN: "abgeglichen",
@@ -74,6 +76,7 @@ interface Abhaengigkeiten<A extends Anruf> {
     eingefroren: () => boolean | Promise<boolean>;
     pausiert: (call: A) => boolean | Promise<boolean>;
     abgebrochen: (call: A) => boolean;
+    abschaltend?: (() => boolean) | undefined;
   };
   platz?: Platz<A>;
   wartefristMs?: number;
@@ -155,6 +158,7 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
   async function sperrGrund(call: A): Promise<string | null> {
     if (await sperren.eingefroren()) return ANRUFSTART_SPERRE.EINGEFROREN;
     if (await sperren.pausiert(call)) return ANRUFSTART_SPERRE.PAUSE;
+    if (sperren.abschaltend?.()) return ANRUFSTART_GRUND_ABSCHALTEN;
     return null;
   }
 

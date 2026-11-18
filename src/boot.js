@@ -68,6 +68,7 @@ import { elevenlabsNummern } from "./elevenlabs/nummern-port.ts";
 import { starteNummerntausch } from "./worker/nummerntausch.js";
 import { numberProvisioning, inboundSignatureVerifier } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
+import { warteAufOffeneAbrechnungen } from "./telephony/call-termination.ts";
 import { starteAufbewahrung, starteSweepTakt, starteFristenTakt } from "./zeitsteuerung.js";
 import { loeschtaktBefund } from "./queue/takt-pruefung.js";
 import { starteLebenszeichen } from "./lebenszeichen.js";
@@ -692,6 +693,12 @@ async function expireOrphanedConsults(store) {
   );
 }
 
+const stoppeQueueMitAbrechnungen = (provisioning) => async () => {
+  const gestoppt = await provisioning.stopQueue();
+  await warteAufOffeneAbrechnungen();
+  return gestoppt;
+};
+
 export async function bootServer({
   app,
   config,
@@ -794,7 +801,7 @@ export async function bootServer({
     store,
     config,
     releaseLongPolls: consultDelivery.releaseOpenPolls,
-    stopQueue: provisioning.stopQueue,
+    stopQueue: stoppeQueueMitAbrechnungen(provisioning),
     abschaltweiche,
     instanzTakt,
   });
