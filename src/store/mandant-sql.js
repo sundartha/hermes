@@ -12,6 +12,9 @@ const SPALTE_JE_SCHLUESSEL = Object.freeze({
   stripeActivationPending: "stripe_activation_pending",
   billingHold: "stripe_billing_hold",
   billingHoldDueAt: "stripe_billing_hold_due_at",
+  stripeCustomerId: "stripe_customer_id",
+  stripePaymentMethodId: "stripe_payment_method_id",
+  stripePaymentMethodType: "stripe_payment_method_type",
 });
 
 const SPERRE_SPALTEN = ["status", ...Object.values(SPALTE_JE_SCHLUESSEL), "stand"].join(", ");

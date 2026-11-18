@@ -679,11 +679,18 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
   };
 }
 
+const STRIPE_SCHLUESSEL = [
+  ["customerId", "stripeCustomerId"],
+  ["paymentMethodId", "stripePaymentMethodId"],
+  ["paymentMethodType", "stripePaymentMethodType"],
+];
+
 function aboAbrechnungMethoden({ requireState, save, mandant }) {
   return {
-    setTenantStripe(tenantId, patch) {
+    setTenantStripe(tenantId, patch = {}) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
-      save();
+      const schluessel = STRIPE_SCHLUESSEL.filter(([feld]) => patch[feld] !== undefined);
+      if (schluessel.length > 0) mandant.schreiben(tenantId, schluessel.map(([, key]) => key));
       return tenant;
     },
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
@@ -1569,9 +1576,6 @@ async function flushTenants(client, tenants) {
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject,
-         stripe_customer_id=EXCLUDED.stripe_customer_id,
-         stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
-         stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,
          stripe_subscription_id=EXCLUDED.stripe_subscription_id,
          stripe_plan_slug=EXCLUDED.stripe_plan_slug,
          stripe_current_period_end=EXCLUDED.stripe_current_period_end,
