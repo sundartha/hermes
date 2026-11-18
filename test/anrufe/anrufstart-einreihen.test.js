@@ -527,3 +527,32 @@ test("Wartender Anruf: scheitert das Lesen einer Sperre, wird nicht gewaehlt und
   assert.deepEqual(ergebnis.gewaehlt, []);
   assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:tor-fehler"]]);
 });
+
+test("Wartender Anruf: scheitert das Lesen der Pause, nennt das Betriebsprotokoll das Tor pausiert und den Anruf", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const fehlerZeilen = [];
+  t.mock.method(console, "error", (...teile) => fehlerZeilen.push(teile.join(" ")));
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  Object.defineProperty(ergebnis.protokoll, "pause", {
+    get: () => {
+      throw new Error("Pause nicht lesbar");
+    },
+  });
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.deepEqual(fehlerZeilen, [`[anrufstart] Tor pausiert nicht lesbar call=${anruf.id}: Pause nicht lesbar`]);
+});
+
+test("Wartender Anruf: scheitert das Lesen des Einfrierens, nennt das Betriebsprotokoll das Tor eingefroren und den Anruf", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const fehlerZeilen = [];
+  t.mock.method(console, "error", (...teile) => fehlerZeilen.push(teile.join(" ")));
+  const { ergebnis, verbindung, anruf } = await wartenderAuftrag();
+  Object.defineProperty(ergebnis.config, "outboundFrozen", {
+    get: () => {
+      throw new Error("Einfrieren nicht lesbar");
+    },
+  });
+  await assert.rejects(verbindung.starte(anruf), NICHT_GEWAEHLT(anruf));
+  assert.deepEqual(ergebnis.protokoll.gruende, [[anruf.id, "not-placed:tor-fehler"]]);
+  assert.deepEqual(fehlerZeilen, [`[anrufstart] Tor eingefroren nicht lesbar call=${anruf.id}: Einfrieren nicht lesbar`]);
+});
