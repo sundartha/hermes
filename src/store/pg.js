@@ -844,7 +844,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
   };
 }
 
-function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, einstellungen, anrufe, anrufExport, posteingang }) {
+function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, einstellungen, anrufe, anrufExport, posteingang, mandant }) {
   return {
     async pruneOldData(
       days = config.privacy.retentionDays,
@@ -871,6 +871,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
       entbindeEntfernte([gebunden, eigene], state);
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
         save();
+      if (removed.privateNumber) mandant.schreiben(tenantId, ["privateNumber"]);
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
