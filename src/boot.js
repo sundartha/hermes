@@ -64,7 +64,7 @@ import { turnBudgetOverrun } from "./turn-budget.ts";
 import { evidenceRetentionEnabled } from "./call-result.ts";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.ts";
 import { probeMailBoot } from "./mail-boot-probe.js";
-import { sipRegistrarWennAktiv } from "./elevenlabs/nummern-registrierung.js";
+import { elevenlabsNummern } from "./elevenlabs/nummern-port.ts";
 import { starteNummerntausch } from "./worker/nummerntausch.js";
 import { numberProvisioning, inboundSignatureVerifier } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
@@ -286,7 +286,7 @@ function warnApiSchluesselLeer(config) {
 }
 
 function meldeElNummernregistrierung(config) {
-  if (!sipRegistrarWennAktiv(config)) {
+  if (!elevenlabsNummern().sipRegistrarWennAktiv(config)) {
     console.warn(
       "[boot] Konfig-Warnung: ElevenLabs-Nummernregistrierung NICHT eingehaengt " +
         "(PROVISIONING_ENABLED muss true sein) - neue DIDs werden nicht " +

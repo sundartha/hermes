@@ -7,7 +7,7 @@ import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.ts";
-import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
+import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
@@ -46,7 +46,7 @@ function capacityDetail(reason) {
 function messgrund(call) {
   const basis = failureReasonBase(call.failureReason);
   if (call.status === "completed") {
-    if (call.answeredUnclearReason === ANSWERED_REASON_NOT_ANSWERED) return NO_ANSWER;
+    if (call.answeredUnclearReason === elevenlabsOutbound().ANSWERED_REASON_NOT_ANSWERED) return NO_ANSWER;
     return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_KEINER;
   }
   return FAILURE_REASON_BASE_TOKENS.includes(basis) ? basis : GRUND_SONSTIG;

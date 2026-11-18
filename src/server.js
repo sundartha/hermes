@@ -23,7 +23,6 @@ import { makeElConfigRead } from "./telephony/outbound-config-soll.ts";
 import { umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.ts";
 import { makeInboundBridges } from "./elevenlabs/inbound-fristen.ts";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.ts";
-import { inboundTrunkSchreiberWennErlaubt } from "./elevenlabs/nummern-registrierung.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates, ausgehendGesperrt } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.ts";
@@ -45,6 +44,7 @@ import { stripeBilling } from "./billing/stripe.ts";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.ts";
 import { elevenlabsConvai, elevenlabsOutbound } from "./elevenlabs/registry.ts";
+import { elevenlabsNummern } from "./elevenlabs/nummern-port.ts";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {
   makeRequestTenant,
@@ -109,7 +109,7 @@ const inboundTrunkSweep = makeTrunkSweep({
   store,
   config,
   elRead,
-  reparatur: inboundTrunkSchreiberWennErlaubt(config),
+  reparatur: elevenlabsNummern().inboundTrunkSchreiberWennErlaubt(config),
   mitStartSperre: store.mitStartSperre,
   jetzt: () => new Date(),
 });

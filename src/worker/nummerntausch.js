@@ -1,9 +1,6 @@
 import { provisionNumber } from "../onboarding.js";
 import { searchParamsForCountry } from "../telephony/provisioning-geo.js";
-import {
-  sipRegistrarWennAktiv,
-  inboundTrunkSchreiberWennErlaubt,
-} from "../elevenlabs/nummern-registrierung.js";
+import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { performNumberRelease } from "../release-reconcile.js";
 import { TAUSCH_ERGEBNIS, NUMBER_STATUS, speicherBereiche } from "../store.js";
 
@@ -116,8 +113,8 @@ export async function runNummerntausch({
   store,
   config,
   numberProvisioning,
-  sipRegistrar = sipRegistrarWennAktiv(config),
-  inboundTrunkSchreiber = inboundTrunkSchreiberWennErlaubt(config),
+  sipRegistrar = elevenlabsNummern().sipRegistrarWennAktiv(config),
+  inboundTrunkSchreiber = elevenlabsNummern().inboundTrunkSchreiberWennErlaubt(config),
   audit,
   logger = console,
 }) {
