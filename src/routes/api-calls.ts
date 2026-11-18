@@ -38,7 +38,7 @@ import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
-import { sleep } from "../utils/timer.js";
+import { sleep } from "../utils/timer.ts";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { unsupportedLanguageBody } from "./_call-request.ts";
 import {
