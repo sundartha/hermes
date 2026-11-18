@@ -259,6 +259,10 @@ const verbindungenMitRollbackSeit = (mitschnitt, vorher) => {
   return verbindungen.map((_, nr) => nr).filter((nr) => verbindungen[nr].slice(vorher[nr] ?? 0).includes(ZURUECK));
 };
 
+async function poolVorwaermen(sql, signer, instanz) {
+  await Promise.all([zaun(sql, signer, [instanz]), zaun(sql, signer, [instanz])]);
+}
+
 async function warteAufAnspruchsverbindung(mitschnitt, vorher) {
   let gefunden = [];
   await mitschnitt.bisBedingung(() => {
@@ -331,7 +335,7 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
 });
 
 test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen nur noch ROLLBACK", FRIST, async (t) => {
-  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ sql, signer, relais }) => {
     const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
     const anbieter = await starteAnrufstartAttrappe();
     const umgebung = pgStartUmgebung(mitschnitt.adresse, {
@@ -343,6 +347,7 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
     });
     const a = await startServer({ env: umgebung });
     try {
+      await poolVorwaermen(sql, signer, a);
       relais.anhalten();
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
@@ -364,7 +369,7 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
 });
 
 test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem Fortsetzen das ROLLBACK des Anspruchs an", FRIST, async (t) => {
-  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ sql, signer, relais }) => {
     const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
     const anbieter = await starteAnrufstartAttrappe();
     const umgebung = pgStartUmgebung(mitschnitt.adresse, {
@@ -376,6 +381,7 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
     });
     const a = await startServer({ env: umgebung });
     try {
+      await poolVorwaermen(sql, signer, a);
       relais.anhalten();
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
