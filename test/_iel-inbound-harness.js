@@ -242,3 +242,19 @@ export function baueElMitStore(store) {
     endCarrierCall: () => {},
   });
 }
+
+export const leererZustand = () => ops.makeDefaultState();
+
+export function seedAusgehenderElCall(state, { answeredVorS, mitGespraech }) {
+  const call = ops.createCall(state, {
+    direction: "outbound",
+    from: INBOUND_TO,
+    to: INBOUND_FROM,
+    goal: "Termin vereinbaren",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
+  if (mitGespraech) call.elevenlabsConversationId = CONV_ID;
+  call.startedAt = isoVor(answeredVorS);
+  call.answeredAt = call.startedAt;
+  return call;
+}

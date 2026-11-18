@@ -1,41 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import * as ops from "../../src/store/state-ops.js";
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { waitUntil } from "../helpers.js";
 import {
-  CONV_ID,
-  INBOUND_FROM,
-  INBOUND_TO,
   RUHE_TAKTE,
   WARTE,
   baueHarness,
   beendeSchleifen,
-  isoVor,
   makeAnbieter,
   mitAnbieter,
   okAntwort,
+  leererZustand,
   ruhe,
+  seedAusgehenderElCall,
   seedInboundElCall,
 } from "../_iel-inbound-harness.js";
 
 const GESPRAECH_S = 240;
-
-function ausgehenderAnruf(state, { gespraech }) {
-  const call = ops.createCall(state, {
-    direction: "outbound",
-    from: INBOUND_TO,
-    to: INBOUND_FROM,
-    goal: "Termin vereinbaren",
-    tenantId: BOOTSTRAP_TENANT_ID,
-  });
-  if (gespraech) call.elevenlabsConversationId = CONV_ID;
-  call.startedAt = isoVor(GESPRAECH_S);
-  call.answeredAt = call.startedAt;
-  return call;
-}
 
 function haltAbrufFest(anbieter) {
   let freigeben;
@@ -47,8 +29,8 @@ function haltAbrufFest(anbieter) {
 }
 
 test("Abfrage durch den Lauf: ein unbekannter Anruf und ein Anruf ohne Gespraech fragen den Anbieter nicht", async () => {
-  const state = ops.makeDefaultState();
-  const ohneGespraech = ausgehenderAnruf(state, { gespraech: false });
+  const state = leererZustand();
+  const ohneGespraech = seedAusgehenderElCall(state, { answeredVorS: GESPRAECH_S, mitGespraech: false });
   const harness = baueHarness(state);
   const anbieter = makeAnbieter(async () => okAntwort(CONVERSATION_IN_PROGRESS));
 
@@ -62,8 +44,8 @@ test("Abfrage durch den Lauf: ein unbekannter Anruf und ein Anruf ohne Gespraech
 });
 
 test("Abfrage durch den Lauf: ein zweiter Aufruf waehrend der laufenden Abfrage startet keine zweite Kette", async () => {
-  const state = ops.makeDefaultState();
-  const call = ausgehenderAnruf(state, { gespraech: true });
+  const state = leererZustand();
+  const call = seedAusgehenderElCall(state, { answeredVorS: GESPRAECH_S, mitGespraech: true });
   const harness = baueHarness(state);
   const anbieter = makeAnbieter(async () => okAntwort(CONVERSATION_IN_PROGRESS));
 
@@ -83,7 +65,7 @@ test("Abfrage durch den Lauf: ein zweiter Aufruf waehrend der laufenden Abfrage 
 });
 
 test("Abfrage durch den Lauf: bei einem gebundenen eingehenden Anruf startet das Start-Tor des Nachlaufs keine zweite Kette", async () => {
-  const state = ops.makeDefaultState();
+  const state = leererZustand();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S });
   const harness = baueHarness(state);
   const anbieter = makeAnbieter(async () => okAntwort(CONVERSATION_IN_PROGRESS));
