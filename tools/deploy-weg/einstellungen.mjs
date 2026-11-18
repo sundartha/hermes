@@ -42,6 +42,7 @@ const REGELN = new Map([
   ["GITHUB_TRIGGERING_ACTOR", muster(LOGIN)],
   ["GITHUB_REF", muster(/^refs\/[\w./-]{1,200}$/)],
   ["GITHUB_OUTPUT", muster(PFAD)],
+  ["GITHUB_STEP_SUMMARY", muster(PFAD)],
   ["GITHUB_WORKSPACE", muster(PFAD)],
   ["STAGING_URL", dienstAdresse],
   ["PRODUKTION_URL", dienstAdresse],
@@ -109,6 +110,13 @@ const BEFEHLE = new Map([
     {
       pflicht: ["GITHUB_REPOSITORY", "GITHUB_RUN_ID"],
       freiwillig: ["GITHUB_SERVER_URL", "SLACK_ALERT_URL"],
+    },
+  ],
+  [
+    "pruefung",
+    {
+      pflicht: ["GITHUB_REPOSITORY", "GITHUB_RUN_ID"],
+      freiwillig: ["GITHUB_SERVER_URL", "GITHUB_STEP_SUMMARY", "SLACK_ALERT_URL"],
     },
   ],
   [
@@ -180,6 +188,7 @@ function werteBauen(umgebung) {
     inActions: umgebung.GITHUB_ACTIONS === "true",
     ref: umgebung.GITHUB_REF || null,
     ausgabeDatei: umgebung.GITHUB_OUTPUT || null,
+    schrittZusammenfassung: umgebung.GITHUB_STEP_SUMMARY || null,
     repoDir: umgebung.GITHUB_WORKSPACE || cwd(),
     stagingUrl: umgebung.STAGING_URL && adresse(umgebung.STAGING_URL),
     produktionUrl: umgebung.PRODUKTION_URL && adresse(umgebung.PRODUKTION_URL),
