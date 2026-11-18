@@ -155,6 +155,7 @@ test("[NIE6] keine weiteren Exporte als die vier Funktionen", async () => {
   if (!helfer) return;
   assert.deepEqual(Object.keys(helfer).sort(), [
     "lastDayOfMonth",
+    "monthStart",
     "oneMonthBack",
     "previousMonthStart",
     "yearMonthKey",
