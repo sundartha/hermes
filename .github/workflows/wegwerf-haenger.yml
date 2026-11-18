@@ -29,8 +29,9 @@ jobs:
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 12 == teil % 12')
           for d in "${dateien[@]}"; do
             s=$(date +%s)
-            NODE_ENV=test timeout -k 5 150 node --test --test-concurrency=1 "$d" > /tmp/out.txt 2>&1; rc=$?
+            NODE_ENV=test timeout -k 5 150 node --test --test-concurrency=1 "$d" > /tmp/out.txt 2>&1 && rc=0 || rc=$?
             e=$(( $(date +%s) - s ))
             echo "ERGEBNIS teil=$TEIL rc=$rc sek=$e $d"
-            if [ $rc -ge 124 ]; then echo "::group::HAENGT $d"; tail -40 /tmp/out.txt; echo "::endgroup::"; fi
+            if [ $rc -ne 0 ]; then echo "::group::HAENGT $d"; tail -40 /tmp/out.txt; echo "::endgroup::"; fi
           done
+          exit 0
