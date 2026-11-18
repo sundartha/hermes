@@ -6,7 +6,6 @@ import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
 import { createTtsStore } from "./tts/store.ts";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
-import { makeVorspannErzeuger } from "./elevenlabs/outbound-vorspann.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
 import { audit } from "./util.ts";
 import { makeDurableAudit } from "./durable-audit.js";
@@ -21,7 +20,6 @@ import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.
 import { makePriceDriftWatch } from "./billing/price-drift-watch.ts";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.ts";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.ts";
-import { makeElevenLabsOutbound, mitAuftragsurteil } from "./elevenlabs/outbound.js";
 import { umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.ts";
 import { makeInboundBridges } from "./elevenlabs/inbound-fristen.ts";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.ts";
@@ -46,7 +44,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.ts";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.ts";
-import { elevenlabsConvai } from "./elevenlabs/registry.ts";
+import { elevenlabsConvai, elevenlabsOutbound } from "./elevenlabs/registry.ts";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.ts";
 import {
   makeRequestTenant,
@@ -147,7 +145,7 @@ const callFinishOhneUrteil = makeCallFinish({
 
 const callFinish = {
   ...callFinishOhneUrteil,
-  finishCall: mitAuftragsurteil({ finishCall: callFinishOhneUrteil.finishCall, summarizeCall }),
+  finishCall: elevenlabsOutbound().mitAuftragsurteil({ finishCall: callFinishOhneUrteil.finishCall, summarizeCall }),
 };
 
 const endCarrierCall = (callId) => {
@@ -155,7 +153,7 @@ const endCarrierCall = (callId) => {
   const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
   return auflegen?.();
 };
-const elevenLabsOutbound = makeElevenLabsOutbound({
+const elevenLabsOutbound = elevenlabsOutbound().makeElevenLabsOutbound({
   store,
   config,
   terminateAndBillCall,
@@ -229,7 +227,7 @@ function onTtsQuotaWarning(warning) {
 
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
-const vorspannErzeuger = makeVorspannErzeuger({ config, store, synthese: directiveSynth.synthesizeVorspann });
+const vorspannErzeuger = elevenlabsOutbound().makeVorspannErzeuger({ config, store, synthese: directiveSynth.synthesizeVorspann });
 
 const vorspannAblauf = makeVorspannAblauf({
   voiceControl,

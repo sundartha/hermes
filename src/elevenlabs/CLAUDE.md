@@ -10,7 +10,7 @@ Vor jeder EL-Prompt-/Konfig-Aenderung: Vorlage als Quelle nehmen (kein Dashboard
 klammerfrei halten, Detektoren nur erweitern (Diagnose), Aenderungen an allen fuenf Stellen + Pins in
 einem Commit, danach `npm run elevenlabs:drift` (und bei Live-Wirkung: Push mit Ruecklese, Owner-Gate).
 
-**Port und Registry:** Ausserhalb von `src/elevenlabs/` holt niemand `convai.ts` direkt, sondern den Port `elevenlabsConvai` aus `registry.ts` (Regel `elevenlabs-nur-ueber-port` in `.dependency-cruiser.cjs`).
+**Port und Registry:** Ausserhalb von `src/elevenlabs/` holt niemand `convai.ts` direkt, sondern den Port `elevenlabsConvai` (Konto lesen) aus `registry.ts`; `server.js` baut den Anrufstart und den Vorspann-Erzeuger über den Port `elevenlabsOutbound` derselben Registry (Regel `elevenlabs-nur-ueber-port` in `.dependency-cruiser.cjs`).
 
 ## Baustein anrufe (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck und Darf nutzen: stehen in `src/telephony/CLAUDE.md`, dem ersten Ordner von anrufe.
