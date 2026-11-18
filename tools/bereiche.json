@@ -11,7 +11,7 @@
       "^src/(inbox-entry|sms-summary)\\.[jt]s$",
       "^src/routes/api-inbox\\.[jt]s$"
     ],
-    "eingaenge": [],
+    "eingaenge": ["^src/routes/api-inbox\\.[jt]s$"],
     "fachlogik": []
   },
   {
