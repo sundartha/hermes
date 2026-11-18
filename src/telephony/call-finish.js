@@ -11,6 +11,7 @@ import { ANSWERED_REASON_NOT_ANSWERED } from "../elevenlabs/outbound.js";
 import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
+import { anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 
 const SMS_BODY_MAX_CHARS = 1500;
 
@@ -315,6 +316,10 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || finishedCalls.has(call)) return;
     finishedCalls.add(call);
+    if (anrufZustandVon(call.status) === null) {
+      console.error(`[call-finish] Anruf ${call.id}: unbekannter Zustand, kein Ende gemeldet`);
+      return;
+    }
     const grund = messgrund(call);
     messeAnrufEnde({
       richtung: call.direction,

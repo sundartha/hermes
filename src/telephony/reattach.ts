@@ -1,3 +1,4 @@
+import type { AnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { classifyCallTime } from "../store/state-ops.js";
 import { makeKeyedSingleFlight } from "../single-flight.ts";
 
@@ -10,7 +11,7 @@ interface AktiverAnruf {
 interface ReattachAbhaengigkeiten {
   attachActiveCall: (callId: string) => Promise<AktiverAnruf | null | undefined>;
   maxCallDurationS: number;
-  terminateCappedCall: (callId: string, sid: string, status: string) => Promise<unknown>;
+  terminateCappedCall: (callId: string, sid: string, status: AnrufZustand) => Promise<unknown>;
   scheduleMaxDurationEnd: (call: AktiverAnruf, sid: string, remaining: number) => unknown;
   budgetAxisFor: (call: AktiverAnruf) => unknown;
   terminateOverBudgetCall: (callId: string, sid: string) => Promise<unknown>;

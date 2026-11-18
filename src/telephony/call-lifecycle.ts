@@ -1,5 +1,6 @@
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.ts";
 import { MAX_CALL_DURATION_CAP_S, MAX_DURATION_RETRY_MS } from "../begriffe/anrufe.js";
+import type { AnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
@@ -15,7 +16,7 @@ export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
   WATCHDOG: "wache",
 });
 
-const ACTIVE_CALL_STATUS = "active";
+const ACTIVE_CALL_STATUS: AnrufZustand = "active";
 
 const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
 
@@ -29,7 +30,7 @@ const carrierEndMs: (call: Call, nowMs: number) => number = carrierEndMsOf;
 
 interface Call {
   id: string;
-  status: string;
+  status: AnrufZustand;
   elevenlabsConversationId?: string | null;
   tenantId: string;
   twilioSid: string;
@@ -49,7 +50,7 @@ interface Store {
   getCall: (callId: string) => Call | null | undefined;
   leseCall?: (callId: string) => Promise<Call | null | undefined>;
   activeCallsForSql?: (tenantId: string) => Promise<Call[]>;
-  setCallEndedAt: (callId: string, status: string, endedAtIso: string) => unknown;
+  setCallEndedAt: (callId: string, status: AnrufZustand, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
   attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
   setzeHoechstdauerFrist?: FristSchreiber;
@@ -62,7 +63,7 @@ type HangUp = (() => Promise<unknown>) | null | undefined;
 interface TerminateRequest {
   callId: string;
   providerCallSid: string;
-  status: string;
+  status: AnrufZustand;
   failureReason: string;
 }
 
@@ -290,7 +291,7 @@ export function makeCallLifecycle({
     }
   }
 
-  async function terminateCappedCall(callId: string, providerCallSid: string, status: string): Promise<void> {
+  async function terminateCappedCall(callId: string, providerCallSid: string, status: AnrufZustand): Promise<void> {
     await terminateActiveCall({ callId, providerCallSid, status, failureReason: CAP_FAILURE_REASON });
   }
 
