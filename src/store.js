@@ -133,6 +133,7 @@ export const leitungsplaetze = {
   belegenEingehend: (anfrage) => aktiveLeitungsplaetze().belegenEingehend(anfrage),
   freigeben: (callId) => aktiveLeitungsplaetze().freigeben(callId),
   belegung: () => aktiveLeitungsplaetze().belegung(),
+  belegteAnrufe: (callIds) => aktiveLeitungsplaetze().belegteAnrufe(callIds),
 };
 
 const speicherAnrufstartMarker = makeAnrufstartMarker();

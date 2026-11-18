@@ -16,6 +16,7 @@ const AKTUELLE_ZEILEN_SQL = `${ZEILEN_SQL} WHERE ablauf_um > now()`;
 const BELEGEN_SQL = `
   INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um, richtung)
   SELECT $1, anbieter, $2, now() + make_interval(secs => $4), $5 FROM unnest($3::text[]) AS anbieter`;
+const BELEGTE_ANRUFE_SQL = `SELECT DISTINCT call_id AS "callId" FROM leitungsplatz WHERE ablauf_um > now() AND call_id = ANY($1::text[])`;
 const FREIGEBEN_SQL = `DELETE FROM leitungsplatz WHERE call_id = $1`;
 
 export function makePostgresLeitungsplaetze(runner) {
@@ -107,5 +108,10 @@ export function makePostgresLeitungsplaetze(runner) {
     return belegungAus(rows);
   }
 
-  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung };
+  async function belegteAnrufe(callIds) {
+    const { rows } = await inTransaktion((client) => client.query(BELEGTE_ANRUFE_SQL, [callIds]));
+    return new Set(rows.map((zeile) => zeile.callId));
+  }
+
+  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung, belegteAnrufe };
 }

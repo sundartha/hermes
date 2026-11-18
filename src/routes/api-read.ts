@@ -12,7 +12,10 @@ interface Speicher {
   getCall: (id: string | undefined) => unknown;
   leseCallUngebunden: (id: string) => Promise<unknown>;
   einstellungenNachladen?: (tenantId: string) => unknown;
+  leitungsplaetze?: { belegteAnrufe: (callIds: string[]) => Promise<Set<string>> };
 }
+
+type AnrufAnsicht = Record<string, unknown>;
 
 interface AnrufAuszug {
   calls: unknown[];
@@ -73,6 +76,24 @@ function usageView({
   };
 }
 
+const anrufKennung = (anruf: AnrufAnsicht): string => String(anruf["id"]);
+
+const wartetMoeglich = (anruf: AnrufAnsicht): boolean =>
+  anruf["direction"] === "outbound" && anruf["status"] === "active" && !anruf["answeredAt"] && !anruf["callControlId"];
+
+async function markiereWartende<T extends AnrufAnsicht>(store: Speicher, anrufe: T[]): Promise<T[]> {
+  const kandidaten = anrufe.filter(wartetMoeglich).map(anrufKennung);
+  if (!store.leitungsplaetze || kandidaten.length === 0) return anrufe;
+  try {
+    const mitPlatz = await store.leitungsplaetze.belegteAnrufe(kandidaten);
+    const wartend = new Set(kandidaten.filter((kennung) => !mitPlatz.has(kennung)));
+    return anrufe.map((anruf) => (wartend.has(anrufKennung(anruf)) ? { ...anruf, queued: true } : anruf));
+  } catch (fehler) {
+    console.error("[api-read] Leitungsplaetze nicht lesbar, Anrufe ohne queued:", fehler instanceof Error ? fehler.message : fehler);
+    return anrufe;
+  }
+}
+
 async function zeigeZustand({
   store,
   bereiche,
@@ -95,7 +116,7 @@ async function zeigeZustand({
   const s = store.load();
   res.json({
     settings: ctx.settings,
-    calls: anrufe.map(publicCall),
+    calls: await markiereWartende(store, anrufe.map(publicCall)),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
     calendar: kalenderAb(store, tenantId).slice(0, STATE_CALENDAR),
     usage: usageView({
@@ -132,7 +153,7 @@ async function zeigeAnruf({
     antworteFehler(res, HTTP_NOT_FOUND, "not found");
     return;
   }
-  res.json(publicCall(call));
+  res.json((await markiereWartende(store, [publicCall(call)]))[0]);
 }
 
 async function zeigeExport({

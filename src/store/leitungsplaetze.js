@@ -86,7 +86,12 @@ export function makeLeitungsplaetze({ jetztMs = Date.now } = {}) {
     return belegungAus(aktuelleZeilen());
   }
 
-  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung };
+  async function belegteAnrufe(callIds) {
+    const gesucht = new Set(callIds);
+    return new Set(aktuelleZeilen().map((zeile) => zeile.callId).filter((callId) => gesucht.has(callId)));
+  }
+
+  return { pruefenAusgehend, belegenAusgehend, belegenEingehend, freigeben, belegung, belegteAnrufe };
 }
 
 export const leitungsplaetze = makeLeitungsplaetze();
