@@ -32,7 +32,10 @@ const LAUFENDER_ANRUF_MS = (9 * 60 + 5) * 1000;
 const LAUFENDER_ANRUF_MAX_S = 1800;
 const VERBRAUCH_SQL = "SELECT cost_eur * 100 AS cent FROM usage";
 
+const FRISTEN_ENV = Object.freeze({ FRISTEN_TAKT_MS: "40" });
+
 const WACHE_ENV = Object.freeze({
+  ...FRISTEN_ENV,
   DEFAULT_TENANT_BUDGET_CENTS: String(KOSTENDECKE_CENT),
   VOICE_TARIFF_DOMESTIC_CENTS: TARIF_CENT,
   VOICE_TARIFF_DEFAULT_CENTS: TARIF_CENT,
@@ -91,7 +94,7 @@ test("PG-MAXDAUER: ein EL-Anruf endet per SQL nach seiner Max-Dauer, ein zugleic
 test("PG-MAXDAUER-NEUSTART: nach hartem Neustart beendet der zweite Lauf den laufenden Anruf mit seiner Max-Dauer", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   const { ziel } = neueAnrufe();
-  await mitHermesAufPostgresHartNeustartbar(t, {}, async ({ srv, anbieter, sql, neustartHart }) => {
+  await mitHermesAufPostgresHartNeustartbar(t, { env: FRISTEN_ENV }, async ({ srv, anbieter, sql, neustartHart }) => {
     const to = ziel();
     await startet(srv, { to, max_duration_s: NEUSTART_DAUER_S });
     const laufend = await anrufAnBis(sql, { ziel: to, genug: gestartet });

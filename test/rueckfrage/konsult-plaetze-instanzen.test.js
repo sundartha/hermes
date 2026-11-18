@@ -7,7 +7,7 @@ import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { postgresVorhanden, seedeMandant, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
-import { startServer } from "../helpers.js";
+import { startServer, waitUntil } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const DB_FRIST_MS = 5_000;
@@ -29,12 +29,14 @@ const UMGEBUNG = Object.freeze({
   IN_CALL_CONSULT_ENABLED: "true",
   ELEVENLABS_TOOL_TOKEN: WERKZEUG_TOKEN,
 });
+const SCHNELLER_TAKT = Object.freeze({ FRISTEN_TAKT_MS: "40" });
+const ABFRAGE_MELDUNG = "[el-outbound] Ergebnisabruf fehlgeschlagen (call=call_kp_10)";
 const ANTWORTFRIST_OBEN_S = 33;
 const ANTWORTFRIST_UNTEN_S = 30;
 const ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164, to_e164, goal, started_at,
-    elevenlabs_conversation_id, max_duration_s, answered_at)
+    elevenlabs_conversation_id, max_duration_s, answered_at, frist_abfrage_at)
   VALUES ($1, $2, $1 || '_token', 'outbound', $3, (SELECT e164 FROM number WHERE tenant_id = $2), '+4915112340000', 'Test', now()::text,
-    'conv_' || $1, 300, now()::text)`;
+    'conv_' || $1, 300, now()::text, now() - interval '1 minute')`;
 const ANZAHL_SQL = "SELECT count(*)::int AS anzahl FROM konsult_platz WHERE call_id = $1";
 const GESAMT_SQL = "SELECT count(*)::int AS anzahl FROM konsult_platz";
 const REST_SQL = "SELECT extract(epoch FROM min(ablauf_um) - now())::float AS rest FROM konsult_platz";
@@ -52,8 +54,8 @@ async function mitZweiInstanzen(t, anrufe, lauf) {
   const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
   await verwaltung.connect();
   const gestartet = [];
-  const starte = async () => {
-    const instanz = await startServer({ env: pgStartUmgebung(db.adresse, UMGEBUNG) });
+  const starte = async (takt = {}) => {
+    const instanz = await startServer({ env: pgStartUmgebung(db.adresse, { ...UMGEBUNG, ...takt }) });
     gestartet.push(instanz);
     return instanz;
   };
@@ -76,7 +78,7 @@ async function mitZweiInstanzen(t, anrufe, lauf) {
     await (await starte()).stop();
     for (const mandant of MANDANTEN) await seedeMandant(sql, mandant);
     for (const [id, mandant, status] of anrufe) await sql(ANRUF_SQL, [id, mandant.id, status]);
-    const a = await starte();
+    const a = await starte(SCHNELLER_TAKT);
     const b = await starte();
     return await lauf({ a, b, sql, halte, hole });
   } finally {
@@ -214,6 +216,7 @@ test(
   async (t) => {
     if (!postgresVorhanden()) return;
     await mitZweiInstanzen(t, [["call_kp_10", M0, "active"]], async ({ a, sql }) => {
+      await waitUntil(() => a.stdout.includes(ABFRAGE_MELDUNG), { timeoutMs: FREIGABE_FRIST_MS });
       const abbruch = new AbortController();
       const frage = abrufMitFrist(`${a.localUrl}/webhooks/elevenlabs/consult`, {
         method: "POST",
