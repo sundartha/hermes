@@ -674,7 +674,6 @@ export function makeCallRoutes({
   }
 
   async function waehleAnruf(call: Anruf): Promise<Wahlausgang> {
-    await beschaffeAbsender(call);
     const wahl = outboundWegFuer({ config, store, call });
     meldeOutboundWeg({ callId: call.id, wahl });
     if (!wahl.weg) return { abbruch: { grund: wahl.grund } };
