@@ -10,8 +10,10 @@ import { waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
+const HTTP_UNAVAILABLE = 503;
 const WARTEGRENZE_MS = 5_000;
 const WARTEGRENZE_PUFFER_MS = 3_000;
+const ABWEISUNG_FRIST_MS = 2 * WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS;
 const ELEVENLABS_PLAETZE = 4;
 const ZIEL_VORWAHL = "+49151123401";
 const ZIEL_STELLEN = 3;
@@ -99,7 +101,7 @@ async function rufeAn(prozess, mandant) {
       headers: { "Content-Type": "application/json", "X-Internal-Identity": mandant.sub },
       body: JSON.stringify({ to: ziel, objective: `Auftrag ${ziel}` }),
     },
-    { wartezeitMs: WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS },
+    { wartezeitMs: ABWEISUNG_FRIST_MS },
   );
   return { status: antwort.status, body: await antwort.json() };
 }
@@ -120,6 +122,7 @@ test(
       assert.deepEqual(rows, [
         { anbieter: "elevenlabs", anzahl: ELEVENLABS_PLAETZE },
         { anbieter: "telnyx", anzahl: ELEVENLABS_PLAETZE },
+        { anbieter: "warteschlange", anzahl: 6 - ELEVENLABS_PLAETZE },
       ]);
       const anrufe = await zeilenBis(
         async () => (await sql(ANRUFE_GEWAEHLT_SQL)).rows[0],
@@ -131,7 +134,7 @@ test(
 );
 
 test(
-  "SG-29 Datenbank antwortet nicht binnen 5 Sekunden: ausgehender Anruf wartet und nichts wird gewählt",
+  "SG-29 Datenbank antwortet nicht binnen 5 Sekunden: ausgehender Anruf wird abgewiesen, nicht eingereiht und nichts wird gewählt",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
@@ -143,17 +146,16 @@ test(
       try {
         blockiert = await rufeAn(a, MANDANTEN[0]);
         const dauerMs = Date.now() - beginn;
-        assert.equal(blockiert.status, HTTP_OK);
-        assert.equal(blockiert.body.status, "dialing");
+        assert.equal(blockiert.status, HTTP_UNAVAILABLE);
+        assert.equal(blockiert.body.reason, "ausgelastet");
         assert.match(a.stdout, /\[leitungsplaetze\] Datenbank nicht erreichbar, ausgehend abgelehnt:/);
-        assert.ok(dauerMs >= WARTEGRENZE_MS - 500, `wartet bis zur Grenze: ${dauerMs} ms`);
-        assert.ok(dauerMs < WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS, `wartet nicht laenger: ${dauerMs} ms`);
+        assert.ok(dauerMs >= 2 * WARTEGRENZE_MS - 500, `wartet zweimal bis zur Grenze: ${dauerMs} ms`);
+        assert.ok(dauerMs < ABWEISUNG_FRIST_MS, `wartet nicht laenger: ${dauerMs} ms`);
         assert.equal(anbieter.starts().length, 0, "ElevenLabs wurde nie angerufen");
-        assert.equal((await sql(ANRUFE_SQL)).rows[0].anzahl, 1, "nur der wartende, nie gewaehlte Anruf");
+        assert.equal((await sql(ANRUFE_SQL)).rows[0].anzahl, 0, "kein Anruf angelegt, nichts eingereiht");
       } finally {
         await sql("COMMIT");
       }
-      await gewaehltBis(sql, blockiert.body.callId);
       assert.equal((await rufeAn(a, MANDANTEN[0])).status, HTTP_OK);
     });
   },
