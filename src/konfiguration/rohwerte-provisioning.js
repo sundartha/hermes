@@ -1,11 +1,11 @@
 import { MS_PER_DAY } from "../utils/timer.ts";
 
-export function rohwerteProvisioning(env, { boolEnv, numEnv }) {
+export function rohwerteProvisioning(env, { boolEnv, numEnv, textEnv }) {
   return {
-    ownerNumberSeed: env.OWNER_NUMBER_SEED || "",
-    ownerNumberProvider: (env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
-    bootstrapE164: env.BOOTSTRAP_E164 || "",
-    bootstrapProvider: env.BOOTSTRAP_PROVIDER || "",
+    ownerNumberSeed: env.OWNER_NUMBER_SEED ?? "",
+    ownerNumberProvider: (env.OWNER_NUMBER_PROVIDER ?? "").toLowerCase(),
+    bootstrapE164: env.BOOTSTRAP_E164 ?? "",
+    bootstrapProvider: env.BOOTSTRAP_PROVIDER ?? "",
     maxNumbers: numEnv("MAX_NUMBERS", env.MAX_NUMBERS, { fallback: 5, min: 0 }),
     maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", env.MAX_NUMBERS_PER_TENANT, {
       fallback: 1,
@@ -31,9 +31,9 @@ export function rohwerteProvisioning(env, { boolEnv, numEnv }) {
     ),
     releaseGraceMs:
       numEnv("RELEASE_GRACE_DAYS", env.RELEASE_GRACE_DAYS, { fallback: 0, min: 0 }) * MS_PER_DAY,
-    provisioningCountry: env.PROVISIONING_COUNTRY || "DE",
+    provisioningCountry: textEnv(env.PROVISIONING_COUNTRY, "DE"),
     geoEnabled: boolEnv("GEO_ENABLED", env.GEO_ENABLED, { fallback: false }),
-    geoDbPath: env.GEO_DB_PATH || "",
+    geoDbPath: env.GEO_DB_PATH ?? "",
     worldDefaultLanguageEnabled: boolEnv(
       "WORLD_DEFAULT_LANGUAGE_ENABLED",
       env.WORLD_DEFAULT_LANGUAGE_ENABLED,

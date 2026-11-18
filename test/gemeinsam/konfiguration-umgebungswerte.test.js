@@ -1927,3 +1927,10 @@ test("Rohwerte: leere Werte für EXA_API_BASE, STORE_BACKEND, QUEUE_BACKEND und 
   const gross = ladeGrosseRohwerte({ TELNYX_API_BASE: "" });
   assert.equal(gross.telephony.telnyxApiBase, "https://api.telnyx.com");
 });
+
+test("Rohwerte: leere Werte für PROVISIONING_COUNTRY, CLAUDE_MODEL und PRECALL_BRIEFING_MODEL ergeben den Standardwert", () => {
+  const leer = ladeAuthLlmRohwerte({ CLAUDE_MODEL: "", PRECALL_BRIEFING_MODEL: "" });
+  assert.equal(leer.llm.claudeModel, "claude-haiku-4-5");
+  assert.equal(leer.llm.briefingModel, "claude-sonnet-5");
+  assert.equal(ladeGrosseRohwerte({ PROVISIONING_COUNTRY: "" }).provisioning.provisioningCountry, "DE");
+});

@@ -3,19 +3,19 @@ import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 
-export function rohwerteLlm(env, { enumEnv, numEnv }) {
+export function rohwerteLlm(env, { enumEnv, numEnv, textEnv }) {
   return {
-    anthropicApiKey: env.ANTHROPIC_API_KEY || "",
+    anthropicApiKey: env.ANTHROPIC_API_KEY ?? "",
     llmProvider: enumEnv("LLM_PROVIDER", env.LLM_PROVIDER, {
       allowed: LLM_PROVIDER_VALUES,
       fallback: DEFAULT_LLM_PROVIDER,
     }),
-    deepseekApiKey: env.DEEPSEEK_API_KEY || "",
+    deepseekApiKey: env.DEEPSEEK_API_KEY ?? "",
     llmProviderFallback: enumEnv("LLM_PROVIDER_FALLBACK", env.LLM_PROVIDER_FALLBACK, {
       allowed: LLM_PROVIDER_VALUES,
       fallback: "",
     }),
-    claudeModel: env.CLAUDE_MODEL || "claude-haiku-4-5",
+    claudeModel: textEnv(env.CLAUDE_MODEL, "claude-haiku-4-5"),
 
     llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", env.LLM_REQUEST_TIMEOUT_MS, {
       fallback: 3500,
@@ -40,7 +40,7 @@ export function rohwerteLlm(env, { enumEnv, numEnv }) {
       min: 1,
     }),
 
-    briefingModel: env.PRECALL_BRIEFING_MODEL || "claude-sonnet-5",
+    briefingModel: textEnv(env.PRECALL_BRIEFING_MODEL, "claude-sonnet-5"),
     briefingTimeoutMs: numEnv("PRECALL_BRIEFING_TIMEOUT_MS", env.PRECALL_BRIEFING_TIMEOUT_MS, {
       fallback: 6000,
       min: 1,
