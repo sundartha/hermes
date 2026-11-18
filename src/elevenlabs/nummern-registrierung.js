@@ -1,11 +1,5 @@
 import { anfrage } from "../utils/anfrage.js";
-import {
-  listPhoneNumbers,
-  createPhoneNumber,
-  deletePhoneNumber,
-  fetchPhoneNumber,
-  patchPhoneNumber,
-} from "./convai.ts";
+import { elevenlabsNummernKonto } from "./nummern-konto-port.ts";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 
@@ -36,11 +30,11 @@ export function makeElSipRegistrar({ el, fetchImpl = anfrage, logger = console }
   async function ensureRegistration({ e164, numberId }) {
     const grund = fehlendeZugangsdaten({ el });
     if (grund) throw new Error(`ElevenLabs-Nummernregistrierung: ${grund}`);
-    const bestand = (await listPhoneNumbers({ fetchImpl, account: el })).find(
+    const bestand = (await elevenlabsNummernKonto().listPhoneNumbers({ fetchImpl, account: el })).find(
       (eintrag) => eintrag.phone_number === e164,
     );
     if (bestand?.phone_number_id) return { phoneNumberId: bestand.phone_number_id, angelegt: false };
-    const { phoneNumberId } = await createPhoneNumber({
+    const { phoneNumberId } = await elevenlabsNummernKonto().createPhoneNumber({
       fetchImpl,
       account: el,
       body: registrierungsKoerper({ e164, numberId, agentId: el.agentId }),
@@ -51,7 +45,7 @@ export function makeElSipRegistrar({ el, fetchImpl = anfrage, logger = console }
   }
 
   async function removeRegistration(phoneNumberId) {
-    const { accepted, status } = await deletePhoneNumber({ fetchImpl, account: el, phoneNumberId });
+    const { accepted, status } = await elevenlabsNummernKonto().deletePhoneNumber({ fetchImpl, account: el, phoneNumberId });
     if (!accepted)
       logger.warn(
         `[el-registrierung] Loeschversuch FEHLGESCHLAGEN phone_number_id=${phoneNumberId} status=${status ?? "unbekannt"} - Waise beim Anbieter moeglich, s. Reparaturlauf`,
@@ -74,10 +68,10 @@ export function registrierungsKlasse(registrierung) {
 }
 
 export async function holeRegistrierungen({ fetchImpl, account }) {
-  const liste = await listPhoneNumbers({ fetchImpl, account });
+  const liste = await elevenlabsNummernKonto().listPhoneNumbers({ fetchImpl, account });
   const registrierungen = [];
   for (const eintrag of liste) {
-    registrierungen.push(await fetchPhoneNumber({ fetchImpl, account, phoneNumberId: eintrag.phone_number_id }));
+    registrierungen.push(await elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account, phoneNumberId: eintrag.phone_number_id }));
   }
   return registrierungen;
 }
@@ -143,7 +137,7 @@ export function inboundTrunkSchreiberWennErlaubt(config) {
 
 export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = anfrage, logger = console }) {
   const soll = { sipUser: zugang.sipUser, agentId: el.agentId };
-  const lies = (phoneNumberId) => fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId });
+  const lies = (phoneNumberId) => elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId });
 
   async function ensureInboundTrunk(number) {
     const body = inboundTrunkKoerper({ benutzer: zugang.sipUser, passwort: zugang.sipPassword, e164: number.e164 });
@@ -154,7 +148,7 @@ export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = anfrage, log
 
   async function schreibeOhneWurf(number, body) {
     try {
-      await patchPhoneNumber({ fetchImpl, account: el, phoneNumberId: number.providerAgentPhoneNumberId, body });
+      await elevenlabsNummernKonto().patchPhoneNumber({ fetchImpl, account: el, phoneNumberId: number.providerAgentPhoneNumberId, body });
     } catch (fehler) {
       logger.warn(
         `[el-trunk] schreiben_fehlgeschlagen nummer_id=${number.id} status=${fehler?.providerStatus ?? STATUS_UNBEKANNT}`,
