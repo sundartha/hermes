@@ -103,7 +103,7 @@
       "^src/mcp-server-info\\.[jt]s$",
       "^src/store\\.[jt]s$",
       "^src/config\\.[jt]s$",
-      "^src/(telephony|geo|llm|queue|research|ui)/registry\\.[jt]s$",
+      "^src/(telephony|elevenlabs|geo|llm|queue|research|ui)/registry\\.[jt]s$",
       "^src/konfiguration/standardsprache\\.[jt]s$"
     ],
     "fachlogik": [
