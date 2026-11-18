@@ -6,8 +6,6 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
 const HTTP_OK = 200;
-const HTTP_UNAVAILABLE = 503;
-const KEINE_WARTESCHLANGE = "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 const KUNDE = "t_el_ein";
 const ABSENDER = "+12025552100";
 const EL_PLAETZE = 6;
@@ -46,7 +44,7 @@ const nimmEingehendAn = (srv, nummer) =>
     body: new URLSearchParams({ CallSid: `CAelein${nummer}`, From: anruferVon(nummer), To: ABSENDER }),
   });
 
-test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-Anrufe fuellen die ElevenLabs-Plaetze, der naechste ausgehende ElevenLabs-Anruf bekommt 503 ausgelastet", async () => {
+test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-Anrufe fuellen die ElevenLabs-Plaetze, der naechste ausgehende ElevenLabs-Anruf wartet mit dialing", async () => {
   const srv = await startServer({
     env: {
       ...EL_INBOUND_ACCESS_BOOT_ENV,
@@ -63,9 +61,14 @@ test("Eingehend ElevenLabs: sechs ueber /voice/incoming angenommene ElevenLabs-A
     for (let nummer = 1; nummer <= EL_PLAETZE; nummer += 1) assert.equal((await nimmEingehendAn(srv, nummer)).status, HTTP_OK);
     const stand = await waitForStoreState(srv, (s) => s.calls.filter((call) => call.direction === "inbound").length >= EL_PLAETZE);
     assert.ok(stand.calls.filter((call) => call.direction === "inbound").every((call) => call.costProfile === "telnyx_inbound_el_convai"));
-    const abgelehnt = await rufeAusgehendAn(srv, 1);
-    assert.equal(abgelehnt.status, HTTP_UNAVAILABLE);
-    assert.equal((await abgelehnt.json()).error, KEINE_WARTESCHLANGE);
+    const wartend = await rufeAusgehendAn(srv, 1);
+    assert.equal(wartend.status, HTTP_OK);
+    const koerper = await wartend.json();
+    assert.equal(koerper.status, "dialing");
+    assert.equal(koerper.deduplicated, false);
+    const warteAnruf = srv.readStore().calls.find((call) => call.id === koerper.callId);
+    assert.equal(warteAnruf.status, "active");
+    assert.equal(warteAnruf.callControlId, null);
   } finally {
     await srv.stop();
   }

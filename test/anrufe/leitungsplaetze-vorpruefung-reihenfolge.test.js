@@ -64,19 +64,19 @@ test("B3: bei OUTBOUND_FROZEN und voller Plattform antwortet POST /api/calls 403
   });
 });
 
-test("S14: antwortet die Datenbank nicht, antwortet POST /api/calls mit 503, startet nichts beim Anbieter und beendet den eingereihten Anruf ohne Wahl", async (t) => {
+test("S14: antwortet die Datenbank nicht, antwortet POST /api/calls mit 200 dialing, reiht den Anruf ein und startet nichts beim Anbieter", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   await mitVorspannWeg(t, {}, async ({ srv, anbieter, sql }) => {
     await sql(SPERRE_NEHMEN_SQL);
-    let antwort;
     try {
-      antwort = await rufeAnWartend(srv);
+      const antwort = await rufeAnWartend(srv);
+      assert.equal(antwort.status, HTTP_OK);
+      assert.equal((await antwort.json()).status, "dialing");
+      assert.equal(anbieter.starts().length, 0);
+      assert.equal((await sql(ANRUF_ANZAHL_SQL)).rows[0].anzahl, 1);
     } finally {
       await sql(SPERRE_GEBEN_SQL);
     }
-    assert.equal(antwort.status, HTTP_UNAVAILABLE);
-    assert.equal(anbieter.starts().length, 0);
-    assert.equal((await sql(ANRUF_ANZAHL_SQL)).rows[0].anzahl, 1);
     const spaeter = await neueAnrufe().rufeAn(srv);
     assert.equal(spaeter.status, HTTP_OK);
     assert.equal((await anrufeSql(sql, 2)).length, 2);
