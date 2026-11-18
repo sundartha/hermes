@@ -21,6 +21,7 @@ function captureSchemas() {
 const PLACE_CALL_SHAPE = {
   to: { optional: false },
   objective: { optional: false },
+  recipient_name: { optional: true },
   briefing: { optional: true },
   constraints: { optional: true },
   mandate: { optional: true },

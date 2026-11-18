@@ -15,6 +15,7 @@ const EXPECTED_MARKERS = {
   place_call: ["NOT", "NOT", "ALWAYS"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
+  "place_call.recipient_name": [],
   "place_call.briefing": ["SUMMARISE", "NO", "KNOW"],
   "place_call.constraints": [],
   "place_call.mandate": ["MANDATE", "ITSELF", "NOTHING", "NO", "ALWAYS"],
