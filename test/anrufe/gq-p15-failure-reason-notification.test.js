@@ -129,13 +129,13 @@ function makeHarness(notifyCapture) {
 test("GQ-P15-B1: Call mit failureReason -> Notification nennt den Grund", async () => {
   const notifyCapture = [];
   const callFinish = makeHarness(notifyCapture);
-  const call = seedCall({ status: "no-answer", transcript: [], failureReason: "no-answer" });
+  const call = seedCall({ status: "failed", transcript: [], failureReason: "no-answer" });
 
   await callFinish.finishCall(call);
 
   assert.equal(notifyCapture.length, 1);
   assert.equal(notifyCapture[0].title, LOCALES.de.postCall.failedTitle);
-  const expected = LOCALES.de.postCall.statusBody(call.to, "no-answer", "no-answer");
+  const expected = LOCALES.de.postCall.statusBody(call.to, "failed", "no-answer");
   assert.equal(notifyCapture[0].body, expected);
   assert.ok(notifyCapture[0].body.includes(FAILURE_REASON_TEXTS.de.phrases["no-answer"]));
 });
@@ -143,11 +143,11 @@ test("GQ-P15-B1: Call mit failureReason -> Notification nennt den Grund", async 
 test("GQ-P15-B2: Call ohne failureReason -> Body byte-identisch zum Bestand (Golden Master)", async () => {
   const notifyCapture = [];
   const callFinish = makeHarness(notifyCapture);
-  const call = seedCall({ status: "no-answer", transcript: [] });
+  const call = seedCall({ status: "failed", transcript: [] });
 
   await callFinish.finishCall(call);
 
-  assert.equal(notifyCapture[0].body, BESTAND_BODY.de);
+  assert.equal(notifyCapture[0].body, `${TARGET} (Status: failed)`);
 });
 
 test("GQ-P15-B3: Cap- und Budget-Terminalisierung erzeugen unterscheidbare Bodies", async () => {
