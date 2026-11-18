@@ -40,12 +40,12 @@ test("widget-kompakt: andere Zeilen und kurze Texte bleiben unbegrenzt hoch", ()
 });
 
 for (const [id, html] of Object.entries(WIDGETS)) {
-  test(`widget-kompakt: der Flügel von ${id} ist in beiden Themen marmorweiß`, () => {
+  test(`widget-kompakt: der Flügel von ${id} ist im Nacht-Thema marmorweiß`, () => {
     const css = stil(html);
     assert.doesNotMatch(css, /--wingf\s*:\s*invert/);
     const [nacht, stein] = wurzelRegeln(css);
     assert.match(nacht, /--wingf:none/);
-    assert.doesNotMatch(stein, /--wingf:(?!none)/);
+    assert.match(stein, /--wingf:brightness\(\.25\)/);
     assert.match(css, /\.w \.wing-wrap\{filter:var\(--wingf\)\}/);
   });
 }
