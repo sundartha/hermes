@@ -240,41 +240,6 @@
       "count": 3
     }
   },
-  "scripts/convo-bench/judge.mjs": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 5
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "scripts/convo-bench/metrics-parse.mjs": {
-    "id-length": {
-      "count": 1
-    }
-  },
-  "scripts/convo-bench/persona.mjs": {
-    "id-length": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "scripts/convo-bench/report.mjs": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 16
-    },
-    "no-magic-numbers": {
-      "count": 9
-    }
-  },
   "scripts/convo-bench/scenarios/anrufbeantworter.mjs": {
     "no-magic-numbers": {
       "count": 1
