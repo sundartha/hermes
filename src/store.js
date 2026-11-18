@@ -222,7 +222,6 @@ function jsonBackendAufbauen() {
     nutzungAuffrischen: async () => true,
     anrufpauseGelesen: async () => jsonBackend.load().anrufpause === true,
     mandantSperreGelesen: async (tenantId) => sperreAusZustand(jsonBackend.load(), tenantId),
-    stammdatenSchreiben: async () => {},
     rueckfrageGelesen: async (callId, _tenantId, afterEventId) =>
       rueckfrageAusZustand(jsonBackend.load(), callId, afterEventId),
     anrufpauseSetzen: (an) => anrufpauseSetzenImJson(jsonBackend, an),

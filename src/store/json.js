@@ -1046,3 +1046,5 @@ export function deleteProfile(tenantId) {
   if (ok) save();
   return ok;
 }
+
+export async function stammdatenSchreiben() {}
