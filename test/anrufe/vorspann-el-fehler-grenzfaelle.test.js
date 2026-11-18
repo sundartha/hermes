@@ -123,6 +123,7 @@ const speicher = () => umgebung.srv.readStore();
 const anrufIn = (id) => speicher().calls.find((eintrag) => eintrag.id === id);
 const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const elFehlerLog = (callId) => `[el-vorspann] rueckfall grund=el_fehler call=${callId}`;
+const elNichtAngenommenLog = (callId) => `[el-vorspann] rueckfall grund=el_nicht_angenommen call=${callId}`;
 
 function sendeAngenommen(callId) {
   const roh = JSON.stringify({ data: { id: `evt-grenzfall-${(zaehler += EINMAL)}`, event_type: "call.answered", payload: { call_control_id: calleeVon(callId) } } });
@@ -242,12 +243,12 @@ test("3365-A5: Speicher scheitert beim Vermerk der EL-Wahl -> Fehler im Log, Ang
   assert.equal(aktionen(attrappe, calleeVon(callId), "bridge").length, NIE);
 });
 
-test("3365-B1: EL-Bein legt vor der Bruecke auf -> Vermerk el_fehler mit Zeitpunkt", async () => {
+test("3365-B1: EL-Bein legt vor der Bruecke auf -> Vermerk el_nicht_angenommen mit Zeitpunkt", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await anrufUndAnnahme();
   await waitUntil(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
   await sende(callId, "call.hangup", elVon(callId));
-  await waitUntil(() => srv.stdout.includes(elFehlerLog(callId)));
+  await waitUntil(() => srv.stdout.includes(elNichtAngenommenLog(callId)));
   await waitUntil(() => anrufIn(callId).failureReason === GRUND);
   assert.ok(anrufIn(callId).elFallbackAt);
 });

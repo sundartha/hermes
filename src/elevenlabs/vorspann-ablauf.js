@@ -15,6 +15,14 @@ export const VORSPANN_PFAD = "/voice/vorspann";
 
 const LOG_TAG = "[el-vorspann]";
 
+const EL_NICHT_ANGENOMMEN = "el_nicht_angenommen";
+const KEIN_WERT = "-";
+
+const meldeElBeinAufgelegt = (callId, { hangupCause, sipHangupCause, hangupSource }) =>
+  console.log(
+    `${LOG_TAG} el_bein_aufgelegt hangup_cause=${hangupCause ?? KEIN_WERT} sip_hangup_cause=${sipHangupCause ?? KEIN_WERT} hangup_source=${hangupSource ?? KEIN_WERT} call=${callId}`,
+  );
+
 const meldeStart = (callId, stand, jetzt) =>
   messeSeit({ callId, messung: "playback_start", bezug: "ms_seit_abheben", stand, seit: STAND.ABGEHOBEN, jetzt });
 
@@ -220,11 +228,14 @@ export function makeVorspannAblauf({
     now,
   });
 
-  async function beiAufgelegt({ call, zustand, vomElBein, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
+  async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
-    if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElFehlerFuer(call);
+    if (elVorBruecke({ vomElBein, stand: zustand.stand })) {
+      meldeElBeinAufgelegt(call.id, ereignis);
+      await vermerkeElFehler({ call, store, inboundBridges, now, rueckfall: EL_NICHT_ANGENOMMEN });
+    }
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
     const aufzeichnung = await store.leseCall(call.id);
