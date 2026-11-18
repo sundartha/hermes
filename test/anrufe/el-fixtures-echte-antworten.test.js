@@ -477,3 +477,37 @@ test("Stimmen am Anrufdatensatz: ein Anruf, der beim Lesen fehlt, ergibt keine Z
   assert.equal(anfragen.some((anfrage) => anfrage.url?.endsWith(STIMMEN_AGENT_PFAD)), false);
   assert.equal(warnungen.some((zeile) => zeile.startsWith("[el-stimmen]")), false);
 });
+
+test("Stimmen am Anrufdatensatz: das Auflegen beim Abbruch wartet nicht auf die Agentenabfrage", async () => {
+  const { call, store } = makeCapturingStore({
+    id: "call_abbruch_stimmen",
+    elevenlabsConversationId: CONVERSATION_DONE_WITH_ANALYSIS.conversation_id,
+    answeredAt: new Date().toISOString(),
+  });
+  Object.assign(call, { direction: "outbound", from: "+15005550006", to: "+4915112345678", language: "de" });
+  store.numberRecordByE164 = () => null;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({
+      elevenLabsOutbound: { ...ACCOUNT, agentId: STIMMEN_AGENT_ID },
+      telnyxElevenLabs: { voiceId: "standard" },
+    }),
+    terminateAndBillCall,
+    billThunk: () => () => {},
+    finishCall: () => {},
+  });
+  const methoden = [];
+  await withFetch(
+    (url, init) => {
+      methoden.push({ url, methode: init.method });
+      if (init.method === "GET" && url.endsWith(STIMMEN_AGENT_PFAD)) return new Promise(() => {});
+      return Promise.resolve({ ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_ANALYSIS });
+    },
+    async () => {
+      el.endActiveCall(call.id);
+      await waitUntil(() => methoden.some((anfrage) => anfrage.methode === "DELETE"));
+    },
+  );
+  assert.equal(methoden.some((anfrage) => anfrage.url.endsWith(STIMMEN_AGENT_PFAD)), false);
+  assert.equal(Object.hasOwn(call.elDetectorCounts ?? {}, "stimmenAnzahl"), false);
+});
