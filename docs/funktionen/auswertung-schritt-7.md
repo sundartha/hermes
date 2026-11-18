@@ -18,5 +18,5 @@ Staging stand seit 18.11. 07:39 UTC auf master (617f8625) und enthält die Eleve
 ## Was nicht getragen hat
 
 - Ort: `test/anrufe/webhook-zustellung-nachlauf-zweifach.test.js` (Zeile 302 bei PR #5269, Zeilen 333 und 366 bei PR #5280), 20-Sekunden-Zeitgrenze unter CI-Last. Folge: roter Job „Tests 5/12“ bzw. „Tests 9/12“ ohne Ursache im Diff, je ein Halt und ein Neustart des Jobs. Folge-Issues: #5255, #5247, #4886 (offen), #5292 (geschlossen).
-- Ort: Rotprobe am PR #5280, Testdateien, die auf master schon grün sind, weil das Verhalten dort gilt (`src/telephony/call-finish.js:49/7`, `src/boot.js:289/2`). Folge: zwei Rückläufe, weil der Abschnitt „## Überlebende Mutanten“ im PR-Text fehlte oder erst nach dem Lauf kam. Folge-Issue: noch keins angelegt, folgt in Häppchen 3.
+- Ort: Rotprobe am PR #5280, Testdateien, die auf master schon grün sind, weil das Verhalten dort gilt (`src/telephony/call-finish.js:49/7`, `src/boot.js:289/2`). Folge: zwei Rückläufe, weil der Abschnitt „## Überlebende Mutanten“ im PR-Text fehlte oder erst nach dem Lauf kam. Folge-Issue: #5324.
 - Ort: Abnahme von #3412 selbst, der Testanruf. Folge: Der Bau-Agent kann ihn nicht auslösen (Kosten, echte Nummer); die Kette hielt am 18.11. 07:38 UTC, bis der Plan-Nachtrag den Weg über Hermes-Produkt festlegte. Folge-Issue: keins nötig, der Weg steht im Plan-Nachtrag von #3412.
