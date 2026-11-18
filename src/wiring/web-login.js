@@ -19,7 +19,7 @@ import { speicherBereiche } from "../store.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
+import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.ts";
 import { stripeBilling } from "../billing/stripe.ts";
@@ -105,13 +105,13 @@ async function anmeldenZeitplaene({ zeitplan, portalRunner, store, config, telny
     store,
     provisioner: telnyxProvisioner,
     audit: auditStore,
-    graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
+    graceMs: config.provisioning.releaseGraceMs, sipRegistrar: elevenlabsNummern().sipRegistrarWennAktiv(config),
   });
   await scheduleContractEndCleanup(zeitplan, {
     store,
     numberProvisioner: telnyxProvisioner,
     workos: workosManagement,
-    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
+    auditStore, sipRegistrar: elevenlabsNummern().sipRegistrarWennAktiv(config),
   });
   await scheduleCancellationMailSweep(zeitplan, { store, mailer, accounts, config, auditStore });
   if (config.billing.paymentEnabled) {
@@ -201,7 +201,7 @@ export async function wireWebLogin({
     store, accounts, sessions, audit, provision, billing: stripeBilling,
     numberProvisioner: telnyxProvisioner,
     workos: workosManagement,
-    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
+    auditStore, sipRegistrar: elevenlabsNummern().sipRegistrarWennAktiv(config),
   };
   app.post(stripeWebhookPath, createRateLimiter(limitJeInstanz()), makeStripeWebhookRoute({ config, messaging, ...stripeWebhookDeps }));
 

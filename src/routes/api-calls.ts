@@ -27,7 +27,7 @@ import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
-import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
+import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
@@ -71,7 +71,7 @@ const anrufSprache: (args: {
   config: Konfiguration;
   call: { tenantId: string | undefined; from: string | undefined; to: string; language: string };
   ownerName: unknown;
-}) => { language: string } = callLocaleOf;
+}) => { language: string } = elevenlabsOutbound().callLocaleOf;
 const eroeffnungHolen: (args: {
   objective: unknown;
   tenantId: string | undefined;
@@ -957,7 +957,7 @@ export function makeCallRoutes({
     const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
     let auflegenGescheitert = false;
     await terminateAndBillCall({
-      persistEnd: endeSchreiberFuer({
+      persistEnd: elevenlabsOutbound().endeSchreiberFuer({
         store, callId: call.id, status: "cancelled", politik: nachlaufPolitikFuer(call), nowMs: Date.now(),
       }),
       hangUp: hangUpForCall({ call, hangUp: providerHangUp ?? elHangUp, awaitAndPersistInboundElResult }),
@@ -973,7 +973,7 @@ export function makeCallRoutes({
       return res.json({
         status: "cancelled",
         line_hangup_confirmed: false,
-        max_line_s: ELEVENLABS_PROVIDER_MAX_DURATION_S,
+        max_line_s: elevenlabsOutbound().ELEVENLABS_PROVIDER_MAX_DURATION_S,
         hangup_attempted: Boolean(elHangUp),
       });
     return res.json({ status: "cancelled" });
