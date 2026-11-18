@@ -5,6 +5,7 @@ import express from "express";
 import { makeReadRoutes } from "../../src/routes/api-read.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const ANRUF_ENDE_MAERZ = "2026-03-31T23:59:00.000Z";
 const ANRUF_ANFANG_APRIL = "2026-04-01T00:00:00.000Z";
@@ -56,7 +57,7 @@ async function zustandUm(t, jetztIso) {
   });
   try {
     t.mock.timers.enable({ apis: ["Date"], now: new Date(jetztIso).getTime() });
-    const antwort = await fetch(`http://127.0.0.1:${server.address().port}/api/state`);
+    const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/state`);
     t.mock.timers.reset();
     return { json: await antwort.json(), abgefragt };
   } finally {
