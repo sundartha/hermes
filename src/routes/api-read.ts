@@ -4,6 +4,7 @@ import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
+import { monthStart } from "../utils/month.js";
 import { speicherBereiche } from "../store.js";
 
 interface Speicher {
@@ -111,7 +112,7 @@ async function zeigeZustand({
   const scoped = await bereiche.konto.exportTenantData(tenantId);
   const anrufe = await bereiche.zustandAnrufe.anrufeFuerZustand(tenantId, STATE_CALLS);
   const jetzt = new Date();
-  const monatsanfang = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), 1));
+  const monatsanfang = monthStart(jetzt);
   const callsThisMonth = await bereiche.zustandAnrufe.anzahlSeit(tenantId, monatsanfang.toISOString());
   const s = store.load();
   res.json({

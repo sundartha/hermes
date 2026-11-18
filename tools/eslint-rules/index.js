@@ -623,7 +623,7 @@ const zeiteinheitenAusTimer = {
 };
 
 const MONAT_MELDUNG =
-  "Monate verschieben und Monatsschlüssel bilden nur über {{quelle}} (yearMonthKey, previousMonthStart, lastDayOfMonth, oneMonthBack): kein getUTCMonth() ± n, kein setUTCMonth und kein Date.UTC mit Monatsrechnung.";
+  "Monate verschieben und Monatsschlüssel bilden nur über {{quelle}} (yearMonthKey, monthStart, previousMonthStart, lastDayOfMonth, oneMonthBack): kein getUTCMonth() ± n, kein setUTCMonth und kein Date.UTC mit Monatsrechnung.";
 const MONAT_ARGUMENT_MONAT = 1;
 
 function istAufruf(knoten, name) {
@@ -641,7 +641,9 @@ function istDateUtcMitRechnung(knoten) {
   const { callee, arguments: argumente } = knoten;
   if (callee.type !== "MemberExpression" || callee.object.name !== "Date" || callee.property.name !== "UTC") return false;
   const monat = argumente[MONAT_ARGUMENT_MONAT];
-  if (!monat || monat.type !== "BinaryExpression" || istMonatsRechnung(monat)) return false;
+  if (!monat) return false;
+  if (istAufruf(monat, "getUTCMonth")) return true;
+  if (monat.type !== "BinaryExpression" || istMonatsRechnung(monat)) return false;
   return monat.operator === "+" || monat.operator === "-";
 }
 

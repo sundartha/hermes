@@ -78,3 +78,14 @@ test("Monatsregel: unter src/ steht außer month.js keine Monatsrechnung", () =>
   const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/*.js", ":!src/utils/month.js");
   assert.equal(treffer, "");
 });
+
+test("Monatsregel: Date.UTC mit getUTCMonth() als Monatsargument ist ein Fehler, der auf month.js verweist", () =>
+  erwarteBefund("export const a = (d) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);\n"));
+
+test("Monatsregel: unter src/ in .js und .ts steht außer month.js kein Date.UTC", () => {
+  const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/**/*.js", "src/**/*.ts", ":!src/utils/month.js");
+  assert.equal(treffer, "");
+});
+
+test("Monatsregel: Date.UTC ohne Monatsargument bleibt ohne Meldung", () =>
+  erwarteKeinen("src/probe-monat.js", "export const a = () => Date.UTC(2026);\n"));
