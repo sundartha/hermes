@@ -132,12 +132,12 @@ to an external party on at least one path is `true`, even if some invocations se
     that call is running; a repeat after it has ended places a new, separately billed call
     (`src/mcp-tools.js#TOOL_ANNOTATIONS`).
 - **await_call_event** (registered `src/mcp-tools.js#uiTool("await_call_event")`, REST `GET /api/calls/:id/consult`,
-  `src/routes/api-calls.js#router.get("/api/calls/:id/consult")`).
+  `src/routes/api-calls.ts#router.get("/api/calls/:id/consult")`).
   - `readOnlyHint: false` - each call writes to the call record: it sets the call's "client
     last polled" timestamp to the current time (`src/store/state-ops.js#noteConsultPoll`,
-    called at `src/routes/api-calls.js#router.get("/api/calls/:id/consult")`), and when it returns a question it records the time
+    called at `src/routes/api-calls.ts#router.get("/api/calls/:id/consult")`), and when it returns a question it records the time
     that question was first delivered (`markConsultAskDelivered`,
-    `src/store/state-ops.js#markConsultAskDelivered`, called at `src/routes/api-calls.js#router.get("/api/calls/:id/consult")`). Its
+    `src/store/state-ops.js#markConsultAskDelivered`, called at `src/routes/api-calls.ts#router.get("/api/calls/:id/consult")`). Its
     description says so ("Each call also writes to the call record ...").
   - `destructiveHint: false` - both writes only record that a client is polling and that a
     question reached it. Neither deletes or changes anything the user or the call produced, and
@@ -154,7 +154,7 @@ to an external party on at least one path is `true`, even if some invocations se
     `src/store/pg.js#makePgStore.advanceInCallConsult`, `#makePgStore.noteConsultPoll`). A repeated identical call therefore refreshes that one
     timestamp and adds nothing else.
 - **answer_consult** (registered `src/mcp-tools.js#uiTool("answer_consult")`, REST
-  `POST /api/calls/:id/consult/answer`, `src/routes/api-calls.js#router.post("/api/calls/:id/consult/answer")`).
+  `POST /api/calls/:id/consult/answer`, `src/routes/api-calls.ts#router.post("/api/calls/:id/consult/answer")`).
   - `readOnlyHint: false` - with `status="final"` it adds the answers to the running call's
     background facts (`src/store/state-ops.js#mergeContextFacts`, applied at
     `#answerConsult`) and marks the question answered (`#answerConsult`); with `status="working"` it records
@@ -169,7 +169,7 @@ to an external party on at least one path is `true`, even if some invocations se
   - `idempotentHint: false` - this is the conservative value (it is also the MCP default). It is
     not a claim that a repeat has a second effect: a repeated identical final answer is refused
     (HTTP 409 `already_answered`, `src/store/state-ops.js#openConsultFor`, `#answerConsult`,
-    `src/routes/api-calls.js#answerConsultFinal`); the tool then returns `accepted: false` and adds nothing
+    `src/routes/api-calls.ts#answerConsultFinal`); the tool then returns `accepted: false` and adds nothing
     (`src/mcp-tools.js#uiTool("answer_consult")`). A repeated `status="working"` acknowledgement is accepted and
     changes nothing (`src/store/state-ops.js#ackConsult`). A repeat does return a different result
     than the first call (`accepted: false` instead of `true`).
@@ -187,21 +187,21 @@ to an external party on at least one path is `true`, even if some invocations se
   - `openWorldHint: false` (O3) - own store only.
   - `idempotentHint` not set - read-only tool.
 - **cancel_call** (registered `src/mcp-tools.js#uiTool("cancel_call")`, REST `POST /api/calls/:id/cancel`,
-  `src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`).
+  `src/routes/api-calls.ts#router.post("/api/calls/:id/cancel")`).
   - `readOnlyHint: false`, `destructiveHint: true` - for a running call it marks the call record
     cancelled, stops billing right away, and attempts a hang-up where the call path allows it.
     The cancellation cannot be reversed. As its description says, whether the phone line itself
     actually drops is not guaranteed on every call path; when it is not confirmed, the response
-    says so (`line_hangup_confirmed: false`, `src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`) instead of
+    says so (`line_hangup_confirmed: false`, `src/routes/api-calls.ts#router.post("/api/calls/:id/cancel")`) instead of
     claiming a clean hang-up. On a call path where no hang-up could be attempted at all (a call
     handled through the voice-agent path whose conversation handle is not yet known), the
-    response says that too (`hangup_attempted: false`, `src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`).
+    response says that too (`hangup_attempted: false`, `src/routes/api-calls.ts#router.post("/api/calls/:id/cancel")`).
   - `openWorldHint: true` (O1) - where the call path allows it, it sends a hang-up request to
     an external party (the telephony provider or the voice-agent provider). On the path where no
     attempt is possible it sends nothing, but the hint describes what the tool can do, not every
     invocation (see the rule above).
   - `idempotentHint: true` - for a call that is no longer running, the route only returns the
-    call's current status and does nothing else (`src/routes/api-calls.js#router.post("/api/calls/:id/cancel")`); a repeat is a
+    call's current status and does nothing else (`src/routes/api-calls.ts#router.post("/api/calls/:id/cancel")`); a repeat is a
     no-op, not an error.
 - **get_agent_number** (registered `src/mcp-tools.js#uiTool("get_agent_number")`, REST `GET /api/state`,
   `src/routes/api-read.ts#router.get("/api/state")`).
@@ -279,7 +279,7 @@ model in the field description, not a server-side check.
   it is rendered as a separate, labelled background block (`src/claude.js#assistantContextSection`), so facts
   the agent must state correctly (`key_facts`) stay apart from free text, and `open_questions`
   is the only way to put a question to the principal while the phone is ringing
-  (`src/routes/api-calls.js#emitOpeningConsult`). Where it overlaps: `summary`, `recipient_relationship`
+  (`src/routes/api-calls.ts#emitOpeningConsult`). Where it overlaps: `summary`, `recipient_relationship`
   and `desired_outcome` cover content the `briefing` description also asks for (what the call
   is about, tone, desired outcome); the descriptions tell the model to put such content in
   context only when the briefing lacks it, nothing in the schema enforces that. The server accepts it only while the
@@ -298,13 +298,13 @@ model in the field description, not a server-side check.
     its goal.
   - `open_questions` (`src/mcp-tools.js#PLACE_CALL_REQUEST_SCHEMA.context.open_questions`) - questions only the principal can answer; they
     are asked while the phone is ringing, and only when the account's permission profile
-    allows questions to the principal (`src/routes/api-calls.js#emitOpeningConsult`).
+    allows questions to the principal (`src/routes/api-calls.ts#emitOpeningConsult`).
 - `constraints` and `mandate` - hard limits, and the optional frame within which the agent may
   commit. `mandate.on_out_of_scope` has no effect on the voice-agent path: that path passes on
   only the decision frame, the fallback order and the booking boundary, not this setting
   (`src/elevenlabs/outbound.js#mandateText`). Which path handles an outbound call is decided by
   `src/elevenlabs/outbound-weg.ts#outboundWegFuer`, called in
-  `src/routes/api-calls.js#router.post("/api/calls")`; there is no global switch for it any more.
+  `src/routes/api-calls.ts#router.post("/api/calls")`; there is no global switch for it any more.
   On that path, `decline` and `accept_best` are therefore not applied. The field's
   description says only "Not applied on every call path." and does not name the path.
 - `language`, `max_duration_s`, `diagnostic` - call settings.

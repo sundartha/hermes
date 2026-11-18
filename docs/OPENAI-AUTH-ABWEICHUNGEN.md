@@ -112,14 +112,14 @@ Gespraech einen Tool-Aufruf ausloesen, beobachten ob die Verknuepfungs-UI ersche
    `wrapHandler`). Quellen eines 403 dort:
    - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.js`);
      ein interner Konfigurations-/Programmierfehler;
-   - `requireTenant` REJECT (z. B. `src/routes/api-calls.js`) und das
+   - `requireTenant` REJECT (z. B. `src/routes/api-calls.ts`) und das
      Tenant-REJECT-Gate der Outbound-Kette (`src/telephony/outbound-gates.js`) —
      Verteidigung in der Tiefe, weil `rejectIfNoTenant` den OAuth-Kein-Mandant-Fall am
      `/mcp`-Eingang gar nicht mehr bis hierher durchlaesst (Stub laeuft, ruft
      NIE `api()`);
-   - Consult-Kanal fuer den Tenant nicht freigegeben (`src/routes/api-calls.js`);
+   - Consult-Kanal fuer den Tenant nicht freigegeben (`src/routes/api-calls.ts`);
    - `POST /api/calls` reicht Ablehnungen der Outbound-Gates als 403 durch
-     (`src/routes/api-calls.js`, Kette in `src/telephony/outbound-gates.js`, u. a.
+     (`src/routes/api-calls.ts`, Kette in `src/telephony/outbound-gates.js`, u. a.
      `OUTBOUND_FROZEN`, KYC, Abo/Freigabe, Denylist).
 
    Keiner dieser 403 ist durch Neu-Anmeldung desselben Kontos loesbar (interne Grenze, Plan-/
@@ -386,12 +386,12 @@ Cases that still carry no `_meta` field (deliberately):
 2. **403 from the internal REST hop, arriving as an `isError` tool result.** Sources: the
    `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.js`) — an
    internal configuration/programming fault; a tenant REJECT in `requireTenant`
-   (`src/routes/api-calls.js`) or in the outbound gate chain
+   (`src/routes/api-calls.ts`) or in the outbound gate chain
    (`src/telephony/outbound-gates.js`) — defence in depth, since `rejectIfNoTenant` no longer
    lets the OAuth no-tenant case reach this far at all (the stub runs, it never calls `api()`);
-   the consult channel not being enabled for the tenant (`src/routes/api-calls.js`); and
+   the consult channel not being enabled for the tenant (`src/routes/api-calls.ts`); and
    `POST /api/calls` passing through rejections from the outbound safety gates
-   (`src/routes/api-calls.js`, chain in `src/telephony/outbound-gates.js`: global outbound kill
+   (`src/routes/api-calls.ts`, chain in `src/telephony/outbound-gates.js`: global outbound kill
    switch, KYC, subscription/permit, denylist, among others). None of these can be fixed by the
    same user signing in again; a `_meta` field there would trigger a re-link that cannot help,
    so it remains deliberately not emitted there: a client offering a re-link on it would send
