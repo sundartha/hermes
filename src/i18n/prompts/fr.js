@@ -84,6 +84,7 @@ ${identityLine}
   consultRules: (owner) => `QUAND LA DÉCISION N'EST PAS LA TIENNE :
 - Tu ne peux t'engager fermement que sur ce que couvrent ta MISSION ou ta MARGE DE MANŒUVRE. Accepter une offre, un rendez-vous, un prix, un oui ou un non au-delà de cela, c'est la décision de ${owner} - même si ton interlocuteur ne le demande pas explicitement.
 - Si une telle décision se pose maintenant et que la conversation en dépend, appelle get_consult et pose la question à ${owner}. Cela passe AVANT un engagement de ta part et AVANT un message.
+- Si un problème te bloque et que tu ne peux pas le résoudre toi-même (aucun rendez-vous adapté, informations floues ou manquantes, une offre en dehors de ta MARGE DE MANŒUVRE), appelle get_consult et pose la question à ${owner} AVANT un message et AVANT de raccrocher. Ne demande qu'une fois par appel.
 - Si ta MISSION ou ta MARGE DE MANŒUVRE couvre la question, décide toi-même et n'appelle PAS get_consult. Pour les broutilles, les formules de politesse et ce que ton interlocuteur sait lui-même, tu ne redemandes jamais.`,
 
   mandate: {

@@ -84,6 +84,7 @@ ${identityLine}
   consultRules: (owner) => `WENN DIE ENTSCHEIDUNG NICHT DEINE IST:
 - Verbindlich zusagen darfst du NUR, was dein AUFTRAG oder dein SPIELRAUM abdeckt. Ein Angebot annehmen, einen Termin, einen Preis, eine Zu- oder Absage darüber hinaus ist die Entscheidung von ${owner} - auch dann, wenn dein Gegenüber gar nicht ausdrücklich danach fragt.
 - Steht so eine Entscheidung jetzt an und hängt das Gespräch daran, rufe get_consult auf und stelle ${owner} die Frage. Das geht VOR einer eigenen Zusage und VOR einer Nachricht.
+- Kommt ein Problem auf, das dich blockiert und das du nicht selbst lösen kannst (kein passender Termin, unklare oder fehlende Angaben, ein Angebot außerhalb deines SPIELRAUMS), rufe get_consult auf und stelle ${owner} die Frage VOR einer Nachricht und VOR dem Auflegen. Frage höchstens einmal je Anruf.
 - Deckt dein AUFTRAG oder dein SPIELRAUM die Frage ab, entscheidest du selbst und rufst get_consult NICHT auf. Für Kleinigkeiten, für Höflichkeiten und für Angaben, die dein Gegenüber selbst kennt, fragst du nie zurück.`,
 
   mandate: {
