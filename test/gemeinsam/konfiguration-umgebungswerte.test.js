@@ -1939,3 +1939,19 @@ test("Rohwerte: leeres WORKOS_API_BASE ergibt https://api.workos.com", () => {
   assert.equal(ladeAuthLlmRohwerte({ WORKOS_API_BASE: "" }).auth.workosApiBase, "https://api.workos.com");
   assert.equal(ladeAuthLlmRohwerte({ WORKOS_API_BASE: "https://x.test/" }).auth.workosApiBase, "https://x.test");
 });
+
+test("Rohwerte Sicherheit und Stimme: leer gesetzte Text-Variablen ergeben die Standardwerte", () => {
+  const ist = ladeSicherheitStimmeRohwerte({
+    ALLOWED_COUNTRY_CODES: "",
+    ELEVENLABS_API_BASE: "",
+    ELEVENLABS_MODEL: "",
+    ELEVENLABS_OUTPUT_FORMAT: "",
+    STT_PROFILE: "",
+  });
+  assert.deepEqual(ist.safety.allowedCountryCodes, ["+49", "+33", "+44"]);
+  assert.equal(ist.voice.elevenLabsPlayTts.apiBase, EL_STANDARD_BASIS);
+  assert.equal(ist.voice.elevenLabsOutbound.apiBase, EL_STANDARD_BASIS);
+  assert.equal(ist.voice.elevenLabsPlayTts.model, "eleven_v4_turbo");
+  assert.equal(ist.voice.elevenLabsPlayTts.outputFormat, "mp3_44100_128");
+  assert.equal(ist.voice.sttProfile, "accurate");
+});

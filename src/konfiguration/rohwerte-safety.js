@@ -15,10 +15,10 @@ export function rohwerteFristen(env, { numEnv }) {
   };
 }
 
-export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv }) {
+export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv, textEnv }) {
   return {
     outboundFrozen: boolEnv("OUTBOUND_FROZEN", env.OUTBOUND_FROZEN, { fallback: false }),
-    allowedCountryCodes: csvEnv(env.ALLOWED_COUNTRY_CODES || "+49,+33,+44"),
+    allowedCountryCodes: csvEnv(textEnv(env.ALLOWED_COUNTRY_CODES, "+49,+33,+44")),
     maxCallsPerHour: numEnv("MAX_CALLS_PER_HOUR", env.MAX_CALLS_PER_HOUR, {
       fallback: 6,
       min: 0,

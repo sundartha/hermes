@@ -2,25 +2,25 @@ import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 export const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 
-function elevenLabsZugang(env, { stripTrailingSlash }) {
+function elevenLabsZugang(env, { stripTrailingSlash, textEnv }) {
   return {
-    apiKey: (env.ELEVENLABS_API_KEY || "").trim(),
+    apiKey: (env.ELEVENLABS_API_KEY ?? "").trim(),
     apiBase: stripTrailingSlash(
-      (env.ELEVENLABS_API_BASE || ELEVENLABS_API_BASE_STANDARD).trim(),
+      textEnv(env.ELEVENLABS_API_BASE, ELEVENLABS_API_BASE_STANDARD).trim(),
     ),
   };
 }
 
-function playTts(env, { boolEnv, numEnv }, zugang) {
+function playTts(env, { boolEnv, numEnv, textEnv }, zugang) {
   return {
     enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", env.ELEVENLABS_PLAY_TTS_ENABLED, {
       fallback: false,
     }),
     apiKey: zugang.apiKey,
-    voiceId: (env.ELEVENLABS_VOICE_ID || "").trim(),
-    model: (env.ELEVENLABS_MODEL || "eleven_v4_turbo").trim(),
+    voiceId: (env.ELEVENLABS_VOICE_ID ?? "").trim(),
+    model: textEnv(env.ELEVENLABS_MODEL, "eleven_v4_turbo").trim(),
     apiBase: zugang.apiBase,
-    outputFormat: (env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(),
+    outputFormat: textEnv(env.ELEVENLABS_OUTPUT_FORMAT, "mp3_44100_128").trim(),
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
       fallback: 2000,
       min: 500,
@@ -41,7 +41,7 @@ function playTts(env, { boolEnv, numEnv }, zugang) {
 
 function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   return {
-    agentId: (env.ELEVENLABS_AGENT_ID || "").trim(),
+    agentId: (env.ELEVENLABS_AGENT_ID ?? "").trim(),
     resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", env.ELEVENLABS_RESULT_POLL_MS, {
       fallback: 5000,
       min: 100,
@@ -85,10 +85,10 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
 
 export function rohwerteVoice(env, helfer, standardSttProfile) {
   const zugang = elevenLabsZugang(env, helfer);
-  const { boolEnv, csvEnv, numEnv } = helfer;
+  const { boolEnv, csvEnv, numEnv, textEnv } = helfer;
   return {
     elevenLabsPlayTts: playTts(env, helfer, zugang),
-    elevenLabsToolToken: (env.ELEVENLABS_TOOL_TOKEN || "").trim(),
+    elevenLabsToolToken: (env.ELEVENLABS_TOOL_TOKEN ?? "").trim(),
     elevenLabsTenantTokenRequired: boolEnv(
       "ELEVENLABS_TENANT_TOKEN_REQUIRED",
       env.ELEVENLABS_TENANT_TOKEN_REQUIRED,
@@ -123,6 +123,6 @@ export function rohwerteVoice(env, helfer, standardSttProfile) {
       { fallback: false },
     ),
     inboundOwnerGreetingTenantIds: csvEnv(env.INBOUND_OWNER_GREETING_TENANT_IDS),
-    sttProfile: (env.STT_PROFILE || standardSttProfile).trim(),
+    sttProfile: textEnv(env.STT_PROFILE, standardSttProfile).trim(),
   };
 }
