@@ -34,16 +34,17 @@ async function mitGateway(state, fn) {
   }
 }
 
-function zustand(zusammenfassungen, persoenlich, bank) {
+function zustand(zusammenfassungen, persoenlich, bank, anrufe = []) {
   return {
+    calls: anrufe,
     agent: { number: "+18643028341", owner: "Antonio" },
     usage: { calls: 19, planUsagePercent: 40 },
     settings: { allowSummaries: zusammenfassungen, allowPersonalData: persoenlich, allowBankData: bank },
   };
 }
 
-async function status(sprache, einstellungen) {
-  return mitGateway(zustand(...einstellungen), () =>
+async function status(sprache, einstellungen, anrufe = []) {
+  return mitGateway(zustand(...einstellungen, anrufe), () =>
     werkzeuge({ identity: null, scopedTenant: `tenant-${sprache}`, language: sprache }).get("get_agent_status")(),
   );
 }
@@ -80,6 +81,7 @@ test("widget-status K5: die Textausgabe behält die bisherige Berechtigungszeile
   );
   assert.deepEqual(Object.keys(ergebnis.structuredContent).sort(), [
     "calls",
+    "callsThisMonth",
     "number",
     "owner",
     "permissions",
@@ -102,7 +104,7 @@ function seite(sprache, mitWoerterbuch = true) {
   const wurzel = { beobachter: [] };
   const dokument = {
     documentElement: wurzel,
-    querySelector: (sel) => (sel === '[data-mcp="calls"]' ? anrufe : null),
+    querySelector: (sel) => (sel === '[data-mcp="callsThisMonth"]' ? anrufe : null),
   };
   class MutationObserver {
     constructor(rueckruf) {
@@ -116,7 +118,7 @@ function seite(sprache, mitWoerterbuch = true) {
   i18n.sprache = sprache;
   const fenster = mitWoerterbuch ? { HermesI18n: i18n } : {};
   const kontext = vm.createContext({ document: dokument, MutationObserver, window: fenster });
-  for (const code of skriptbloecke(STATUS).filter((s) => s.includes('data-mcp="calls"'))) vm.runInContext(code, kontext);
+  for (const code of skriptbloecke(STATUS).filter((s) => s.includes('data-mcp="callsThisMonth"'))) vm.runInContext(code, kontext);
   return { anrufe, wurzel, i18n };
 }
 
@@ -152,4 +154,24 @@ test("widget-status K5: ohne Wörterbuch steht die englische Zeile, vor der erst
   assert.equal(ohne.anrufe.text, "—");
   ohne.anrufe.textContent = "4";
   assert.equal(ohne.anrufe.text, "4 this month");
+});
+
+test("widget-status K5: callsThisMonth zählt nur Anrufe ab Monatsbeginn, calls bleibt die Summe seit Beginn", async () => {
+  const jetzt = new Date();
+  const monatsbeginn = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), 1));
+  const vormonat = new Date(monatsbeginn.getTime() - 1000).toISOString();
+  const ersterSekunde = monatsbeginn.toISOString();
+  const anrufe = [{ startedAt: ersterSekunde }, { startedAt: jetzt.toISOString() }, { startedAt: vormonat }];
+  const ergebnis = await status("de", [true, true, true], anrufe);
+  assert.equal(ergebnis.structuredContent.callsThisMonth, 2);
+  assert.equal(ergebnis.structuredContent.calls, 19);
+  const leer = await status("de", [true, true, true], [{ startedAt: vormonat }]);
+  assert.equal(leer.structuredContent.callsThisMonth, 0);
+  const ohne = await status("de", [true, true, true]);
+  assert.equal(ohne.structuredContent.callsThisMonth, 0);
+});
+
+test("widget-status K5: die Karte schreibt „in diesem Monat“ nur an die Monatszahl, die Gesamtzahl bleibt unbeschriftet", () => {
+  assert.match(STATUS, /data-mcp="callsThisMonth"/);
+  assert.doesNotMatch(STATUS, /data-mcp="calls"/);
 });

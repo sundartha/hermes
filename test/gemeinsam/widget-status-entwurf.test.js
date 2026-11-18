@@ -109,7 +109,7 @@ test("widget-status-entwurf K2: Füllung und Kreis stehen beim Wert, auf 100 % b
 
 test("widget-status-entwurf K2: darunter stehen Inhaber, Nummer, Anrufe, Berechtigungen in dieser Reihenfolge auf Glas", () => {
   const felder = [...STATUS.matchAll(/<dd data-mcp="(\w+)">/g)].map((m) => m[1]);
-  assert.deepEqual(felder, ["owner", "number", "calls", "permissions"]);
+  assert.deepEqual(felder, ["owner", "number", "callsThisMonth", "permissions"]);
   assert.match(STATUS, /<dl class="sheet angaben">/);
   assert.match(regel(stil(STATUS), ".angaben"), /--spalte:132px/);
   assert.match(STATUS, /<div class="zeile rise d1"><dt data-i18n="Owner">Owner<\/dt>/);
@@ -159,7 +159,7 @@ test("widget-status-entwurf K9: ohne Nutzungswert steht ein ruhiger Strich, ohne
   assert.deepEqual(nach("abc"), { wert: "0%", bereit: false });
   assert.match(regel(stil(STATUS), ".nutzung:not(.bereit) .satz,.nutzung:not(.bereit) .proz"), /display:none/);
   assert.match(STATUS, /<b><span data-mcp="planUsagePercent">—<\/span><span class="proz"> %<\/span><\/b>/);
-  for (const feld of ["owner", "number", "calls", "permissions"]) {
+  for (const feld of ["owner", "number", "callsThisMonth", "permissions"]) {
     assert.match(STATUS, new RegExp('<dd data-mcp="' + feld + '">—</dd>'));
   }
   assert.doesNotMatch(STATUS.slice(STATUS.indexOf("<body>"), STATUS.indexOf("<script")), /undefined|null/);
