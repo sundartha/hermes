@@ -22,7 +22,7 @@ import {
 } from "../../src/ui/widget-catalog.js";
 import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../../src/store/state-ops.js";
-import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.js";
+import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { registerTools } from "../../src/mcp-tools.js";
 import { FAILURE_REASON_BASE_TOKENS } from "../../src/telephony/failure-reason.ts";
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
