@@ -60,3 +60,57 @@ test("Marker-Fehler: ohne Fehler wird der Marker gesetzt und genau einmal gewaeh
   assert.equal(await bau.auftrag({ payload: { callId: CALL_ID } }), ANRUFSTART_AUSGANG.GESTARTET);
   assert.deepEqual(bau.spur, ["starte", "timer"]);
 });
+
+const HTTP_UNAVAILABLE = 503;
+const ANBIETER_VOLL = "anbieter_voll";
+const MANDANT = "t_marker";
+const festerKontext = {
+  name: "fester-kontext",
+  run: (ctx) => {
+    Object.assign(ctx, {
+      requestedBy: "owner",
+      tenantId: MANDANT,
+      mandate: null,
+      context: null,
+      fromNumber: "+4930123456",
+      outboundProvider: "telnyx",
+      numberRecord: null,
+      reserveCents: 0,
+      maxDur: 60,
+    });
+    return null;
+  },
+};
+
+test("Anrufstart ohne Orchestrator: bei voller Plattform antwortet POST /api/calls 503 und der Anruf endet ohne Wahl mit not-placed:warteschlange", async (t) => {
+  const { jsonSpeicherImDatenordner } = await import("../gemeinsam/json-speicher-im-datenordner.js");
+  const { appOhneAbhaengigkeiten } = await import("../gemeinsam/app-ohne-abhaengigkeiten.js");
+  const { abrufMitFrist } = await import("../gemeinsam/antwortfrist.mjs");
+  const { config, speicher } = await jsonSpeicherImDatenordner("anrufstart-ohne-orchestrator-");
+  const gewaehlt = [];
+  const gruende = [];
+  const store = {
+    ...speicher,
+    recordFailureReason: (callId, grund) => gruende.push(grund),
+    leitungsplaetze: { ...speicher.leitungsplaetze, pruefenAusgehend: async () => ANBIETER_VOLL },
+  };
+  const basis = await appOhneAbhaengigkeiten(t, {
+    config,
+    store,
+    audit: () => {},
+    provisioning: undefined,
+    outboundGates: [festerKontext],
+    callQuotaDenial: () => null,
+    requestTenant: () => MANDANT,
+    requireTenant: () => MANDANT,
+    vorspannAblauf: { pruefe: async () => ({}), waehle: async (a) => gewaehlt.push(a) },
+  });
+  const antwort = await abrufMitFrist(`${basis}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: "+4915112340077", objective: "Tisch fuer zwei reservieren" }),
+  });
+  assert.equal(antwort.status, HTTP_UNAVAILABLE);
+  assert.deepEqual(gruende, ["not-placed:warteschlange"]);
+  assert.deepEqual(gewaehlt, []);
+});
