@@ -204,7 +204,7 @@ const RECIPIENT_NAME_MAX_LENGTH = 80;
 function recipientNameField() {
   const eingabe = z.string().max(RECIPIENT_NAME_MAX_LENGTH).optional();
   return eingabe.describe(
-    "Optional: the name of the person or business being called, exactly as the user gave it (e.g. 'Salon Mia'). Only shown in the call card's headline; never spoken, never stored. Leave it out if the user did not name the party.",
+    "Optional: name of the party being called, as the user gave it. Shown only in the call card headline, never spoken.",
   );
 }
 
