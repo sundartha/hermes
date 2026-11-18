@@ -1,3 +1,5 @@
+import { HTTP_BAD_REQUEST, HTTP_SERVER_ERROR, HTTP_STATUS_MAX, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
+
 const COMPLETED_STATUS = "completed";
 const SELF_DESCRIBING_FAILURES = ["no-answer", "busy", "canceled"];
 const GENERIC_FAILURE_STATUS = "failed";
@@ -57,11 +59,6 @@ const SOURCE_POLL = "poll";
 const SOURCE_QUEUE = "queue";
 const POLL_TIMEOUT_DETAIL = "timeout";
 
-const HTTP_CLIENT_ERROR_MIN = 400;
-const HTTP_TOO_MANY_REQUESTS = 429;
-const HTTP_SERVER_ERROR_MIN = 500;
-const HTTP_STATUS_MAX = 599;
-
 const SIP_UNAUTHORIZED = 401;
 const SIP_FORBIDDEN = 403;
 const SIP_PROXY_AUTH_REQUIRED = 407;
@@ -93,7 +90,7 @@ const reasonOf = (base: string, detail: string): string => `${base}${DETAIL_SEPA
 
 function statusNumber(value: Zahlenwert, max: number): number | null {
   const zahl = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
-  return Number.isInteger(zahl) && zahl >= HTTP_CLIENT_ERROR_MIN && zahl <= max ? zahl : null;
+  return Number.isInteger(zahl) && zahl >= HTTP_BAD_REQUEST && zahl <= max ? zahl : null;
 }
 
 const START_NO_STATUS_DETAIL = "no-status";
@@ -106,7 +103,7 @@ export function startRejectionReason(providerStatus: Zahlenwert): string {
 
 function startBase(code: number): string {
   if (code === HTTP_TOO_MANY_REQUESTS) return AT_CAPACITY;
-  return code >= HTTP_SERVER_ERROR_MIN ? RESULT_UNKNOWN : NOT_PLACED;
+  return code >= HTTP_SERVER_ERROR ? RESULT_UNKNOWN : NOT_PLACED;
 }
 
 export function providerErrorReason(error: { reason?: unknown; code?: Zahlenwert } | null | undefined): string | null {
