@@ -400,3 +400,147 @@ test("Ablage-Lesung 5: scheitert die Ablage-Lesung beim Fristablauf, bleibt die 
   await naechsterTakt();
   assert.deepEqual(umleitungen, []);
 });
+
+const UB_MANDANT = "t_uebergabe_bruecken";
+const UB_JETZT = Date.parse("2030-01-01T12:00:00.000Z");
+const UB_UEBERNAHME_MS = 15000;
+const UB_ANGENOMMEN_VOR_MS = 5000;
+
+function ubAnruf(zusatz = {}) {
+  return {
+    id: "call_ub",
+    tenantId: UB_MANDANT,
+    status: "active",
+    costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+    answeredAt: new Date(UB_JETZT - UB_ANGENOMMEN_VOR_MS).toISOString(),
+    provider: "telnyx",
+    twilioSid: "CA_ub",
+    ...zusatz,
+  };
+}
+
+function ubBaue({ anruf = ubAnruf(), mitUngebunden = false, schreibenScheitert = false } = {}) {
+  const betrieb = { frist: [], umgeleitet: [], timer: [], lesen: 0 };
+  const store = {
+    getCall: () => anruf,
+    load: () => ({ calls: [anruf] }),
+    setzeUebergabeFrist: async (frist) => {
+      if (schreibenScheitert) throw new Error("db weg");
+      betrieb.frist.push(frist);
+    },
+  };
+  if (mitUngebunden)
+    store.leseCallUngebunden = async () => {
+      betrieb.lesen += 1;
+      return anruf;
+    };
+  const bruecken = makeInboundBridges({
+    store,
+    umleiten: (auftrag) => betrieb.umgeleitet.push(auftrag),
+    setTimer: (fn, ms) => betrieb.timer.push(ms) && { fn },
+    clearTimer: () => {},
+    now: () => UB_JETZT,
+    uebernahmeMs: UB_UEBERNAHME_MS,
+  });
+  return { betrieb, bruecken };
+}
+
+const ubTick = () => new Promise((erfuellen) => setImmediate(erfuellen));
+
+test("Uebergabe-Frist schreiben: die aeussere Frist steht als Frist an der Anrufzeile, aeussere Restfrist plus Uebernahmezeit", async () => {
+  const { betrieb, bruecken } = ubBaue();
+  bruecken.armDeadlines("call_ub");
+  await ubTick();
+  const erwartet = UB_JETZT - UB_ANGENOMMEN_VOR_MS + EL_BRIDGE_START_DEADLINE_MS + UB_UEBERNAHME_MS;
+  assert.deepEqual(betrieb.frist, [{ callId: "call_ub", tenantId: UB_MANDANT, faelligAt: new Date(erwartet).toISOString() }]);
+});
+
+test("Uebergabe-Frist schreiben: die innere Frist nach Annahme steht als Frist an der Anrufzeile, jetzt plus Bindungsfrist plus Uebernahmezeit", async () => {
+  const { betrieb, bruecken } = ubBaue();
+  bruecken.armBindingDeadline("call_ub");
+  await ubTick();
+  const erwartet = UB_JETZT + EL_BINDING_AFTER_ANSWER_MS + UB_UEBERNAHME_MS;
+  assert.deepEqual(betrieb.frist, [{ callId: "call_ub", tenantId: UB_MANDANT, faelligAt: new Date(erwartet).toISOString() }]);
+});
+
+test("Uebergabe-Frist schreiben: der Timer wird auch dann sofort armiert, wenn das Schreiben der Frist noch aussteht", () => {
+  const { betrieb, bruecken } = ubBaue();
+  bruecken.armBindingDeadline("call_ub");
+  assert.deepEqual(betrieb.timer, [EL_BINDING_AFTER_ANSWER_MS]);
+});
+
+test("Uebergabe-Frist schreiben: ohne Uebernahmezeit steht die Frist auf dem Timer-Zeitpunkt", async () => {
+  const betrieb = { frist: [] };
+  const bruecken = makeInboundBridges({
+    store: { getCall: () => ubAnruf(), load: () => ({ calls: [] }), setzeUebergabeFrist: async (frist) => betrieb.frist.push(frist) },
+    umleiten: () => {},
+    setTimer: () => ({}),
+    now: () => UB_JETZT,
+  });
+  bruecken.armBindingDeadline("call_ub");
+  await ubTick();
+  assert.equal(betrieb.frist[0].faelligAt, new Date(UB_JETZT + EL_BINDING_AFTER_ANSWER_MS).toISOString());
+});
+
+test("Uebergabe-Frist schreiben: scheitert das Schreiben, steht der Fehler mit Anruf-ID im Log und der Timer bleibt armiert", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  const { betrieb, bruecken } = ubBaue({ schreibenScheitert: true });
+  bruecken.armBindingDeadline("call_ub");
+  await ubTick();
+  assert.deepEqual(zeilen, ["[fristen] Uebergabe-Frist schreiben fehlgeschlagen: call_ub Error: db weg"]);
+  assert.deepEqual(betrieb.timer, [EL_BINDING_AFTER_ANSWER_MS]);
+});
+
+test("Uebergabe-Frist schreiben: ein unbekannter Anruf bekommt keine Frist", async () => {
+  const { betrieb, bruecken } = ubBaue({ anruf: null });
+  bruecken.armBindingDeadline("call_ub");
+  await ubTick();
+  assert.deepEqual(betrieb.frist, []);
+});
+
+test("Uebergabe durch den Lauf: ein wartender Anruf wird auf den Rueckfall-Pfad quelle=frist umgeleitet, gelesen wird die Zeile ohne Spiegel", async () => {
+  const anruf = ubAnruf();
+  const { betrieb, bruecken } = ubBaue({ anruf, mitUngebunden: true });
+  await bruecken.uebergabeDurchLauf("call_ub");
+  assert.equal(betrieb.lesen, 1);
+  assert.deepEqual(betrieb.umgeleitet, [{ call: anruf, rueckfallUrl: elRueckfallUrl({ callId: "call_ub", quelle: EL_RUECKFALL_QUELLE.FRIST }) }]);
+  assert.equal(betrieb.umgeleitet[0].rueckfallUrl, "/voice/el-rueckfall?callId=call_ub&quelle=frist");
+});
+
+test("Uebergabe durch den Lauf: das Log nennt Anruf und die Frist lauf", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "log", (...teile) => zeilen.push(teile.join(" ")));
+  const { bruecken } = ubBaue();
+  await bruecken.uebergabeDurchLauf("call_ub");
+  assert.deepEqual(zeilen, ["[el-inbound] frist_abgelaufen call=call_ub frist=lauf"]);
+});
+
+test("Uebergabe durch den Lauf: ohne Ungebunden-Lesen faellt der Lauf auf den Spiegel zurueck", async () => {
+  const { betrieb, bruecken } = ubBaue();
+  await bruecken.uebergabeDurchLauf("call_ub");
+  assert.equal(betrieb.umgeleitet.length, 1);
+});
+
+test("Uebergabe durch den Lauf: ein gebundener, ein zurueckgefallener, ein beendeter und ein unbekannter Anruf werden nicht umgeleitet", async () => {
+  for (const anruf of [
+    ubAnruf({ elevenlabsConversationId: "conv_1" }),
+    ubAnruf({ elFallbackAt: "2030-01-01T12:00:00.000Z" }),
+    ubAnruf({ status: "completed" }),
+    null,
+  ]) {
+    const { betrieb, bruecken } = ubBaue({ anruf, mitUngebunden: true });
+    await bruecken.uebergabeDurchLauf("call_ub");
+    assert.deepEqual(betrieb.umgeleitet, []);
+  }
+});
+
+test("Uebergabe durch den Lauf: ein Lesefehler wird nicht als nichts faellig verschluckt", async () => {
+  const bruecken = makeInboundBridges({
+    store: { getCall: () => null, load: () => ({ calls: [] }), leseCallUngebunden: async () => Promise.reject(new Error("db weg")) },
+    umleiten: () => {},
+    setTimer: () => ({}),
+    now: () => UB_JETZT,
+  });
+  await assert.rejects(() => bruecken.uebergabeDurchLauf("call_ub"), /db weg/);
+});
