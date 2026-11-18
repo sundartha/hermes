@@ -91,7 +91,11 @@ async function zielGeprueft(anrufer) {
 
 function messenAufruf(anrufer) {
   if (env.ABSICHTLICH_ROT === "true") return () => Promise.resolve(null);
-  return () => anrufer.anrufen({ ziel: env.STAGING_PROBE_ZIEL });
+  return async () => {
+    const messung = await anrufer.anrufen({ ziel: env.STAGING_PROBE_ZIEL });
+    if (typeof anrufer.stimmenAnzahl !== "function") return messung;
+    return { ...messung, stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined) };
+  };
 }
 
 async function ausgangMelden(ergebnis) {
