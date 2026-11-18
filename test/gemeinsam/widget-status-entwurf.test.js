@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const STATUS = WIDGETS["agent-status"];
-const NEUE_VERSION = 29;
+const NEUE_VERSION = 30;
 
 function stil(html) {
   return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
@@ -143,8 +143,8 @@ test("widget-status-entwurf K7: Überschrift und Satz zur Nutzung stehen in en, 
 
 test("widget-status-entwurf K8: agent-status hat eine neue Version, die alten Pins bleiben", () => {
   const pins = widgetPins();
-  assert.equal(Object.keys(pins.calls).length, 30);
-  assert.equal(Object.keys(pins.call).length, 43);
+  assert.equal(Object.keys(pins.calls).length, 31);
+  assert.equal(Object.keys(pins.call).length, 44);
   assert.equal(Object.keys(pins["agent-status"]).length, NEUE_VERSION);
   assert.match(pins["agent-status"][NEUE_VERSION], /^[0-9a-f]{64}$/);
   assert.equal(

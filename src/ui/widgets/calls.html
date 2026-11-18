@@ -63,6 +63,11 @@
       knoten.setAttribute("data-i18n", key);
       knoten.textContent = t(key);
     }
+    function zahlwort(n) {
+      var schluessel = "number " + n;
+      var wort = t(schluessel);
+      return wort === schluessel ? String(n) : wort;
+    }
     function kopf() {
       if (anzahl === null) return;
       if (anzahl === 0) {
@@ -72,7 +77,7 @@
         return;
       }
       setze(vor, "Hermes handled");
-      zahl.textContent = t(anzahl === 1 ? "{n} call" : "{n} calls").replace("{n}", String(anzahl));
+      zahl.textContent = t(anzahl === 1 ? "{n} call" : "{n} calls").replace("{n}", zahlwort(anzahl));
       setze(nach, "recently.");
     }
     function feld(zeile, name) {
