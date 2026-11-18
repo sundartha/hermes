@@ -143,9 +143,9 @@ function assertSttProfile(config) {
   abortOnFatal(sttProfileFindings(config.voice.sttProfile));
 }
 
-function currentCoverage(config, store) {
+async function currentCoverage(config, store) {
   return {
-    coveragePercent: costTruingCoveragePercent(store.load()),
+    coveragePercent: costTruingCoveragePercent({ ...store.load(), calls: await anrufeAllerInstanzen(store) }),
     minCoveragePercent: config.billing.costTruingMinCoveragePercent,
   };
 }
@@ -162,12 +162,12 @@ function applyBootFindings(findings) {
   for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
-function assertCostTruingBooking(config, store) {
+function assertCostTruingBooking(config, coverage) {
   applyBootFindings(
     costTruingBookingFindings({
       requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
       assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
-      ...currentCoverage(config, store),
+      ...coverage,
     }),
   );
 }
@@ -200,6 +200,12 @@ function anrufeAllerInstanzen(store) {
   return speicherBereiche(store).berichtAnrufe.anrufeFuerBericht();
 }
 
+async function checkCoverageGates(config, store) {
+  const coverage = await currentCoverage(config, store);
+  assertCostTruingBooking(config, coverage);
+  warnVoiceTariffBelowFullCost(config, coverage);
+}
+
 async function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(await anrufeAllerInstanzen(store), config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
@@ -214,11 +220,11 @@ function warnTarifpaar(config, store) {
   else console.log(line);
 }
 
-function warnVoiceTariffBelowFullCost(config, store) {
+function warnVoiceTariffBelowFullCost(config, coverage) {
   const findings = voiceTariffFloorFindings({
     domesticTariffCents: config.billing.voiceTariffDomesticCents,
     fullCostFloorCents: config.billing.voiceTariffFullCostFloorCents,
-    ...currentCoverage(config, store),
+    ...coverage,
   });
   for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
@@ -353,14 +359,12 @@ function assertBootGates(config, store, durableAudit) {
   assertPricedPlans(config);
   warnStaleModelPrices(config);
   assertProviderRateInBand(config);
-  assertCostTruingBooking(config, store);
   assertSttProfile(config);
   assertAngekuendigterOrigin(config);
   warnAlertChannelUnset(config);
   warnAlarmEingangUnset(config);
   warnKostenAlarmZielUnset(config, durableAudit);
   warnTarifpaar(config, store);
-  warnVoiceTariffBelowFullCost(config, store);
   warnTurnBudgetOverrun(config);
   warnLlmFallbackUnusable(config);
   warnMissingProvisioningConnection(config);
@@ -716,6 +720,7 @@ export async function bootServer({
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
+  await checkCoverageGates(config, store);
   await warnTariffDrift(config, store);
 
   const taktBefund = loeschtaktBefund(config);
