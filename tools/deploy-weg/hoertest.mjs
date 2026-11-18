@@ -1,6 +1,11 @@
+import { appendFileSync } from "node:fs";
+
+import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 import { AUTOMATION_LOGIN } from "../github.mjs";
-import { Abbruch } from "./ausgabe.mjs";
+import { Abbruch, zeileBauen } from "./ausgabe.mjs";
 import { anfrage, githubZugang } from "./netz.mjs";
+import { absichtlichRotMelden, fruehwarnungOk } from "./staging.mjs";
+import { ECHTE_UHR } from "./takt.mjs";
 
 export const HOERTEST_TITEL = "Hörtest nötig vor dem Live-Deploy";
 export const NACHKONTROLLE_TITEL = "Nachkontrolle: Update-Deploy zurückgenommen";
@@ -294,4 +299,80 @@ export async function nachkontrolleIssueSchreiben({
     meldungen: NACHKONTROLLE_MELDUNGEN,
     ausgabe,
   });
+}
+
+const MONATSERSTER = 1;
+const STUMM = Object.freeze({ melde: () => undefined });
+const UEBER_SCHWELLE = Object.freeze({ webhooksAbgewiesen: 1, anrufeUeberHoechstdauer: 1 });
+
+const SCHICHTEN = Object.freeze([
+  {
+    id: "1",
+    name: "Staging-Smoke",
+    rotErzeugen: () =>
+      absichtlichRotMelden({ einstellungen: { absichtlichRot: true }, ausgabe: STUMM }),
+  },
+  {
+    id: "2a",
+    name: "Stille-Waechter",
+    rotErzeugen: () =>
+      !fruehwarnungOk({ stand: UEBER_SCHWELLE, basis: 0, eigene: 0, ausgabe: STUMM }),
+  },
+  { id: "3", name: "Anrufprobe", rotErzeugen: () => !urteilen(null).gruen },
+]);
+
+function zugestellt(status) {
+  return status >= HTTP_OK && status < HTTP_NICHT_OK_AB;
+}
+
+function zeitMelden({ einstellungen, ausgabe, schicht, ms }) {
+  ausgabe.melde("pruefung_zeit", { schicht: schicht.id, ms });
+  if (einstellungen.schrittZusammenfassung === null) return;
+  const zeile = zeileBauen("pruefung_zeit", { schicht: schicht.id, ms });
+  appendFileSync(einstellungen.schrittZusammenfassung, zeile + "\n");
+}
+
+async function schichtPruefen({ einstellungen, ausgabe, uhr, schicht }) {
+  const start = uhr.jetzt();
+  if (!schicht.rotErzeugen()) {
+    ausgabe.melde("pruefung_defekt", { schicht: schicht.id });
+    return false;
+  }
+  const text =
+    "Probe, kein echter Fehler (Prüfung der Prüfung, Schicht " +
+    schicht.id +
+    " " +
+    schicht.name +
+    ", Lauf " +
+    laufAdresse(einstellungen) +
+    ")";
+  const { status } = await anfrage(einstellungen.slackUrl, { methode: "POST", koerper: { text } });
+  const ende = uhr.jetzt();
+  if (!zugestellt(status)) {
+    ausgabe.melde("pruefung_nicht_zugestellt", { schicht: schicht.id, http: status });
+    return false;
+  }
+  zeitMelden({ einstellungen, ausgabe, schicht, ms: ende - start });
+  return true;
+}
+
+export async function monatspruefung({
+  einstellungen,
+  ausgabe,
+  uhr = ECHTE_UHR,
+  schichten = SCHICHTEN,
+}) {
+  if (new Date(uhr.jetzt()).getUTCDate() !== MONATSERSTER) {
+    ausgabe.melde("pruefung_uebersprungen");
+    return true;
+  }
+  if (einstellungen.slackUrl === null) {
+    ausgabe.melde("pruefung_ohne_slack");
+    return false;
+  }
+  const ergebnisse = [];
+  for (const schicht of schichten) {
+    ergebnisse.push(await schichtPruefen({ einstellungen, ausgabe, uhr, schicht }));
+  }
+  return ergebnisse.every(Boolean);
 }
