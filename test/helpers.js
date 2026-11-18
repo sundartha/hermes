@@ -484,6 +484,13 @@ export async function waitUntil(
   }
 }
 
+export async function waitUntilMitLauf(el, callId, predicate) {
+  await waitUntil(() => {
+    void el.abfrageDurchLauf(callId);
+    return predicate();
+  });
+}
+
 export async function withFetch(fetchImpl, run) {
   const orig = globalThis.fetch;
   globalThis.fetch = fetchImpl;

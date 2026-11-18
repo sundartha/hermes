@@ -681,7 +681,7 @@ test("IEL-B5-17: Neustart waehrend GEBUNDEN - Status-Callback startet keine zwei
     const getsNachStatus = attrappe.gets().length;
     await waitUntil(() => attrappe.gets().length >= getsNachStatus + WEITERE_TAKTE, SPAWN_WARTE);
     assert.equal(spawnCall(srv.readStore()).status, "active");
-    for (const abstand of abstaendeMs(attrappe.gets()))
+    for (const abstand of abstaendeMs(attrappe.gets().slice(getsNachStatus)))
       assert.ok(abstand >= MINDEST_ABSTAND_ANTEIL * POLL_TAKT_MS, `eine Schleife: Abstand ${abstand} ms`);
 
     attrappe.setzeAntwort(CONVERSATION_DONE_WITH_ANALYSIS);

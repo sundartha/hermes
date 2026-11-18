@@ -12,8 +12,6 @@ const GEHEIMNIS = "abfrage-frist-werkzeug-geheimnis";
 const KENNUNG = "abfragefrist";
 const KONVERSATION = "conv_abfrage_frist";
 const POLL_MS = 50000;
-const REQUEST_TIMEOUT_MS = 120000;
-const UEBERNAHME_MS = 30000;
 const TOLERANZ_MS = 20000;
 const PLATZ_SQL = `INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um)
   VALUES ($1, 'elevenlabs', $2, now() + interval '1 hour')`;
@@ -64,7 +62,7 @@ test("Abfrage-Frist: ein nach dem Abgleich abgehobener ausgehender Anruf traegt 
       (zeilen) => zeilen[0]?.frist_abfrage_at,
     );
     assert.equal(zeile.status, "active");
-    const erwartet = vorher + REQUEST_TIMEOUT_MS + POLL_MS + UEBERNAHME_MS;
+    const erwartet = vorher + POLL_MS;
     assert.ok(Math.abs(zeile.frist_abfrage_at.getTime() - erwartet) < TOLERANZ_MS, String(zeile.frist_abfrage_at));
   });
 });

@@ -128,6 +128,31 @@ export function baueStore(state, beobachtung) {
   };
 }
 
+function mitFristenlauf(echt, store) {
+  const laeufe = new Set();
+  const treibe = (callId) => {
+    if (laeufe.has(callId)) return;
+    laeufe.add(callId);
+    void (async () => {
+      while ((await store.leseCall(callId))?.status === "active") {
+        await echt.abfrageDurchLauf(callId);
+        await new Promise((fertig) => setTimeout(fertig, POLL_MS).unref());
+      }
+      laeufe.delete(callId);
+    })();
+  };
+  return {
+    ...echt,
+    abfrageDurchLauf: async (callId) => {
+      treibe(callId);
+    },
+    startInboundNachlauf: async (callId) => {
+      await echt.startInboundNachlauf(callId);
+      treibe(callId);
+    },
+  };
+}
+
 export function baueHarness(state) {
   const beobachtung = { gebucht: [], zusammenfassungen: [], detektorZaehlungen: [], traegerAuflegen: [] };
   const store = baueStore(state, beobachtung);
@@ -143,7 +168,7 @@ export function baueHarness(state) {
     planSummarySms: () => ({ send: false }),
     audit: () => {},
   });
-  const el = makeElevenLabsOutbound({
+  const echt = makeElevenLabsOutbound({
     store,
     config: withConfigNamespaces({ elevenLabsOutbound: { ...ACCOUNT, resultPollMs: POLL_MS } }),
     terminateAndBillCall,
@@ -151,6 +176,7 @@ export function baueHarness(state) {
     finishCall: callFinish.finishCall,
     endCarrierCall: (callId) => beobachtung.traegerAuflegen.push(callId),
   });
+  const el = mitFristenlauf(echt, store);
   return { el, store, callFinish, ...beobachtung };
 }
 
