@@ -22,6 +22,7 @@ import { localeFor } from "../i18n/locales.js";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE, HTTP_TOO_MANY_REQUESTS } from "../utils/http.ts";
 import { KEINE_DB_RESERVIERUNG, LEITUNGSPLATZ_ENTSCHEIDUNG, RESERVIERUNG_GRUND } from "../store.js";
+import { fuehreToreAus, GatesBestanden } from "./gates-bestanden.ts";
 import { MS_PER_HOUR, MS_PER_SECOND } from "../utils/timer.ts";
 
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
@@ -124,22 +125,18 @@ export const GATE_ERROR_GRUND = "gate_error";
 export const GATE_ERROR_MESSAGE =
   "Sicherheitspruefung derzeit nicht moeglich. Der Anruf wurde nicht gestartet.";
 
+function torFehlerAblehnung(gate, ctx, fehler) {
+  console.error(`[place_call] Gate ${gate.name} fehlgeschlagen:`, fehler?.message);
+  return {
+    status: HTTP_SERVICE_UNAVAILABLE,
+    body: { error: GATE_ERROR_MESSAGE },
+    audit: denialAudit(GATE_ERROR_GRUND, ctx, ` gate=${gate.name}`),
+  };
+}
+
 export async function runOutboundGates({ gates, ctx }) {
-  for (const gate of gates) {
-    let denial;
-    try {
-      denial = await gate.run(ctx);
-    } catch (fehler) {
-      console.error(`[place_call] Gate ${gate.name} fehlgeschlagen:`, fehler?.message);
-      return {
-        status: HTTP_SERVICE_UNAVAILABLE,
-        body: { error: GATE_ERROR_MESSAGE },
-        audit: denialAudit(GATE_ERROR_GRUND, ctx, ` gate=${gate.name}`),
-      };
-    }
-    if (denial) return denial;
-  }
-  return null;
+  const ergebnis = await fuehreToreAus(gates, ctx, torFehlerAblehnung);
+  return ergebnis instanceof GatesBestanden ? null : ergebnis;
 }
 
 export function makeOutboundGates({
