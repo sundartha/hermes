@@ -23,7 +23,7 @@ import {
 } from "./konfiguration/pruefungen-produktion.js";
 import { pruefungenStartMit } from "./konfiguration/pruefungen-start.js";
 import { umgebungMit } from "./konfiguration/umgebung.ts";
-import { rohwerteAuth } from "./konfiguration/rohwerte-auth.js";
+import { rohwerteAuth } from "./konfiguration/rohwerte-auth.ts";
 import { rohwerteBilling } from "./konfiguration/rohwerte-billing.js";
 import { rohwerteLlm } from "./konfiguration/rohwerte-llm.ts";
 import { rohwerteMail } from "./konfiguration/rohwerte-mail.ts";
@@ -36,7 +36,7 @@ import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety
 import { rohwerteStore } from "./konfiguration/rohwerte-store.ts";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.ts";
 import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.ts";
-import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.js";
+import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.ts";
 import { rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
 import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.ts";
 import {

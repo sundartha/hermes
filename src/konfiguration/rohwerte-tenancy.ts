@@ -1,10 +1,42 @@
 import { MS_PER_MINUTE } from "../utils/timer.ts";
+import type { umgebungMit } from "./umgebung.ts";
 
 const CONSULT_WAIT_MAX_MS = MS_PER_MINUTE;
 const CONSULT_OPEN_MAX_MS = 300_000;
 const EL_CONSULT_STAGE_MAX_MS = 55_000;
 
-export function rohwerteTenancy(env, { boolEnv, numEnv }) {
+export function rohwerteTenancy(
+  env: {
+    MULTI_TENANT?: string | undefined;
+    MCP_UI_ENABLED?: string | undefined;
+    ASSISTANT_CONTEXT_ENABLED?: string | undefined;
+    PRECALL_BRIEFING_ENABLED?: string | undefined;
+    CONSULT_ENABLED?: string | undefined;
+    IN_CALL_CONSULT_ENABLED?: string | undefined;
+    CONSULT_WAIT_MS?: string | undefined;
+    CONSULT_OPEN_MS?: string | undefined;
+    EL_CONSULT_DELIVERY_MS?: string | undefined;
+    EL_CONSULT_ACK_MS?: string | undefined;
+    EL_CONSULT_ANSWER_MS?: string | undefined;
+    SELF_SERVICE_ENABLED?: string | undefined;
+    PROFILES_JSON?: string | undefined;
+  },
+  { boolEnv, numEnv }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "numEnv">,
+): {
+  multiTenant: boolean;
+  mcpUiEnabled: boolean;
+  assistantContextEnabled: boolean;
+  precallBriefingEnabled: boolean;
+  consultEnabled: boolean;
+  inCallConsultEnabled: boolean;
+  consultWaitMs: number;
+  consultOpenMs: number;
+  elConsultDeliveryMs: number;
+  elConsultAckMs: number;
+  elConsultAnswerMs: number;
+  selfServiceEnabled: boolean;
+  profilesSeed: string;
+} {
   return {
     multiTenant: boolEnv("MULTI_TENANT", env.MULTI_TENANT, { fallback: false }),
     mcpUiEnabled: boolEnv("MCP_UI_ENABLED", env.MCP_UI_ENABLED, { fallback: true }),
