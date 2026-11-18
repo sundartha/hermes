@@ -350,6 +350,8 @@ const GEGENSTELLE_NAME = GEGENSTELLE_TEXT.transform((name) => name || null)
   .nullish()
   .catch(null);
 const ANRUF_KOERPER = z.object({ recipient_name: GEGENSTELLE_NAME }).passthrough().catch({});
+const PFAD_KENNUNG_MAX = 128;
+const PFAD_KENNUNG = z.object({ id: z.string().max(PFAD_KENNUNG_MAX) });
 const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
@@ -953,10 +955,12 @@ export function makeCallRoutes({
   });
 
   async function liefereConsultEreignis(req: Request<{ id: string }>, res: Response) {
+    const pfad = pruefeKoerper(res, { schema: PFAD_KENNUNG }, req.params);
+    if (!pfad) return undefined;
     const tenantId = requestTenant(req);
     const call = sichtbarerAnruf(
-      (await bereiche.gespraech.getCall(req.params.id)) ??
-        (await anrufVonAndererInstanz(store, req.params.id, tenantId)),
+      (await bereiche.gespraech.getCall(pfad.id)) ??
+        (await anrufVonAndererInstanz(store, pfad.id, tenantId)),
       tenantId,
     );
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
@@ -979,9 +983,11 @@ export function makeCallRoutes({
   });
 
   async function beantworteConsult(req: Request<{ id: string }>, res: Response) {
+    const pfad = pruefeKoerper(res, { schema: PFAD_KENNUNG }, req.params);
+    if (!pfad) return undefined;
     const tenantId = requireTenant(req, res);
     if (!tenantId) return undefined;
-    const call = sichtbarerAnruf(store.getCall(req.params.id), tenantId);
+    const call = sichtbarerAnruf(store.getCall(pfad.id), tenantId);
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (!consultAllowedFor(await bereiche.einstellungen.resolveProfile(tenantId)))
       return res
@@ -1006,7 +1012,9 @@ export function makeCallRoutes({
   });
 
   async function brecheAnrufAb(req: Request<{ id: string }>, res: Response) {
-    const call = sichtbarerAnruf(await leseAnruf(store, req.params.id), requestTenant(req));
+    const pfad = pruefeKoerper(res, { schema: PFAD_KENNUNG }, req.params);
+    if (!pfad) return undefined;
+    const call = sichtbarerAnruf(await leseAnruf(store, pfad.id), requestTenant(req));
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     if (call.status !== "active") return res.json({ status: call.status });
     audit("cancel_call", req, `call=${call.id} requestedBy=${internalIdentity(req) ?? OWNER_ID}`);
