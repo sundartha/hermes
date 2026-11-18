@@ -205,12 +205,12 @@ test("3365-D1: HTTP-Fehler beim EL-dial -> Uebergabe vermerkt, Angerufener aufge
   assert.ok(anrufIn(callId).elFallbackAt);
 });
 
-test("3365-D1: EL-Bein legt vor der Bruecke auf -> Uebergabe vermerkt, Angerufener aufgelegt, keine Bruecke, Logzeile el_fehler", async () => {
+test("3365-D1: EL-Bein legt vor der Bruecke auf -> Uebergabe vermerkt, Angerufener aufgelegt, keine Bruecke, Logzeile el_nicht_angenommen", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await angenommenerAnruf();
   await elAufgelegt(callId);
   await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => srv.stdout.includes(logZeile("el_fehler", callId)));
+  await waitUntil(() => srv.stdout.includes(logZeile("el_nicht_angenommen", callId)));
   await wiedergabeEnde(callId);
   await verarbeitet();
   assert.equal(bruecken(attrappe, callId).length, 0);

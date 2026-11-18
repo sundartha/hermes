@@ -9,11 +9,27 @@ const EREIGNIS_VON_TYP = Object.freeze({
   "call.playback.ended": CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE,
 });
 
+const AUFLEGE_URSACHE_FELDER = Object.freeze({
+  hangup_cause: "hangupCause",
+  sip_hangup_cause: "sipHangupCause",
+  hangup_source: "hangupSource",
+});
+
+function parseAufgelegtUrsache(payload) {
+  const ursache = {};
+  for (const [feld, name] of Object.entries(AUFLEGE_URSACHE_FELDER)) {
+    const token = safeCauseToken(payload?.[feld]);
+    if (token) ursache[name] = token;
+  }
+  return ursache;
+}
+
 export function parseCallControlEvent(body) {
   const data = body?.data;
   return {
     ereignis: Object.hasOwn(EREIGNIS_VON_TYP, data?.event_type) ? EREIGNIS_VON_TYP[data.event_type] : null,
     callControlId: data?.payload?.call_control_id ?? null,
+    ...parseAufgelegtUrsache(data?.payload),
   };
 }
 
