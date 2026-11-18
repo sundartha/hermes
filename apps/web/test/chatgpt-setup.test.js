@@ -6,6 +6,9 @@ import { CHATGPT_PLUGINS_URL, MCP_URL } from "../src/lib/agent-docs.js";
 import { HOME_GERMAN } from "../src/lib/home-german.js";
 
 const OFFIZIELL = "https://chatgpt.com/plugins";
+// chatgpt.com/.well-known/apple-app-site-association: "/plugins" oeffnet sonst die ChatGPT-App,
+// in der es kein "Add custom MCP server" gibt; dieses Fragment schliesst den Universal Link aus.
+const IM_BROWSER = "#no_universal_links";
 const SEITE = readFileSync(
   fileURLToPath(new URL("../src/pages/index.astro", import.meta.url)),
   "utf8",
@@ -24,9 +27,19 @@ const EINSTIEGE_ZUR_KARTE = 2;
 const SCHRITTE = 3;
 const KURZE_BESCHREIBUNG = 110;
 
-test("ChatGPT-Setup: der Plugins-Link ist die offiziell dokumentierte Adresse ohne Parameter", () => {
-  assert.equal(CHATGPT_PLUGINS_URL, OFFIZIELL);
+test("ChatGPT-Setup: der Plugins-Link ist die offizielle Adresse, bleibt im Browser und hat keine Parameter", () => {
+  assert.equal(CHATGPT_PLUGINS_URL, OFFIZIELL + IM_BROWSER);
   assert.ok(!CHATGPT_PLUGINS_URL.includes("?"));
+});
+
+test("ChatGPT-Setup: die Karte sagt, dass ChatGPT im Browser einrichtet und nicht in jedem Tarif", () => {
+  const texte = (key) => [ENGLISCH.find((e) => e.key === key).text, HOME_GERMAN[key]];
+  const [descEn, descDe] = texte("opt1Desc");
+  assert.match(descEn, /browser/i);
+  assert.match(descDe, /Browser/);
+  const [stepEn, stepDe] = texte("opt1Step2");
+  assert.match(stepEn, /not on every plan/);
+  assert.match(stepDe, /nicht in jedem Tarif/);
 });
 
 test("ChatGPT-Setup: die Setup-Karte verlinkt Plugins in neuem Tab und kopiert weiter die Server-URL", () => {
