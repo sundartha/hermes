@@ -124,7 +124,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "tenantSubscription", "tenantSuspendedAt", "tenantTimezone", "tenantsPendingCancellationMail",
   "tenantsPendingContractEndCleanup", "timeOutStagedConsult", "toggleActionItem", "trackUsage",
   "trueUpAnsweredAt", "tryReserveOutboundBudget", "unsubscribeNewsletterRecipientByToken", "updateSettings",
-  "usageOf", "withStoreLock",
+  "usageOf", "withStoreLock", "zaehleAnrufeSeit",
 ];
 
 test("Speicher-Methodenliste: der Teststore liefert genau diese Schluessel, keinen doppelt", async () => {

@@ -6,6 +6,7 @@ const PUNKTE_SQL = `SELECT * FROM action_item WHERE tenant_id = $1 ORDER BY seq 
 const NEUESTE_SQL = `SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC LIMIT $2`;
 const NEUESTE_SEGMENTE_SQL = `SELECT * FROM transcript_segment WHERE tenant_id = $1 AND call_id = ANY($2) ORDER BY id ASC`;
 const NEUESTE_PUNKTE_SQL = `SELECT * FROM action_item WHERE tenant_id = $1 AND call_id = ANY($2) ORDER BY seq DESC`;
+const SEIT_SQL = `SELECT count(*)::int AS anzahl FROM call WHERE tenant_id = $1 AND started_at >= $2 COLLATE "C"`;
 const FEHLER = "[pg] anruf-export lesen fehlgeschlagen:";
 
 export function macheAnrufExport({ runner, zeilenZuAnrufen }) {
@@ -36,6 +37,8 @@ export function macheAnrufExport({ runner, zeilenZuAnrufen }) {
         }
         return anrufe;
       }),
+    zaehleSeit: (tenantId, seitIso) =>
+      imKontext(tenantId, async (client) => (await client.query(SEIT_SQL, [tenantId, seitIso])).rows[0].anzahl),
     neueste: (tenantId, limit) =>
       imKontext(tenantId, async (client) => {
         const anrufe = (await client.query(NEUESTE_SQL, [tenantId, limit])).rows;

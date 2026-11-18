@@ -189,6 +189,10 @@ function anrufeFuerZustandVon(speicher) {
   };
 }
 
+function anzahlAnrufeSeitVon(speicher) {
+  return async (tenantId, seitIso) => speicher.zaehleAnrufeSeit(tenantId, seitIso);
+}
+
 export function speicherBereiche(speicher) {
   return {
     einstellungen: {
@@ -261,7 +265,7 @@ export function speicherBereiche(speicher) {
     mandant: {
       tenantContext: async (tenantId) => speicher.tenantContext(tenantId),
     },
-    zustandAnrufe: { anrufeFuerZustand: anrufeFuerZustandVon(speicher), },
+    zustandAnrufe: { anrufeFuerZustand: anrufeFuerZustandVon(speicher), anzahlSeit: anzahlAnrufeSeitVon(speicher) },
     berichtAnrufe: { anrufeFuerBericht: () => anrufeFuerBericht(speicher) },
     mandantProfil: mandantProfilBereich(speicher),
     konto: {

@@ -393,6 +393,7 @@ export const {
   eraseTenantData,
   exportTenantData,
   exportTenantDataGelesen,
+  zaehleAnrufeSeit,
   updateSettings,
   resolveProfile,
   listProfiles,

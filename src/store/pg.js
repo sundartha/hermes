@@ -835,6 +835,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
+    zaehleAnrufeSeit: (tenantId, seitIso) => anrufExport.zaehleSeit(tenantId, seitIso),
     async exportTenantDataGelesen(tenantId, { anrufe, bericht } = {}) {
       if (bericht) return { calls: await anrufExport.berichte() };
       const gelesen = anrufe ? await anrufExport.neueste(tenantId, anrufe) : await anrufExport.lies(tenantId);

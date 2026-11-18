@@ -5,6 +5,7 @@ import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
 import { speicherBereiche } from "../store.js";
+import { monthStart } from "../utils/month.js";
 
 interface Speicher {
   load: () => unknown;
@@ -26,6 +27,7 @@ interface Bereiche {
   };
   zustandAnrufe: {
     anrufeFuerZustand: (tenantId: string, limit: number) => Promise<unknown[]>;
+    anzahlSeit: (tenantId: string, seitIso: string) => Promise<number>;
   };
   konto: {
     exportTenantData: (tenantId: string) => Promise<AnrufAuszug>;
@@ -57,14 +59,17 @@ export const STATE_CALLS = 30,
 function usageView({
   usage,
   quota,
+  callsThisMonth,
 }: {
   usage: { inputTokens: number; outputTokens: number; calls: number };
   quota: unknown;
+  callsThisMonth: number;
 }): object {
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     calls: usage.calls,
+    callsThisMonth,
     planUsagePercent: planUsagePercent(quota),
   };
 }
@@ -85,6 +90,7 @@ async function zeigeZustand({
   const ctx = await bereiche.mandant.tenantContext(tenantId);
   const scoped = await bereiche.konto.exportTenantData(tenantId);
   const anrufe = await bereiche.zustandAnrufe.anrufeFuerZustand(tenantId, STATE_CALLS);
+  const callsThisMonth = await bereiche.zustandAnrufe.anzahlSeit(tenantId, monthStart(new Date()).toISOString());
   const s = store.load();
   res.json({
     settings: ctx.settings,
@@ -94,6 +100,7 @@ async function zeigeZustand({
     usage: usageView({
       usage: store.usageOf(tenantId),
       quota: tenantQuotaView(store, tenantId),
+      callsThisMonth,
     }),
     notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
     agent: {

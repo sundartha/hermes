@@ -302,6 +302,10 @@ export function exportTenantData(tenantId) {
   return ops.exportTenantData(load(), tenantId);
 }
 
+export function zaehleAnrufeSeit(tenantId, seitIso) {
+  return exportTenantData(tenantId).calls.filter((anruf) => anruf.startedAt >= seitIso).length;
+}
+
 export function exportTenantDataGelesen(tenantId, { bericht } = {}) {
   return bericht ? { calls: load().calls } : exportTenantData(tenantId);
 }
