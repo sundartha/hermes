@@ -151,7 +151,7 @@ test("Kriterium 5: scheitert das Schreiben der Frist, steht der Fehler mit Anruf
 const frischFaellig = (db, id) =>
   imMandanten(db, "UPDATE call SET status = 'active', frist_abfrage_at = now() - interval '1 minute', frist_abfrage_lease_bis = NULL WHERE id = $1", [id]);
 
-test("Kriterium 5: fuehrt dieser Prozess die Abfrage-Kette eines Anrufs schon, startet der Boot-Takt bei erneut faelliger Frist keine zweite", async () => {
+test("Kriterium 5: fuehrt dieser Prozess die Abfrage-Kette eines Anrufs schon, startet der Boot-Takt bei erneut faelliger Frist genau eine zweite Abfrage", async () => {
   await fremderAnruf(db, ANRUF_KETTE);
   await waitUntil(() => abrufeVon(ANRUF_KETTE) === 1, { timeoutMs: FRIST_BIS_ABRUF_MS });
   await frischFaellig(db, ANRUF_KETTE);
