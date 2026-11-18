@@ -133,6 +133,17 @@ async function anrufeFuerBericht(speicher) {
   return (await speicher.exportTenantDataGelesen(null, { bericht: true })).calls;
 }
 
+async function kandidatenImSpiegel(speicher, istKandidat) {
+  const kandidaten = (await anrufeFuerBericht(speicher)).filter(istKandidat);
+  if (!speicher.leseCall) return kandidaten;
+  const gebunden = [];
+  for (const kandidat of kandidaten) {
+    const call = await speicher.leseCall(kandidat.id);
+    if (call) gebunden.push(call);
+  }
+  return gebunden;
+}
+
 function kostenabgleichBereich(speicher) {
   const zustandMitAnrufen = async () => {
     const zustand = speicher.load();
@@ -141,6 +152,7 @@ function kostenabgleichBereich(speicher) {
   };
   return {
     abgleichZustand: async () => kostenabgleich.abgleichZustand(await zustandMitAnrufen()),
+    sweepKandidaten: (istKandidat) => kandidatenImSpiegel(speicher, istKandidat),
     querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(speicher.load(), nowIso),
     querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(await zustandMitAnrufen(), eingabe),
   };

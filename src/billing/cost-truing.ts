@@ -129,6 +129,7 @@ interface Bereiche {
   };
   kostenabgleich: {
     abgleichZustand(): Promise<Zustand>;
+    sweepKandidaten(istKandidat: (call: KostenAnruf) => boolean): Promise<KostenAnruf[]>;
   };
 }
 
@@ -751,7 +752,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   async function sweepAllCandidates(trigger: string): Promise<Sweepergebnis> {
     const nowMs = now();
-    const candidates = store.load().calls.filter((call) => isTruingCandidate(call, nowMs));
+    const candidates = await bereiche.kostenabgleich.sweepKandidaten((call) => isTruingCandidate(call, nowMs));
     const controls = costRecordControlsFor(candidates);
     const retrievable = candidates.filter((call) => isRetrievable(call, controls.get(call.provider)));
     const skippedCalls = candidates.length - retrievable.length;
