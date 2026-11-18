@@ -7,7 +7,6 @@ import { after, test } from "node:test";
 import { PROBE_STAGING_TEST_TOKEN, PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
-import { LOCALES } from "../../src/i18n/locales.js";
 
 const BASIS = "https://hermes-staging-erpv.onrender.com";
 const ZIEL = "+12722205602";
@@ -17,6 +16,11 @@ const MODUL = fileURLToPath(new URL("../helpers/anruf-probe-anrufer-ergebnis.mjs
 const GEHEIMER_INHALT = "Zusammenfassung mit Gespraechsinhalt Zebra";
 const GRUSS =
   "Hallo, hier ist der KI-Assistent von Probe GmbH. Das Gespräch wird transkribiert und zusammengefasst. Wie kann ich helfen?";
+const PLATZHALTER = {
+  de: "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
+  en: "(No summary available yet - wait about 5 seconds and call again if needed.)",
+  fr: "(Pas encore de résumé disponible - attendez environ 5 secondes et réessayez si besoin.)",
+};
 const server = [];
 
 after(() => {
@@ -113,14 +117,14 @@ const ANRUFER_FAELLE = [
   ["erst Fehler, dann Zusammenfassung", ["fehler", "fehler", ZUSAMMENFASSUNG], true],
   ["erst leer, dann Zusammenfassung", [{ call_id: "c1", result_summary: "" }, ZUSAMMENFASSUNG], true],
   ["dauerhaft Fehler", ["fehler"], false],
-  ...Object.entries(LOCALES).map(([sprache, locale]) => [
+  ...Object.entries(PLATZHALTER).map(([sprache, text]) => [
     `Platzhalter ${sprache} bis zur Frist`,
-    [{ call_id: "c1", result_summary: locale.mcp.awaitSummary }],
+    [{ call_id: "c1", result_summary: text }],
     false,
   ]),
   [
     "erst Platzhalter, dann Zusammenfassung",
-    [{ call_id: "c1", result_summary: LOCALES.de.mcp.awaitSummary }, ZUSAMMENFASSUNG],
+    [{ call_id: "c1", result_summary: PLATZHALTER.de }, ZUSAMMENFASSUNG],
     true,
   ],
 ];
