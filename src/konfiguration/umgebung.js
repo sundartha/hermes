@@ -20,7 +20,7 @@ function parseNumEnv(trimmed, integer) {
 
 function numEnvExpectation(integer, min) {
   const art = integer ? "Ganzzahl" : "Zahl";
-  return min === undefined ? art : `${art}, >= ${min}`;
+  return min === undefined ? art : `${art}, >= ${String(min)}`;
 }
 
 function numEnvMit(fehlerliste) {
@@ -34,7 +34,7 @@ function numEnvMit(fehlerliste) {
       return fallback;
     }
     if (min !== undefined && parsed < min) {
-      fehlerliste.push(`${name}=${parsed} unterschreitet das Minimum ${min}.`);
+      fehlerliste.push(`${name}=${String(parsed)} unterschreitet das Minimum ${String(min)}.`);
       return fallback;
     }
     if (max !== undefined && parsed > max) return max;
