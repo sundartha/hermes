@@ -14,9 +14,11 @@ export type BeiTorFehler<K> = (tor: Tor<K>, ctx: K, fehler: unknown) => Ablehnun
 let ausstellen: () => GatesBestanden;
 
 export class GatesBestanden {
-  readonly #nachweis = true;
+  readonly #nachweis: boolean;
 
-  private constructor() {}
+  private constructor() {
+    this.#nachweis = true;
+  }
 
   static {
     ausstellen = () => new GatesBestanden();

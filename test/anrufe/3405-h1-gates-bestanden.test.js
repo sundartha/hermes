@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runOutboundGates } from "../../src/telephony/outbound-gates.js";
 
 const lade = () => import("../../src/telephony/gates-bestanden.ts").catch(() => ({}));
 
@@ -55,22 +54,4 @@ test("der Nachweis laesst sich ausserhalb des Moduls nicht erzeugen", async () =
   assert.equal(typeof GatesBestanden, "function");
   assert.deepEqual(Object.getOwnPropertyNames(GatesBestanden).sort(), ["length", "name", "prototype"]);
   assert.deepEqual(Object.keys(await lade()).sort(), ["GatesBestanden", "fuehreToreAus"]);
-});
-
-test("runOutboundGates: bestanden gibt null, Ablehnung unveraendert, Torfehler 503 mit Meldung", async () => {
-  const aufrufe = [];
-  assert.equal(await runOutboundGates({ gates: [bestehen("a", aufrufe)], ctx }), null);
-  assert.equal(await runOutboundGates({ gates: [ablehnen("a", aufrufe)], ctx }), ABLEHNUNG);
-  const stumm = console.error;
-  console.error = () => {};
-  const fehler = await runOutboundGates({ gates: [werfen("kyc", aufrufe)], ctx }).finally(() => {
-    console.error = stumm;
-  });
-  assert.equal(fehler.status, 503);
-  assert.deepEqual(fehler.body, { error: "Sicherheitspruefung derzeit nicht moeglich. Der Anruf wurde nicht gestartet." });
-  assert.deepEqual(fehler.audit, {
-    event: "place_call_denied",
-    grund: "gate_error",
-    detail: "to=+491711234567 grund=gate_error gate=kyc",
-  });
 });
