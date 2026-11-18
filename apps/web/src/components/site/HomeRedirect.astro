@@ -28,7 +28,7 @@ const canonical = new URL("/", Astro.site);
     <meta http-equiv="refresh" content={`0; url=${target}`} />
     <link rel="canonical" href={canonical} />
     <title>{label} — Hermes von Sundartha</title>
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
   </head>
   <body class="home-redirect">
     <p>Weiter zur Startseite: <a href={target}>{label}</a></p>

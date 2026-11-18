@@ -76,9 +76,9 @@ test("jeder interne href zeigt auf eine echte Route, LOGIN_URL oder mailto:", ()
       if (
         href.startsWith("/assets/") ||
         href.startsWith("/_astro/") ||
-        href === "/favicon.svg" ||
-        href === "/favicon.ico" ||
-        href === "/apple-touch-icon.png"
+        href === "/favicon.svg?v=2" ||
+        href === "/favicon.ico?v=2" ||
+        href === "/apple-touch-icon.png?v=2"
       ) {
         continue;
       }

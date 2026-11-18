@@ -234,9 +234,9 @@ const sectionDots = [
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" sizes="180x180" />
     <link rel="alternate" type="text/markdown" href={new URL("/index.md", Astro.site)} title="This page as Markdown" />
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)}></script>
     <link rel="alternate" type="text/markdown" href={new URL("/agents.md", Astro.site)} title="Setup guide for AI agents" />
