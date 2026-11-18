@@ -11,7 +11,7 @@ import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/ab
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.js";
-import { sendeAusgabenwarnung } from "./ausgabenwarnung.js";
+import { sendeAusgabenwarnung } from "./ausgabenwarnung.ts";
 import { E164 } from "../begriffe/anruf-pruefung.ts";
 import { invalidText, validateAssistantContext, validateMandate } from "../i18n/anruf-eingabe-texte.ts";
 import { findPlan } from "../plans.ts";

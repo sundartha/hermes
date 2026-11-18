@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parseSpeakEvent } from "./speak-events.ts";
 import { parseAnsweredBy } from "../../answered-by.ts";
-import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.js";
+import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.ts";
 
 const EREIGNIS_VON_TYP = Object.freeze({
   "call.answered": CALL_CONTROL_EREIGNIS.ABGEHOBEN,
