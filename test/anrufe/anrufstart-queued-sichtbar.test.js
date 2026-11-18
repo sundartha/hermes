@@ -17,6 +17,7 @@ const HTTP_OK = 200;
 const KUNDEN = 4;
 const PLAETZE = 4;
 const WAHL_PFAD = "/v2/calls";
+const BUDGET_UMGEBUNG = { MAX_BUDGET_EUR: "10", VOICE_TARIFF_DOMESTIC_CENTS: "20", VOICE_TARIFF_DEFAULT_CENTS: "20", ALLOWED_COUNTRY_CODES: "*" };
 const kundeVon = (index) => `t_queued_${index}`;
 const absenderVon = (index) => `+1202555${String(3100 + index).padStart(4, "0")}`;
 const zielVon = (nummer) => `+1202555${String(6100 + nummer).padStart(4, "0")}`;
@@ -70,6 +71,7 @@ async function mitVollerPlattform(lauf) {
   const env = {
     ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: "queued" }),
     ...vorspannMandantenUmgebung(kunden),
+    ...BUDGET_UMGEBUNG,
   };
   let srv = null;
   try {
@@ -102,6 +104,10 @@ test("queued: ein wartender Anruf steht in der Anrufabfrage und in der Anruflist
 test("queued: cancel_call eines wartenden Anrufs beendet ihn als cancelled, ohne Wahl, und er steht danach nicht mehr als queued da", async () => {
   await mitVollerPlattform(async ({ srv, wartend, gewaehlt }) => {
     assert.equal(gewaehlt(), PLAETZE);
+    const eintragVon = () => srv.readStore().calls.find((eintrag) => eintrag.id === wartend);
+    const reserveCents = eintragVon().reserveCents;
+    assert.ok(reserveCents > 0);
+    assert.equal(eintragVon().reserveReleased, false);
     const antwort = await lies({ srv, index: KUNDEN - 1, pfad: `/api/calls/${wartend}/cancel`, methode: "POST" });
     assert.equal(antwort.status, "cancelled");
     const danach = await lies({ srv, index: KUNDEN - 1, pfad: `/api/calls/${wartend}` });
@@ -109,6 +115,7 @@ test("queued: cancel_call eines wartenden Anrufs beendet ihn als cancelled, ohne
     assert.equal(danach.queued, undefined);
     assert.equal(danach.callControlId ?? null, null);
     assert.equal(gewaehlt(), PLAETZE);
+    assert.equal(eintragVon().reserveReleased, true);
   });
 });
 
@@ -240,4 +247,14 @@ test("queued: belegteAnrufe nennt nur Anrufe mit gueltigem Platz, im Speicher un
   await db.query("UPDATE leitungsplatz SET ablauf_um = now() - interval '1 minute'");
   const abgelaufen = await speicher.makePostgresLeitungsplaetze(runner).belegteAnrufe(["c_mit_platz"]);
   assert.deepEqual([...abgelaufen], []);
+});
+
+test("queued: get_call_status zeigt bei einem wartenden Anruf die letzten Transkriptzeilen", async () => {
+  const eintrag = { ...EINTRAG, status: "active", queued: true, transcript: [{ role: "counterparty", text: "Hallo?" }] };
+  await mitGateway({ "/api/calls/call_q": eintrag }, async (handlers) => {
+    const status = (await handlers.get("get_call_status")({ call_id: "call_q" })).structuredContent;
+    assert.equal(status.status, "queued");
+    assert.equal(status.last_transcript_lines.length, 1);
+    assert.ok(status.last_transcript_lines[0].endsWith(": Hallo?"));
+  });
 });
