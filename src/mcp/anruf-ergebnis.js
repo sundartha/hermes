@@ -5,7 +5,7 @@ import { maskRestrictedText } from "../restricted-data.js";
 import { failureReasonBase } from "../telephony/failure-reason.ts";
 
 export function mapStatus(call) {
-  if (call.status === "active") return call.answeredAt ? "in_progress" : "dialing";
+  if (call.status === "active") return call.answeredAt ? "in_progress" : call.queued ? "queued" : "dialing";
   return call.status;
 }
 
