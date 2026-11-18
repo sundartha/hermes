@@ -345,3 +345,135 @@ test("F-2b: CONVERSATION_DONE_MIT_KOSTEN auf dem echten Poll-Pfad - EL-Zeile vor
   assert.ok(telnyxSip, "die erwartete telnyx_sip-Zeile fehlt");
   assert.equal(telnyxSip.reife, REIFE.ERWARTET);
 });
+
+const STIMMEN_AGENT_ID = "agent_stimmen";
+const STIMMEN_AGENT_PFAD = `/v1/convai/agents/${STIMMEN_AGENT_ID}`;
+const STIMMEN_ZEHN_SEKUNDEN_MS = 10_000;
+const STIMME_DE = "cqPdIo76zSHFDcSZpFov";
+const STIMME_FR = "WeAAwKYcS06VmXw086yZ";
+const STIMME_ANDERS = "stimme_beim_anbieter";
+const STIMMEN_HTTP_FEHLER = 500;
+
+const stimmenAgent = (eigene, ueberschreibbar) => ({
+  conversation_config: { tts: { voice_id: eigene } },
+  platform_settings: { overrides: { conversation_config_override: { tts: { voice_id: ueberschreibbar } } } },
+});
+
+async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de", leseCallNull = false }) {
+  const { call, store, state } = makeCapturingStore({
+    id: "call_stimmen",
+    elevenlabsConversationId: CONVERSATION_DONE_WITH_ANALYSIS.conversation_id,
+    answeredAt: new Date().toISOString(),
+  });
+  Object.assign(call, { direction: richtung, from: "+15005550006", to: "+4915112345678", language: sprache });
+  const nummernAbfragen = [];
+  store.numberRecordByE164 = (e164) => {
+    nummernAbfragen.push(e164);
+    return null;
+  };
+  if (leseCallNull) {
+    let gelesen = 0;
+    store.leseCall = async () => ((gelesen += 1) === 3 ? null : call);
+  }
+  let billed = false;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({
+      elevenLabsOutbound: { ...ACCOUNT, agentId: STIMMEN_AGENT_ID },
+      telnyxElevenLabs: { voiceId: "standard" },
+    }),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+  const anfragen = [];
+  const warnungen = [];
+  const warnVorher = console.warn;
+  console.warn = (...zeilen) => warnungen.push(zeilen.map(String).join(" "));
+  const timeoutVorher = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => {
+    anfragen.push({ fristMs: ms });
+    return timeoutVorher.call(AbortSignal, ms);
+  };
+  try {
+    await withFetch(
+      async (url, init) => {
+        anfragen.push({ url, methode: init.method, schluessel: init.headers["xi-api-key"] });
+        if (init.method !== "GET") return { ok: true, status: HTTP_OK };
+        if (!url.endsWith(STIMMEN_AGENT_PFAD)) return { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_ANALYSIS };
+        if (agentAntwort instanceof Error || typeof agentAntwort === "string") return Promise.reject(agentAntwort);
+        if (agentAntwort === null) return { ok: false, status: STIMMEN_HTTP_FEHLER, json: async () => ({}) };
+        return { ok: true, status: HTTP_OK, json: async () => agentAntwort };
+      },
+      async () => {
+        el.rearmActiveConversationPolls();
+        await waitUntil(() => billed);
+      },
+    );
+  } finally {
+    console.warn = warnVorher;
+    AbortSignal.timeout = timeoutVorher;
+  }
+  return { call, state, anfragen, warnungen, nummernAbfragen };
+}
+
+const STIMMEN_TABELLE = [
+  ["gleiche Stimme", STIMME_DE, stimmenAgent(STIMME_DE, false), 1],
+  ["andere Stimme ohne Freigabe", STIMME_DE, stimmenAgent(STIMME_ANDERS, false), 2],
+  ["andere Stimme mit Freigabe", STIMME_DE, stimmenAgent(STIMME_ANDERS, true), 1],
+  ["Freigabe nur als Text ist keine Freigabe", STIMME_DE, stimmenAgent(STIMME_ANDERS, "true"), 2],
+  ["Agent ohne Freigabeangaben", STIMME_DE, { conversation_config: { tts: { voice_id: STIMME_ANDERS } } }, 2],
+  ["Agent ohne eigene Stimme", STIMME_DE, stimmenAgent("", true), undefined],
+  ["Agent ohne Sprachteil", STIMME_DE, {}, undefined],
+];
+
+for (const [name, , agentAntwort, erwartet] of STIMMEN_TABELLE) {
+  test(`Stimmen am Anrufdatensatz: ${name}`, async () => {
+    const { call } = await pollMitAgent({ agentAntwort });
+    assert.equal(call.elDetectorCounts.stimmenAnzahl, erwartet);
+    assert.equal(Object.hasOwn(call.elDetectorCounts, "stimmenAnzahl"), erwartet !== undefined);
+  });
+}
+
+test("Stimmen am Anrufdatensatz: die Stimme folgt der Sprache des Anrufs", async () => {
+  const { call } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_FR, false), sprache: "fr" });
+  assert.equal(call.elDetectorCounts.stimmenAnzahl, 1);
+});
+
+test("Stimmen am Anrufdatensatz: die Rufnummer der Sprachwahl ist beim ausgehenden Anruf der Absender, beim eingehenden die gerufene Nummer", async () => {
+  const agentAntwort = stimmenAgent(STIMME_ANDERS, false);
+  const ausgehend = await pollMitAgent({ agentAntwort, richtung: "outbound" });
+  const eingehend = await pollMitAgent({ agentAntwort, richtung: "inbound" });
+  assert.deepEqual(ausgehend.nummernAbfragen.filter((nummer) => nummer === "+15005550006" || nummer === "+4915112345678"), ["+15005550006"]);
+  assert.deepEqual(eingehend.nummernAbfragen.filter((nummer) => nummer === "+15005550006" || nummer === "+4915112345678"), ["+4915112345678"]);
+});
+
+test("Stimmen am Anrufdatensatz: der Agent der Konfiguration wird mit Schluessel und einer Frist von zehn Sekunden gelesen", async () => {
+  const { anfragen } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_DE, false) });
+  const agentGets = anfragen.filter((anfrage) => anfrage.url === `${ACCOUNT.apiBase}${STIMMEN_AGENT_PFAD}`);
+  assert.equal(agentGets.length, 1);
+  assert.equal(agentGets[0].methode, "GET");
+  assert.equal(agentGets[0].schluessel, ACCOUNT.apiKey);
+  assert.ok(anfragen.some((anfrage) => anfrage.fristMs === STIMMEN_ZEHN_SEKUNDEN_MS));
+});
+
+test("Stimmen am Anrufdatensatz: scheitert die Abfrage, fehlt die Zahl, die Zaehler stehen und die Meldung nennt keine Stimme", async () => {
+  for (const [agentAntwort, grund] of [[null, "Agent-Abruf"], [new Error("nicht erreichbar"), "nicht erreichbar"], ["kaputt", "unbekannt"]]) {
+    const { call, warnungen } = await pollMitAgent({ agentAntwort });
+    assert.equal(call.status, "completed");
+    assert.deepEqual(call.elDetectorCounts, { elTags: 0, elB1: 0 });
+    const meldungen = warnungen.filter((zeile) => zeile.startsWith("[el-stimmen]"));
+    assert.equal(meldungen.length, 1);
+    assert.ok(meldungen[0].startsWith("[el-stimmen] nicht ermittelt (call=call_stimmen): "));
+    assert.ok(meldungen[0].includes(grund), meldungen[0]);
+  }
+});
+
+test("Stimmen am Anrufdatensatz: ein Anruf, der beim Lesen fehlt, ergibt keine Zahl und keine Abfrage beim Anbieter", async () => {
+  const { call, anfragen, warnungen } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_DE, false), leseCallNull: true });
+  assert.deepEqual(call.elDetectorCounts, { elTags: 0, elB1: 0 });
+  assert.equal(anfragen.some((anfrage) => anfrage.url?.endsWith(STIMMEN_AGENT_PFAD)), false);
+  assert.equal(warnungen.some((zeile) => zeile.startsWith("[el-stimmen]")), false);
+});

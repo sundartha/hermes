@@ -33,7 +33,9 @@ const CALL_FIELDS_HIDDEN_FROM_VIEW = [
 ];
 
 export function publicCall(call) {
-  return omitKeys(call, CALL_FIELDS_HIDDEN_FROM_VIEW);
+  const sicht = omitKeys(call, CALL_FIELDS_HIDDEN_FROM_VIEW);
+  const stimmenAnzahl = call.elDetectorCounts?.stimmenAnzahl;
+  return Number.isInteger(stimmenAnzahl) ? { ...sicht, stimmenAnzahl } : sicht;
 }
 
 export function findActiveNumber(state, tenantId, provider) {
