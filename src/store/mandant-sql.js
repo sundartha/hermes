@@ -15,6 +15,13 @@ const SPALTE_JE_SCHLUESSEL = Object.freeze({
   stripeCustomerId: "stripe_customer_id",
   stripePaymentMethodId: "stripe_payment_method_id",
   stripePaymentMethodType: "stripe_payment_method_type",
+  stripeSubscriptionId: "stripe_subscription_id",
+  stripePlanSlug: "stripe_plan_slug",
+  stripeCurrentPeriodEnd: "stripe_current_period_end",
+  stripeCurrentPeriodStart: "stripe_current_period_start",
+  stripeNumberSetupFeeExempt: "stripe_number_setup_fee_exempt",
+  stripePeriodCreditRevoked: "stripe_period_credit_revoked",
+  stripeCancelAtPeriodEnd: "stripe_cancel_at_period_end",
 });
 
 const SPERRE_SPALTEN = ["status", ...Object.values(SPALTE_JE_SCHLUESSEL), "stand"].join(", ");

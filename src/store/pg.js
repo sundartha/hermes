@@ -679,6 +679,17 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
   };
 }
 
+const ABO_SCHLUESSEL = [
+  ["subscriptionId", "stripeSubscriptionId"],
+  ["planSlug", "stripePlanSlug"],
+  ["currentPeriodEnd", "stripeCurrentPeriodEnd"],
+  ["currentPeriodStart", "stripeCurrentPeriodStart"],
+  ["numberSetupFeeExempt", "stripeNumberSetupFeeExempt"],
+  ["activationPending", "stripeActivationPending"],
+  ["periodCreditRevoked", "stripePeriodCreditRevoked"],
+  ["cancelAtPeriodEnd", "stripeCancelAtPeriodEnd"],
+];
+
 const STRIPE_SCHLUESSEL = [
   ["customerId", "stripeCustomerId"],
   ["paymentMethodId", "stripePaymentMethodId"],
@@ -699,7 +710,8 @@ function aboAbrechnungMethoden({ requireState, save, mandant }) {
       const tenant = ops.setTenantSubscription(requireState(), tenantId, patch);
       ops.deriveTenantBudgetFromPlan(requireState(), tenantId, config.billing);
       save();
-      if (patch.activationPending !== undefined) mandant.schreiben(tenantId, ["stripeActivationPending"]);
+      const schluessel = ABO_SCHLUESSEL.filter(([feld]) => patch[feld] !== undefined);
+      if (schluessel.length > 0) mandant.schreiben(tenantId, schluessel.map(([, key]) => key));
       return tenant;
     },
     tenantSubscription: (tenantId) => ops.tenantSubscription(requireState(), tenantId),
@@ -1576,18 +1588,11 @@ async function flushTenants(client, tenants) {
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject,
-         stripe_subscription_id=EXCLUDED.stripe_subscription_id,
-         stripe_plan_slug=EXCLUDED.stripe_plan_slug,
-         stripe_current_period_end=EXCLUDED.stripe_current_period_end,
-         stripe_current_period_start=EXCLUDED.stripe_current_period_start,
-         stripe_number_setup_fee_exempt=EXCLUDED.stripe_number_setup_fee_exempt,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
          timezone=EXCLUDED.timezone,
          private_number=EXCLUDED.private_number,
          number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
          number_provision_skip_at=EXCLUDED.number_provision_skip_at,
-         stripe_period_credit_revoked=EXCLUDED.stripe_period_credit_revoked,
-         stripe_cancel_at_period_end=EXCLUDED.stripe_cancel_at_period_end,
          number_release_pending=EXCLUDED.number_release_pending,
          workos_delete_pending=EXCLUDED.workos_delete_pending,
          cancellation_mail_pending=EXCLUDED.cancellation_mail_pending,
