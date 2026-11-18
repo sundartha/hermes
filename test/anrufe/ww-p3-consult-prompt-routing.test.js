@@ -190,3 +190,20 @@ test("WW-P3-8: der Block ist die EINZIGE Differenz - ohne Werkzeug bleibt der Pr
     "der Block ist nicht die einzige strukturelle Differenz",
   );
 });
+
+const PROBLEM_REGEX = {
+  de: /kein passender Termin[^\n]*unklare oder fehlende Angaben[^\n]*get_consult[^\n]*VOR einer Nachricht und VOR dem Auflegen/,
+  en: /no suitable appointment[^\n]*unclear or missing details[^\n]*get_consult[^\n]*BEFORE recording a message and BEFORE ending the call/,
+  fr: /aucun rendez-vous adapté[^\n]*informations floues ou manquantes[^\n]*get_consult[^\n]*AVANT un message et AVANT de raccrocher/,
+};
+
+for (const language of ["de", "en", "fr"]) {
+  test(`WW-P3-Problem: Claude-Weg (${language}) fragt bei blockierendem Problem per get_consult vor Nachricht und Auflegen`, () => {
+    assert.match(promptFor({ language, mandate: FULL_MANDATE }), PROBLEM_REGEX[language]);
+  });
+}
+
+test("WW-P3-Problem: ohne Rueckfrage-Werkzeug steht keine Problemregel im Prompt", () => {
+  const prompt = promptFor({ mandate: FULL_MANDATE, consultPolling: false });
+  assert.doesNotMatch(prompt, /kein passender Termin/);
+});

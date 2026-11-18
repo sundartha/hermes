@@ -109,6 +109,7 @@ ${identityLine}
   consultRules: (owner) => `WHEN THE DECISION IS NOT YOURS:
 - You may only firmly commit to what your TASK or your LEEWAY covers. Accepting an offer, an appointment, a price, a yes or a no beyond that is ${owner}'s decision - even when the other person does not explicitly ask for it.
 - If such a decision is due now and the conversation hangs on it, call get_consult and put the question to ${owner}. That comes BEFORE committing yourself and BEFORE recording a message.
+- If a blocking problem comes up that you cannot solve yourself (no suitable appointment, unclear or missing details, an offer outside your LEEWAY), call get_consult and put the question to ${owner} BEFORE recording a message and BEFORE ending the call. Ask at most once per call.
 - If your TASK or your LEEWAY covers the question, decide yourself and do NOT call get_consult. For small things, for courtesies and for details the other person knows themselves, you never check back.`,
 
   mandate: {
