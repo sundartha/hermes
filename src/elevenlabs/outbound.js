@@ -6,7 +6,7 @@ import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.ts";
-import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
+import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, START_UNKLAR_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
@@ -14,7 +14,8 @@ import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
-import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation } from "./convai.ts";
+import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation, listConversations } from "./convai.ts";
+import { makeAnrufstartAuftrag } from "./anrufstart-auftrag.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
 import { medienwegZeilen } from "./medienweg.ts";
 import { spokenTimezoneName } from "./nanp-area-codes.ts";
@@ -801,6 +802,22 @@ function makeInitInhalt(inhaltsAnfrageFor) {
   };
 }
 
+function macheAnrufstartAuftragMit(verbindung, { store, config, settings, haltAnrufStartFest, beende }) {
+  return makeAnrufstartAuftrag({
+    ...verbindung,
+    store,
+    anbieterGespraeche: {
+      liste: (query) => listConversations({ fetchImpl: anfrageNachAussen, account: settings(), query }),
+      hole: (conversationId) => fetchConversation({ fetchImpl: anfrageNachAussen, account: settings(), conversationId }),
+    },
+    haltAnrufStartFest,
+    beendeStartUnklar: (callId) =>
+      finishWithoutProviderResult({ store, ...beende, callId, nowMs: Date.now(), failureReason: START_UNKLAR_REASON }),
+    mandantenToken: (tenantId) => tenantToolToken({ secret: config.voice.elevenLabsToolToken, tenantId }),
+    wartefristMs: settings().anrufstartWartefristMs,
+  });
+}
+
 export function makeElevenLabsOutbound({
   store,
   config,
@@ -893,7 +910,21 @@ export function makeElevenLabsOutbound({
     await deleteConversationAtProvider({ account: settings(), ...conversationRef });
   }
 
+  async function haltAnrufStartFest(call, conversationId) {
+    store.recordElevenlabsConversationId(call.id, conversationId);
+    await store.markAnswered(call.id);
+    scheduleResultPoll(call.id, conversationId);
+  }
+
   return {
+    macheAnrufstartAuftrag: (verbindung) =>
+      macheAnrufstartAuftragMit(verbindung, {
+        store,
+        config,
+        settings,
+        haltAnrufStartFest,
+        beende: { terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall },
+      }),
     initInhaltFor,
     endActiveCall,
     abfrageDurchLauf,

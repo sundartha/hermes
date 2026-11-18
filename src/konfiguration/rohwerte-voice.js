@@ -52,6 +52,11 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
       min: 100,
       max: 120000,
     }),
+    anrufstartWartefristMs: numEnv("ANRUFSTART_WARTEFRIST_MS", env.ANRUFSTART_WARTEFRIST_MS, {
+      fallback: 120000,
+      min: 100,
+      max: 120000,
+    }),
     bridgeStartDeadlineMs: numEnv("EL_BRIDGE_START_DEADLINE_MS", env.EL_BRIDGE_START_DEADLINE_MS, {
       fallback: 30000,
       min: 100,

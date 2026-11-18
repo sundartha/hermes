@@ -209,6 +209,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     costTruing,
     consultDelivery,
     elevenLabsOutbound,
+    anrufstartVerdrahtung,
     vorspannErzeuger,
     vorspannAblauf,
     mcpDrosseln,
@@ -239,6 +240,11 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       arm: {
         armMaxDurationTimer: lifecycle.armMaxDurationTimer,
         armReserveReleaseTimer: lifecycle.armReserveReleaseTimer,
+      },
+      anrufstart: {
+        einreihen: provisioning?.reiheAnrufstartEin,
+        macheAuftrag: elevenLabsOutbound?.macheAnrufstartAuftrag,
+        verdrahtung: anrufstartVerdrahtung,
       },
       tenant: { requestTenant, requireTenant, tenantOwnsCall },
       consultDelivery,
