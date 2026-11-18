@@ -95,8 +95,7 @@ after(async () => {
 
 test("Max-Dauer beendet den Anruf: Ziel wird gegen den Auftrag bewertet statt unclear zu bleiben", () => {
   const call = stand.calls.find((c) => c.id === "call_3491_max");
-  assert.equal(call.status, "failed");
-  assert.equal(call.failureReason, "max-duration-cap");
-  assert.equal(call.objectiveAchieved, "unclear");
-  assert.equal(call.summary, PROVIDER_SUMMARY);
+  assert.equal(call.status, "completed");
+  assert.equal(call.objectiveAchieved, true);
+  assert.equal(call.summary, MODEL_SUMMARY);
 });

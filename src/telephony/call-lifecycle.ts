@@ -6,6 +6,7 @@ import { carrierEndMsOf } from "../store/state-ops.js";
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
 import { defaultSetTimer } from "../utils/uhr-warten.ts";
 import { inDatenbankBeendet } from "./reattach.ts";
+import { istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
@@ -35,6 +36,7 @@ interface Call {
   tenantId: string;
   twilioSid: string;
   maxDurationS?: number;
+  transcript?: unknown[];
 }
 
 interface FristEintrag {
@@ -283,7 +285,9 @@ export function makeCallLifecycle({
 
   async function terminateExpiredCall(call: Call): Promise<void> {
     await ohneWeg(call);
-    await terminateCappedCall(call.id, call.twilioSid, "failed");
+    const gelesen = (await readCall(store, call.id)) ?? call;
+    const bewertbar = istOutboundElProfil(gelesen) && Boolean(gelesen.transcript?.length);
+    await terminateCappedCall(call.id, call.twilioSid, bewertbar ? "completed" : "failed");
   }
 
   const terminateOverBudgetExpired = (call: Call) => beendeUeberBudgetOhneWeg(call, ohneWeg, budgetAxis);

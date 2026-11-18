@@ -790,10 +790,11 @@ function makeInitInhalt(inhaltsAnfrageFor) {
   };
 }
 
-function macheAnrufstartAuftragMit(verbindung, { store, config, settings, scheduleResultPoll, beende }) {
+function macheAnrufstartAuftragMit(verbindung, { store, config, settings, scheduleResultPoll, schreibeAbfrageFrist, beende }) {
   async function haltAnrufStartFest(call, conversationId) {
     store.recordElevenlabsConversationId(call.id, conversationId);
     await store.markAnswered(call.id);
+    await schreibeAbfrageFrist(call);
     scheduleResultPoll(call.id, conversationId);
   }
 
@@ -910,7 +911,7 @@ export function makeElevenLabsOutbound({
   return {
     macheAnrufstartAuftrag: (verbindung) =>
       macheAnrufstartAuftragMit(verbindung, {
-        store, config, settings, scheduleResultPoll,
+        store, config, settings, scheduleResultPoll, schreibeAbfrageFrist,
         beende: { terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall },
       }),
     initInhaltFor,
