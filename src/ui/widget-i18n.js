@@ -139,6 +139,7 @@ export const WIDGET_DICT = {
 
 export const WIDGET_LOCALE_META_KEY = "hermes/locale";
 export const WIDGET_CONTENT_LOCALE_META_KEY = "hermes/content_locale";
+export const STIMMEN_ANZAHL_META_KEY = "hermes/stimmen_anzahl";
 
 export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];

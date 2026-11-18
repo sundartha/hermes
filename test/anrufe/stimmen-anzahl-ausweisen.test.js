@@ -22,6 +22,7 @@ const HTTP_OK = 200;
 const HTTP_FEHLER = 500;
 const FRIST_MS = 15000;
 const POLL_TAKT_MS = 100;
+const META_SCHLUESSEL = "hermes/stimmen_anzahl";
 const TENANT = "t_stimmen";
 const SUB = "sub-stimmen";
 const CALL_ID = "call_stimmen_5004";
@@ -124,8 +125,10 @@ for (const richtung of ["outbound", "inbound"]) {
         const status = await werkzeug("get_call_status");
         const ergebnis = await werkzeug("get_call_result");
         assert.equal(status.structuredContent.status, "completed");
-        assert.equal(status.structuredContent.stimmen_anzahl, fall.erwartet);
-        assert.equal(ergebnis.structuredContent.stimmen_anzahl, fall.erwartet);
+        assert.equal(status._meta[META_SCHLUESSEL], fall.erwartet);
+        assert.equal(ergebnis._meta[META_SCHLUESSEL], fall.erwartet);
+        assert.equal("stimmen_anzahl" in status.structuredContent, false);
+        assert.equal("stimmen_anzahl" in ergebnis.structuredContent, false);
       });
     });
   }
@@ -136,8 +139,8 @@ test("scheitert die Agentenabfrage, endet der Anruf trotzdem und stimmen_anzahl 
     const status = await werkzeug("get_call_status");
     const ergebnis = await werkzeug("get_call_result");
     assert.equal(status.structuredContent.status, "completed");
-    assert.equal("stimmen_anzahl" in status.structuredContent, false);
-    assert.equal("stimmen_anzahl" in ergebnis.structuredContent, false);
+    assert.equal("_meta" in status, false);
+    assert.equal(META_SCHLUESSEL in ergebnis._meta, false);
   });
 });
 
@@ -146,7 +149,7 @@ test("keine voice_id steht in der Ausgabe der Werkzeuge", async () => {
   await mitAnruf({ richtung: "outbound", agentAntwort: antwort }, async ({ werkzeug }) => {
     for (const name of ["get_call_status", "get_call_result"]) {
       const ausgabe = await werkzeug(name);
-      assert.equal(ausgabe.structuredContent.stimmen_anzahl, ZWEI);
+      assert.equal(ausgabe._meta[META_SCHLUESSEL], ZWEI);
       const text = JSON.stringify(ausgabe);
       assert.equal(text.includes(FREMDE_STIMME), false);
       assert.equal(text.includes(DEUTSCHE_STIMME), false);
