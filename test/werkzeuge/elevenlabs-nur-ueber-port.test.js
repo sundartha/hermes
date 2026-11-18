@@ -74,7 +74,8 @@ test("Der Konto-Port holt ein Gespräch mit Schlüssel und Frist über die Eleve
   const antwort = await elevenlabsConvai().fetchConversation({ fetchImpl, account: konto, conversationId: "c 1" });
   assert.deepEqual(antwort, { conversation_id: "c1" });
   assert.equal(aufrufe[0].url, "https://el.test/v1/convai/conversations/c%201");
-  assert.equal(aufrufe[0].init.headers["xi-api-key"], "k-test");
+  const { headers } = aufrufe[0].init;
+  assert.equal(headers["xi-api-key"], "k-test");
 });
 
 test("Der Konto-Port holt eine Rufnummer über die ElevenLabs-API", async () => {
