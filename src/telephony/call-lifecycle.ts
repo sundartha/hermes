@@ -135,13 +135,8 @@ function schreibeFrist({ schreibe, fehlerText }: FristZiel, call: Call, ms: numb
   });
 }
 
-function planeReserveFreigabe(
-  { store, releaseReserve }: Pick<CallLifecycleDeps, "store" | "releaseReserve">,
-  call: Call,
-  delayMs: number,
-): void {
+function planeReserveFreigabe({ store }: Pick<CallLifecycleDeps, "store">, call: Call, delayMs: number): void {
   schreibeFrist({ schreibe: (frist) => store.setzeReserveFrist?.(frist), fehlerText: RESERVE_FRIST_FEHLER }, call, delayMs);
-  setTimeout(() => releaseReserve(store.getCall(call.id) ?? call), delayMs);
 }
 
 async function loescheElKonversation(call: Call, endActiveCall: CallLifecycleDeps["endActiveCall"]): Promise<void> {
@@ -305,7 +300,7 @@ export function makeCallLifecycle({
   }
 
   function armReserveReleaseTimer(call: Call): void {
-    planeReserveFreigabe({ store, releaseReserve }, call, callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs);
+    planeReserveFreigabe({ store }, call, callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs);
   }
 
   async function reattachActiveCall(callId: string): Promise<ReattachResult> {
