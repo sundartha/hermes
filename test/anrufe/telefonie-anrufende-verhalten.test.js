@@ -1,10 +1,11 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitUntil, waitForLog, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
 
+const FRISTEN_TAKT_MS = 40;
 const HTTP_OK = 200;
 const WARTEZEIT_MS = 5000;
 const EIGENE_NUMMER = "+4915199998888";
@@ -156,7 +157,7 @@ test("3395-R1-4: ausgehender Anruf ohne Abheben meldet das angerufene Ziel; gefu
   });
 });
 
-test("3395-R1-5: Neustart terminalisiert einen abgelaufenen Anruf mit Cap-Grund und zaehlt Zombie und Rest getrennt", async () => {
+test("3395-R1-5: der Fristen-Lauf terminalisiert einen abgelaufenen Anruf mit Cap-Grund, ein lebender Anruf bleibt aktiv", async () => {
   const zombie = seedCall({
     id: "boot_zombie",
     answeredAt: "2020-01-01T00:00:00.000Z",
@@ -164,9 +165,8 @@ test("3395-R1-5: Neustart terminalisiert einen abgelaufenen Anruf mit Cap-Grund 
     maxDurationS: 60,
   });
   const lebend = seedCall({ id: "boot_lebend", answeredAt: new Date().toISOString(), maxDurationS: 180 });
-  const srv = await startServer({ seed: zustand([zombie, lebend], []) });
+  const srv = await startServer({ env: { FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS) }, seed: zustand([zombie, lebend], []) });
   try {
-    await waitForLog(srv, /\[rearm\] aktive Calls beim Boot: 1 re-armed, 1 terminalisiert \(Zombie\)/);
     await waitUntil(() => anrufVon(srv, "boot_zombie").failureReason, { timeoutMs: WARTEZEIT_MS });
     const [z, l] = ["boot_zombie", "boot_lebend"].map((id) => anrufVon(srv, id));
     assert.equal(z.failureReason, "max-duration-cap");

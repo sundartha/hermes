@@ -81,7 +81,7 @@ async function mitAnbieter({ gespraeche, anrufe }, lauf) {
   const anbieter = await starteAnbieter(gespraeche);
   const empfaenger = await startEmpfaenger();
   const srv = await startServer({
-    env: { ...EL_ENV, ELEVENLABS_API_BASE: anbieter.url, METRIKEN_OTLP_URL: empfaenger.url },
+    env: { ...EL_ENV, ELEVENLABS_API_BASE: anbieter.url, METRIKEN_OTLP_URL: empfaenger.url, FRISTEN_TAKT_MS: "40" },
     seed: seedState({ calls: anrufe }),
   });
   try {
@@ -101,6 +101,7 @@ const elAnruf = (id, laufzeitS, zusatz = {}) =>
     provider: "telnyx",
     startedAt: vorSekunden(laufzeitS),
     answeredAt: vorSekunden(laufzeitS),
+    fristAbfrageAt: vorSekunden(laufzeitS),
     maxDurationS: 3600,
     elevenlabsConversationId: `conv_${id}`,
     ...zusatz,

@@ -4,7 +4,6 @@ import {
   startServer,
   seedState,
   seedCall,
-  waitForLog,
   waitForStoreState,
   DOMESTIC_TEST_NUMBER,
 } from "../helpers.js";
@@ -12,9 +11,11 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 
 const DOMESTIC_TARIFF_CENTS = 20;
 const DOMESTIC_TO = "+4915112345678";
+const FRISTEN_TAKT_MS = 40;
 const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
   VOICE_TARIFF_DEFAULT_CENTS: "300",
+  FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
 };
 
 const ZOMBIE_MAX_S = 60;
@@ -65,7 +66,7 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
   }
 });
 
-test("Boot-Re-Arm laesst einen aktiven Call mit Restzeit active (Timer neu armiert)", async () => {
+test("Fristen-Lauf laesst einen aktiven Call mit Restzeit active, waehrend er den abgelaufenen beendet", async () => {
   const answeredAt = new Date(Date.now() - 10_000).toISOString();
   const srv = await startServer({
     env: TARIFF_ENV,
@@ -80,11 +81,21 @@ test("Boot-Re-Arm laesst einen aktiven Call mit Restzeit active (Timer neu armie
           endedAt: null,
           maxDurationS: 180,
         }),
+        seedCall({
+          id: "zombie_takt",
+          direction: "outbound",
+          to: DOMESTIC_TO,
+          status: "active",
+          answeredAt: ZOMBIE_ANSWERED_AT,
+          startedAt: ZOMBIE_ANSWERED_AT,
+          endedAt: null,
+          maxDurationS: ZOMBIE_MAX_S,
+        }),
       ],
     }),
   });
   try {
-    await waitForLog(srv, /\[rearm\] aktive Calls beim Boot: 1 re-armed, 0 terminalisiert/);
+    await waitForStoreState(srv, (st) => st.calls.find((c) => c.id === "zombie_takt")?.status === "failed");
     const live = srv.readStore().calls.find((c) => c.id === "live");
     assert.equal(live.status, "active", "aktiver Call mit Restzeit bleibt active");
     assert.equal(live.endedAt, null, "kein Ende gesetzt (nicht terminalisiert)");

@@ -100,7 +100,7 @@ async function pollFixtureConversation(fixture) {
     async (_url, init) =>
       init.method === "GET" ? { ok: true, status: HTTP_OK, json: async () => fixture } : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );
@@ -373,7 +373,7 @@ async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de
   };
   if (leseCallNull) {
     let gelesen = 0;
-    store.leseCall = async () => ((gelesen += 1) === 3 ? null : call);
+    store.leseCall = async () => ((gelesen += 1) === 4 ? null : call);
   }
   let billed = false;
   const el = makeElevenLabsOutbound({
@@ -408,7 +408,7 @@ async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de
         return { ok: true, status: HTTP_OK, json: async () => agentAntwort };
       },
       async () => {
-        el.rearmActiveConversationPolls();
+        await el.abfrageDurchLauf(call.id);
         await waitUntil(() => billed);
       },
     );

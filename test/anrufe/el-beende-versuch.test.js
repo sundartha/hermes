@@ -321,7 +321,7 @@ test("Max-Dauer-Cap: ein EL-Call loest jetzt den EL-Beende-Versuch aus (vorher: 
     cappedEndedAtMs,
     classifyCallTime,
   });
-  lifecycle.rearmActiveCallTimers();
+  await lifecycle.terminateExpiredCall(call);
   await billedP;
   assert.deepEqual(endCalls, [call.id], "der EL-Beende-Versuch lief genau einmal fuer den EL-Call");
 });
@@ -556,7 +556,7 @@ test("Poll-Obergrenze: ein Call aelter als ELEVENLABS_PROVIDER_MAX_DURATION_S te
   await withFetch(
     async () => ({ ok: false, status: HTTP_UNPROCESSABLE }),
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );
@@ -607,7 +607,7 @@ for (const fall of PERMANENT_ERROR_FAELLE) {
         return { ok: false, status: fall.envelope.httpStatus, json: async () => fall.envelope.body };
       },
       async () => {
-        el.rearmActiveConversationPolls();
+        await el.abfrageDurchLauf(call.id);
         await waitUntil(() => billed);
       },
     );
@@ -672,7 +672,7 @@ test("F3: ein ungemessener Fehlerstatus (500) bleibt VORUEBERGEHEND - der Poll h
       return { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_ANALYSIS };
     },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

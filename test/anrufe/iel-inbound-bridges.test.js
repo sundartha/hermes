@@ -26,6 +26,7 @@ import {
 import { CONV_ID, INBOUND_FROM, INBOUND_TO, TRAEGER_SID, seedWartenderElCall } from "../_iel-inbound-harness.js";
 
 const OFFSET_MS = 5000;
+const FRISTEN_TAKT_MS = 40;
 const FRISCH_BEANTWORTET_S = 1;
 const LANGE_HER_S = 3600;
 const UNLESBAR = "kein-zeitpunkt";
@@ -152,23 +153,23 @@ function neustartZustand() {
   return { state: JSON.parse(JSON.stringify(state)), call, nowMs };
 }
 
-test("IEL-B6-24a: Neustart waehrend WARTET -> rearmDeadlines armiert NUR den wartenden Call mit seiner Restfrist", async () => {
+test("IEL-B6-24a: Neustart waehrend WARTET -> der Fristen-Lauf leitet NUR den wartenden Call um und stellt keinen Timer", async () => {
   const { state, call, nowMs } = neustartZustand();
   const { bridges, timer, umleitungen } = baueBruecken(state, { nowMs });
-  const zeilen = await captureConsole(async () => bridges.rearmDeadlines());
-  assert.deepEqual(timer.aktive().map((auftrag) => auftrag.ms), [EL_BRIDGE_START_DEADLINE_MS - OFFSET_MS]);
-  assert.ok(zeilen.includes("[el-inbound] Fristen re-armiert: 1 Anrufe"));
-  timer.feuereAlle();
+  const zeilen = await captureConsole(async () => {
+    for (const eintrag of state.calls) await bridges.uebergabeDurchLauf(eintrag.id);
+  });
+  assert.deepEqual(timer.aktive(), []);
+  assert.deepEqual(zeilen, [`[el-inbound] frist_abgelaufen call=${call.id} frist=lauf`]);
   assert.deepEqual(umleitungen.map((auftrag) => auftrag.call.id), [call.id]);
 });
 
-test("IEL-B6-24b: Neustart nach abgelaufener Frist -> Verzoegerung 0, die Umleitung feuert beim naechsten Tick", () => {
+test("IEL-B6-24b: Neustart nach abgelaufener Frist -> der Fristen-Lauf leitet sofort um, ohne Timer", async () => {
   const { state, call } = wartenderZustand({ answeredVorS: LANGE_HER_S });
   const zustand = JSON.parse(JSON.stringify(state));
   const { bridges, timer, umleitungen } = baueBruecken(zustand, { nowMs: Date.now() });
-  bridges.rearmDeadlines();
-  assert.deepEqual(timer.aktive().map((auftrag) => auftrag.ms), [0]);
-  timer.feuereAlle();
+  await bridges.uebergabeDurchLauf(call.id);
+  assert.deepEqual(timer.aktive(), []);
   assert.deepEqual(umleitungen.map((auftrag) => auftrag.rueckfallUrl), [rueckfallUrlFuer(call.id)]);
 });
 
@@ -252,15 +253,17 @@ function abgelaufenerSeed() {
         startedAt: answeredAt,
         maxDurationS: SPAWN_MAX_DAUER_S,
         costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+        fristUebergabeAt: answeredAt,
       }),
     ],
   });
 }
 
-test("IEL-B6-28: der Boot re-armiert die abgelaufene aeussere Frist und die Wirkung laeuft ueber server.js", async () => {
+test("IEL-B6-28: der Fristen-Lauf des Boots leitet die abgelaufene aeussere Frist um und die Wirkung laeuft ueber server.js", async () => {
   const srv = await startServer({
     env: {
       FAKE_ORIGINATE: "true",
+      FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
       ELEVENLABS_INBOUND_ENABLED: "true",
       ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
       ...EL_INBOUND_ACCESS_BOOT_ENV,
@@ -268,7 +271,6 @@ test("IEL-B6-28: der Boot re-armiert die abgelaufene aeussere Frist und die Wirk
     seed: abgelaufenerSeed(),
   });
   try {
-    await waitForLog(srv, /\[el-inbound\] Fristen re-armiert: 1 Anrufe/, LOG_FRIST_MS);
     await waitForLog(srv, new RegExp(`\\[el-inbound\\] (umgeleitet|umleitung_fehlgeschlagen) call=${SPAWN_CALL_ID}`), LOG_FRIST_MS);
   } finally {
     await srv.stop();
@@ -319,10 +321,11 @@ test("IEL-B6-27f: Umleitung lehnt mit null ab - das Trägerbein wird trotzdem au
   assert.deepEqual(aufgelegt, ["call_fehlertext"]);
 });
 
-test("IEL-B6-24c: Neustart ohne wartenden Call -> kein Timer und keine Logzeile ueber re-armierte Fristen", async () => {
-  const { bridges, timer } = baueBruecken(ops.makeDefaultState(), { nowMs: Date.now() });
-  const zeilen = await captureConsole(async () => bridges.rearmDeadlines());
+test("IEL-B6-24c: Neustart ohne wartenden Call -> der Fristen-Lauf stellt keinen Timer, leitet nicht um und schreibt keine Logzeile", async () => {
+  const { bridges, timer, umleitungen } = baueBruecken(ops.makeDefaultState(), { nowMs: Date.now() });
+  const zeilen = await captureConsole(async () => bridges.uebergabeDurchLauf("call_unbekannt"));
   assert.deepEqual(timer.aktive(), []);
+  assert.deepEqual(umleitungen, []);
   assert.deepEqual(zeilen, []);
 });
 

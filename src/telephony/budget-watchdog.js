@@ -40,11 +40,5 @@ export function makeBudgetWatchdog({
     schedule(callId);
   }
 
-  function rearm(callIds) {
-    const before = armed.size;
-    for (const callId of callIds) arm(callId);
-    return { armedNow: armed.size - before };
-  }
-
-  return { arm, rearm };
+  return { arm };
 }

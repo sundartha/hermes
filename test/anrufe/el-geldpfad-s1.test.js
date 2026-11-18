@@ -75,7 +75,7 @@ test("S1-A: eigene 1800-s-Frist + dauerhaft stummer Ergebnisabruf -> gebucht wer
   await withFetch(
     async () => ({ ok: false, status: HTTP_SERVER_ERROR }),
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );
@@ -115,7 +115,7 @@ test("S1-A: eine KUERZERE anrufeigene Frist bleibt wirksam - die Kappung ist das
   await withFetch(
     async () => ({ ok: false, status: HTTP_SERVER_ERROR }),
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

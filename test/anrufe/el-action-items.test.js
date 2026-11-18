@@ -88,7 +88,7 @@ async function pollConversation(conversation) {
         ? { ok: true, status: HTTP_OK, json: async () => conversation }
         : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

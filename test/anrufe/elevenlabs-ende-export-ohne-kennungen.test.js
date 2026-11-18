@@ -44,6 +44,7 @@ test("EL-Ende S14b: Export mit Annahmezeit enthaelt weder Anruf-ID, Mandanten-ID
     startedAt: new Date(Date.now() - LAUFZEIT_S * MS_JE_S).toISOString(),
     answeredAt: new Date(Date.now() - LAUFZEIT_S * MS_JE_S).toISOString(),
     maxDurationS: 3600,
+    fristAbfrageAt: new Date(Date.now() - LAUFZEIT_S * MS_JE_S).toISOString(),
     elevenlabsConversationId: `conv_${ANRUF_ID}`,
   });
   const anbieter = http.createServer((req, res) => {
@@ -66,6 +67,7 @@ test("EL-Ende S14b: Export mit Annahmezeit enthaelt weder Anruf-ID, Mandanten-ID
       ELEVENLABS_API_KEY: "el-ende-schluessel",
       METRIKEN_OTLP_TOKEN: OTLP_MESSWERTE_TOKEN,
       METRIKEN_INTERVALL_MS: "50",
+      FRISTEN_TAKT_MS: "40",
       ELEVENLABS_API_BASE: `http://127.0.0.1:${anbieter.address().port}`,
       METRIKEN_OTLP_URL: empfaenger.url,
     },

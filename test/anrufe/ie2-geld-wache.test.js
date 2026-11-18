@@ -4,6 +4,7 @@ import {
   makeCallLifecycle,
   BUDGET_FAILURE_REASON,
 } from "../../src/telephony/call-lifecycle.ts";
+import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
 import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.ts";
 import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
 import { blockingBudgetAxis, BUDGET_AXIS } from "../../src/budget-gate.js";
@@ -158,14 +159,14 @@ test("IE2-3: Geld-Wache und Max-Dauer-Cap ergeben GENAU EINE Terminalisierung", 
   assert.equal(call.failureReason, BUDGET_FAILURE_REASON, "der Geld-Grund bleibt stehen");
 });
 
-test("IE2-4: Boot-Re-Arm armiert die Geld-Wache", async () => {
+test("IE2-4: der Fristen-Lauf beendet ein ueberlebendes Leg ueber der Kostendecke, ohne dass ein Takt neu gestellt wird", async () => {
   const harness = makeHarness();
   const { call } = harness;
-  harness.lifecycle.rearmBudgetWatchdogs();
-  assert.equal(harness.budgetTimers.length, 1, "das ueberlebende Leg bekommt genau einen Takt");
-  await fireLatest(harness.budgetTimers);
+  await harness.lifecycle.terminateOverBudgetExpired(call);
   await harness.billed;
-  assert.equal(call.status, "completed", "der re-armierte Takt terminalisiert wie am Anrufstart");
+  assert.deepEqual(harness.budgetTimers, [], "kein Takt im Speicher des Prozesses");
+  assert.equal(call.status, "completed", "der Lauf terminalisiert wie der Takt am Anrufstart");
+  assert.equal(call.failureReason, BUDGET_FAILURE_REASON);
 });
 
 test("IE2-5: Takt 0 stellt nirgends einen Takt - der Rueckfall-Hebel ist byte-identisch zum Bestand", async () => {
@@ -173,9 +174,8 @@ test("IE2-5: Takt 0 stellt nirgends einen Takt - der Rueckfall-Hebel ist byte-id
   const { call } = harness;
   await withCapturedCapTimers(harness, async () => {
     harness.lifecycle.armMaxDurationTimer(call, call.twilioSid);
-    harness.lifecycle.rearmBudgetWatchdogs();
   });
-  assert.deepEqual(harness.budgetTimers, [], "kein Takt am Anrufstart und keiner beim Boot-Re-Arm");
+  assert.deepEqual(harness.budgetTimers, [], "kein Takt am Anrufstart");
   assert.equal(harness.capTimers.length, 1, "der Max-Dauer-Cap bleibt unberuehrt scharf");
   assert.equal(call.status, "active", "nichts terminalisiert");
 });
@@ -523,7 +523,7 @@ function lesefehlerHarness({ lese, storeErgaenzung = {}, calls = [neuerAnruf("ca
       return { unref() {} };
     },
   });
-  return { lifecycle, call, order, budgetTimers, capTimers, billed };
+  return { lifecycle, call, order, budgetTimers, capTimers, billed, store };
 }
 
 async function mitErfasstenFristenUndFehlern(harness, body) {
@@ -629,58 +629,85 @@ test("Geld-Wache: bei langsamem Leser beendet sie den Anruf ueber der Kostendeck
   assert.deepEqual(harness.order, ["recordFailureReason", "setCallEndedAt", "endCall", "bill"]);
 });
 
-function neustartHarness(activeCallsForSql) {
+function neustartHarness() {
   const alleAnrufe = [neuerAnruf("call_t1", "tenant_1"), neuerAnruf("call_t2", "tenant_2", LANGE_HER_MS)];
   return lesefehlerHarness({
     lese: () => async () => null,
     calls: alleAnrufe,
-    storeErgaenzung: {
-      load: () => ({ calls: [], tenants: [{ id: "tenant_1" }, { id: "tenant_2" }] }),
-      activeCallsForSql: activeCallsForSql(alleAnrufe),
-    },
+    storeErgaenzung: { load: () => ({ calls: alleAnrufe }) },
   });
 }
 
-test("Neustart: Fristen und Geld-Wache kommen aus der Datenbank, jeder Mandant wird gelesen", async () => {
-  const gefragt = [];
-  const harness = neustartHarness((alle) => async (tenantId) => {
-    gefragt.push(tenantId);
-    return alle.filter((call) => call.tenantId === tenantId);
+function neustartLauf(harness, { faellig }) {
+  const alleAnrufe = harness.store.load().calls;
+  const anruf = (id) => alleAnrufe.find((call) => call.id === id);
+  const beendet = [];
+  const beende = (art, status) => async (call) => {
+    beendet.push([art, call.id]);
+    anruf(call.id).status = status;
+  };
+  const lauf = makeFristenLauf({
+    store: {
+      faelligeFristen: async ({ art }) => {
+        if (!faellig[art]) throw new Error("Start ohne Datenbank");
+        return faellig[art].map((callId) => ({ callId, tenantId: anruf(callId).tenantId, versuche: 1 }));
+      },
+      getCall: anruf,
+      attachActiveCall: async (id) => anruf(id),
+      setzeGeldFrist: async () => {},
+    },
+    beende: beende("hoechstdauer", "failed"),
+    geld: {
+      intervalMs: TAKT_MS,
+      jetzt: Date.now,
+      blockingAxisFor: harness.lifecycle.blockingAxisFor,
+      beende: beende("geld", "completed"),
+    },
+    abgelaufeneHier: harness.lifecycle.abgelaufeneAktive,
+    limitJeMandant: 5,
+    leaseMs: TAKT_MS,
   });
+  return { lauf, beendet };
+}
+
+test("Neustart: Hoechstdauer und Geld-Wache kommen aus der Datenbank, der Lauf beendet ohne neu gestellte Timer", async () => {
+  const harness = neustartHarness();
+  const { lauf, beendet } = neustartLauf(harness, { faellig: { hoechstdauer: ["call_t2"], geld: ["call_t1"] } });
   await mitErfasstenFristenUndFehlern(harness, async () => {
-    await harness.lifecycle.rearmActiveCallTimers();
-    await harness.lifecycle.rearmBudgetWatchdogs();
+    await lauf.takt();
+    await lauf.geldTakt();
   });
-  assert.deepEqual(gefragt.sort(), ["tenant_1", "tenant_1", "tenant_2", "tenant_2"]);
-  assert.equal(harness.budgetTimers.length, 2, "beide aktiven Anrufe bekommen eine Geld-Wache");
-  assert.equal(harness.capTimers.length, 1, "der laufende Anruf bekommt seine Frist, der abgelaufene wird beendet");
+  assert.deepEqual(beendet, [["hoechstdauer", "call_t2"], ["geld", "call_t1"]]);
+  assert.deepEqual(harness.budgetTimers, [], "keine Geld-Wache im Speicher des Prozesses");
+  assert.deepEqual(harness.capTimers, [], "keine Frist im Speicher des Prozesses");
 });
 
-test("Neustart: ein Lesefehler bricht das Wiederherstellen ab, es laeuft kein Anruf ohne Frist", async () => {
-  const harness = neustartHarness(() => async () => {
-    throw new Error("Start ohne Datenbank");
+test("Neustart: ein Lesefehler im Lauf beendet nach dem zweiten Takt den abgelaufenen Anruf dieses Prozesses, den laufenden nie", async () => {
+  const harness = neustartHarness();
+  const { lauf, beendet } = neustartLauf(harness, { faellig: {} });
+  await mitErfasstenFristenUndFehlern(harness, async (fehlerzeilen) => {
+    await lauf.takt();
+    assert.deepEqual(beendet, [], "ein einzelner Lesefehler beendet keinen Anruf");
+    await lauf.takt();
+    assert.match(fehlerzeilen.join("\n"), /Start ohne Datenbank/);
   });
-  await mitErfasstenFristenUndFehlern(harness, async () => {
-    await assert.rejects(Promise.resolve(harness.lifecycle.rearmActiveCallTimers()), /Start ohne Datenbank/);
-    await assert.rejects(Promise.resolve(harness.lifecycle.rearmBudgetWatchdogs()), /Start ohne Datenbank/);
-  });
-  assert.deepEqual(harness.budgetTimers, []);
+  assert.deepEqual(beendet, [["hoechstdauer", "call_t2"]]);
   assert.deepEqual(harness.capTimers, []);
 });
 
-test("Neustart: ohne aktiven Anruf schreibt die Geld-Wache keine Re-Arm-Zeile", async (t) => {
-  const harness = neustartHarness(() => async () => []);
+test("Neustart: ohne faellige Frist beendet der Lauf nichts, schreibt keine Logzeile und stellt keinen Timer", async (t) => {
+  const harness = neustartHarness();
+  const { lauf, beendet } = neustartLauf(harness, { faellig: { hoechstdauer: [], geld: [] } });
   const zeilen = [];
   t.mock.method(console, "log", (...args) => {
     zeilen.push(args.join(" "));
   });
   await mitErfasstenFristenUndFehlern(harness, async () => {
-    await harness.lifecycle.rearmBudgetWatchdogs();
+    await lauf.takt();
+    await lauf.geldTakt();
   });
-  assert.deepEqual(
-    zeilen.filter((zeile) => zeile.includes("Boot-Re-Arm der Geld-Wache")),
-    [],
-  );
+  assert.deepEqual(zeilen, []);
+  assert.deepEqual(beendet, []);
   assert.deepEqual(harness.budgetTimers, []);
 });
 

@@ -7,6 +7,7 @@ import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness
 
 const FRIST_MS = 15000;
 const POLL_TAKT_MS = 100;
+const FRISTEN_TAKT_MS = 40;
 const MAX_DAUER_S = 3600;
 const FRISCH_S = 5;
 const GESPRAECH_S = 30;
@@ -54,10 +55,11 @@ async function mitLaufendemAnruf(lauf, bisher = [{ role: "agent", text: VORSPANN
     startedAt: answeredAt,
     elevenlabsConversationId: CONV_ID,
     elBoundAt: answeredAt,
+    fristAbfrageAt: answeredAt,
     transcript: bisher.map((zeile) => ({ ...zeile, at: answeredAt })),
   });
   const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: el.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS), DIAGNOSTIC_RETENTION_DAYS: "7" },
+    env: { ELEVENLABS_API_BASE: el.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS), FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS), DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed: seedState({ settings: { allowSummaries: false }, calls: [call] }),
   });
   try {

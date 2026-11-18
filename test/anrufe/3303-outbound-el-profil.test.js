@@ -35,6 +35,7 @@ const ABGEHOBEN_ID = "call_3303_abgehoben";
 const LOG_FRIST_MS = 8000;
 const FRIST_UEBERSCHRITTEN_MS = 35000;
 const MAX_DAUER_S = 600;
+const FRISTEN_TAKT_MS = 40;
 
 function neustartSeed() {
   const abgehobenAt = new Date(Date.now() - FRIST_UEBERSCHRITTEN_MS).toISOString();
@@ -43,7 +44,14 @@ function neustartSeed() {
     settings: { allowSummaries: false },
     calls: [
       seedCall({ ...gemeinsam, id: KLINGELT_ID, twilioSid: "v3:klingelt" }),
-      seedCall({ ...gemeinsam, id: ABGEHOBEN_ID, twilioSid: "v3:abgehoben", answeredAt: abgehobenAt, startedAt: abgehobenAt }),
+      seedCall({
+        ...gemeinsam,
+        id: ABGEHOBEN_ID,
+        twilioSid: "v3:abgehoben",
+        answeredAt: abgehobenAt,
+        startedAt: abgehobenAt,
+        fristUebergabeAt: abgehobenAt,
+      }),
     ],
   });
 }
@@ -52,6 +60,7 @@ test("3303-K6: Neustart re-armiert nur den abgehobenen ausgehenden Anruf, der kl
   const srv = await startServer({
     env: {
       FAKE_ORIGINATE: "true",
+      FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
       ELEVENLABS_INBOUND_ENABLED: "true",
       ELEVENLABS_INBOUND_TENANT_IDS: "t_3303",
       ...EL_INBOUND_ACCESS_BOOT_ENV,
@@ -59,7 +68,6 @@ test("3303-K6: Neustart re-armiert nur den abgehobenen ausgehenden Anruf, der kl
     seed: neustartSeed(),
   });
   try {
-    await waitForLog(srv, /\[el-inbound\] Fristen re-armiert: 1 Anrufe/, LOG_FRIST_MS);
     await waitForLog(srv, new RegExp(`\\[el-inbound\\] frist_abgelaufen call=${ABGEHOBEN_ID}`), LOG_FRIST_MS);
     assert.ok(!srv.stdout.includes(`call=${KLINGELT_ID}`), "der klingelnde Anruf darf keine el-inbound-Zeile erzeugen");
   } finally {

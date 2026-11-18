@@ -77,6 +77,7 @@ function anrufDerRichtung(richtung) {
     startedAt: jetzt,
     elevenlabsConversationId: CONVERSATION_DONE_WITH_ANALYSIS.conversation_id,
     elBoundAt: jetzt,
+    fristAbfrageAt: jetzt,
     ...(eingehend ? { elNachlaufStartedAt: jetzt } : {}),
   });
 }
@@ -92,6 +93,7 @@ async function mitAnruf({ richtung, agentAntwort }, lauf) {
       ...EL_OUTBOUND_BOOT_ENV,
       ELEVENLABS_API_BASE: anbieter.url,
       ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      FRISTEN_TAKT_MS: "40",
     },
     seed: seedState({
       tenants: [{ id: TENANT, idpSubject: SUB, status: "active", ownerName: "Stimmen Kunde" }],

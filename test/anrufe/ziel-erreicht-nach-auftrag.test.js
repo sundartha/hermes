@@ -146,6 +146,7 @@ before(async () => {
       goal: GOAL,
       elevenlabsConversationId: `conv_${n}`,
       answeredAt: new Date().toISOString(),
+      fristAbfrageAt: new Date().toISOString(),
     }),
   );
   srv = await startServer({
@@ -155,6 +156,7 @@ before(async () => {
       ELEVENLABS_API_BASE: `http://127.0.0.1:${elevenLabs.address().port}`,
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      FRISTEN_TAKT_MS: "40",
     },
     seed: seedState({
       tenants: [

@@ -59,8 +59,8 @@ async function startResultMock(gespraech) {
 async function ausgabeNachErgebnisabruf(gespraech) {
   const mock = await startResultMock(gespraech);
   const jetzt = new Date().toISOString();
-  const aktiverAnruf = seedCall({ id: CALL_ID, provider: "telnyx", status: "active", answeredAt: jetzt, startedAt: jetzt, maxDurationS: 3600, elevenlabsConversationId: CONVERSATION_ID });
-  const srv = await startServer({ env: { ELEVENLABS_API_BASE: mock.url, ELEVENLABS_API_KEY: "test-key" }, seed: seedState({ calls: [aktiverAnruf] }) });
+  const aktiverAnruf = seedCall({ id: CALL_ID, provider: "telnyx", status: "active", answeredAt: jetzt, startedAt: jetzt, fristAbfrageAt: jetzt, maxDurationS: 3600, elevenlabsConversationId: CONVERSATION_ID });
+  const srv = await startServer({ env: { ELEVENLABS_API_BASE: mock.url, ELEVENLABS_API_KEY: "test-key", FRISTEN_TAKT_MS: "40" }, seed: seedState({ calls: [aktiverAnruf] }) });
   try {
     await waitForStoreState(srv, (state) => state.calls.find((eintrag) => eintrag.id === CALL_ID)?.status !== "active");
     return srv.stdout;

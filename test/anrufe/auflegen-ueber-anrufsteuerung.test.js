@@ -6,6 +6,7 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;
 const WARTEZEIT_MS = 4000;
+const FRISTEN_TAKT_MS = 40;
 const LANG_VERGANGEN = "2020-01-01T00:00:00.000Z";
 const KURZE_HOECHSTDAUER_S = 60;
 const LANGE_HOECHSTDAUER_S = 180;
@@ -37,6 +38,7 @@ async function mitTelnyxAttrappe(anrufe, ablauf) {
       TELNYX_CONNECTION_ID: "conn_test",
       TELNYX_ACCOUNT_SID: "acct_test",
       TELNYX_API_BASE: attrappe.url,
+      FRISTEN_TAKT_MS: String(FRISTEN_TAKT_MS),
     },
     seed: seedState({ calls: anrufe }),
   });

@@ -709,18 +709,6 @@ function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) 
   return true;
 }
 
-function rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }) {
-  const activeElCalls = store
-    .load()
-    .calls.filter((call) => call.elevenlabsConversationId && pollDarfWirken(call));
-  for (const call of activeElCalls) {
-    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) laufendeInboundPolls.add(call.id);
-    void pollConversationResult(call.id, call.elevenlabsConversationId);
-  }
-  if (activeElCalls.length)
-    console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
-}
-
 async function saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId }) {
   const call = await store.leseCall(callId);
   const conversationId = call?.elevenlabsConversationId;
@@ -880,8 +868,11 @@ export function makeElevenLabsOutbound({
   }
 
   async function abfrageDurchLauf(callId) {
-    const conversationId = (await store.leseCall(callId))?.elevenlabsConversationId;
-    if (conversationId && !laufendeKetten.has(callId)) void pollConversationResult(callId, conversationId);
+    const call = await store.leseCall(callId);
+    const conversationId = call?.elevenlabsConversationId;
+    if (!conversationId || laufendeKetten.has(callId)) return;
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) laufendeInboundPolls.add(callId);
+    void pollConversationResult(callId, conversationId);
   }
 
   async function pollTakt(callId, conversationId) {
@@ -925,7 +916,6 @@ export function makeElevenLabsOutbound({
     initInhaltFor,
     endActiveCall,
     abfrageDurchLauf,
-    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
     awaitAndPersistInboundElResult: (callId) =>
       awaitAndPersistInboundElResult({ store, fetchConversationSoft, stimmenAnzahlFuer, pollMs: settings().resultPollMs, callId }),

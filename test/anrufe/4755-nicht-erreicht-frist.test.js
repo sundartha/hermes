@@ -12,6 +12,7 @@ const CONV_ID = "conv_4755";
 const FRIST_S = 75;
 const MEHRERE_ABFRAGEN = 3;
 const POLL_MS = "100";
+const FRISTEN_TAKT_MS = "40";
 const EL_SIP = "el_convai_sip";
 const TELNYX = "telnyx_budget";
 
@@ -48,6 +49,7 @@ function seed({ alterS, costProfile }) {
         costProfile,
         startedAt: start,
         answeredAt: start,
+        fristAbfrageAt: start,
         maxDurationS: 3600,
         elevenlabsConversationId: CONV_ID,
       }),
@@ -58,7 +60,7 @@ function seed({ alterS, costProfile }) {
 async function mitAnruf({ alterS, gespraech, costProfile = EL_SIP }, pruefe) {
   const attrappe = await starteAnbieterAttrappe(gespraech);
   const srv = await startServer({
-    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: POLL_MS },
+    env: { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key", ELEVENLABS_RESULT_POLL_MS: POLL_MS, FRISTEN_TAKT_MS },
     seed: seed({ alterS, costProfile }),
   });
   try {

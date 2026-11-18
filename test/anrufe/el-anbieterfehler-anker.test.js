@@ -51,7 +51,7 @@ async function pollFixtureConversation(fixture) {
     async (_url, init) =>
       init.method === "GET" ? { ok: true, status: HTTP_OK, json: async () => fixture } : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );
@@ -136,7 +136,7 @@ test("Poll-Obergrenze ueberschritten (Zombie-Anruf): failureReason = result-unkn
       throw new Error("darf nicht aufgerufen werden: die Zeit-Obergrenze entscheidet vor dem Fetch");
     },
     async () => {
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );
@@ -160,9 +160,9 @@ test("dauerhafter Abruf-Fehler (HTTP 404, 3x in Folge): failureReason traegt den
     async (_url, init) =>
       init.method === "GET" ? { ok: false, status: HTTP_NOT_FOUND, json: async () => ({}) } : { ok: true, status: HTTP_OK },
     async () => {
-      el.rearmActiveConversationPolls();
-      el.rearmActiveConversationPolls();
-      el.rearmActiveConversationPolls();
+      await el.abfrageDurchLauf(call.id);
+      await el.abfrageDurchLauf(call.id);
+      await el.abfrageDurchLauf(call.id);
       await waitUntil(() => billed);
     },
   );

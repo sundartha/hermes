@@ -661,8 +661,9 @@ async function starteTelnyxAttrappe() {
 
 test("IEL-B8-22: Neustart waehrend WARTET, abgelaufene Frist - Umleitung scheitert, dann wird aufgelegt (nie Stille)", async () => {
   const telnyx = await starteTelnyxAttrappe();
-  const env2 = { ...EL_AN_ENV, TELNYX_API_BASE: telnyx.url, TELNYX_API_KEY: "test", TELNYX_ACCOUNT_SID: "acc_b8" };
-  const bearbeiten = (call) => Object.assign(call, { answeredAt: new Date(Date.now() - FRIST_UEBERSCHRITTEN_MS).toISOString() });
+  const env2 = { ...EL_AN_ENV, TELNYX_API_BASE: telnyx.url, TELNYX_API_KEY: "test", TELNYX_ACCOUNT_SID: "acc_b8", FRISTEN_TAKT_MS: "40" };
+  const abgehobenAt = new Date(Date.now() - FRIST_UEBERSCHRITTEN_MS).toISOString();
+  const bearbeiten = (call) => Object.assign(call, { answeredAt: abgehobenAt, fristUebergabeAt: abgehobenAt });
   try {
     await mitNeustart({ env: EL_AN_ENV, env2, vorbereiten: (srv) => incomingText(srv), bearbeiten }, async (srv) => {
       const { id } = einzigerCall(srv);

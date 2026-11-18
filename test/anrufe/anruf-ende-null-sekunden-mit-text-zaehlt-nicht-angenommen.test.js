@@ -58,6 +58,7 @@ test("Anruf-Ende: 0 s Anbieterdauer mit gesprochenem Text bleibt completed, zaeh
       ...EL_ENV,
       ELEVENLABS_API_BASE: `http://127.0.0.1:${anbieter.address().port}`,
       METRIKEN_OTLP_URL: empfaenger.url,
+      FRISTEN_TAKT_MS: "40",
     },
     seed: seedState({
       calls: [
@@ -66,6 +67,7 @@ test("Anruf-Ende: 0 s Anbieterdauer mit gesprochenem Text bleibt completed, zaeh
           provider: "telnyx",
           startedAt: vorher,
           answeredAt: vorher,
+          fristAbfrageAt: vorher,
           maxDurationS: 3600,
           elevenlabsConversationId: "conv_text",
         }),
