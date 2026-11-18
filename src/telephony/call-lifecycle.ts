@@ -287,15 +287,11 @@ export function makeCallLifecycle({
   const terminateOverBudgetExpired = (call: Call) => beendeUeberBudgetOhneWeg(call, ohneWeg, budgetAxis);
 
   function scheduleMaxDurationEnd(call: Call, providerCallSid: string, ms: number): void {
-    setTimeout(() => {
-      terminateCappedCall(call.id, providerCallSid, "completed").catch(() => undefined);
-    }, ms);
+    schreibeFrist({ schreibe: (frist) => store.setzeHoechstdauerFrist?.(frist), fehlerText: FRIST_FEHLER }, call, ms);
   }
 
   function armMaxDurationTimer(call: Call, providerCallSid: string): void {
-    const ms = callMaxDurationMs(call);
-    scheduleMaxDurationEnd(call, providerCallSid, ms);
-    schreibeFrist({ schreibe: (frist) => store.setzeHoechstdauerFrist?.(frist), fehlerText: FRIST_FEHLER }, call, ms);
+    scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
     budgetAxis.arm(call.id);
   }
 
