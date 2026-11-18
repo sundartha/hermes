@@ -214,6 +214,7 @@ export function speicherBereiche(speicher) {
     },
     rueckfrageAbschluss: {
       verwaisteSchliessen: async (callId, eingabe) => {
+        if (speicher.leseCall) await speicher.leseCall(callId);
         const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);
         if (changed) speicher.save();
       },
