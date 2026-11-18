@@ -1,0 +1,36 @@
+name: wegwerf-haenger
+on:
+  push:
+    branches: ['wegwerf/**']
+permissions:
+  contents: read
+jobs:
+  datei:
+    name: Teil ${{ matrix.teil }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/postgres
+      - uses: ./.github/actions/node-npm-ci
+        with:
+          web: "false"
+      - name: Datei für Datei mit Zeitgrenze
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: |
+          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 12 == teil % 12')
+          for d in "${dateien[@]}"; do
+            s=$(date +%s)
+            NODE_ENV=test timeout -k 5 150 node --test --test-concurrency=1 "$d" > /tmp/out.txt 2>&1; rc=$?
+            e=$(( $(date +%s) - s ))
+            echo "ERGEBNIS teil=$TEIL rc=$rc sek=$e $d"
+            if [ $rc -ge 124 ]; then echo "::group::HAENGT $d"; tail -40 /tmp/out.txt; echo "::endgroup::"; fi
+          done
