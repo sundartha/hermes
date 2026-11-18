@@ -2,6 +2,6 @@ export const ANRUF_ZUSTAENDE = ["active", "completed", "failed", "cancelled"] as
 
 export type AnrufZustand = (typeof ANRUF_ZUSTAENDE)[number];
 
-export function istAnrufZustand(wert: unknown): wert is AnrufZustand {
-  return ANRUF_ZUSTAENDE.some((zustand) => zustand === wert);
+export function anrufZustandVon(wert: unknown): AnrufZustand | null {
+  return ANRUF_ZUSTAENDE.find((zustand) => zustand === wert) ?? null;
 }
