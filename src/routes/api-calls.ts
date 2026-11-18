@@ -680,7 +680,7 @@ export function makeCallRoutes({
     return res.status(HTTP_CONFLICT).json({ ...vorWahlAbgebrochenBody(call.id), grund });
   }
 
-  async function waehleAnruf(call: Anruf, bestanden: GatesBestanden): Promise<Wahlausgang> {
+  const waehleAnruf: WaehleAnruf = async (call, bestanden) => {
     if (!bestanden.gilt) throw new TypeError("Wählen ohne bestandene Gates");
     const wahl = outboundWegFuer({ config, store, call });
     meldeOutboundWeg({ callId: call.id, wahl });
@@ -691,7 +691,7 @@ export function makeCallRoutes({
     if (vorspann.rueckfall) return { abbruch: { grund: vorspann.rueckfall } };
     const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
     return { callControlId: gewaehlt.callControlId };
-  }
+  };
 
   function armeTimer(call: Anruf) {
     armMaxDurationTimer(call, call.twilioSid);
