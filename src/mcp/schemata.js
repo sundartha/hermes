@@ -10,7 +10,6 @@ export const CALL_STATUS_OUTPUT = {
   answered_at: z.string().nullable().optional(),
   last_transcript_lines: z.array(z.string()),
   failure_reason: z.string().nullable(),
-  stimmen_anzahl: z.number().optional(),
 };
 
 const RESULT_CARD_OUTPUT = {
@@ -33,7 +32,6 @@ export const CALL_RESULT_OUTPUT = {
   objective_achieved: z.union([z.boolean(), z.string()]),
   ...RESULT_CARD_OUTPUT,
   next_steps: z.array(NEXT_STEP_OUTPUT),
-  stimmen_anzahl: z.number().optional(),
 };
 
 export const AWAIT_EVENT_OUTPUT = {

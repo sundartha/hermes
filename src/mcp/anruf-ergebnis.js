@@ -1,3 +1,4 @@
+import { STIMMEN_ANZAHL_META_KEY } from "../ui/widget-i18n.js";
 import { resultCardView } from "../call-result.ts";
 import { localeFor } from "../i18n/locales.js";
 import { maskRestrictedText } from "../restricted-data.js";
@@ -12,8 +13,8 @@ export function callOutcomeView(call) {
   return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
 }
 
-export function stimmenView(call) {
-  return Number.isInteger(call.stimmenAnzahl) ? { stimmen_anzahl: call.stimmenAnzahl } : {};
+export function stimmenMeta(call) {
+  return Number.isInteger(call.stimmenAnzahl) ? { [STIMMEN_ANZAHL_META_KEY]: call.stimmenAnzahl } : {};
 }
 
 const AWAIT_SUMMARY_PLACEHOLDER = localeFor("de").mcp.awaitSummary;

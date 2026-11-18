@@ -17,7 +17,7 @@ import {
 } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
-import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps, maskedTranscript, stimmenView } from "./anruf-ergebnis.js";
+import { mapStatus, callOutcomeView, pickTranscript, maskedNextSteps, maskedTranscript, stimmenMeta } from "./anruf-ergebnis.js";
 
 const LAST_TRANSCRIPT_LINES = 6;
 
@@ -50,7 +50,6 @@ function pickCallStatus(callId, call, texts) {
   return {
     call_id: callId,
     ...callOutcomeView(call),
-    ...stimmenView(call),
     ...callTimestamps(call),
     duration_s: durationS(call),
     last_transcript_lines: visibleLines.map((transcriptLine) =>
@@ -86,7 +85,6 @@ function summaryLanguageOf(callRecord, tenantLanguage) {
 function callResultReply(callId, callRecord, loc) {
   const data = {
     ...pickTranscript(callId, callRecord, loc.mcp),
-    ...stimmenView(callRecord),
     next_steps: maskedNextSteps(callRecord.result),
   };
   const text = jsonText({
@@ -105,6 +103,7 @@ function callResultReply(callId, callRecord, loc) {
     _meta: {
       ...summaryContentMeta([callRecord], loc.language),
       transcript: maskedTranscript(callRecord.transcript),
+      ...stimmenMeta(callRecord),
     },
   };
 }
@@ -132,6 +131,7 @@ async function callStatusResult({ call, loc }, callId) {
   const callRecord = await call("GET", `/api/calls/${callId}`);
   requireFields(callRecord, { transcript: "array" });
   const data = pickCallStatus(callId, callRecord, loc.mcp);
+  const meta = stimmenMeta(callRecord);
   return {
     content: [
       {
@@ -144,6 +144,7 @@ async function callStatusResult({ call, loc }, callId) {
       },
     ],
     structuredContent: data,
+    ...(Object.keys(meta).length ? { _meta: meta } : {}),
   };
 }
 
