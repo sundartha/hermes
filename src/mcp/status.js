@@ -13,13 +13,23 @@ function permissionsSummary(settings, labels) {
   );
 }
 
+function permissionsSentence(settings, agentStatusTexts) {
+  const items = agentStatusTexts.permissionItems;
+  const allowed = [
+    settings.allowSummaries === true ? items.summaries : null,
+    settings.allowPersonalData === true ? items.personalData : null,
+    settings.allowBankData === true ? items.bankData : null,
+  ].filter((item) => item !== null);
+  return allowed.length === 0 ? agentStatusTexts.permissionsNone : agentStatusTexts.permissionsAllowed(allowed);
+}
+
 function pickAgentStatus(state, texts) {
   return {
     number: state.agent.number ?? null,
     owner: state.agent.owner ?? null,
     calls: state.usage.calls,
     planUsagePercent: state.usage.planUsagePercent ?? null,
-    permissions: permissionsSummary(state.settings, texts.permissionLabels),
+    permissions: permissionsSentence(state.settings, texts.agentStatus),
   };
 }
 
@@ -76,7 +86,7 @@ export function registerGetAgentStatus({ call, loc, enableWidgetUi, uiTool }) {
               `${agentStatusTexts.number}: ${data.number}\n${agentStatusTexts.owner}: ${data.owner}\n` +
               `${agentStatusTexts.calls}: ${data.calls}\n` +
               `${planUsageLine(data.planUsagePercent, agentStatusTexts)}\n` +
-              `${agentStatusTexts.permissions}: ${data.permissions}`,
+              `${agentStatusTexts.permissions}: ${permissionsSummary(state.settings, loc.mcp.permissionLabels)}`,
           },
         ],
         structuredContent: data,

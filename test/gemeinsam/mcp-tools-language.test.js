@@ -276,23 +276,17 @@ test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () 
   }
 });
 
-test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch (ex MCP-09)", async () => {
+test("Berechtigungen folgen der Tenant-Sprache als lesbarer Satz (ex MCP-09)", async () => {
   await withGateway(AGENT_STATE_FIXTURE, async () => {
-    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
-      .get("get_agent_status")();
-    assert.equal(
-      de.structuredContent.permissions,
-      "Summaries=true, PersoenlicheDaten=false, Bankdaten=false",
-      "DE bleibt byte-identisch zum Bestand",
-    );
-    for (const language of ["en", "fr"]) {
+    const erwartet = {
+      de: "Darf Zusammenfassungen weitergeben",
+      en: "May share summaries",
+      fr: "Peut partager les résumés",
+    };
+    for (const language of ["de", "en", "fr"]) {
       const result = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
         .get("get_agent_status")();
-      assert.doesNotMatch(result.structuredContent.permissions, /PersoenlicheDaten|Bankdaten/,
-        `Sprache ${language} darf keine deutschen Feldnamen tragen`);
-      assert.match(result.structuredContent.permissions,
-        new RegExp(`^${MCP_TEXTS[language].permissionLabels.summaries}=true, `),
-        "Wert kommt aus DEMSELBEN Locale-Buendel, kein zweiter Katalog");
+      assert.equal(result.structuredContent.permissions, erwartet[language]);
     }
   });
 });

@@ -89,5 +89,28 @@
     }
   })();
   </script>
+  <script>
+  (function () {
+    "use strict";
+    var anrufe = document.querySelector('[data-mcp="calls"]');
+    var anzahl = null;
+    function t(key) {
+      var i18n = window.HermesI18n;
+      return i18n && typeof i18n.t === "function" ? i18n.t(key) : key;
+    }
+    function zeige() {
+      if (anzahl === null) return;
+      anrufe.textContent = t("{n} this month").replace("{n}", String(anzahl));
+    }
+    function lies() {
+      var roh = String(anrufe.textContent).trim();
+      if (!/^\d+$/.test(roh)) return;
+      anzahl = Number(roh);
+      zeige();
+    }
+    new MutationObserver(lies).observe(anrufe, { childList: true, characterData: true, subtree: true });
+    new MutationObserver(zeige).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+  })();
+  </script>
 </body>
 </html>
