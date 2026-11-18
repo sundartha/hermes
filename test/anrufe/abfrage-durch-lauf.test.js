@@ -84,3 +84,22 @@ test("Abfrage durch den Lauf: bei einem gebundenen eingehenden Anruf startet das
 
   assert.equal(anbieter.maxOffen, 1);
 });
+
+test("Abfrage durch den Lauf: bei einem ausgehenden Anruf merkt sich der Lauf keinen Nachlauf, das Start-Tor des Nachlaufs startet die Kette selbst", async () => {
+  const state = leererZustand();
+  const call = seedAusgehenderElCall(state, { answeredVorS: GESPRAECH_S, mitGespraech: true });
+  const harness = baueHarness(state);
+  const anbieter = makeAnbieter(async () => okAntwort(CONVERSATION_IN_PROGRESS));
+
+  await mitAnbieter({ state, anbieter }, async () => {
+    const freigeben = haltAbrufFest(anbieter);
+    await harness.el.abfrageDurchLauf(call.id);
+    await waitUntil(() => anbieter.offen === 1, WARTE);
+    harness.el.startInboundNachlauf(call.id);
+    await waitUntil(() => anbieter.offen === 2, WARTE);
+    freigeben(okAntwort(CONVERSATION_IN_PROGRESS));
+    await beendeSchleifen(state, anbieter);
+  });
+
+  assert.equal(anbieter.maxOffen, 2);
+});
