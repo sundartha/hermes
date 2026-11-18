@@ -43,6 +43,11 @@ function stimmeGerissen(messung) {
   return anzahl > 1 ? ["stimmwechsel"] : [];
 }
 
+function ergebnisGerissen(messung) {
+  if (!Object.hasOwn(messung, "ergebnisVorgetragen")) return [];
+  return messung.ergebnisVorgetragen === true ? [] : ["ergebnis_fehlt"];
+}
+
 export function urteilen(messung) {
   if (messung === null || typeof messung !== "object") return { gruen: false, gerissen: ["messung"] };
   const gerissen = [];
@@ -53,6 +58,7 @@ export function urteilen(messung) {
   if (!(messung.dauerSekunden <= DAUER_GRENZE_S)) gerissen.push("dauer");
   if (messung.stillstandSekunden > STILLSTAND_GRENZE_S) gerissen.push("stillstand");
   gerissen.push(...stimmeGerissen(messung));
+  gerissen.push(...ergebnisGerissen(messung));
   if (messung.status !== STATUS_BEENDET) gerissen.push("status");
   return { gruen: gerissen.length === 0, gerissen };
 }
