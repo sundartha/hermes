@@ -112,7 +112,7 @@ interface CallLifecycle {
   armMaxDurationTimer: (call: Call, providerCallSid: string) => void;
   armReserveReleaseTimer: (call: Call) => void;
   reattachActiveCall: (callId: string) => Promise<ReattachResult>;
-  terminateExpiredCall: (call: Call, abgelaufenNachStart?: boolean) => Promise<void>;
+  terminateExpiredCall: (call: Call) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
   releaseReserve: (call: Call) => unknown;
@@ -281,9 +281,12 @@ export function makeCallLifecycle({
 
   const ohneWeg = (call: Call) => loescheOhneAuflegeweg(call, { hangUpAction, voiceControl, endActiveCall });
 
-  async function terminateExpiredCall(call: Call, abgelaufenNachStart = false): Promise<void> {
+  const prozessStartMs = Date.now();
+
+  async function terminateExpiredCall(call: Call): Promise<void> {
     await ohneWeg(call);
-    await terminateCappedCall(call.id, call.twilioSid, abgelaufenNachStart ? "completed" : "failed");
+    const zombie = classifyCallTime(call, prozessStartMs, MAX_CALL_DURATION_CAP_S).expired;
+    await terminateCappedCall(call.id, call.twilioSid, zombie ? "failed" : "completed");
   }
 
   const terminateOverBudgetExpired = (call: Call) => beendeUeberBudgetOhneWeg(call, ohneWeg, budgetAxis);
