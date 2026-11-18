@@ -300,7 +300,7 @@ export function makeTrunkSweep({
       return mitEndung(number, SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG);
     const lies = (phoneNumberId: string | null | undefined) =>
       elRead.fetchPhoneNumber(phoneNumberId, { timeoutMs: TRUNK_ABRUF_FRIST_MS }).catch((fehler: unknown) => {
-        logger.log(`${LOG_PRAEFIX} abruf_fehler nummer_id=${number.id} status=${abrufStatus(fehler)}`);
+        logger.log(`${LOG_PRAEFIX} abruf_fehler endung=${e164Endung(number.e164)} status=${abrufStatus(fehler)}`);
         throw fehler;
       });
     const abruf = await leseTrunkBeleg({ lies, number, soll: sollZugang() });

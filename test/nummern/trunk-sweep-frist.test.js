@@ -67,7 +67,7 @@ test("Abgelaufene Frist: Nummer gilt nicht als belegt, Log nennt status=timeout"
   };
   const { zeilen, aufrufe, laeuft } = lauf(elRead);
   await laeuft;
-  assert.ok(zeilen.includes("[el-trunk] abruf_fehler nummer_id=num_frist status=timeout"), zeilen.join("\n"));
+  assert.ok(zeilen.includes("[el-trunk] abruf_fehler endung=…5378 status=timeout"), zeilen.join("\n"));
   assert.equal(aufrufe.mark, 0);
   assert.match(zeilen.at(-1), /belegt=0 .*unbekannt=1/);
 });
@@ -76,7 +76,7 @@ test("Fehlerstatus des Anbieters steht im Log", async () => {
   const fehler = Object.assign(new Error("ElevenLabs Nummernabruf fehlgeschlagen: HTTP 503"), { providerStatus: HTTP_UNAVAILABLE });
   const { zeilen, aufrufe, laeuft } = lauf({ fetchPhoneNumber: () => Promise.reject(fehler) });
   await laeuft;
-  assert.ok(zeilen.includes("[el-trunk] abruf_fehler nummer_id=num_frist status=503"), zeilen.join("\n"));
+  assert.ok(zeilen.includes("[el-trunk] abruf_fehler endung=…5378 status=503"), zeilen.join("\n"));
   assert.equal(aufrufe.mark, 0);
   assert.equal(aufrufe.clear, 0);
 });
@@ -85,14 +85,14 @@ test("404 loggt den Status und bleibt Abweichung", async () => {
   const fehler = Object.assign(new Error("weg"), { providerStatus: HTTP_NOT_FOUND });
   const { zeilen, aufrufe, laeuft } = lauf({ fetchPhoneNumber: () => Promise.reject(fehler) });
   await laeuft;
-  assert.ok(zeilen.includes("[el-trunk] abruf_fehler nummer_id=num_frist status=404"), zeilen.join("\n"));
+  assert.ok(zeilen.includes("[el-trunk] abruf_fehler endung=…5378 status=404"), zeilen.join("\n"));
   assert.equal(aufrufe.clear, 1);
 });
 
 test("Anderer Fehler ohne Status und ohne Frist loggt status=fehler und kein Geheimnis", async () => {
   const { zeilen, laeuft } = lauf({ fetchPhoneNumber: () => Promise.reject(new Error("GEHEIM-key_frist")) });
   await laeuft;
-  assert.ok(zeilen.includes("[el-trunk] abruf_fehler nummer_id=num_frist status=fehler"), zeilen.join("\n"));
+  assert.ok(zeilen.includes("[el-trunk] abruf_fehler endung=…5378 status=fehler"), zeilen.join("\n"));
   assert.ok(!zeilen.join("\n").includes("GEHEIM"));
 });
 
