@@ -107,6 +107,11 @@ async function vermerkeElFehler({ call, store, inboundBridges, now, rueckfall = 
   }
 }
 
+async function vermerkeElNichtAngenommen({ ereignis, ...args }) {
+  meldeElBeinAufgelegt(args.call.id, ereignis);
+  await vermerkeElFehler({ ...args, rueckfall: EL_NICHT_ANGENOMMEN });
+}
+
 const vermerkeElFrist = (args) =>
   vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: VORSPANN_WAHL_GRUND.EL_FRIST });
 
@@ -232,10 +237,7 @@ export function makeVorspannAblauf({
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
-    if (elVorBruecke({ vomElBein, stand: zustand.stand })) {
-      meldeElBeinAufgelegt(call.id, ereignis);
-      await vermerkeElFehler({ call, store, inboundBridges, now, rueckfall: EL_NICHT_ANGENOMMEN });
-    }
+    if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis });
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
     const aufzeichnung = await store.leseCall(call.id);

@@ -90,7 +90,10 @@ afterEach(async () => {
 });
 
 let zaehler = 0;
-const anrufIn = (id) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === id);
+const anrufIn = (id) => {
+  const { calls } = umgebung.srv.readStore();
+  return calls.find((eintrag) => eintrag.id === id);
+};
 const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
 const aufgelegtLog = (ursache, callId) =>
