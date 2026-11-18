@@ -53,3 +53,5 @@ scripts/           check-setup.js (npm run check), set-public-url.js
   nur noch der Betreiber-Teil — IdP-Account (WorkOS) + scharf schalten. Einstellungen:
   `MCP_AUTH` und `OAUTH_ISSUER_URL`, erklärt im Abschnitt „MCP ueber HTTP“ der `.env.example`.
   Bis dahin schützt `/mcp` die fail-closed-Default (localhost) bzw. `MCP_AUTH_TOKEN`.
+
+Hinweis (Testbau 2026-11-18): Diese Zeile wurde von einer Server-Kette gebaut und belegt, dass der Bauweg auch dort läuft.
