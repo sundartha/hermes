@@ -24,6 +24,7 @@ function normalizeContextReceived(cr) {
 
 export function registerPlaceCall({
   consultAllowed,
+  consultTore,
   placeCallHopCall,
   loc,
   uiTool,
@@ -59,9 +60,13 @@ export function registerPlaceCall({
         deduplicated: !!placed.deduplicated,
       };
       const started = jsonText({ call_id: data.call_id, status: data.status });
+      const geschlosseneTore = Object.entries(consultTore)
+        .filter(([, offen]) => !offen)
+        .map(([tor]) => tor);
       const hinweise = [
         data.deduplicated ? loc.mcp.callAlreadyRunningHint : null,
         consultAllowed ? loc.mcp.consultPermissionHint : null,
+        geschlosseneTore.length > 0 ? loc.mcp.consultNotReleasedHint(geschlosseneTore) : null,
       ].filter(Boolean);
       return {
         content: [{ type: "text", text: [started, ...hinweise].join("\n") }],
