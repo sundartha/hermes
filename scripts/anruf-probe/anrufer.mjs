@@ -1,5 +1,6 @@
 import { env } from "node:process";
 
+import { LOCALES } from "../../src/i18n/locales.js";
 import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { DAUER_GRENZE_S } from "./urteil.mjs";
 import { ABSTAND_MS } from "./wiederholung.mjs";
@@ -18,6 +19,7 @@ const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, 
 const TAG_LAENGE = 10;
 const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
+const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
@@ -129,7 +131,8 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     const beginn = uhr.jetzt();
     for (;;) {
       const ergebnis = await ruf("get_call_result", { call_id: callId }).catch(() => undefined);
-      if (typeof ergebnis?.result_summary === "string" && ergebnis.result_summary.trim() !== "") return true;
+      const text = ergebnis?.result_summary;
+      if (typeof text === "string" && text.trim() !== "" && !ZUSAMMENFASSUNG_PLATZHALTER.includes(text)) return true;
       if (uhr.jetzt() - beginn >= ERGEBNIS_FRIST_MS) return false;
       await uhr.warte(TAKT_MS);
     }

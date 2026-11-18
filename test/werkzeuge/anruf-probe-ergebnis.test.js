@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 import { PROBE_STAGING_TEST_TOKEN, PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
+import { LOCALES } from "../../src/i18n/locales.js";
 
 const BASIS = "https://hermes-staging-erpv.onrender.com";
 const ZIEL = "+12722205602";
@@ -112,6 +113,16 @@ const ANRUFER_FAELLE = [
   ["erst Fehler, dann Zusammenfassung", ["fehler", "fehler", ZUSAMMENFASSUNG], true],
   ["erst leer, dann Zusammenfassung", [{ call_id: "c1", result_summary: "" }, ZUSAMMENFASSUNG], true],
   ["dauerhaft Fehler", ["fehler"], false],
+  ...Object.entries(LOCALES).map(([sprache, locale]) => [
+    `Platzhalter ${sprache} bis zur Frist`,
+    [{ call_id: "c1", result_summary: locale.mcp.awaitSummary }],
+    false,
+  ]),
+  [
+    "erst Platzhalter, dann Zusammenfassung",
+    [{ call_id: "c1", result_summary: LOCALES.de.mcp.awaitSummary }, ZUSAMMENFASSUNG],
+    true,
+  ],
 ];
 
 for (const [name, ergebnisse, erwartet] of ANRUFER_FAELLE) {
