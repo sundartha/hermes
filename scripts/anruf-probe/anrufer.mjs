@@ -1,5 +1,6 @@
 import { env } from "node:process";
 
+import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { DAUER_GRENZE_S } from "./urteil.mjs";
 import { ABSTAND_MS } from "./wiederholung.mjs";
 
@@ -16,6 +17,8 @@ const RICHTUNG = "eingehend";
 const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
 const TAG_LAENGE = 10;
 const LISTE_OBERGRENZE = 30;
+const GEGEN_VORLAUF_MS = 5000;
+const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
   jetzt: () => Date.now(),
   warte: (ms) => new Promise((fertig) => setTimeout(fertig, ms)),
@@ -45,7 +48,7 @@ async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur =
   if (!ergebnis || ergebnis.isError || (!ohneStruktur && !ergebnis.structuredContent)) {
     throw new Error(`mcp_${name}_fehlgeschlagen`);
   }
-  return ergebnis.structuredContent;
+  return { ...ergebnis.structuredContent, _meta: ergebnis._meta };
 }
 
 function gegenseitenText(zeile) {
@@ -102,6 +105,8 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
   const abbrechen = (callId) =>
     werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
+  let probeStartMs = Number.NaN;
+
   async function beobachten(callId) {
     const beginn = uhr.jetzt();
     let verlauf = verlaufNeu();
@@ -144,6 +149,15 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       for (const anruf of offene) await abbrechen(anruf.id);
       return offene.length;
     },
+    stimmenAnzahl: async () => {
+      const { calls } = await ruf("list_calls", {});
+      for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
+        const gegen = await ruf("get_call_status", { call_id: anruf.id });
+        const nach = Date.parse(gegen.started_at) - probeStartMs;
+        if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+      }
+      return undefined;
+    },
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
         to: nummer,
@@ -159,6 +173,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
         throw fehler;
       }
       const { stand, begruessung, gegenseite, stillstandSekunden } = beobachtet;
+      probeStartMs = Date.parse(stand.started_at);
       return {
         annahmeSekunden: (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
         begruessung,

@@ -36,6 +36,13 @@ function begruessungText(messung) {
   return typeof messung.begruessung === "string" ? messung.begruessung.trim() : "";
 }
 
+function stimmeGerissen(messung) {
+  if (!Object.hasOwn(messung, "stimmenAnzahl")) return [];
+  const anzahl = messung.stimmenAnzahl;
+  if (!Number.isInteger(anzahl) || anzahl < 1) return ["stimme_unklar"];
+  return anzahl > 1 ? ["stimmwechsel"] : [];
+}
+
 export function urteilen(messung) {
   if (messung === null || typeof messung !== "object") return { gruen: false, gerissen: ["messung"] };
   const gerissen = [];
@@ -45,6 +52,7 @@ export function urteilen(messung) {
   if (eroeffnungenZaehlen(messung) > 1) gerissen.push("eroeffnung_doppelt");
   if (!(messung.dauerSekunden <= DAUER_GRENZE_S)) gerissen.push("dauer");
   if (messung.stillstandSekunden > STILLSTAND_GRENZE_S) gerissen.push("stillstand");
+  gerissen.push(...stimmeGerissen(messung));
   if (messung.status !== STATUS_BEENDET) gerissen.push("status");
   return { gruen: gerissen.length === 0, gerissen };
 }
