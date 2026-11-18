@@ -204,7 +204,7 @@ export function setzeAbfrageImSpiegel(state, { callId, faelligAt }) {
 export function setzeUebergabeImSpiegel(state, { callId, faelligAt }) {
   const call = state.calls.find((eintrag) => eintrag.id === callId);
   if (call?.status !== "active") return;
-  const bleibt = faelligAt !== null && call.fristUebergabeAt && alsMs(call.fristUebergabeAt) < alsMs(faelligAt);
+  const bleibt = alsMs(call.fristUebergabeAt) < alsMs(faelligAt);
   if (!bleibt) call.fristUebergabeAt = faelligAt;
   call.fristUebergabeVersuche = 0;
 }
