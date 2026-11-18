@@ -50,7 +50,7 @@
     <dl class="sheet angaben">
       <div class="zeile rise d1"><dt data-i18n="Owner">Owner</dt><dd data-mcp="owner">—</dd></div>
       <div class="zeile rise d2"><dt data-i18n="Number">Number</dt><dd data-mcp="number">—</dd></div>
-      <div class="zeile rise d3"><dt data-i18n="Calls">Calls</dt><dd data-mcp="calls">—</dd></div>
+      <div class="zeile rise d3"><dt data-i18n="Calls">Calls</dt><dd data-mcp="callsThisMonth">—</dd></div>
       <div class="zeile rise d4"><dt data-i18n="Permissions">Permissions</dt><dd data-mcp="permissions">—</dd></div>
     </dl>
     <span class="rimcard" aria-hidden="true"></span>
@@ -92,7 +92,7 @@
   <script>
   (function () {
     "use strict";
-    var anrufe = document.querySelector('[data-mcp="calls"]');
+    var anrufe = document.querySelector('[data-mcp="callsThisMonth"]');
     var anzahl = null;
     function t(key) {
       var i18n = window.HermesI18n;

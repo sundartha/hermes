@@ -672,12 +672,13 @@ const RICH_STATE = {
   calls: [{ id: "c1", from: "+49170000000" }],
 };
 const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS);
-const AGENT_KEYS = ["calls", "number", "owner", "permissions", "planUsagePercent"];
+const AGENT_KEYS = ["calls", "callsThisMonth", "number", "owner", "permissions", "planUsagePercent"];
 const PERMISSIONS_STR_DE = "Darf Zusammenfassungen weitergeben";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
   owner: z.string().nullable(),
   calls: z.number(),
+  callsThisMonth: z.number(),
   planUsagePercent: z.number().nullable(),
   permissions: z.string(),
 });

@@ -1281,6 +1281,7 @@
         "additionalProperties": false,
         "required": [
           "calls",
+          "callsThisMonth",
           "number",
           "owner",
           "permissions",
@@ -1300,6 +1301,9 @@
             ]
           },
           "calls": {
+            "type": "number"
+          },
+          "callsThisMonth": {
             "type": "number"
           },
           "planUsagePercent": {

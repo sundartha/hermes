@@ -78,6 +78,7 @@ export const AGENT_STATUS_OUTPUT = {
   number: z.string().nullable(),
   owner: z.string().nullable(),
   calls: z.number(),
+  callsThisMonth: z.number(),
   planUsagePercent: z.number().nullable(),
   permissions: z.string(),
 };
