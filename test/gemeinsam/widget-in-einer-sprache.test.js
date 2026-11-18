@@ -435,6 +435,7 @@ const KENNUNG_OHNE_SPRACHE = Object.freeze({
   call_id: "Kennung",
   status: "roher Statuswert, unsichtbar (slot-hidden), angezeigt wird die Beschriftung",
   "data-duration-display": "Zeit als m:ss",
+  "data-number-display": "Rufnummer, sprachunabhaengig",
 });
 const IN_NUTZERSPRACHE = Object.freeze({
   result_summary: "Ergebnis-Text, Sprache ueber hermes/content_locale geprueft",
@@ -442,6 +443,7 @@ const IN_NUTZERSPRACHE = Object.freeze({
   next_step: "Ergebnis-Karte, Sprache ueber hermes/content_locale geprueft",
   "data-failure-display": "Beschriftung mit Schluessel",
   "data-objective-display": "Beschriftung mit Schluessel",
+  "data-assignment-display": "Auftragssatz, Sprache ueber hermes/content_locale geprueft",
   "data-hud-phase": "Beschriftung mit Schluessel",
 });
 

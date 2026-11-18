@@ -34,7 +34,7 @@
   .ph-live .pill,.ph-done .pill{clip-path:inset(0 round 22px)}
   .ph-live .pill::before,.ph-done .pill::before{opacity:0}
   .ph-done .pill{background:#f2ece3;color:#15130f}
-  .zeile[data-row="summary"],.zeile[data-row="assignment"]{box-sizing:border-box;max-height:120px;overflow-y:auto}
+  .zeile[data-row="summary"]{box-sizing:border-box;max-height:120px;overflow-y:auto}
   .ph-fail .pill,.ph-cancel .pill{background:transparent;box-shadow:none}
   .ph-fail .pill::before,.ph-cancel .pill::before{border-color:var(--line2);box-shadow:none}
   .ph-dial .ga{opacity:.5}.ph-live .ga{opacity:1}.ph-done .ga{opacity:.8}
@@ -156,7 +156,6 @@
   (function () {
     "use strict";
 
-    // Self-Poll-Takt + Kein-Live-Update-Grenze.
     var POLL_CONNECTING_MS = 3000;
     var POLL_INTERVAL_MS = 5000;
     var TIMER_TOLERANCE_S = 1;
@@ -166,47 +165,25 @@
     var MAX_RESULT_RETRIES = 5;
     var AWAIT_SUMMARIES = /*__AWAIT_SUMMARIES__*/;
 
-    // Tool-Namen wie server-seitig registriert (src/mcp-tools.js).
     var TOOL_GET_STATUS = "get_call_status";
     var TOOL_GET_CALL_RESULT = "get_call_result";
     var TOOL_CANCEL = "cancel_call";
 
-    // Wire-Formate der MCP-Apps-Spec (SEP-1865 / ext-apps 2026-01-26). METHOD_TOOLS_CALL
-    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls; fruehere, erfundene
-    // Wire-Strings duerfen hier nirgends woertlich stehen (Spec-Gate, s.
-    // test/mcp-ui-w1-call-widget.test.js).
-    // METHOD_TOOL_RESULT = Kanal A (Host-Push, den der geteilte BIND_SCRIPT ohnehin
-    // bindet - wir werten ihn zusaetzlich selbst aus, um Terminal-Status zu erkennen).
     var METHOD_TOOLS_CALL = "tools/call";
     var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
-    // Ready-Signal des geteilten BIND_SCRIPT (src/ui/widget-bind.js: UI_READY_FLAG /
-    // UI_READY_EVENT) - gesetzt, sobald der Host die ui/initialize-Anfrage beantwortet
-    // hat. Ein self-contained Iframe-Skript kann nicht importieren, die Namen sind hier
-    // deshalb woertlich dupliziert; ein Sync-Test (test/mcp-ui-w1-call-widget.test.js)
-    // haelt beide Quellen zusammen (kein stiller Drift).
     var UI_READY_FLAG = "__hermesUiReady";
     var UI_READY_EVENT = "hermes:ui-ready";
 
-    // Aufeinanderfolgende JSON-RPC-Fehlerantworten, nach denen Weiter-Pollen sinnlos ist
-    // (haeufigster Fall: die Tool-Berechtigung im Connector steht auf "Fragen" - eine
-    // Rueckfrage kann ein Widget nicht beantworten). Ein Erfolg setzt den Zaehler zurueck.
     var MAX_CONSECUTIVE_RPC_ERRORS = 3;
 
     var TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
     var EMDASH = "—";
     var I18N_ATTR = "data-i18n";
 
-    // Lokalisierung: window.HermesI18n kommt aus dem im <head> injizierten
-    // I18N_SCRIPT (widget-i18n.js) und ist hier synchron verfuegbar. Faellt es
-    // aus, degradiert t() auf die Keys - die SIND englische Texte (fail-safe).
     var t = window.HermesI18n && typeof window.HermesI18n.t === "function"
       ? window.HermesI18n.t
       : function (key) { return key; };
 
-    // Anzeige-Labels (reine Praesentation) fuer die failure_reason-Basis-Token aus
-    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS - die Klassifikation lebt
-    // nur dort; unbekannt -> "Failed" (failureReasonKey). Ein neues Token braucht hier
-    // eine Zeile, sonst schlaegt der zugehoerige Test (test/mcp-ui-widget-i18n.test.js) fehl.
     var FAILURE_REASON_LABELS = {
       "no-answer": "No answer",
       "busy": "Busy",
@@ -216,23 +193,12 @@
       "unreachable": "Unreachable",
       "result-unknown": "Result unknown",
       "at-capacity": "At capacity",
-      // Diese zwei internen Token existieren bereits als Satz in FAILURE_REASON_TEXTS
-      // (i18n/failure-reason-texts.js), hatten hier aber nie ein Kurzlabel - sie
-      // erschienen bislang ROH ("max-duration-cap") in der Karte.
       "max-duration-cap": "Duration limit",
       "budget-exhausted": "Budget used up",
     };
 
-    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (One-Switch-Regel: ein neuer
-    // Status braucht GENAU EINE Zeile). Die 5 WingMark-Zustaende sind fix - cancelled
-    // nutzt bewusst den wingStatus von failed.
     var WING_STATUS_IDLE = "idle";
 
-    // Ring-Geometrie (Olympus-HUD): rein dekorativ, kein echter Fortschritts-
-    // Prozentsatz in den Slots verfuegbar - kurzer/wandernder Bogen bei
-    // dialing/in_progress (CSS-Rotation via ring--spin), geschlossener Ring bei
-    // completed, unterbrochener gedaempfter Ring bei failed/cancelled. Muss VOR
-    // STATUS_VIEW stehen, da dessen ringPreset-Eintraege darauf aufbauen.
     var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. test/mcp-ui-w1-call-widget.test.js
     var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
     var RING_ARC_DIALING_PX = 110;
@@ -241,8 +207,6 @@
     var RING_ARC_INTERRUPTED_GAP_PX = 23;
     var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
 
-    // pillLabel/hudPhase tragen den Uebersetzungs-KEY: die Sprache steht erst mit dem ersten
-    // Tool-Ergebnis fest, t(...) laeuft deshalb erst zur Anwendezeit (updateStatusPill/-HudPhase).
     var STATUS_VIEW = {
       dialing: {
         phase: "dial",
@@ -292,11 +256,6 @@
       },
     };
 
-    // Alle moeglichen Wing-Status-Modifier-Klassen ("wing--idle", "wing--connecting",
-    // ...), aus WING_STATUS_IDLE + STATUS_VIEW abgeleitet statt ein zweites Mal
-    // hartcodiert - dedupliziert, da mehrere Call-Status auf denselben
-    // Wing-Status faellen (cancelled -> error, s.o.). updateWingForStatus nutzt diese
-    // Liste, um NUR den Status-Teil der Klasse zu wechseln (s. dort).
     var WING_MODIFIER_CLASSES = (function collectWingModifierClasses() {
       var seen = {};
       var classes = [];
@@ -312,9 +271,6 @@
       return classes;
     })();
 
-    // Fluegel-Held (Olympus-HUD): Mount-Groesse der Canvas-Engine, deckt sich
-    // mit --wing-size im CSS oben - Kreuzpruefung gegen Drift siehe
-    // test/mcp-ui-w1-call-widget.test.js.
     var WING_CANVAS_SIZE_PX = 72;
     var WING_FPS_CAP = 60;
 
@@ -362,16 +318,12 @@
       el.textContent = dashIfEmpty(value);
     }
 
-    // Anzeige-Elemente ohne data-mcp (s. Markup-Kommentar bei .rows): werden
-    // NUR von diesem Skript beschrieben, nie vom geteilten BIND_SCRIPT.
     function setDisplayText(selector, value) {
       var el = doc.querySelector(selector);
       if (!el) return;
       el.textContent = dashIfEmpty(value);
     }
 
-    // Sekunden -> "m:ss" (sprachneutral, tabular-nums im CSS). Anrufe sind
-    // durch die Max-Dauer-Sicherung kurz; Stundenformat braucht es nicht.
     function formatDuration(totalSeconds) {
       var s = Math.max(0, Math.floor(totalSeconds));
       var rest = s % 60;
@@ -474,9 +426,6 @@
       if (el) el.style.display = visible ? "" : "none";
     }
 
-    // Gemeinsamer Helfer fuer die beiden skalaren Ergebnis-Karten-Felder
-    // (outcome/next_step). Zeile bleibt VERSTECKT, wenn das Feld leer ist - eine Zeile
-    // "Naechster Schritt: —" ist Rauschen, kein Ergebnis.
     function applyResultRow(key, value, allowed) {
       var present = allowed && typeof value === "string" && value.length > 0;
       setRowVisible(key, present);
@@ -490,9 +439,6 @@
       btn.style.display = disabled ? "none" : "";
     }
 
-    // className-Token-Helfer (kein DOM-classList-Zwang - funktioniert mit jedem
-    // Element, das nur .className als String kennt). Ersetzen GENAU ein Token,
-    // ruehren den Rest der Klasse nicht an (s. updateWingForStatus).
     function removeClassToken(el, token) {
       var classes = (el.className || "").split(/\s+/).filter(function (c) { return c && c !== token; });
       el.className = classes.join(" ");
@@ -504,15 +450,11 @@
       el.className = classes.join(" ");
     }
 
-    // Reine Status-Uebersetzung, keine DOM-Beruehrung (Command-Query-Trennung, P5).
     function wingStatusFor(status) {
       var view = STATUS_VIEW[status];
       return view ? view.wingStatus : WING_STATUS_IDLE;
     }
 
-    // Spiegelt den Call-Status auf den Wing-Zustand: Klassenwechsel auf dem CSS-Wrapper
-    // (Fallback-Pfad); engineHandle.setStatus() steht in updateForStatus.
-    // Wechselt NUR den wing--<status>-Token, damit "wing--dark" (von wingSpan()) bleibt.
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
       var wing = doc.querySelector("[data-wing]");
@@ -534,9 +476,6 @@
       if (card && view) card.className = "w ph-" + view.phase;
     }
 
-    // Lokalisierte Anzeige-Uebersetzung der Status-Pill - reine
-    // Darstellung; der rohe Status bleibt unveraendert im [data-mcp="status"]-Slot
-    // (structuredContent-Vertrag unangetastet, siehe applyCallStatus/setSlotText).
     function updateStatusPill(status) {
       var view = STATUS_VIEW[status];
       var pill = doc.querySelector("[data-status-pill]");
@@ -547,9 +486,6 @@
       setKeyedText(label, view ? view.pillLabel : null);
     }
 
-    // Status-abgeleitete HUD-Unterzeile - wie die Status-Pill eine reine
-    // Anzeige-Uebersetzung, keine neue Datenquelle. t() zur ANWENDEZEIT (s.
-    // STATUS_VIEW-Kommentar oben) - nicht beim Laden aufgeloest.
     function updateHudPhase(status) {
       var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
@@ -579,9 +515,6 @@
       }
     }
 
-    // Zeilenweise wie widget-bind.js renderLines (dieselbe .turn-Klasse, dieselbe
-    // XSS-Disziplin) - hier dupliziert, da dieses Skript self-contained bleibt (s.
-    // Datei-Kommentar oben).
     function renderTranscriptLines(lines) {
       var container = slot("last_transcript_lines");
       if (!container) return;
@@ -666,8 +599,6 @@
       setRowVisible("next_steps", steps.length > 0);
     }
 
-    // Terminal-Folgen: Sichtbarkeit je Status, Cancel deaktivieren,
-    // Polling stoppen, bei completed EINMAL get_call_result nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
       currentStatus = status;
@@ -690,7 +621,6 @@
       if (status === "completed" || status === "failed") fetchCallResultOnce();
     }
 
-    // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
     function groupNumber(raw) {
       var match = /^\+49(\d{3})(\d{4,})$/.exec(raw);
       return match ? "+49 " + match[1] + " " + match[2] : raw;
@@ -747,7 +677,6 @@
       setRowVisible("summary", currentStatus === "completed" && !summaryHidden);
     }
 
-    // Wendet die get_call_result-Whitelist (pickTranscript) an.
     function applyCallResult(data) {
       if (!isRecord(data)) return;
       applyCallSubject(data);
@@ -756,7 +685,6 @@
       applyObjective(data, awaiting);
       applySummaryRow(data, awaiting);
       if (awaiting) scheduleResultRetry();
-      // Die beiden skalaren Karten-Felder.
       applyResultRow("outcome", data.outcome, currentStatus === "completed");
       applyResultRow("next_step", data.next_step, true);
       applyNextSteps(data);
@@ -797,9 +725,6 @@
       return "call-widget-" + rpcCounter;
     }
 
-    // Erste Antwort (gleich welcher Kanal) - danach greift der 15s-Fallback nicht mehr.
-    // Die frueher hier gefuehrte Sendeformat-Auswahl (eine vormalige interne Zustands-
-    // variable) ist entfallen: es gibt nur noch EIN Sende-Format (METHOD_TOOLS_CALL).
     function markResponse(data, applyFn) {
       anyResponseReceived = true;
       applyFn(data);
@@ -809,9 +734,6 @@
       return tool === TOOL_GET_CALL_RESULT ? applyCallResult : applyCallStatus;
     }
 
-    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call", id-gematcht
-    // (handleMessage). Das ready-Gate steht hier fuer ALLE Aufrufer. Rueckgabe true =
-    // tatsaechlich gesendet - Pflicht fuer jeden einmaligen Effekt, der am Versand haengt.
     function sendToolCall(tool, args) {
       if (!window[UI_READY_FLAG]) return false;
       var parent = window.parent;
@@ -826,8 +748,6 @@
       return true;
     }
 
-    // callResultFetched NUR bei tatsaechlichem Versand. Vor dem Handshake bleibt der Guard
-    // offen; der erste Poll-Tick nach whenUiReady(startPolling) holt das Ergebnis nach.
     function fetchCallResultOnce() {
       if (callResultFetched) return;
       var callId = currentCallId();
@@ -849,20 +769,12 @@
       sendToolCall(TOOL_GET_STATUS, { call_id: callId });
     }
 
-    // Optische Deaktivierung (Button verschwindet) NUR nach bestaetigtem Versand - klickt
-    // der Nutzer, bevor der Handshake steht, gibt sendToolCall() false zurueck und der
-    // Button bleibt unveraendert sichtbar/aktiv statt einen nie gesendeten Abbruch
-    // vorzutaeuschen (kein stiller Klickverlust ohne Feedback).
     function onCancelClick() {
       var callId = currentCallId();
       if (!callId) return;
-      // Cancel-Callback (Muster des inzwischen entfernten Einzel-Widgets)
       if (sendToolCall(TOOL_CANCEL, { call_id: callId })) setCancelDisabled(true);
     }
 
-    // Keine Host-Bruecke innerhalb der Frist -> Polling einstellen;
-    // die Karte zeigt dann still den zuletzt gepushten Stand (kein sichtbares
-    // Diagnose-Label mehr, s. markResponse-Kommentar).
     function onFallbackTimeout() {
       fallbackTimerId = null;
       if (anyResponseReceived) return; // schon eine Antwort da - kein Abbruch noetig
@@ -872,10 +784,6 @@
       }
     }
 
-    // Kanal A: Host-Notification (dieselbe Form wie der initiale place_call-Push; der
-    // geteilte BIND_SCRIPT bindet sie ohnehin schon in die ueberlappenden Slots - wir
-    // werten sie zusaetzlich selbst aus, um Terminal-Status + Diagnose zu erkennen).
-    // Kanal B: direkte JSON-RPC-Antwort auf einen unserer eigenen Requests (id-gematcht).
     function handleMessage(event) {
       var m = event && event.data;
       if (!isRecord(m)) return;
@@ -894,10 +802,6 @@
       roundTripMs = Math.max(0, monotonicNow() - sentAtById[m.id]);
       delete sentAtById[m.id];
       if (isRecord(m.result)) observeLocale(m.result._meta);
-      // JSON-RPC-Fehlerantwort: NICHT mehr still verschlucken. Transiente Fehler duerfen
-      // nicht stoppen (ein Erfolg setzt den Zaehler zurueck), aber ein dauerhaft
-      // ablehnender Host wird nicht endlos weitergefragt. Die Karte behaelt dabei ihren
-      // letzten Stand - kein Blanking, kein erfundener Fehlertext.
       if (m.error) {
         consecutiveRpcErrors += 1;
         if (consecutiveRpcErrors >= MAX_CONSECUTIVE_RPC_ERRORS) stopPolling();
@@ -909,8 +813,6 @@
       markResponse(data, dispatchFor(pendingTool));
     }
 
-    // Montiert die Wing-Canvas-Engine (in <head> VOR diesem Skript injiziert, also synchron
-    // verfuegbar). Bei jedem Fehlschlag bleibt die CSS-WingMark sichtbar - NIE ein leeres Loch.
     function mountWingEngine() {
       if (!(window.HermesWingCanvas && typeof window.HermesWingCanvas.mount === "function")) return;
       var host = doc.querySelector("[data-wing-canvas]");
@@ -925,8 +827,6 @@
       }
     }
 
-    // Sofort-Tick + Takt (3s Verbindung, 5s Live) + 15s-Fallback-Frist. Laeuft NUR nach dem Host-Handshake
-    // (whenUiReady) - vorher startet auch die Fallback-Uhr nicht.
     function startPolling() {
       pollTick();
       pollPeriodMs = pollPeriodFor(currentStatus);
@@ -934,11 +834,6 @@
       fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
     }
 
-    // Late-safe: Signal schon gefeuert (BIND_SCRIPT lief frueher, oder Remount) -> sofort
-    // starten; sonst genau einmal auf das Event warten. Damit haengt die Reihenfolge NICHT
-    // an der Injektions-Position des BIND_SCRIPT (widget-catalog.js haengt es NACH diesem
-    // Skript ein). Kein Timeout-Fallback: ein Host, der den Handshake nicht beantwortet,
-    // beantwortet auch keinen tools/call.
     function whenUiReady(startFn) {
       if (window[UI_READY_FLAG]) {
         startFn();
