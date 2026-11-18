@@ -23,7 +23,6 @@ const ROW_TOKEN_KEYS = {
     completed: "Completed",
     failed: "Failed",
     cancelled: "Cancelled",
-    queued: "Waiting for a line",
     dialing: "Placing call",
     in_progress: "In call",
   },
