@@ -16,7 +16,7 @@ function monatsanfang() {
   return new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), 1));
 }
 
-async function legeAn(sql, mandant, id, startIso) {
+async function legeAn(sql, mandant, { id, startIso }) {
   await sql(ANRUF_SQL, [id, mandant.id, `tok_${id}`, mandant.e164, "+4915112345678", startIso]);
 }
 
@@ -25,11 +25,11 @@ test("MONATSZAEHLUNG-SQL: usage.callsThisMonth zaehlt alle Anrufe des Mandanten 
   await mitHermesAufPostgresMitMandanten(t, { mandanten: [MANDANT_A, MANDANT_B] }, async ({ srv, sql }) => {
     const anfang = monatsanfang().getTime();
     for (let i = 0; i < ANRUFE_A_DIESEN_MONAT; i += 1) {
-      await legeAn(sql, MANDANT_A, `call_mon_a_${i}`, new Date(anfang + i * 1000).toISOString());
+      await legeAn(sql, MANDANT_A, { id: `call_mon_a_${i}`, startIso: new Date(anfang + i * 1000).toISOString() });
     }
-    await legeAn(sql, MANDANT_A, "call_mon_a_vormonat", new Date(anfang - 1).toISOString());
+    await legeAn(sql, MANDANT_A, { id: "call_mon_a_vormonat", startIso: new Date(anfang - 1).toISOString() });
     for (let i = 0; i < ANRUFE_B_DIESEN_MONAT; i += 1) {
-      await legeAn(sql, MANDANT_B, `call_mon_b_${i}`, new Date(anfang + i * 1000).toISOString());
+      await legeAn(sql, MANDANT_B, { id: `call_mon_b_${i}`, startIso: new Date(anfang + i * 1000).toISOString() });
     }
     const zustand = async (mandant) => (await mandantenAbruf(srv, mandant.sub).hole("/api/state")).json();
     assert.equal((await zustand(MANDANT_A)).usage.callsThisMonth, ANRUFE_A_DIESEN_MONAT);
