@@ -38,7 +38,6 @@ const WARTELISTE = {
   "src/telephony/adapters/telnyx/numbers.js": FOLGE,
   "src/telephony/adapters/telnyx/voice.js": GROSS,
   "src/telephony/adapters/telnyx/webhook-events.js": FOLGE,
-  "src/telephony/budget-watchdog.js": FOLGE,
   "src/telephony/call-finish.js": GROSS,
   "src/telephony/outage-report.js": GROSS,
   "src/telephony/outbound-gates.js": GROSS,

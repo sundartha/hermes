@@ -1,10 +1,8 @@
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.ts";
-import { MAX_CALL_DURATION_CAP_S, MAX_DURATION_RETRY_MS } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import type { AnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
-import { makeBudgetWatchdog } from "./budget-watchdog.js";
-import { defaultSetTimer } from "../utils/uhr-warten.ts";
 import { inDatenbankBeendet } from "./reattach.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
@@ -20,7 +18,7 @@ const ACTIVE_CALL_STATUS: AnrufZustand = "active";
 
 const EL_ENDE_FEHLER = "[fristen] EL-Konversation loeschen fehlgeschlagen:";
 
-const LESE_FEHLER = "[max-duration] Anruf nicht lesbar, neuer Versuch geplant:";
+const LESE_FEHLER = "[max-duration] Anruf nicht lesbar:";
 
 const FRIST_FEHLER = "[fristen] Hoechstdauer-Frist schreiben fehlgeschlagen:";
 
@@ -56,7 +54,6 @@ interface Store {
   setzeReserveFrist?: FristSchreiber;
 }
 
-type SetTimer = (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
 type HangUp = (() => Promise<unknown>) | null | undefined;
 
 interface TerminateRequest {
@@ -74,8 +71,6 @@ interface BudgetAxisSeamDeps {
   billing: unknown;
   blockingBudgetAxis: BlockingBudgetAxis;
   terminateActiveCall: TerminateActiveCall;
-  intervalMs: number;
-  setTimer: SetTimer;
 }
 
 interface ReattachResult {
@@ -86,7 +81,7 @@ interface CallLifecycleDeps {
   store: Store;
   config: {
     billing: unknown;
-    safety: { budgetWatchdogIntervalMs: number; reserveReleaseGraceMs: number };
+    safety: { reserveReleaseGraceMs: number };
   };
   finishCall: unknown;
   releaseReserve: (call: Call) => unknown;
@@ -105,7 +100,6 @@ interface CallLifecycleDeps {
   cappedEndedAtMs: (call: Call, carrierEndMs: number, capS: number) => number;
   classifyCallTime: (call: Call, nowMs: number, capS: number) => { remaining: number; expired: boolean };
   blockingBudgetAxis: BlockingBudgetAxis;
-  setBudgetWatchTimer?: SetTimer;
 }
 
 interface CallLifecycle {
@@ -154,10 +148,6 @@ async function loescheOhneAuflegeweg(
   if (!weg) await loescheElKonversation(call, endActiveCall);
 }
 
-function runningLeg(call: Call | null | undefined): Call | null {
-  return call?.status === ACTIVE_CALL_STATUS ? call : null;
-}
-
 function activeCallsOf(store: Store): Call[] {
   return store.load().calls.filter((call) => call.status === ACTIVE_CALL_STATUS);
 }
@@ -171,22 +161,17 @@ function readCall(store: Store, callId: string): Promise<Call | null | undefined
   return store.leseCall ? store.leseCall(callId) : store.getCall(callId);
 }
 
-async function readCallOrRetry(
-  store: Store,
-  callId: string,
-  retry: () => void,
-): Promise<{ call: Call | null | undefined } | null> {
+async function readCallOrNull(store: Store, callId: string): Promise<{ call: Call | null | undefined } | null> {
   try {
     return { call: await readCall(store, callId) };
   } catch (err) {
     console.error(LESE_FEHLER, callId, Reflect.get(Object(err), "message"));
-    setTimeout(retry, MAX_DURATION_RETRY_MS);
     return null;
   }
 }
 
 function makeBudgetAxisSeam({
-  store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
+  store, billing, blockingBudgetAxis, terminateActiveCall,
 }: BudgetAxisSeamDeps) {
   function blockingAxisFor({ tenantId }: { tenantId: string }): unknown {
     return blockingBudgetAxis({ store, billing, tenantId });
@@ -201,20 +186,7 @@ function makeBudgetAxisSeam({
     });
   }
 
-  const watchdog = makeBudgetWatchdog({
-    intervalMs,
-    activeCallById: async (callId: string) => runningLeg(await readCall(store, callId)),
-    blockingAxisFor,
-    terminate: (call: Call) =>
-      terminateOverBudgetCall({
-        callId: call.id,
-        providerCallSid: call.twilioSid,
-        origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG,
-      }),
-    setTimer,
-  });
-
-  return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm };
+  return { blockingAxisFor, terminateOverBudgetCall };
 }
 
 async function beendeUeberBudgetOhneWeg(
@@ -230,13 +202,11 @@ async function beendeUeberBudgetOhneWeg(
 export function makeCallLifecycle({
   store, config, finishCall, releaseReserve, voiceControl, terminateAndBillCall, hangUpAction, billThunk,
   endActiveCall, awaitAndPersistInboundElResult, reattachActiveCallCore, cappedEndedAtMs, classifyCallTime,
-  blockingBudgetAxis, setBudgetWatchTimer = defaultSetTimer,
+  blockingBudgetAxis,
 }: CallLifecycleDeps): CallLifecycle {
   async function terminateActiveCall({ callId, providerCallSid, status, failureReason }: TerminateRequest): Promise<void> {
     try {
-      const gelesen = await readCallOrRetry(store, callId, () => {
-        terminateActiveCall({ callId, providerCallSid, status, failureReason }).catch(() => undefined);
-      });
+      const gelesen = await readCallOrNull(store, callId);
       if (!gelesen) return;
       const { call } = gelesen;
       if (call?.status !== "active") return;
@@ -271,7 +241,6 @@ export function makeCallLifecycle({
 
   const budgetAxis = makeBudgetAxisSeam({
     store, billing: config.billing, blockingBudgetAxis, terminateActiveCall,
-    intervalMs: config.safety.budgetWatchdogIntervalMs, setTimer: setBudgetWatchTimer,
   });
 
   const ohneWeg = (call: Call) => loescheOhneAuflegeweg(call, { hangUpAction, voiceControl, endActiveCall });
@@ -292,7 +261,6 @@ export function makeCallLifecycle({
 
   function armMaxDurationTimer(call: Call, providerCallSid: string): void {
     scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
-    budgetAxis.arm(call.id);
   }
 
   function armReserveReleaseTimer(call: Call): void {
@@ -307,7 +275,6 @@ export function makeCallLifecycle({
       terminateOverBudgetCall: (id: string, providerCallSid: string) =>
         budgetAxis.terminateOverBudgetCall({ callId: id, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.REATTACH }),
     });
-    if (result.call) budgetAxis.arm(result.call.id);
     return result;
   }
 

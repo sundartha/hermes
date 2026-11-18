@@ -226,7 +226,7 @@ async function endeDesAuftragsAnrufs(srv) {
 }
 
 test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-Anruf, sobald die Decke erreicht ist", async () => {
-  await aufDemElWeg({ env: WACHE_ENV, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
+  await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40" }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv, anbieter }) => {
     assert.equal((await rufeAn(srv)).status, HTTP_OK);
     await initInhaltFuer(srv, { callId: auftragsAnruf(srv.readStore()).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
     const anruf = await endeDesAuftragsAnrufs(srv);
