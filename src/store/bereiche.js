@@ -57,7 +57,9 @@ function mandantProfilBereich(speicher) {
     tenantGeo: async (tenantId) => tenantGeo(speicher.load(), tenantId),
     identitaetSetzen: async (tenantId, identitaet) =>
       speicher.withStoreLock(() => {
-        if (setTenantIdentityIfAbsent(speicher.load(), tenantId, identitaet)) speicher.save();
+        if (!setTenantIdentityIfAbsent(speicher.load(), tenantId, identitaet)) return;
+        speicher.save();
+        speicher.stammdatenSchreiben(tenantId, ["ownerName", "firstName"]);
       }),
   };
 }

@@ -131,7 +131,8 @@ test("P2b: setTenantIdentityIfAbsent persistiert ownerName auf einem bestehenden
     lastName: "User",
   });
   assert.equal(changed, true, "echte Mutation -> Flush");
-  await store.save();
+  store.stammdatenSchreiben("t_web", ["ownerName", "firstName"]);
+  await store.drainFlushes();
   const r = await reopen(db);
   assert.equal(
     r.tenantContext("t_web").ownerName,

@@ -51,10 +51,10 @@ export function sperreAusZustand(zustand, tenantId) {
   };
 }
 
-export async function sperreSchreiben(client, tenantId, werte) {
+const schreiberFuer = (spalten) => async (client, tenantId, werte) => {
   const schluessel = Object.keys(werte);
   const setzen = schluessel.map(
-    (key, index) => `${SPALTE_JE_SCHLUESSEL[key]} = $${index + ERSTER_WERT_PLATZHALTER}`,
+    (key, index) => `${spalten[key]} = $${index + ERSTER_WERT_PLATZHALTER}`,
   );
   const { rows } = await client.query(
     `UPDATE tenant SET ${setzen.join(", ")} WHERE id = $1 RETURNING ${SPERRE_SPALTEN}`,
@@ -62,12 +62,15 @@ export async function sperreSchreiben(client, tenantId, werte) {
   );
   if (rows.length === 0) throw new Error("Mandant nicht in der Datenbank");
   return rows[0];
-}
+};
+
+export const sperreSchreiben = schreiberFuer(SPALTE_JE_SCHLUESSEL);
 
 const sperreZeile = async (client, tenantId) =>
   (await client.query(LESEN_SQL, [tenantId])).rows[0] ?? null;
 
-export function macheMandantSql({ einreihen, runner, requireState, protokoll = console }) {
+export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpalten,protokoll = console }) {
+  const schreibenMitSpalten = schreiberFuer({ ...SPALTE_JE_SCHLUESSEL, ...stammdatenSpalten });
   const staende = new Map();
   const offen = new Map();
   const letzte = new Map();
@@ -100,7 +103,7 @@ export function macheMandantSql({ einreihen, runner, requireState, protokoll = c
     const eintraege = Object.keys(werte).map((key) => eintrag(tenantId, key));
     let zeile;
     try {
-      zeile = await einreihen((client) => sperreSchreiben(client, tenantId, werte));
+      zeile = await einreihen((client) => schreibenMitSpalten(client, tenantId, werte));
     } catch (err) {
       protokoll.error(SCHREIBFEHLER, err.message);
       eintraege.forEach((wert) => unbestaetigt.add(wert));
