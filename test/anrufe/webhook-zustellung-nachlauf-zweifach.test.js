@@ -300,7 +300,7 @@ test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen,
 });
 
 test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt es keine Anweisung mehr ab", FRIST, async (t) => {
-  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, relais }) => {
+  await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ sql, signer, relais }) => {
     const mitschnitt = await starteAnweisungsMitschnitt(relais.adresse);
     const anbieter = await starteAnrufstartAttrappe();
     const umgebung = pgStartUmgebung(mitschnitt.adresse, {
@@ -316,10 +316,9 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
       assert.ok(a.stdout.includes(GRUND_FRIST), a.stdout);
-      const vorher = mitschnitt.verbindungen().map((anweisungen) => anweisungen.length);
       relais.fortsetzen();
       await relais.abwarten();
-      await warteAufAnspruchsverbindung(mitschnitt, vorher);
+      await zaun(sql, signer, [a]);
       const ansprueche = mitschnitt.verbindungen().flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG));
       assert.deepEqual(ansprueche, []);
     } finally {
