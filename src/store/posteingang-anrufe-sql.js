@@ -51,7 +51,7 @@ export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
           console.error(FEHLER, err.message);
           throw err;
         }));
-        for (const call of nurHier.filter((eigener) => gewaehlt.includes(eigener))) {
+        for (const call of nurHier.filter((eigener) => gewaehlt.includes(eigener) && !eigener.inboxSeenAt)) {
           call.inboxSeenAt = jetzt;
           markiert.add(call.id);
         }

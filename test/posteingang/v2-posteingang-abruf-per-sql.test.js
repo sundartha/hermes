@@ -115,6 +115,18 @@ test("Ein Anruf, den nur der eigene Spiegel markiert hat, kommt einmal und ist d
   assert.equal(zweiter.marked, 0);
 });
 
+test("Zwei gleichzeitige Abrufe liefern einen nur im Spiegel markierten Anruf nur einmal", async () => {
+  const { store } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+4915112345678", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  store.markInboxEntry(call.id, true);
+  const seiten = await Promise.all([
+    store.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false }),
+    store.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false }),
+  ]);
+  assert.deepEqual(seiten.flatMap((seite) => seite.entries.map((e) => e.call_id)), [call.id]);
+  assert.equal(seiten.reduce((summe, seite) => summe + seite.marked, 0), 1);
+});
+
 test("Schlaegt das Lesen fehl, wirft der Abruf und liefert keine leere Seite", async () => {
   let kaputt = false;
   const { b } = await markierterAnruf({
