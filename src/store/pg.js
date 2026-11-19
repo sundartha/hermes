@@ -25,6 +25,7 @@ import {
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { mitZeitgrenze } from "./webhook-zustellung.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
+import { macheProfilSql } from "./profil-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktiveAnrufeSql } from "./aktive-anrufe-sql.js";
@@ -180,6 +181,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const optionen = { einreihen, runner, requireState, fristMs: einstellungenFristMs };
   const einstellungen = macheEinstellungenSchreiber(optionen);
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
+  const profil = macheProfilSql(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -193,7 +195,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -876,7 +878,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
   };
 }
 
-function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, einstellungen, anrufe, anrufExport, posteingang, mandant }) {
+function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, einstellungen, profil, anrufe, anrufExport, posteingang, mandant }) {
   return {
     async pruneOldData(
       days = config.privacy.retentionDays,
@@ -970,12 +972,12 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
     listProfiles: () => ops.listProfiles(requireState()),
     setProfile(tenantId, patch) {
       const result = ops.setProfile(requireState(), tenantId, patch);
-      save();
+      profil.schreiben(tenantId, Object.fromEntries(result.changed.map((key) => [key, result.profile[key]])));
       return result;
     },
     deleteProfile(tenantId) {
       const ok = ops.deleteProfile(requireState(), tenantId);
-      if (ok) save();
+      if (ok) profil.loeschen(tenantId);
       return ok;
     },
   };
@@ -1596,7 +1598,6 @@ async function flush(client, state, { preFlush, gebunden }) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke, gebunden });
     }
-    await flushProfiles(client, state.profiles);
     await flushPlatformTtsUsage(client, state);
     await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
@@ -1914,18 +1915,6 @@ async function flushCalendar(client, tenantId, events) {
   }
 }
 
-async function flushProfiles(client, profiles) {
-  const tenantIds = Object.keys(profiles);
-  await deleteMissingProfiles(client, tenantIds);
-  for (const [tenantId, data] of Object.entries(profiles)) {
-    await client.query(
-      `INSERT INTO profile (tenant_id, data) VALUES ($1,$2)
-       ON CONFLICT (tenant_id) DO UPDATE SET data=EXCLUDED.data`,
-      [tenantId, JSON.stringify(data)],
-    );
-  }
-}
-
 async function flushPlatformTtsUsage(client, state) {
   const row = state.platformTtsUsage;
   const kostenstelleZeichen = ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters;
@@ -1995,14 +1984,6 @@ async function deleteMissingOutageAlerts(client, keepIds) {
     return;
   }
   await client.query(`DELETE FROM outage_alert WHERE id <> ALL($1::text[])`, [keepIds]);
-}
-
-async function deleteMissingProfiles(client, keepTenantIds) {
-  if (keepTenantIds.length === 0) {
-    await client.query(`DELETE FROM profile`);
-    return;
-  }
-  await client.query(`DELETE FROM profile WHERE tenant_id <> ALL($1::text[])`, [keepTenantIds]);
 }
 
 async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
