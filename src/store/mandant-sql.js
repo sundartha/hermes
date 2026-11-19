@@ -7,6 +7,7 @@ import {
 } from "./zustand/mandant.js";
 
 const SPALTE_JE_SCHLUESSEL = Object.freeze({
+  idpSubject: "idp_subject",
   kycLevel: "kyc_level",
   suspendedAt: "suspended_at",
   stripeActivationPending: "stripe_activation_pending",
