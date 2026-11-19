@@ -80,8 +80,12 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function synthesizeVorspann(text, voiceId) {
     const nowIso = new Date().toISOString();
     if (ttsQuotaExhausted(store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
-    const stimme = { ...config.voice.elevenLabsPlayTts, voiceId, voiceSettings: AGENT_STIMME.voiceSettings };
-    if (AGENT_STIMME.model) stimme.model = AGENT_STIMME.model;
+    const stimme = {
+      ...config.voice.elevenLabsPlayTts,
+      voiceId,
+      model: AGENT_STIMME.model,
+      voiceSettings: AGENT_STIMME.voiceSettings,
+    };
     const result = await synthesizeSpeechStream(text, synthOptionen(stimme));
     if (!result.ok) return result;
     const warning = store.recordTtsCharacters(text.length, nowIso);
