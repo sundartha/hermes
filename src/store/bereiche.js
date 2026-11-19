@@ -2,7 +2,7 @@ import { NUMBER_STATUS } from "../begriffe/nummern.js";
 import { SKIP_VERMERK_SCHLUESSEL } from "../begriffe/nummern-vergabe.js";
 import * as ausfall from "./zustand/ausfall.js";
 import { expireOrphanedConsults } from "./state-ops.js";
-import { tenantLanguage } from "./views.js";
+import { tenantLanguage } from "./views.ts";
 import * as kostenabgleich from "./zustand/kostenabgleich.js";
 import {
   allTenantIds,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { planSummarySms } from "../../src/sms-summary.ts";
-import { publicCall } from "../../src/store/views.js";
+import { publicCall } from "../../src/store/views.ts";
 import { makeDefaultState, createCall, markSummarySmsSent } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";

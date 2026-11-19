@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { anfrage } from "../utils/anfrage.js";
-import { findActiveNumber } from "../store/views.js";
+import { findActiveNumber } from "../store/views.ts";
+import type { Zustand } from "../store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";
 
 interface StoreMitZustand {
-  load: () => unknown;
+  load: () => Zustand;
 }
 
 interface AlarmAbsender {

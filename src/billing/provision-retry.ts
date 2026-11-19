@@ -1,7 +1,7 @@
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { speicherBereiche } from "../store.js";
 import { failedNumberCount, tenantActiveSubscriber, tenantStripe } from "../store/state-ops.js";
-import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
+import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.ts";
 import { isHoldCapablePaymentMethodType } from "./payment-method-eligibility.ts";
 
 export const PROVISION_RETRY_OUTCOME = Object.freeze({
