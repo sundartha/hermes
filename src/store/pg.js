@@ -780,6 +780,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
       return tenant;
     },
     tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(requireState(), tenantId),
+    tenantPrivateNumberLesen: (tenantId) => mandant.privateNumberLesen(tenantId),
 
     setTenantGeo(tenantId, patch) {
       const tenant = ops.setTenantGeo(requireState(), tenantId, patch);

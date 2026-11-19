@@ -26,6 +26,7 @@ const SPALTE_JE_SCHLUESSEL = Object.freeze({
 
 const SPERRE_SPALTEN = ["status", ...Object.values(SPALTE_JE_SCHLUESSEL), "stand"].join(", ");
 const LESEN_SQL = `SELECT ${SPERRE_SPALTEN} FROM tenant WHERE id = $1`;
+const EIGENE_NUMMER_SQL = "SELECT private_number FROM tenant WHERE id = $1";
 const ERSTER_WERT_PLATZHALTER = 2;
 const KEIN_STAND = -1;
 const SCHREIBFEHLER = "[pg] mandant-sperre schreiben fehlgeschlagen:";
@@ -93,6 +94,12 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     return sperreAusZustand({ tenants: [{ id: tenantId, ...zeileZuSperre(zeile ?? {}) }] }, tenantId);
   }
 
+  async function privateNumberLesen(tenantId) {
+    await letzte.get(tenantId);
+    const { rows } = await runner.withClient((client) => client.query(EIGENE_NUMMER_SQL, [tenantId]));
+    return rows[0]?.private_number ?? null;
+  }
+
   function zurueckzaehlen(tenantId) {
     const uebrig = offen.get(tenantId) - 1;
     if (uebrig > 0) offen.set(tenantId, uebrig);
@@ -132,5 +139,5 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     if (!(await schreiben(tenantId, schluessel))) throw new Error(NICHT_GESCHRIEBEN);
   }
 
-  return { schreiben, schreibenPflicht, sperreLesen, nichtBestaetigt };
+  return { schreiben, schreibenPflicht, sperreLesen, privateNumberLesen, nichtBestaetigt };
 }

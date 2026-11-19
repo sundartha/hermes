@@ -274,6 +274,7 @@ export function speicherBereiche(speicher) {
       exportTenantData: async (tenantId) => speicher.exportTenantData(tenantId),
       exportTenantDataGelesen: async (tenantId) => speicher.exportTenantDataGelesen(tenantId),
       tenantPrivateNumber: async (tenantId) => speicher.tenantPrivateNumber(tenantId),
+      tenantPrivateNumberLesen: async (tenantId) => speicher.tenantPrivateNumberLesen(tenantId),
       setPrivateNumber: async (tenantId, nummer) => speicher.setPrivateNumber(tenantId, nummer),
       tenantStripe: async (tenantId) => speicher.tenantStripe(tenantId),
       tenantSubscription: async (tenantId) => speicher.tenantSubscription(tenantId),
