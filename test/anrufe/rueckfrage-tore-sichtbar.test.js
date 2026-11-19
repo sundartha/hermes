@@ -161,3 +161,23 @@ for (const sprache of ["en", "fr"]) {
     assert.equal(text.includes(hinweis("de", ["master"])), false);
   });
 }
+
+async function mehrereToreInSprache(sprache) {
+  const { result } = await placeCall({
+    env: { ...ALLE_OFFEN, CONSULT_ENABLED: "false" },
+    allowConsult: false,
+    defaultLanguage: sprache,
+  });
+  const text = result.content[0].text;
+  assert.notEqual(result.isError, true, JSON.stringify(result));
+  assert.ok(text.includes(hinweis(sprache, ["master", "mandant"])));
+  assert.equal(text.includes(hinweis("de", ["master", "mandant"])), false);
+}
+
+test("RF-H2-6 place_call auf Englisch trennt mehrere geschlossene Tore mit Komma", async () => {
+  await mehrereToreInSprache("en");
+});
+
+test("RF-H2-7 place_call auf Franzoesisch trennt mehrere geschlossene Tore mit Komma", async () => {
+  await mehrereToreInSprache("fr");
+});
