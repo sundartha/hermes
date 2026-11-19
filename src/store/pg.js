@@ -403,7 +403,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
   };
 }
 
-function anrufBelegMethoden({ requireState, save }) {
+function anrufBelegMethoden({ requireState, save, runner }) {
   return {
     ...kostenAbschlussMutatoren({ requireState, save }),
     recordFailureReason(callId, reason) {
@@ -430,7 +430,7 @@ function anrufBelegMethoden({ requireState, save }) {
       if (changed) save();
       return call;
     },
-    ...brueckenZustandMutatoren({ requireState, save }),
+    ...brueckenZustandMutatoren({ requireState, save, runner }),
     ...inboundTrunkBelegMutatoren({ requireState, save }),
     recordCallCostEvidence(eingabe) {
       const { evidence, changed } = ops.recordCallCostEvidence(requireState(), eingabe);
@@ -1415,11 +1415,20 @@ function mitSpeichernBeiAenderung(save) {
     return ergebnis;
   };
 }
-function brueckenZustandMutatoren({ requireState, save }) {
+const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+function brueckenZustandMutatoren({ requireState, save, runner }) {
   const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
   return {
     bindInboundElConversation(callId, bindung) {
       return speichereBeiAenderung(ops.bindInboundElConversation(requireState(), callId, bindung));
+    },
+    async speichereKonversationsId(callId) {
+      const call = ops.getCall(requireState(), callId);
+      if (!call?.elevenlabsConversationId) return;
+      await runner.withClient(async (client) => {
+        await setTenant(client, call.tenantId);
+        await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId]);
+      });
     },
     markInboundElFallback(callId, nowIso) {
       return speichereBeiAenderung(ops.markInboundElFallback(requireState(), callId, nowIso));

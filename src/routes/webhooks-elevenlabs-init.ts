@@ -56,7 +56,7 @@ interface Speicher {
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
-  drainFlushes?(): Promise<unknown>;
+  speichereKonversationsId?(callId: string): Promise<unknown>;
 }
 
 type NummernSatz = Parameters<typeof inboundElPathFor>[0]["numberRecord"];
@@ -66,6 +66,7 @@ interface Abhaengigkeiten {
   config: Konfiguration;
   bridges: { clearDeadlines(callId: string): void };
   now: () => number;
+  speicherFristMs: number;
   outboundInitInhalt?: ((call: Anruf, vorspann: unknown) => Record<string, unknown>) | undefined;
   vorspannText: (callId: string) => unknown;
 }
@@ -90,6 +91,7 @@ export const ELEVENLABS_INIT_PATH = "/webhooks/elevenlabs/init";
 export const INIT_TOKEN_HEADER = "x-hermes-init-token";
 
 export const EL_INIT_WIEDERHOLUNG_FRIST_MS = 10000;
+export const EL_INIT_SPEICHERN_FRIST_MS = 1000;
 
 export const INIT_ANTWORT = Object.freeze({
   VERWEIGERT: Object.freeze({ error: "verweigert" }),
@@ -280,15 +282,24 @@ function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-async function bindungDauerhaft(store: Speicher): Promise<void> {
-  await store.drainFlushes?.().catch((err: unknown) => {
-    console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
+async function bindungDauerhaft({ store, callId, fristMs }: { store: Speicher; callId: string; fristMs: number }): Promise<void> {
+  if (!store.speichereKonversationsId) return;
+  let zeitgeber: NodeJS.Timeout | undefined;
+  const abgelaufen = new Promise<never>((_, abbrechen) => {
+    zeitgeber = setTimeout(() => abbrechen(new Error(`Frist von ${String(fristMs)} ms abgelaufen`)), fristMs);
   });
+  try {
+    await Promise.race([store.speichereKonversationsId(callId), abgelaufen]);
+  } catch (err) {
+    console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
+  } finally {
+    clearTimeout(zeitgeber);
+  }
 }
 
 async function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): Promise<unknown> {
   const eingangMs = performance.now();
-  const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
+  const { store, config, bridges, now, outboundInitInhalt, vorspannText, speicherFristMs } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
   const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
@@ -311,8 +322,10 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   });
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
-  await bindungDauerhaft(store);
-  if (bindung.changed) bridges.clearDeadlines(call.id);
+  if (bindung.changed) {
+    await bindungDauerhaft({ store, callId: call.id, fristMs: speicherFristMs });
+    bridges.clearDeadlines(call.id);
+  }
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
 
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() }));
@@ -338,11 +351,12 @@ export function makeElevenLabsInitWebhookRoutes({
   config,
   bridges,
   now = Date.now,
+  speicherFristMs = EL_INIT_SPEICHERN_FRIST_MS,
   outboundInitInhalt,
   vorspannText,
-}: Omit<Abhaengigkeiten, "now"> & { now?: () => number }): Router {
+}: Omit<Abhaengigkeiten, "now" | "speicherFristMs"> & { now?: () => number; speicherFristMs?: number }): Router {
   const router = Router(EXAKTER_ROUTER);
-  const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
+  const deps = { store, config, bridges, now, speicherFristMs, outboundInitInhalt, vorspannText };
 
   router.post(ELEVENLABS_INIT_PATH, (req: Request, res: Response, next: NextFunction): void => {
     antworteInitSicher({ req, res, deps }).catch(next);
