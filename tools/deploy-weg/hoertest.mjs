@@ -3,7 +3,7 @@ import { appendFileSync } from "node:fs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 import { AUTOMATION_LOGIN } from "../github.mjs";
 import { Abbruch, zeileBauen } from "./ausgabe.mjs";
-import { anfrage, githubZugang } from "./netz.mjs";
+import { anbieterStoerungen, anfrage, githubZugang } from "./netz.mjs";
 import { absichtlichRotMelden, fruehwarnungOk } from "./staging.mjs";
 import { ECHTE_UHR } from "./takt.mjs";
 
@@ -155,11 +155,12 @@ const SEKUNDEN_JE_MINUTE = 60;
 const ENTPRELLEN_MINUTEN = 60;
 const VORFALL_ENTPRELLEN_MS = ENTPRELLEN_MINUTEN * SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
 
-function vorfallText({ titel, commit, laufUrl, seit }) {
+function vorfallText({ titel, commit, laufUrl, seit, gestoert }) {
   return [
     titel + " (Commit " + commit + ").",
     ...(seit === undefined ? [] : ["Seit: " + seit]),
     "Umgebung: Staging.",
+    ...gestoert.map((name) => "Anbieter meldet gerade Störung: " + name),
     "Lauf: " + laufUrl,
     "Erster Schritt: Ursache im Lauf lesen",
   ].join("\n");
@@ -187,7 +188,8 @@ async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
   const aktiv = wege.filter((weg) => weg.adresse !== null);
   for (const weg of wege) if (weg.adresse === null) ausgabe.melde(weg.vorsilbe + "_uebersprungen");
   const entprellt = frischGemeldet(vorher, Date.now());
-  const text = vorfallText({ ...vorfall, laufUrl: laufAdresse(einstellungen) });
+  const gestoert = entprellt || aktiv.length === 0 ? [] : await anbieterStoerungen(einstellungen.anbieterStatus);
+  const text = vorfallText({ ...vorfall, laufUrl: laufAdresse(einstellungen), gestoert });
   for (const weg of aktiv) {
     if (entprellt) {
       ausgabe.melde(weg.vorsilbe + "_entprellt");

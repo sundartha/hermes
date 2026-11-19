@@ -11,6 +11,8 @@ const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\[bot\])?$/;
 const PFAD = /^\S.{0,1023}$/;
 const SCHLUESSEL_PEM = /^-----BEGIN PRIVATE KEY-----[\w+/=\s]{1,4000}-----END PRIVATE KEY-----\s*$/;
 const SCHLUSS_STRICH = /\/+$/;
+const STATUS_TELNYX_STANDARD = "https://status.telnyx.com/api/v2/status.json";
+const STATUS_ELEVENLABS_STANDARD = "https://status.elevenlabs.io/api/v2/status.json";
 const HEARTBEAT_NACHTLAUF = "BETTER_STACK_HEARTBEAT_NACHTLAUF";
 const HEARTBEAT_PROBE = "BETTER_STACK_HEARTBEAT_PROBE";
 
@@ -58,6 +60,8 @@ const REGELN = new Map([
   ["SLACK_ALERT_URL", httpsOderLoopback],
   [HEARTBEAT_NACHTLAUF, httpsOderLoopback],
   [HEARTBEAT_PROBE, httpsOderLoopback],
+  ["STATUS_TELNYX_URL", standardOderLoopback(STATUS_TELNYX_STANDARD)],
+  ["STATUS_ELEVENLABS_URL", standardOderLoopback(STATUS_ELEVENLABS_STANDARD)],
   ["GITHUB_ACTIONS", muster(/^(?:true|false)$/)],
 ]);
 
@@ -102,7 +106,14 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       pflicht: [...GITHUB_PFLICHT, "GITHUB_RUN_ID"],
-      freiwillig: ["GITHUB_API_URL", "GITHUB_SERVER_URL", "BETTER_STACK_ALERT_URL", "SLACK_ALERT_URL"],
+      freiwillig: [
+        "GITHUB_API_URL",
+        "GITHUB_SERVER_URL",
+        "BETTER_STACK_ALERT_URL",
+        "SLACK_ALERT_URL",
+        "STATUS_TELNYX_URL",
+        "STATUS_ELEVENLABS_URL",
+      ],
     },
   ],
   [
@@ -175,6 +186,13 @@ function adresse(wert, standard) {
   return (wert || standard).replace(SCHLUSS_STRICH, "");
 }
 
+function anbieterStatusBauen(umgebung) {
+  return [
+    { name: "Telnyx", url: umgebung.STATUS_TELNYX_URL || STATUS_TELNYX_STANDARD },
+    { name: "ElevenLabs", url: umgebung.STATUS_ELEVENLABS_URL || STATUS_ELEVENLABS_STANDARD },
+  ];
+}
+
 function werteBauen(umgebung) {
   return {
     githubUrl: adresse(umgebung.GITHUB_API_URL, GITHUB_API_STANDARD),
@@ -202,6 +220,7 @@ function werteBauen(umgebung) {
     telnyxSchluessel: umgebung.STAGING_TELNYX_PRIVATE_KEY,
     vorfallUrl: umgebung.BETTER_STACK_ALERT_URL || null,
     slackUrl: umgebung.SLACK_ALERT_URL || null,
+    anbieterStatus: anbieterStatusBauen(umgebung),
     heartbeatNachtlaufUrl: gueltigOderNull(HEARTBEAT_NACHTLAUF, umgebung),
     heartbeatProbeUrl: gueltigOderNull(HEARTBEAT_PROBE, umgebung),
   };
