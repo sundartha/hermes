@@ -94,7 +94,7 @@ function webhookKopf(signer, zeit, formular) {
   return { [SIGNATUR_KOPF]: signer.sign(zeit, formular), [ZEIT_KOPF]: zeit };
 }
 
-async function webhookProbe({ hermes, ziel, signer, schluessel, erwartet, ausgabe, uhr, commit }) {
+async function webhookProbe({ hermes, ziel, signer, ausgabe, uhr, commit }) {
   const formular = new URLSearchParams({
     CallSid: "CAprobe" + commit.slice(0, KENNUNG_LAENGE),
     CallStatus: "ringing",
@@ -102,28 +102,22 @@ async function webhookProbe({ hermes, ziel, signer, schluessel, erwartet, ausgab
   const zeit = String(Math.floor(uhr.jetzt() / MS_JE_SEKUNDE));
   const kopf = webhookKopf(signer, zeit, formular);
   const http = await hermes.webhook({ pfad: ziel.pfad, formular, kopf });
-  ausgabe.melde(schluessel, { teil: ziel.teil, http });
-  return http === erwartet;
+  ausgabe.melde("probe_webhook_fremd", { teil: ziel.teil, http });
+  return { teil: ziel.teil, http };
 }
 
-async function webhooksProbieren({ hermes, commit, ausgabe, uhr }) {
+export async function fremdeWebhooksProbieren({ hermes, commit, ausgabe, uhr }) {
   const signer = fremderSigner();
   const ergebnisse = [];
   for (const ziel of webhookZiele(commit)) {
-    ergebnisse.push(
-      await webhookProbe({
-        hermes,
-        ziel,
-        ausgabe,
-        uhr,
-        commit,
-        signer,
-        schluessel: "probe_webhook_fremd",
-        erwartet: HTTP_VERBOTEN,
-      }),
-    );
+    ergebnisse.push(await webhookProbe({ hermes, ziel, ausgabe, uhr, commit, signer }));
   }
-  return ergebnisse.every(Boolean);
+  return ergebnisse;
+}
+
+async function webhooksProbieren(kontext) {
+  const ergebnisse = await fremdeWebhooksProbieren(kontext);
+  return ergebnisse.every(({ http }) => http === HTTP_VERBOTEN);
 }
 
 export function fruehwarnungOk({ stand, basis, eigene, ausgabe }) {

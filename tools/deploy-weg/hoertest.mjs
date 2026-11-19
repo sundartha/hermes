@@ -200,6 +200,21 @@ async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
   }
 }
 
+export async function liveProbeMelden({ einstellungen, abweichungen, ausgabe }) {
+  if (einstellungen.slackUrl === null) {
+    ausgabe.melde("slack_uebersprungen");
+    return;
+  }
+  const gestoert = await anbieterStoerungen(einstellungen.anbieterStatus);
+  const text = [
+    ...abweichungen.map(({ teil, http }) => "Live-Probe: Webhook " + teil + " antwortet mit " + http),
+    "Umgebung: Produktion.",
+    ...gestoert.map((name) => "Anbieter meldet gerade Störung: " + name),
+    "Lauf: " + laufAdresse(einstellungen),
+  ].join("\n");
+  await vorfallSenden({ adresse: einstellungen.slackUrl, koerper: { text }, vorsilbe: "slack", ausgabe });
+}
+
 export async function alarmprobe({ einstellungen, ausgabe }) {
   if (einstellungen.slackUrl === null) {
     ausgabe.melde("slack_uebersprungen");

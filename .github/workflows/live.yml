@@ -146,6 +146,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           UPDATE_WORKFLOW_TOKEN: ${{ secrets.UPDATE_WORKFLOW_TOKEN }}
+          SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
           PRODUKTION_URL: https://app.sundartha.com
           COMMIT: ${{ needs.entscheiden.outputs.commit }}
         run: node tools/deploy-weg.mjs nachkontrolle --commit "$COMMIT"
