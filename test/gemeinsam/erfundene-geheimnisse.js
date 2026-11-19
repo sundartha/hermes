@@ -102,3 +102,9 @@ export const H7C2B4B2_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-nur-fuer-den-tes
 export const H7C2B4B2_FREMDER_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-eines-anderen-anrufs";
 export const H7C2B4B2_ERFUNDENES_TOKEN = "h7c2b4b2-erfundenes-token";
 export const H7C2B4B4_DEPLOY_TOKEN = "h7c2b4b4-deploy-token-testgeheim-mindestens-32-zeichen";
+
+export const RESTRICTED_TOKEN_ZWISCHEN = "AKIAABCDEFGHIJKLMNOP";
+export const RESTRICTED_TOKEN_NACH_KENNUNG = "AKIAQRSTUVWXYZ012345";
+export const RESTRICTED_PEM_BLOCK = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----";
+export const RESTRICTED_TOKEN_IN_KARTE = "sk-4111111111111111abcd";
+export const RESTRICTED_TOKEN_MIT_KENNWORT = "sk_live_abcdefghijklmnop1234";
