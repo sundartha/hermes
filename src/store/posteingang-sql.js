@@ -99,13 +99,15 @@ export function macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebun
         },
       );
     },
-    umschalten: async (state, item) => {
-      const call = await anrufFuer(state, item.callId);
-      if (!call) return null;
-      return einreihen(async (client) => {
-        await client.query(KONTEXT_SQL, [call.tenantId]);
-        await client.query(ERLEDIGT_SQL, [item.done, item.id, call.tenantId]);
-      });
+    umschalten: (state, item) => {
+      const schreiben = (call) =>
+        einreihen(async (client) => {
+          await client.query(KONTEXT_SQL, [call.tenantId]);
+          await client.query(ERLEDIGT_SQL, [item.done, item.id, call.tenantId]);
+        });
+      const gespiegelt = ops.getCall(state, item.callId);
+      if (gespiegelt) return schreiben(gespiegelt);
+      return leseCallUngebunden(item.callId).then((call) => (call ? schreiben(call) : null));
     },
     anlegen: async (state, callId, { text, type }) => {
       const vorhanden = ops.callActionItems(state, callId).find((punkt) => ops.actionItemKey(punkt.text) === ops.actionItemKey(text));
