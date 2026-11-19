@@ -61,6 +61,7 @@ type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
 const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
 const sprachtexteFuer: (language: string) => unknown = localeFor;
+const gateTexteFuer: (language: string) => { gates: { queueUnavailable: string } } = localeFor;
 const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | GatesBestanden> = runOutboundGates;
 const vorabBriefing: (args: {
   objective: unknown;
@@ -175,6 +176,7 @@ interface Konfiguration {
 }
 
 interface Speicher {
+  tenantLanguage: (tenantId: string | undefined) => string;
   tenantPrivateNumber: (tenantId: string | undefined) => string | null | undefined;
   tenantGeo: (tenantId: string | undefined) => { country: string; defaultLanguage: string };
   activeCallsForSql: (tenantId: string | undefined) => Promise<Anruf[]>;
@@ -786,7 +788,8 @@ export function makeCallRoutes({
     } catch (fehler) {
       console.error(`[place_call] Warteschlange nicht erreichbar call=${call.id}:`, nachrichtOf(fehler));
       await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${GRUND_WARTESCHLANGE}`);
-      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: CLAIM_ERROR_MESSAGE });
+      const { queueUnavailable } = gateTexteFuer(store.tenantLanguage(ctx.tenantId)).gates;
+      return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: queueUnavailable });
     }
     return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
   }
