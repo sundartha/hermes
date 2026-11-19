@@ -63,7 +63,7 @@ export function raeumeDatenVerzeichnisAuf(datenVerzeichnis) {
 export function legeCodeKopieAn(datenVerzeichnis) {
   const kopie = fs.mkdtempSync(path.join(datenVerzeichnis, "code-"));
   fs.cpSync(path.join(WURZEL, "src"), path.join(kopie, "src"), { recursive: true });
-  for (const name of ["package.json", "node_modules", "public"])
+  for (const name of ["package.json", "node_modules", "public", "elevenlabs"])
     fs.symlinkSync(path.join(WURZEL, name), path.join(kopie, name));
   return kopie;
 }
