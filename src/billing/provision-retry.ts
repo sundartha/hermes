@@ -17,6 +17,8 @@ export const PROVISION_RETRY_OUTCOME = Object.freeze({
 
 type Zustand = Parameters<typeof failedNumberCount>[0];
 
+const failedNumberCountOf: (state: Zustand, tenantId: string) => number = failedNumberCount;
+
 const NO_RETRY_ATTEMPTS = 0;
 
 interface RetryDecision {
@@ -51,7 +53,7 @@ export function resolveAutoProvisionRetry(
       outcome: PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE,
       attempts: NO_RETRY_ATTEMPTS,
     };
-  const attempts = failedNumberCount(state, tenantId);
+  const attempts = failedNumberCountOf(state, tenantId);
   if (attempts >= maxAttempts)
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED, attempts };
   return { retry: true, outcome: PROVISION_RETRY_OUTCOME.RETRY, attempts };
