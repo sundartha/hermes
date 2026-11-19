@@ -213,7 +213,10 @@ interface Bereiche {
   };
   anrufe: { resolveCallLanguage: (anfrage: { tenantId: string | undefined; numberRecord: unknown }) => Promise<string> };
   mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
-  einstellungen: { recordCostProfile: (callId: string, profil: string) => Promise<unknown> };
+  einstellungen: {
+    recordCostProfile: (callId: string, profil: string) => Promise<unknown>;
+    resolveProfile: (tenantId: string | undefined) => Promise<unknown>;
+  };
   gespraech: { getCall: (callId: string) => Promise<Anruf | null | undefined> };
 }
 
@@ -946,7 +949,7 @@ export function makeCallRoutes({
       tenantId,
     );
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    if (!consultAllowedFor(store.resolveProfile(tenantId)))
+    if (!consultAllowedFor(await bereiche.einstellungen.resolveProfile(tenantId)))
       return antworteFehler(res, HTTP_NOT_FOUND, "not found");
     await bereiche.rueckfrage.noteConsultPoll(call.id);
     const event = await consultDelivery.waitForEvent({
@@ -969,7 +972,7 @@ export function makeCallRoutes({
     if (!tenantId) return undefined;
     const call = sichtbarerAnruf(store.getCall(req.params.id), tenantId);
     if (!call) return antworteFehler(res, HTTP_NOT_FOUND, "not found");
-    if (!consultAllowedFor(store.resolveProfile(tenantId)))
+    if (!consultAllowedFor(await bereiche.einstellungen.resolveProfile(tenantId)))
       return res
         .status(HTTP_FORBIDDEN)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
