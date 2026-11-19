@@ -37,6 +37,56 @@ const UHR_BESTAND = [
   "src/telephony/outbound-gates.js",
   "src/telephony/reattach.ts",
 ];
+const UHR_QUELLEN_ORDNER = ["store", "routes", "billing", "queue", "worker", "consult", "conversation"];
+const UHR_QUELLEN_BESTAND = [
+  "src/billing/card-setup.ts",
+  "src/billing/cost-cross-check.ts",
+  "src/billing/cost-truing.ts",
+  "src/billing/paid-without-number-watch.ts",
+  "src/billing/price-drift-watch.ts",
+  "src/billing/provision-retry-sweep.ts",
+  "src/billing/webhook.ts",
+  "src/consult/delivery.js",
+  "src/consult/in-call.js",
+  "src/conversation/consult-raised.js",
+  "src/queue/adapters/memory/queue.ts",
+  "src/queue/adapters/pgboss/queue.ts",
+  "src/routes/api-billing.ts",
+  "src/routes/api-calls.ts",
+  "src/routes/api-read.ts",
+  "src/routes/intern-anrufe-laufend.js",
+  "src/routes/intern-status.js",
+  "src/routes/stripe-webhook.ts",
+  "src/routes/voice.ts",
+  "src/routes/webhooks-elevenlabs-init.ts",
+  "src/routes/webhooks-elevenlabs.ts",
+  "src/store/anrufe.js",
+  "src/store/bereiche.js",
+  "src/store/budget-reserve-pg.js",
+  "src/store/einstellungen-sql.js",
+  "src/store/ersatz-spur.js",
+  "src/store/instanz-besitz.js",
+  "src/store/json.js",
+  "src/store/kennzahlen.js",
+  "src/store/leitungsplaetze-pg.js",
+  "src/store/leitungsplaetze.js",
+  "src/store/login-bremse.js",
+  "src/store/mandant-sql.js",
+  "src/store/nutzung-pg.js",
+  "src/store/pg.js",
+  "src/store/state-ops.js",
+  "src/store/stripe-ereignis-register.js",
+  "src/store/tts-ablage.js",
+  "src/store/views.js",
+  "src/store/webhook-zustellung.js",
+  "src/store/zustand/einstellungen.ts",
+  "src/store/zustand/grundlagen.js",
+  "src/store/zustand/listen.js",
+  "src/store/zustand/nummern.js",
+  "src/store/zustand/nutzung.js",
+  "src/worker/provisioning-orchestrator.js",
+];
+const UHR_DATUM_REGEL = { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: UHR_MELDUNG };
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
 export const HERMES_REGELN_DATEI = new URL("./tools/eslint-rules/index.js", import.meta.url);
 const QUELLTEXT_BESTAND = "tools/basis/quelltext-als-text.json";
@@ -385,6 +435,21 @@ const schreibFunktion = {
   selector: "Identifier[name=/^(writeFile|appendFile|createWriteStream)(Sync)?$/]",
   message: NUR_LESEN_MELDUNG,
 };
+const CENT_REGELN = [
+  {
+    selector:
+      'AssignmentExpression[left.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] AssignmentExpression)',
+    message:
+      "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+  },
+  {
+    selector:
+      'UpdateExpression[argument.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)',
+    message:
+      "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
+  },
+];
+const ROUTE_REGELN = [{ selector: HANDLER_EXPORT_SELECTOR, message: ROUTER_FORM_MELDUNG }];
 const dateiBloecke = [
   {
     name: "rueckfrage-auditor",
@@ -412,36 +477,14 @@ const dateiBloecke = [
     files: [`src/store/**/*.${ENDUNGEN}`],
     ignores: [`src/store/json.${ENDUNGEN}`, `src/store/pg.${ENDUNGEN}`],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        demeterRegel,
-        {
-          selector:
-            'AssignmentExpression[left.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] AssignmentExpression)',
-          message:
-            "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
-        },
-        {
-          selector:
-            'UpdateExpression[argument.property.name="costCents"]:not(FunctionDeclaration[id.name=/^(bookCents|applyCreditCents)$/] UpdateExpression)',
-          message:
-            "Cent-Stände schreiben nur bookCents und applyCreditCents; die Gate-Achse hat genau zwei Kanten (KV2-8).",
-        },
-      ],
+      "no-restricted-syntax": ["error", demeterRegel, ...CENT_REGELN],
     },
   },
   {
     name: "route-in-router-form",
     files: [`src/routes/**/*.${ENDUNGEN}`],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        demeterRegel,
-        {
-          selector: HANDLER_EXPORT_SELECTOR,
-          message: ROUTER_FORM_MELDUNG,
-        },
-      ],
+      "no-restricted-syntax": ["error", demeterRegel, ...ROUTE_REGELN],
     },
   },
   {
@@ -763,7 +806,7 @@ export default [
       "no-restricted-syntax": [
         "error",
         { selector: demeterChainSelector, message: demeterChainMessage },
-        { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: UHR_MELDUNG },
+        UHR_DATUM_REGEL,
       ],
       "no-restricted-properties": [
         "error",
@@ -779,6 +822,49 @@ export default [
   ...dateiBloecke,
   ...hermesBloecke,
   ...testRegelBloecke,
+  {
+    name: "uhr-als-wert-quellen",
+    files: UHR_QUELLEN_ORDNER.map((ordner) => `src/${ordner}/**/*.${ENDUNGEN}`),
+    ignores: UHR_QUELLEN_BESTAND,
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "setTimeout", message: UHR_MELDUNG },
+        { name: "setInterval", message: UHR_MELDUNG },
+        { name: "setImmediate", message: UHR_MELDUNG },
+      ],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })),
+          patterns: [{ regex: "(^|/)utils/(timer|uhr-warten)(\\.(js|ts))?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
+        },
+      ],
+      "no-restricted-syntax": ["error", demeterRegel, UHR_DATUM_REGEL],
+      "no-restricted-properties": [
+        "error",
+        PROCESS_ENV_REGEL,
+        { object: "Date", property: "now", message: UHR_MELDUNG },
+        { object: "performance", property: "now", message: UHR_MELDUNG },
+        { object: "process", property: "hrtime", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setImmediate", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setTimeout", message: UHR_MELDUNG },
+        { object: "globalThis", property: "setInterval", message: UHR_MELDUNG },
+      ],
+    },
+  },
+  {
+    name: "uhr-als-wert-quellen-store",
+    files: [`src/store/**/*.${ENDUNGEN}`],
+    ignores: UHR_QUELLEN_BESTAND,
+    rules: { "no-restricted-syntax": ["error", demeterRegel, ...CENT_REGELN, UHR_DATUM_REGEL] },
+  },
+  {
+    name: "uhr-als-wert-quellen-routen",
+    files: [`src/routes/**/*.${ENDUNGEN}`],
+    ignores: UHR_QUELLEN_BESTAND,
+    rules: { "no-restricted-syntax": ["error", demeterRegel, ...ROUTE_REGELN, UHR_DATUM_REGEL] },
+  },
   {
     name: "keine-eigenen-typdeklarationen",
     files: TS_DEKLARATIONEN,
