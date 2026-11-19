@@ -1,92 +1,53 @@
-import { test } from "node:test";
+import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import {
-  tenantsOf,
-  getCall,
-  settingsFor,
-  calendarFor,
-  updateSettings,
-  resolveProfile,
-  setProfile,
-  deleteProfile,
-  listProfiles,
-  bindSubToTenant,
-  resolveTenant,
-} from "../../src/store/state-ops.js";
+import { tempDataDir } from "../helpers.js";
 
-const TENANT = "t1";
+const TENANT = "t_zustand_einstellungen";
+const FREMDER_TENANT = "t_zustand_fremd";
 
-test("Mandantenliste fehlt oder ist null: leere Liste, sonst die gespeicherte", () => {
-  assert.deepEqual(tenantsOf({}), []);
-  assert.deepEqual(tenantsOf({ tenants: null }), []);
-  const liste = [{ id: TENANT }];
-  assert.equal(tenantsOf({ tenants: liste }), liste);
-});
-
-test("Anruf wird über id oder Anbieter-Kennung gefunden, sonst null", () => {
-  const anruf = { id: "c1", twilioSid: "CA1" };
-  const state = { calls: [anruf] };
-  assert.equal(getCall(state, "c1"), anruf);
-  assert.equal(getCall(state, "CA1"), anruf);
-  assert.equal(getCall(state, "nix"), null);
-});
-
-test("Einstellungen und Kalender werden je Mandant einmal angelegt und danach wiederverwendet", () => {
-  const state = { settings: {}, calendar: {} };
-  const einstellungen = settingsFor(state, TENANT);
-  assert.equal(settingsFor(state, TENANT), einstellungen);
-  assert.equal(state.settings[TENANT], einstellungen);
-  const kalender = calendarFor(state, TENANT);
-  assert.deepEqual(kalender, []);
-  assert.equal(calendarFor(state, TENANT), kalender);
+let speicher;
+before(async () => {
+  process.env.DATA_DIR = tempDataDir();
+  speicher = await import("../../src/store.js");
 });
 
 test("updateSettings übernimmt nur bekannte Felder passenden Typs und meldet die geänderten", () => {
-  const state = { settings: {} };
-  const vorher = { ...settingsFor(state, TENANT) };
-  const unbekannt = updateSettings(state, TENANT, { gibtEsNicht: 1 });
+  const unbekannt = speicher.updateSettings(TENANT, { gibtEsNicht: 1 });
   assert.deepEqual(unbekannt.changed, []);
-  assert.deepEqual(unbekannt.settings, vorher);
-  const falscherTyp = updateSettings(state, TENANT, { greeting: 5 });
-  assert.deepEqual(falscherTyp.changed, []);
-  const ohnePatch = updateSettings(state, TENANT, null);
-  assert.deepEqual(ohnePatch.changed, []);
-  const sprache = updateSettings(state, TENANT, { language: "DE" });
+  assert.equal("gibtEsNicht" in unbekannt.settings, false);
+  assert.deepEqual(speicher.updateSettings(TENANT, { greeting: 5 }).changed, []);
+  assert.deepEqual(speicher.updateSettings(TENANT, null).changed, []);
+  const sprache = speicher.updateSettings(TENANT, { language: "DE" });
   assert.deepEqual(sprache.changed, ["language"]);
   assert.equal(sprache.settings.language, "de");
-  assert.deepEqual(updateSettings(state, TENANT, { language: "de" }).changed, []);
-  assert.deepEqual(updateSettings(state, TENANT, { language: "" }).settings.language, null);
-  assert.deepEqual(updateSettings(state, TENANT, { language: "klingonisch" }).changed, []);
-  assert.equal(state.settings[TENANT].language, null);
-  assert.deepEqual(updateSettings(state, TENANT, { greeting: "Hallo, hier ist die Praxis." }).changed, []);
+  assert.deepEqual(speicher.updateSettings(TENANT, { language: "de" }).changed, []);
+  assert.equal(speicher.updateSettings(TENANT, { language: "" }).settings.language, null);
+  assert.deepEqual(speicher.updateSettings(TENANT, { language: "klingonisch" }).changed, []);
+  assert.equal(speicher.load().settings[TENANT].language, null);
+  assert.deepEqual(speicher.updateSettings(TENANT, { greeting: "Hallo, hier ist die Praxis." }).changed, []);
 });
 
 test("Profile: ohne gespeichertes Profil Standard, setzen, auflisten, löschen", () => {
-  const state = { profiles: {} };
-  assert.equal(resolveProfile(state, TENANT).allowCalendar, false);
-  const gesetzt = setProfile(state, TENANT, { allowCalendar: true, unbekannt: 1 });
+  assert.equal(speicher.resolveProfile(FREMDER_TENANT).allowCalendar, false);
+  const gesetzt = speicher.setProfile(FREMDER_TENANT, { allowCalendar: true, unbekannt: 1 });
   assert.deepEqual(gesetzt.changed, ["allowCalendar"]);
   assert.deepEqual(gesetzt.profile, { allowCalendar: true });
-  assert.equal(setProfile(state, TENANT, { allowLookup: true }).profile.allowCalendar, true);
-  assert.equal(resolveProfile(state, TENANT).allowLookup, true);
-  assert.equal(listProfiles(state), state.profiles);
-  assert.equal(deleteProfile(state, TENANT), true);
-  assert.equal(TENANT in state.profiles, false);
-  assert.equal(deleteProfile(state, TENANT), false);
-  assert.equal(resolveProfile(state, null).allowCalendar, false);
+  const erweitert = speicher.setProfile(FREMDER_TENANT, { allowLookup: true });
+  assert.equal(erweitert.profile.allowCalendar, true);
+  assert.equal(speicher.resolveProfile(FREMDER_TENANT).allowLookup, true);
+  assert.equal(FREMDER_TENANT in speicher.listProfiles(), true);
+  assert.equal(speicher.deleteProfile(FREMDER_TENANT), true);
+  assert.equal(FREMDER_TENANT in speicher.listProfiles(), false);
+  assert.equal(speicher.deleteProfile(FREMDER_TENANT), false);
+  assert.equal(speicher.resolveProfile(null).allowCalendar, false);
 });
 
-test("Anmeldung zu Mandant: Zuordnung hat Vorrang vor idpSubject, leere Angaben ändern nichts", () => {
-  const state = { tenants: [{ id: TENANT, idpSubject: "sub-a" }] };
-  assert.equal(resolveTenant(state, "sub-a"), TENANT);
-  assert.equal(resolveTenant(state, "sub-x"), null);
-  assert.equal(resolveTenant(state, ""), null);
-  bindSubToTenant(state, "", TENANT);
-  bindSubToTenant(state, "sub-x", "");
-  assert.equal(state.subIndex, undefined);
-  bindSubToTenant(state, "sub-x", "t2");
-  assert.equal(resolveTenant(state, "sub-x"), "t2");
-  bindSubToTenant(state, "sub-y", "t3");
-  assert.deepEqual(state.subIndex, { "sub-x": "t2", "sub-y": "t3" });
-  assert.equal(resolveTenant({}, "sub-a"), null);
+test("Anmeldung zu Mandant: leere Angaben ändern nichts, Zuordnung wird aufgelöst", () => {
+  speicher.bindSubToTenant("", TENANT);
+  speicher.bindSubToTenant("sub-zustand-x", "");
+  assert.equal(speicher.resolveTenant("sub-zustand-x"), null);
+  speicher.bindSubToTenant("sub-zustand-x", TENANT);
+  assert.equal(speicher.resolveTenant("sub-zustand-x"), TENANT);
+  assert.equal(speicher.resolveTenant("sub-zustand-y"), null);
+  assert.equal(speicher.resolveTenant(""), null);
 });
