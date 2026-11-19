@@ -9,6 +9,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
+import { anweisungenSeit, warteAufAnspruchsverbindung } from "./anspruchsverbindung.js";
 import { starteAnweisungsMitschnitt } from "./anweisungs-mitschnitt.js";
 import { starteDatenbankRelais } from "./datenbank-relais.js";
 import { postgresVorhanden } from "./hermes-mit-postgres.js";
@@ -247,9 +248,6 @@ const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
 const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
-const FRISTEN_ABFRAGE = "WITH faellig AS";
-const HOECHSTDAUER_ANWEISUNG = "UPDATE call SET frist_hoechstdauer_at";
-const ANSPRUCH_ENDE = [ABSCHLUSS, ZURUECK];
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
@@ -259,17 +257,8 @@ const naechsteNachAnspruch = (anweisungen) => {
 const gehalteneBeginne = (mitschnitt) =>
   mitschnitt.verbindungen().flatMap((anweisungen, nr) => (anweisungen.at(-1) === BEGINN ? [nr] : []));
 
-const anweisungenSeit = (mitschnitt, nr, vorher) => mitschnitt.verbindungen()[nr].slice(vorher[nr]);
-
 async function poolVorwaermen(sql, signer, instanz) {
   await Promise.all([zaun(sql, signer, [instanz]), zaun(sql, signer, [instanz])]);
-}
-
-async function warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten) {
-  const enthaelt = (nr, merkmale) => anweisungenSeit(mitschnitt, nr, vorher).some((text) => merkmale.some((merkmal) => text.includes(merkmal)));
-  const istTakt = (nr) => enthaelt(nr, [FRISTEN_ABFRAGE, HOECHSTDAUER_ANWEISUNG]);
-  await mitschnitt.bisBedingung(() => gehalten.every((nr) => istTakt(nr) || enthaelt(nr, ANSPRUCH_ENDE)));
-  return gehalten.filter((nr) => !istTakt(nr));
 }
 
 test("Der gewonnene Anspruch wird auf derselben Verbindung sofort abgeschlossen, die Sperre auf der Anrufzeile bleibt nicht liegen", FRIST, async (t) => {
