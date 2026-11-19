@@ -14,7 +14,7 @@ import {
 import { H7C2B4B2_BINDUNGS_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } from "../pg-helpers.js";
+import { BOOTSTRAP_TENANT_ID, legeMandantAn, makePgStore, makePgTestStore } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const SPEICHERN_DAUERT_DURCHLAEUFE = 200;
@@ -226,4 +226,25 @@ test("H5137-6: das gezielte Speichern schreibt die ID nur in die Zeile eines lau
   const laufendBindung = store.bindInboundElConversation(laufend.id, { conversationId: KONVERSATION, nowIso: jetzt });
   await laufendBindung.dauerhaft;
   assert.equal(await konversationInDatenbank(runner, laufend.id), KONVERSATION);
+});
+
+test("H5137-7: das gezielte Speichern hinterlaesst auf der Leitung nicht den Mandanten des Anrufs", async () => {
+  const FREMDER_MANDANT = "tenant_h5137_fremd";
+  const { store, runner } = await makePgTestStore();
+  await legeMandantAn(store, FREMDER_MANDANT);
+  assert.equal(await store.ensureTenant(FREMDER_MANDANT), true);
+  const call = store.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: FREMDER_MANDANT, provider: "telnyx" });
+  Object.assign(call, {
+    elevenlabsConversationId: null,
+    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+    answeredAt: new Date().toISOString(),
+    streamToken: H7C2B4B2_BINDUNGS_TOKEN,
+  });
+  await store.persistCall(call.id);
+  await store.bindInboundElConversation(call.id, { conversationId: KONVERSATION, nowIso: new Date().toISOString() }).dauerhaft;
+  const mandant = await runner.withClient(async (client) => {
+    const { rows } = await client.query("SELECT current_setting('app.current_tenant', true) AS mandant");
+    return rows[0].mandant;
+  });
+  assert.equal(mandant, BOOTSTRAP_TENANT_ID);
 });
