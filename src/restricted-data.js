@@ -294,7 +294,7 @@ function findPrivateKeyBlockSpans(text) {
 }
 
 const TOKEN_START = "(?<![A-Za-z0-9_-])";
-const TOKEN_CHAR = /[A-Za-z0-9_-]/;
+const TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
 const TOKEN_PATTERNS = Object.freeze(
   [
     "(?:AKIA|ASIA)[0-9A-Z]{16}",
@@ -310,7 +310,7 @@ const TOKEN_PATTERNS = Object.freeze(
 
 function tokenEnd(text, index) {
   let end = index;
-  while (end < text.length && TOKEN_CHAR.test(text.charAt(end))) end++;
+  while (end < text.length && TOKEN_CHARS.includes(text.charAt(end))) end++;
   return end;
 }
 
