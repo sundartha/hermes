@@ -21,6 +21,7 @@ const ANRUF = "call_nachlauf1";
 const ANRUF_OFFEN = "call_nachlauf2";
 const KONVERSATION = "conv_nachlauf1";
 const NACHLAUF_LOG = "[el-inbound] nachlauf gestartet";
+const ANGENOMMEN_LOG = '"status":"in-progress"';
 const EINMAL = 1;
 const FRIST = { timeout: 60_000 };
 const OHNE_EIGENE_FRIST = new AbortController().signal;
@@ -78,6 +79,12 @@ const senden = async (instanz, zustellung) => {
   const antwort = await abrufMitFrist(`${instanz.localUrl}${zustellung.pfad}`, zustellung.optionen);
   return antwort.status;
 };
+
+async function waermeAnruf(signer, instanz) {
+  const ab = instanz.stdout.length;
+  assert.equal(await senden(instanz, signierterEndstatus(signer, "warm", { status: "in-progress" })), HTTP_OK);
+  await logBis(instanz, ANGENOMMEN_LOG, { ab });
+}
 
 const nachlaufZeilen = (instanz) => instanz.stdout.split("\n").filter((zeile) => zeile.includes(NACHLAUF_LOG));
 
@@ -176,6 +183,7 @@ test("Zweite Zustellung nach dem Start auf der anderen Instanz startet keinen zw
 test("Hängt die Datenbank beim Beanspruchen, startet der Nachlauf trotzdem und der Anruf bricht nicht ab", FRIST, async (t) => {
   await mitGebundenemAnruf(t, { ueberRelais: true }, async ({ signer, starte, relais }) => {
     const a = await starte();
+    await waermeAnruf(signer, a);
     relais.anhalten();
     assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
     const zaehle = await warteAufLog([a]);
@@ -198,6 +206,7 @@ test("Schlägt das Beanspruchen in der Datenbank fehl, startet der Nachlauf trot
 test("Fehlt die Anrufzeile in der Datenbank noch, startet der Nachlauf trotzdem", FRIST, async (t) => {
   await mitGebundenemAnruf(t, {}, async ({ sql, signer, starte }) => {
     const a = await starte();
+    await waermeAnruf(signer, a);
     await sql(ANRUF_LOESCHEN_SQL, [ANRUF]);
     assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
     const zaehle = await warteAufLog([a]);
@@ -305,6 +314,7 @@ test("Bekommt das Beanspruchen die Verbindung erst nach Ablauf der Frist, setzt 
     });
     const a = await startServer({ env: umgebung });
     try {
+      await waermeAnruf(signer, a);
       relais.anhalten();
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
@@ -337,6 +347,7 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
     const a = await startServer({ env: umgebung });
     try {
       await poolVorwaermen(sql, signer, a);
+      await waermeAnruf(signer, a);
       relais.anhalten();
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
@@ -372,6 +383,7 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
     const a = await startServer({ env: umgebung });
     try {
       await poolVorwaermen(sql, signer, a);
+      await waermeAnruf(signer, a);
       relais.anhalten();
       assert.equal(await senden(a, signierterEndstatus(signer, "a")), HTTP_OK);
       await warteAufLog([a]);
