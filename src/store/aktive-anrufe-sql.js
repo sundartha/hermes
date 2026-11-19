@@ -2,6 +2,8 @@ import * as ops from "./state-ops.js";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const AKTIVE_SQL = `SELECT * FROM call WHERE tenant_id = $1 AND status = 'active' ORDER BY seq ASC`;
+const VORHANDEN_SQL = `SELECT id FROM call WHERE tenant_id = $1 AND id = ANY($2)`;
+const MANDANTEN_SQL = `SELECT id FROM tenant ORDER BY id`;
 const FEHLER = "[pg] aktive anrufe lesen fehlgeschlagen:";
 
 export function macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }) {
@@ -16,6 +18,23 @@ export function macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }) {
         console.error(FEHLER, err.message);
         throw err;
       });
+  const beendeteIds = async (kandidaten) => {
+    const beendet = new Set();
+    const jeMandant = Map.groupBy(kandidaten, (call) => call.tenantId);
+    for (const [tenantId, calls] of jeMandant) {
+      const zeilen = await runner
+        .withClient(async (client) => {
+          await client.query(KONTEXT_SQL, [tenantId]);
+          return (await client.query(VORHANDEN_SQL, [tenantId, calls.map((call) => call.id)])).rows;
+        })
+        .catch((err) => {
+          console.error(FEHLER, err.message);
+          throw err;
+        });
+      for (const zeile of zeilen) beendet.add(zeile.id);
+    }
+    return beendet;
+  };
   const standVon = (state, tenantId) => {
     if (!staende.has(state)) staende.set(state, new Map());
     const je = staende.get(state);
@@ -41,6 +60,21 @@ export function macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }) {
       stand.offen -= 1;
       stand.zuletztGelesen = true;
       return stand.aktive;
+    },
+    async alle(state) {
+      const mandanten = await runner
+        .withClient(async (client) => (await client.query(MANDANTEN_SQL)).rows)
+        .catch((err) => {
+          console.error(FEHLER, err.message);
+          throw err;
+        });
+      const gelesen = [];
+      for (const { id } of mandanten) gelesen.push(...zeilenZuAnrufen(await ausDatenbank(id), [], []));
+      const inDatenbank = new Set(gelesen.map((call) => call.id));
+      const kandidaten = state.calls.filter((call) => call.status === "active" && !inDatenbank.has(call.id));
+      const beendet = await beendeteIds(kandidaten);
+      const nurHier = kandidaten.filter((call) => !beendet.has(call.id));
+      return [...gelesen, ...nurHier];
     },
     zaehlung(state, tenantId) {
       const hier = ops.activeCallsFor(state, tenantId).filter((call) => eigene.has(call.id));

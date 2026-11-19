@@ -44,6 +44,8 @@ function speicher({ sql, spiegel = [], auffrischen = async () => true }) {
   const gebunden = anruf("call_kostendecke_gebunden", { startedAt: new Date().toISOString(), answeredAt: new Date().toISOString() });
   return {
     load: () => ({ calls: [gebunden] }),
+    aktiveAnrufeAlle: async () => [gebunden].filter((call) => call.status === "active"),
+    attachActiveCall: async (id) => [gebunden].find((call) => call.id === id && call.status === "active") ?? null,
     getCall: () => gebunden,
     resolveProfile: () => ({ allowConsult: true, allowLookup: true }),
     nutzungAuffrischen: auffrischen,

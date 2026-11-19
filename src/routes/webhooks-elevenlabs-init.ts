@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/inbound-path-decision.ts";
@@ -51,7 +51,9 @@ interface Bindung {
 }
 
 interface Speicher {
-  load(): { calls: Anruf[] };
+  aktiveAnrufeAlle(): Promise<Anruf[]>;
+  getCall(callId: string): Anruf | null | undefined;
+  attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
 }
@@ -182,18 +184,16 @@ function keinAnruf({
   return res.status(HTTP_NOT_FOUND).json(INIT_ANTWORT.KEIN_ANRUF);
 }
 
-function aktiverElInboundCallMitToken(store: Speicher, token: unknown): Anruf | null {
+async function aktiverElInboundCallMitToken(store: Speicher, token: unknown): Promise<Anruf | null> {
   if (!token) return null;
+  const calls = await store.aktiveAnrufeAlle();
   return (
-    store
-      .load()
-      .calls.find(
-        (call: Anruf) =>
-          call.status === "active" &&
-          bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND &&
-          Boolean(call.streamToken) &&
-          safeEqual(token, call.streamToken),
-      ) ?? null
+    calls.find(
+      (call: Anruf) =>
+        bridgeStateOf(call) !== BRIDGE_STATE.KEIN_EL_INBOUND &&
+        Boolean(call.streamToken) &&
+        safeEqual(token, call.streamToken),
+    ) ?? null
   );
 }
 
@@ -220,7 +220,7 @@ function calledNumberPasst(body: InitKoerper, call: Anruf): boolean {
   return fehlt || normNum(body.called_number) === call.to;
 }
 
-function zuordnungFuer({
+async function zuordnungFuer({
   store,
   config,
   body,
@@ -230,8 +230,8 @@ function zuordnungFuer({
   config: Konfiguration;
   body: InitKoerper;
   nowMs: number;
-}): Zuordnung {
-  const call = aktiverElInboundCallMitToken(store, callBindingTokenOf(body));
+}): Promise<Zuordnung> {
+  const call = await aktiverElInboundCallMitToken(store, callBindingTokenOf(body));
   if (!call) return { grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, call: null };
   if (!bindbar({ call, conversationId: body.conversation_id, nowMs }))
     return { grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, call };
@@ -279,14 +279,14 @@ function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): unknown {
+async function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): Promise<unknown> {
   const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
   if (!initTokenGueltig(config, req)) return verweigern(res);
 
   const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
-  const zuordnung = zuordnungFuer({ store, config, body, nowMs });
+  const zuordnung = await zuordnungFuer({ store, config, body, nowMs });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 
@@ -294,6 +294,9 @@ function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abh
   if (sperrgrund) return keinAnruf({ res, body, grund: sperrgrund, callId: call.id });
 
   const outboundAntwort = outboundAntwortFuer({ outboundInitInhalt, vorspannText, call });
+
+  if (!(store.getCall(call.id) ?? (await store.attachActiveCall(call.id))))
+    return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
   const bindung = store.bindInboundElConversation(call.id, {
     conversationId: body.conversation_id,
@@ -312,6 +315,16 @@ function fehlerNachricht(err: unknown): string {
   return typeof err.message === "string" ? err.message : "";
 }
 
+async function antworteInitSicher({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): Promise<unknown> {
+  try {
+    return await handleInit({ req, res, deps });
+  } catch (err) {
+    console.error(`[${INIT_LOG_TAG}] fehler: ${fehlerNachricht(err) || "unbekannt"}`);
+    if (res.headersSent) return res.end();
+    return res.status(HTTP_SERVER_ERROR).json(INIT_ANTWORT.INTERN);
+  }
+}
+
 export function makeElevenLabsInitWebhookRoutes({
   store,
   config,
@@ -323,14 +336,8 @@ export function makeElevenLabsInitWebhookRoutes({
   const router = Router(EXAKTER_ROUTER);
   const deps = { store, config, bridges, now, outboundInitInhalt, vorspannText };
 
-  router.post(ELEVENLABS_INIT_PATH, (req, res) => {
-    try {
-      return handleInit({ req, res, deps });
-    } catch (err) {
-      console.error(`[${INIT_LOG_TAG}] fehler: ${fehlerNachricht(err) || "unbekannt"}`);
-      if (res.headersSent) return res.end();
-      return res.status(HTTP_SERVER_ERROR).json(INIT_ANTWORT.INTERN);
-    }
+  router.post(ELEVENLABS_INIT_PATH, (req: Request, res: Response, next: NextFunction): void => {
+    antworteInitSicher({ req, res, deps }).catch(next);
   });
 
   return router;

@@ -250,6 +250,8 @@ export function baueInitZustand() {
   const call = seedWartenderElCall(state, { answeredVorS: 2 });
   const store = {
     ...storeOpsFacade(state),
+    aktiveAnrufeAlle: async () => store.load().calls.filter((call) => call.status === "active"),
+    attachActiveCall: async (id) => store.load().calls.find((call) => call.id === id && call.status === "active") ?? null,
     bindInboundElConversation: (id, bindung) => ops.bindInboundElConversation(state, id, bindung),
     numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
     tenantTimezone: (id) => ops.tenantTimezone(state, id),
