@@ -285,8 +285,10 @@ function outboundAntwortFuer({
 async function bindungDauerhaft({ store, callId, fristMs }: { store: Speicher; callId: string; fristMs: number }): Promise<void> {
   if (!store.speichereKonversationsId) return;
   let zeitgeber: NodeJS.Timeout | undefined;
-  const abgelaufen = new Promise<never>((_, abbrechen) => {
-    zeitgeber = setTimeout(() => abbrechen(new Error(`Frist von ${String(fristMs)} ms abgelaufen`)), fristMs);
+  const abgelaufen = new Promise<never>((_ignoriert, abbrechen) => {
+    zeitgeber = setTimeout(() => {
+      abbrechen(new Error(`Frist von ${String(fristMs)} ms abgelaufen`));
+    }, fristMs);
   });
   try {
     await Promise.race([store.speichereKonversationsId(callId), abgelaufen]);
