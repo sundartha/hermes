@@ -1,4 +1,35 @@
-export function isInsecureHttpIssuer(issuerUrl) {
+export interface PruefungenKonfiguration {
+  auth: {
+    dashboardPassword: string | undefined;
+    mcpAuth: string;
+    oauthIssuerUrl: string | undefined;
+    oauthAudience: string | undefined;
+  };
+  safety: { skipTwilioSignatureCheck: boolean };
+  store: { storeBackend: string };
+  server: { publicUrl: string; publicUrlExplicit: boolean };
+  tenancy: { selfServiceEnabled: boolean; multiTenant: boolean };
+}
+
+interface Umgebung {
+  DEV_LOGIN_ENABLED?: string | undefined;
+}
+type StandardKonfiguration = () => PruefungenKonfiguration;
+type ErkenneProduktion = () => boolean;
+type AudienceUmformung = (wert: string | undefined) => string;
+type KanonischeAudience = (publicUrl: string) => string;
+
+interface PruefungenFunktionen {
+  productionFootguns: (cfg?: PruefungenKonfiguration, isProduction?: boolean) => string[];
+  productionAuthHints: (cfg?: PruefungenKonfiguration, isProduction?: boolean) => string[];
+}
+
+interface Footgun {
+  trifftZu: (cfg: PruefungenKonfiguration) => boolean;
+  befund: string;
+}
+
+export function isInsecureHttpIssuer(issuerUrl: string | undefined): boolean {
   return (
     !!issuerUrl &&
     issuerUrl.startsWith("http://") &&
@@ -6,7 +37,13 @@ export function isInsecureHttpIssuer(issuerUrl) {
   );
 }
 
-const PRODUCTION_FOOTGUNS = (umgebung, { fuerAudienceVergleich, kanonischeAudience }) => [
+const PRODUCTION_FOOTGUNS = (
+  umgebung: Umgebung,
+  {
+    fuerAudienceVergleich,
+    kanonischeAudience,
+  }: { fuerAudienceVergleich: AudienceUmformung; kanonischeAudience: KanonischeAudience },
+): Footgun[] => [
   {
     trifftZu: (cfg) => !cfg.auth.dashboardPassword,
     befund:
@@ -54,12 +91,16 @@ const PRODUCTION_FOOTGUNS = (umgebung, { fuerAudienceVergleich, kanonischeAudien
   },
 ];
 
-function productionFootguns(footguns, cfg, isProduction) {
+function productionFootguns(
+  footguns: Footgun[],
+  cfg: PruefungenKonfiguration,
+  isProduction: boolean,
+): string[] {
   if (!isProduction) return [];
   return footguns.filter((footgun) => footgun.trifftZu(cfg)).map((footgun) => footgun.befund);
 }
 
-function productionAuthHints(cfg, isProduction) {
+function productionAuthHints(cfg: PruefungenKonfiguration, isProduction: boolean): string[] {
   if (!isProduction) return [];
   if (cfg.auth.mcpAuth === "oauth" || cfg.auth.mcpAuth === "off") return [];
   return [
@@ -69,8 +110,8 @@ function productionAuthHints(cfg, isProduction) {
   ];
 }
 
-export function isSelfServiceLive(cfg) {
-  return Boolean(cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant);
+export function isSelfServiceLive(cfg: PruefungenKonfiguration): boolean {
+  return cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant;
 }
 
 export function pruefungenProduktionMit({
@@ -79,7 +120,13 @@ export function pruefungenProduktionMit({
   erkenneProduktion,
   fuerAudienceVergleich,
   kanonischeAudience,
-}) {
+}: {
+  umgebung: Umgebung;
+  standardConfig: StandardKonfiguration;
+  erkenneProduktion: ErkenneProduktion;
+  fuerAudienceVergleich: AudienceUmformung;
+  kanonischeAudience: KanonischeAudience;
+}): PruefungenFunktionen {
   const footguns = PRODUCTION_FOOTGUNS(umgebung, { fuerAudienceVergleich, kanonischeAudience });
   return {
     productionFootguns: (cfg = standardConfig(), isProduction = erkenneProduktion()) =>
