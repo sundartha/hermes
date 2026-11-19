@@ -1,14 +1,80 @@
 import { existsSync } from "fs";
 import path from "path";
 import { alarmEingangFindings } from "./alarm-eingang-pruefung.ts";
-import { isInsecureHttpIssuer, isSelfServiceLive } from "./pruefungen-produktion.ts";
+import {
+  isInsecureHttpIssuer,
+  isSelfServiceLive,
+  type PruefungenKonfiguration,
+} from "./pruefungen-produktion.ts";
 
-const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
+export type StartKonfiguration = PruefungenKonfiguration & {
+  llm: {
+    anthropicApiKey: string | undefined;
+    llmProvider: string;
+    llmProviderFallback: string | undefined;
+    deepseekApiKey: string | undefined;
+  };
+  server: { webDistDir: string; publicDir: string };
+  auth: {
+    sessionSecret: string | undefined;
+    statusToken: string | undefined;
+    deployToken: string | undefined;
+  };
+  store: { databaseUrl: string | undefined };
+  billing: {
+    paymentEnabled: boolean;
+    stripeSecretKey: string | undefined;
+    stripeWebhookSecret: string | undefined;
+    numberSetupFeeCents: number;
+    betterstackAlertUrl: string | undefined;
+  };
+  voice: { elevenLabsInbound: { begruessungslautEnabled: boolean } };
+  provisioning: { provisioningEnabled: boolean };
+  mail: object;
+};
 
-const webLoginInfraReady = (config) =>
+interface Befund {
+  fatal: boolean;
+  message: string;
+}
+
+interface Voraussetzung {
+  fehlt: () => boolean;
+  name: string;
+}
+
+type AlarmKanalEingabe = object;
+type StandardKonfiguration = () => StartKonfiguration;
+type ErkenneProduktion = () => boolean;
+type Fehlerliste = () => string[];
+type ProductionHinweise = (cfg?: StartKonfiguration, isProduction?: boolean) => string[];
+type AlertChannelInputs = (teile: {
+  billing: StartKonfiguration["billing"];
+  mail: StartKonfiguration["mail"];
+}) => AlarmKanalEingabe;
+type AlertChannelFindings = (eingabe: AlarmKanalEingabe) => Befund[];
+
+export interface StartAbhaengigkeiten {
+  standardConfig: StandardKonfiguration;
+  erkenneProduktion: ErkenneProduktion;
+  fehlerliste: Fehlerliste;
+  productionFootguns: ProductionHinweise;
+  productionAuthHints: ProductionHinweise;
+  alertChannelInputs: AlertChannelInputs;
+  alertChannelFindings: AlertChannelFindings;
+  llmProvider: { DEEPSEEK: string };
+  begruessungslautPfad: string;
+}
+
+const isPositiveIntegerFee = (cents: number): boolean => Number.isInteger(cents) && cents > 0;
+
+const webLoginInfraReady = (config: StartKonfiguration): boolean =>
   Boolean(config.auth.sessionSecret) && config.store.storeBackend === "pg";
 
-const REQUIRED_CONFIG = (config, { llmProvider, begruessungslautPfad }) => [
+const REQUIRED_CONFIG = (
+  config: StartKonfiguration,
+  { llmProvider, begruessungslautPfad }: StartAbhaengigkeiten,
+): Voraussetzung[] => [
   { fehlt: () => !config.llm.anthropicApiKey, name: "ANTHROPIC_API_KEY" },
   {
     fehlt: () =>
@@ -56,17 +122,27 @@ const REQUIRED_CONFIG = (config, { llmProvider, begruessungslautPfad }) => [
   },
 ];
 
-function sharedTokenFindings({ statusToken, deployToken }) {
+function sharedTokenFindings({
+  statusToken,
+  deployToken,
+}: {
+  statusToken: string | undefined;
+  deployToken: string | undefined;
+}): string[] {
   if (!statusToken || statusToken !== deployToken) return [];
   return [
     "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
   ];
 }
 
-const fatalMessages = (findings) =>
+const fatalMessages = (findings: Befund[]): string[] =>
   findings.filter((befund) => befund.fatal).map((befund) => befund.message);
 
-function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
+function fatalConfigFindings(
+  config: StartKonfiguration,
+  isProduction: boolean,
+  abhaengigkeiten: StartAbhaengigkeiten,
+): string[] {
   const { fehlerliste, productionFootguns, alertChannelInputs, alertChannelFindings } =
     abhaengigkeiten;
   const alertChannelConfig = alertChannelInputs({
@@ -83,14 +159,14 @@ function fatalConfigFindings(config, isProduction, abhaengigkeiten) {
   ];
 }
 
-function reportFatalConfig(missing, fatal) {
+function reportFatalConfig(missing: string[], fatal: string[]): void {
   console.error("\n[Konfiguration fatal] Boot wird verweigert:");
   for (const name of missing) console.error(`  - fehlt/ungueltig: ${name}`);
   for (const befund of fatal) console.error(`  - ${befund}`);
   console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
 }
 
-function warnLocalOnlyFootguns(config) {
+function warnLocalOnlyFootguns(config: StartKonfiguration): void {
   if (config.safety.skipTwilioSignatureCheck)
     console.error(
       "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
@@ -99,7 +175,7 @@ function warnLocalOnlyFootguns(config) {
     console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
 }
 
-function warnConfigurationHints(config) {
+function warnConfigurationHints(config: StartKonfiguration): void {
   if (config.billing.paymentEnabled && !config.provisioning.provisioningEnabled)
     console.error(
       "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
@@ -112,7 +188,9 @@ function warnConfigurationHints(config) {
     );
 }
 
-export function pruefungenStartMit(abhaengigkeiten) {
+export function pruefungenStartMit(abhaengigkeiten: StartAbhaengigkeiten): {
+  assertConfig: () => boolean;
+} {
   const { standardConfig, erkenneProduktion, productionAuthHints } = abhaengigkeiten;
   return {
     assertConfig() {
