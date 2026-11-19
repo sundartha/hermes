@@ -315,7 +315,7 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     if (bekannt && eigene.has(id)) return bekannt;
     if (bekannt) return kopieNeuLesen(id, bekannt, uebernehmen);
     try {
-      const gelesen = await runner.withClient((client) => anrufLesen(client, id));
+      const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id) });
       return gelesen ? uebernehmen(state, gelesen) : null;
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);
@@ -1215,14 +1215,6 @@ async function loadTenantRows(client, tenantId) {
   const settingsRows = (
     await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])
   ).rows;
-  const callRows = (
-    await client.query(`SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId])
-  ).rows;
-  const segRows = (
-    await client.query(`SELECT * FROM transcript_segment WHERE tenant_id = $1 ORDER BY id ASC`, [
-      tenantId,
-    ])
-  ).rows;
   const itemRows = (
     await client.query(`SELECT * FROM action_item WHERE tenant_id = $1 ORDER BY seq DESC`, [
       tenantId,
@@ -1268,8 +1260,6 @@ async function loadTenantRows(client, tenantId) {
   ).rows;
   return {
     settingsRows,
-    callRows,
-    segRows,
     itemRows,
     calRows,
     usageRows,
@@ -1283,9 +1273,6 @@ async function loadTenantRows(client, tenantId) {
 
 async function hydrateTenantInto(client, state, tenantId) {
   const rows = await loadTenantRows(client, tenantId);
-  const segmentsByCall = groupTranscripts(rows.segRows);
-  const itemIdsByCall = groupActionItemIds(rows.itemRows);
-
   if (rows.settingsRows.length) {
     Object.assign(state.settings, { [tenantId]: rowToSettings(rows.settingsRows[0]) });
   }
@@ -1294,9 +1281,6 @@ async function hydrateTenantInto(client, state, tenantId) {
     nutzungGeladen(state, tenantId, state.usage[tenantId]);
   }
   Object.assign(state.calendar, { [tenantId]: rows.calRows.map(rowToCalendarEvent) });
-  state.calls.push(
-    ...rows.callRows.map((zeile) => anrufAlsGelesen(rowToCall(zeile, segmentsByCall, itemIdsByCall))),
-  );
   state.actionItems.push(...rows.itemRows.map(rowToActionItem));
   state.notifications.push(...rows.notifRows.map(rowToNotification));
   state.numbers.push(...rows.numberRows.map(rowToNumber));

@@ -12,6 +12,8 @@ import {
 } from "./zwei-instanzen-postgres.js";
 
 const HTTP_OK = 200;
+const HTTP_FEHLER = 500;
+const HTTP_NICHT_GEFUNDEN = 404;
 const ANRUF = "call_h7c2a_kopie";
 const EIGENER_ANRUF = "call_h7c2a_eigen";
 const GRUND = "von Instanz A beendet";
@@ -67,27 +69,23 @@ test("H7c2a-3: auf einer Instanz liefert GET /api/calls/:id einen eigenen Anruf 
   });
 });
 
-test("H7c2a-4: hängt die Datenbank, liefert GET /api/calls/:id auf Instanz B die geladene Kopie statt eines Fehlers", async (t) => {
+test("H7c2a-4: hängt die Datenbank, antwortet GET /api/calls/:id auf Instanz B mit 500 statt 404", async (t) => {
   await mitInstanzHinterRelais(t, { anrufe: [ANRUF] }, async ({ a: b, relais }) => {
     relais.anhalten();
     try {
       const antwort = await lies(b, ANRUF);
-      assert.equal(antwort.status, HTTP_OK);
-      const anruf = await antwort.json();
-      assert.equal(anruf.id, ANRUF);
-      assert.equal(anruf.status, "active");
-      assert.match(b.stdout, /geladene Kopie bleibt/);
+      assert.equal(antwort.status, HTTP_FEHLER);
+      assert.match(b.stdout, /leseCall fehlgeschlagen/);
     } finally {
       relais.fortsetzen();
     }
   });
 });
 
-test("H7c2a-5: ist der Anruf in der Datenbank nicht mehr da, liefert GET /api/calls/:id auf Instanz B die geladene Kopie", async (t) => {
+test("H7c2a-5: ist der Anruf in der Datenbank nicht mehr da, antwortet GET /api/calls/:id auf Instanz B mit 404", async (t) => {
   await mitInstanzenAufPostgres(t, { anrufe: [ANRUF] }, async ({ instanzen: [, b], sql }) => {
     await sql(LOESCHEN_SQL, [ANRUF]);
     const antwort = await lies(b, ANRUF);
-    assert.equal(antwort.status, HTTP_OK);
-    assert.equal((await antwort.json()).status, "active");
+    assert.equal(antwort.status, HTTP_NICHT_GEFUNDEN);
   });
 });
