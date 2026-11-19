@@ -161,3 +161,35 @@ test("numberStatusFor: eigene freigegebene Nummer bei globalem Cap-Skip -> 'bloc
   s.tenants.find((t) => t.id === TENANT).numberProvisionSkipReason = "global_cap";
   assert.equal(numberStatusFor(s, TENANT), "blocked");
 });
+
+test("activeNumberFor: Ersatznummer eines anderen Tenants wird nicht ausgeliefert", () => {
+  const s = {
+    numbers: [
+      { id: "n_fremd_neu", tenantId: "t_b", status: "active", e164: "+4930555555" },
+      { id: "n_alt", tenantId: "t_a", status: "active", e164: "+4930111111" },
+    ],
+    provisioningJobs: [
+      { kind: "number_swap", numberId: "n_fremd_neu", idempotencyKey: "tausch_n_x" },
+    ],
+  };
+  assert.equal(activeNumberFor(s, "t_a"), "+4930111111");
+});
+
+test("activeNumberFor: noch nicht aktive Ersatznummer wird nicht ausgeliefert", () => {
+  const s = {
+    numbers: [
+      { id: "n_neu", tenantId: "t_a", status: "provisioning", e164: "+4930222222" },
+      { id: "n_alt", tenantId: "t_a", status: "active", e164: "+4930111111" },
+    ],
+    provisioningJobs: [{ kind: "number_swap", numberId: "n_neu", idempotencyKey: "tausch_n_alt" }],
+  };
+  assert.equal(activeNumberFor(s, "t_a"), "+4930111111");
+});
+
+test("activeNumberFor: leerer Nummerneintrag bei Tauschauftrag ohne Nummer bricht nicht ab", () => {
+  const s = {
+    numbers: [{ id: "n_alt", tenantId: "t_a", status: "active", e164: "+4930111111" }, null],
+    provisioningJobs: [{ kind: "number_swap", idempotencyKey: "tausch_n_alt" }],
+  };
+  assert.equal(activeNumberFor(s, "t_a"), "+4930111111");
+});
