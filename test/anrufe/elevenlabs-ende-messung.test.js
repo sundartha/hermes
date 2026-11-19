@@ -77,11 +77,11 @@ async function starteAnbieter(gespraeche) {
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
-async function mitAnbieter({ gespraeche, anrufe }, lauf) {
+async function mitAnbieter({ gespraeche, anrufe, env = {} }, lauf) {
   const anbieter = await starteAnbieter(gespraeche);
   const empfaenger = await startEmpfaenger();
   const srv = await startServer({
-    env: { ...EL_ENV, ELEVENLABS_API_BASE: anbieter.url, METRIKEN_OTLP_URL: empfaenger.url, FRISTEN_TAKT_MS: "40" },
+    env: { ...EL_ENV, ELEVENLABS_API_BASE: anbieter.url, METRIKEN_OTLP_URL: empfaenger.url, FRISTEN_TAKT_MS: "40", ...env },
     seed: seedState({ calls: anrufe }),
   });
   try {
@@ -93,7 +93,17 @@ async function mitAnbieter({ gespraeche, anrufe }, lauf) {
   }
 }
 
-const vorSekunden = (s) => new Date(Date.now() - s * MS_JE_S).toISOString();
+const festeUhr = (ms) =>
+  [
+    "const Echt = Date;",
+    `const fest = ${ms};`,
+    "globalThis.Date = class extends Echt {",
+    "  constructor(...a) { super(...(a.length ? a : [fest])); }",
+    "  static now() { return fest; }",
+    "};",
+  ].join("\n");
+
+const vorSekunden = (s, basisMs = Date.now()) => new Date(basisMs - s * MS_JE_S).toISOString();
 
 const elAnruf = (id, laufzeitS, zusatz = {}) =>
   seedCall({
@@ -152,11 +162,15 @@ test("EL-Ende S12/S13: Dauer 42 s und 600 s landen in den Eimern", async () => {
 
 test("EL-Ende S14: Anruf vor 50 s angelegt, Anbieterdauer 42 s: genau eine Annahmezeit zwischen 8 und 10 s", async () => {
   const gespraeche = { conv_ein: gespraech("ein", "done", { call_duration_secs: 42, error: null }) };
-  await mitAnbieter({ gespraeche, anrufe: [elAnruf("ein", 50)] }, async ({ srv, empfaenger }) => {
+  const festgelegt = Date.now();
+  const env = { NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(festeUhr(festgelegt))}` };
+  const zeit = vorSekunden(50, festgelegt);
+  const anrufe = [elAnruf("ein", 50, { startedAt: zeit, answeredAt: zeit, fristAbfrageAt: zeit })];
+  await mitAnbieter({ gespraeche, anrufe, env }, async ({ srv, empfaenger }) => {
     await beendet(srv, "ein");
     const [annahme] = await warteAuf(empfaenger, (e) => histogrammeVon(e, ANNAHME));
     assert.equal(annahme.anzahl, 1);
-    assert.ok(annahme.summe >= 8 && annahme.summe < 10, `Summe ${annahme.summe}`);
+    assert.equal(annahme.summe, 8);
     const text = JSON.stringify(empfaenger.exporte);
     for (const verboten of ["+4915112345678", "conv_ein", "call_test1"]) assert.ok(!text.includes(verboten));
   });
