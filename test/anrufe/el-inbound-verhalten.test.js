@@ -134,6 +134,7 @@ test("3395-R6-2: eingehender Rueckfall - wartender Anruf bekommt den Fehlersatz 
     const erst = await rueckfall(srv, WARTET_ID, "frist");
     assert.match(erst, /Hier ist der KI-Assistent von Jonas Beispiel\. Es ist ein technischer Fehler aufgetreten/);
     assert.match(erst, /<Hangup\/>/);
+    await waitUntil(() => gespeichert(srv, WARTET_ID)?.elFallbackAt, { timeoutMs: LOG_WARTE_MS });
     const call = gespeichert(srv, WARTET_ID);
     assert.equal(call.failureReason, "el_uebergabe_gescheitert");
     assert.match(call.elFallbackAt, /^\d{4}-\d\d-\d\dT/);
