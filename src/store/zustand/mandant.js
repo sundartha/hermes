@@ -9,7 +9,7 @@ import { seedTenantDefaultBudget } from "./budget.js";
 
 export function numberRecordByE164(state, e164) {
   if (!e164) return null;
-  return state.numbers.find((number) => number.e164 === e164 && number.status === NUMBER_STATUS.ACTIVE) || null;
+  return state.numbers.find((number) => number.e164 === e164 && number.status === NUMBER_STATUS.ACTIVE) ?? null;
 }
 
 export function findTenantByNumber(state, e164) {
@@ -25,16 +25,18 @@ export function seedBootstrapIdpSubject(state, rawSub, tenantId) {
   return true;
 }
 
+const NUMBER_TRANSITION_MAP = new Map(Object.entries(NUMBER_TRANSITIONS));
+
 export function canTransitionNumber(from, to) {
-  return (NUMBER_TRANSITIONS[from] || []).includes(to);
+  return (NUMBER_TRANSITION_MAP.get(from) ?? []).includes(to);
 }
 
 export function findNumber(state, id) {
-  return state.numbers.find((number) => number.id === id) || null;
+  return state.numbers.find((number) => number.id === id) ?? null;
 }
 
 export function findTenant(state, id) {
-  return tenantsOf(state).find((tenant) => tenant.id === id) || null;
+  return tenantsOf(state).find((tenant) => tenant.id === id) ?? null;
 }
 
 export function applyOwnerIdentity(tenant, firstName, lastName) {
@@ -69,13 +71,13 @@ export function seedBootstrapKyc(state, tenantId) {
 
 export function kycReached(state, tenantId, minLevel) {
   const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.kycLevel == null) return false;
+  if (tenant?.kycLevel == null) return false;
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
 export function tenantActiveSubscriber(state, tenantId, minLevel) {
   const tenant = findTenant(state, tenantId);
-  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return false;
+  if (tenant?.status !== TENANT_STATUS.ACTIVE) return false;
   if (tenant.kycLevel == null) return false;
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
@@ -94,7 +96,7 @@ export function setSuspendedAtIfAbsent(state, tenantId, nowIso) {
 
 export function clearSuspendedAt(state, tenantId) {
   const tenant = findTenant(state, tenantId);
-  if (!tenant || !tenant.suspendedAt) return { tenant, changed: false };
+  if (!tenant?.suspendedAt) return { tenant, changed: false };
   tenant.suspendedAt = null;
   return { tenant, changed: true };
 }
@@ -208,7 +210,7 @@ export function billingHoldActive(state, tenantId, nowIso) {
   const tenant = findTenant(state, tenantId);
   const reason = tenant?.billingHold ?? null;
   if (!reason) return null;
-  const dueAtIso = tenant.billingHoldDueAt;
+  const dueAtIso = tenant?.billingHoldDueAt;
   if (!dueAtIso) return reason;
   return nowIso >= dueAtIso ? reason : null;
 }
@@ -272,18 +274,18 @@ export function tenantMayRequestNumber(state, tenantId) {
 
 export function tenantContext(state, ownerName, tenantId) {
   const tenant = findTenant(state, tenantId);
-  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
+  const effectiveOwner = (tenant?.ownerName ?? "") || ownerName;
   return {
     tenantId,
     ownerName: effectiveOwner,
-    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
+    firstName: (tenant?.firstName ?? "") || firstNameOf(effectiveOwner),
     settings: settingsFor(state, tenantId),
     calendar: calendarFor(state, tenantId),
   };
 }
 
 function firstNameOf(fullName) {
-  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
+  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] ?? "" : "";
 }
 
 export function registerTenant(
