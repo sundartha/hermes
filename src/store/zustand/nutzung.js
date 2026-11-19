@@ -21,7 +21,7 @@ import {
   costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "../cost-evidence.ts";
-import { newId, getCall } from "./grundlagen.js";
+import { newId, getCall } from "./grundlagen.ts";
 
 export function usageFor(state, tenantId) {
   return (state.usage[tenantId] ||= emptyUsage());

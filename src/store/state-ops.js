@@ -41,8 +41,8 @@ export {
   reservationsTotal,
   releaseOutboundReserveCents,
 } from "./zustand/budget.js";
-import { newId, getCall } from "./zustand/grundlagen.js";
-export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
+import { newId, getCall } from "./zustand/grundlagen.ts";
+export { newId, tenantsOf, getCall } from "./zustand/grundlagen.ts";
 import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
 export { tenantContext, registerTenant } from "./zustand/mandant.js";
 export {
@@ -126,7 +126,7 @@ export {
   schliesseKostenAbgleich,
   oeffneKostenAbgleichErneut,
 } from "./zustand/nutzung.js";
-import { settingsFor, calendarFor, benachrichtigungHinzufuegen } from "./zustand/einstellungen.js";
+import { settingsFor, calendarFor, benachrichtigungHinzufuegen } from "./zustand/einstellungen.ts";
 import {
   bootstrapNummerAnlegen,
   bootstrapNummerAusKonfigAnlegen,
@@ -142,7 +142,7 @@ export {
   listProfiles,
   setProfile,
   deleteProfile,
-} from "./zustand/einstellungen.js";
+} from "./zustand/einstellungen.ts";
 export {
   tenantHasLiveNumber,
   markTenantNeedsManualReconcile,

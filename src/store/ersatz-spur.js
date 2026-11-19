@@ -1,7 +1,7 @@
 import { NUMBER_SWAP_JOB } from "../begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import { normNum } from "../begriffe/rufnummern.js";
-import { newId } from "./zustand/grundlagen.js";
+import { newId } from "./zustand/grundlagen.ts";
 import { bootstrapNummerAnlegen, swapKey } from "./zustand/nummern.js";
 
 export const ERSATZ_GRUND = Object.freeze({

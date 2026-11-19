@@ -1,6 +1,6 @@
 import { planCapCents } from "../../billing/plan-caps.ts";
 import { isKnownPlanSlug } from "../../plans.ts";
-import { tenantsOf } from "./grundlagen.js";
+import { tenantsOf } from "./grundlagen.ts";
 import { CENTS_PER_EUR, isBookableCents, globalCapCents } from "../../begriffe/abrechnung.js";
 import {
   usageFor,
