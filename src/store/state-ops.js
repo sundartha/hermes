@@ -1098,7 +1098,7 @@ export function findConflict(s, tenantId, startIso, endIso) {
 export function resolveCallLanguage(state, { tenantId, numberRecord }) {
   const settingsLang = settingsFor(state, tenantId).language;
   const tenant = findTenant(state, tenantId);
-  return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
+  return (settingsLang ?? "") || (numberRecord?.language ?? "") || (tenant?.defaultLanguage ?? "") || DEFAULT_LANGUAGE;
 }
 
 export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {
