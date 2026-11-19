@@ -180,7 +180,10 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
-        if (shouldPersistProvisionResult(r)) store.save();
+        if (shouldPersistProvisionResult(r)) {
+          store.save();
+          if (sub) store.stammdatenSchreiben(tenantId, ["idpSubject"]);
+        }
         return r;
       })
       .catch((e) => {

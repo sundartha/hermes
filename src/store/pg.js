@@ -966,13 +966,10 @@ async function aufbauen(client, prepareSchema) {
   await setTenant(client, BOOTSTRAP_TENANT_ID);
   await prepareSchema(client, BOOTSTRAP_TENANT_ID);
   const state = await hydrate(client);
-  const flushBootstrap = () =>
-    flushTenants(
-      client,
-      state.tenants.filter((mandant) => mandant.id === BOOTSTRAP_TENANT_ID),
-    );
   if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
-    await flushBootstrap();
+    await sperreSchreiben(client, BOOTSTRAP_TENANT_ID, {
+      idpSubject: ops.findTenant(state, BOOTSTRAP_TENANT_ID).idpSubject,
+    });
   if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID))
     await sperreSchreiben(client, BOOTSTRAP_TENANT_ID, { kycLevel: KYC_LEVEL.ID_VERIFIED });
   for (const tenantId of backfillGreetingNotices(state)) {
@@ -1618,7 +1615,6 @@ async function flushTenants(client, tenants) {
       `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_payment_method_type, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
        ON CONFLICT (id) DO UPDATE SET
-         idp_subject=EXCLUDED.idp_subject,
          number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
          number_provision_skip_at=EXCLUDED.number_provision_skip_at,
          number_release_pending=EXCLUDED.number_release_pending,
