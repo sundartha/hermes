@@ -405,6 +405,7 @@ export function failNumber(state, numberId) {
 
 export function markNumberGekauft(state, numberId, e164) {
   const number = findNumber(state, numberId);
+  if (!number) throw new Error(`markNumberGekauft: Nummer ${numberId} nicht gefunden`);
   number.e164 = e164;
   return number;
 }
