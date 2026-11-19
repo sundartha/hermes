@@ -102,3 +102,20 @@ for (const datei of bestand) {
     assert.match(readFileSync(pfad, "utf8"), /Date\.now|performance\.now|new Date\(\)|setTimeout|setInterval|setImmediate|node:timers|hrtime|utils\/(timer|uhr-warten)/);
   });
 }
+
+test("uhr-als-wert-quellen: tariffCentsPerMin-Import in cost-calibration wird weiter gemeldet", async () => {
+  const quelltext = 'import { tariffCentsPerMin } from "../telephony/outbound-gates.js";\nexport const a = tariffCentsPerMin;\n';
+  const [ergebnis] = await eslint.lintText(quelltext, { filePath: resolve(WURZEL, "src/billing/cost-calibration.ts") });
+  assert.equal(ergebnis.messages.filter((meldung) => /P5-12/.test(meldung.message)).length, 1);
+  const [uhr] = await eslint.lintText('import { sleep } from "../utils/uhr-warten.js";\nexport const a = sleep;\n', {
+    filePath: resolve(WURZEL, "src/billing/cost-calibration.ts"),
+  });
+  assert.equal(uhr.messages.filter((meldung) => /Uhr als Wert/.test(meldung.message)).length, 1);
+});
+
+test("uhr-als-wert-quellen: die Router-Form-Regel gilt in Routen weiter", async () => {
+  const [ergebnis] = await eslint.lintText("export const fooHandler = () => 1;\nexport { fooHandler as default };\n", {
+    filePath: resolve(WURZEL, "src/routes/probe-uhr.js"),
+  });
+  assert.ok(ergebnis.messages.some((meldung) => /Router-Form|Handler|Router/.test(meldung.message)));
+});
