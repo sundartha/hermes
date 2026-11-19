@@ -249,3 +249,30 @@ test("H5137-7: das gezielte Speichern hinterlaesst auf der Leitung nicht den Man
   });
   assert.equal(mandant, BOOTSTRAP_TENANT_ID);
 });
+
+test("H5137-8: dieselbe Bindung ein zweites Mal liefert kein dauerhaft und schreibt die Zeile nicht noch einmal", async () => {
+  const { store, runner } = await makePgTestStore();
+  const schreibvorgaenge = [];
+  const zaehlend = {
+    withClient: (arbeit) =>
+      runner.withClient((client) =>
+        arbeit({
+          query: (sql, ...rest) => {
+            if (String(sql).includes("UPDATE call SET elevenlabs_conversation_id")) schreibvorgaenge.push(sql);
+            return client.query(sql, ...rest);
+          },
+        }),
+      ),
+  };
+  const a = makePgStore(zaehlend);
+  await a.init();
+  const call = wartendesAnruf(a);
+  await a.persistCall(call.id);
+  const erste = a.bindInboundElConversation(call.id, { conversationId: KONVERSATION, nowIso: JETZT_ISO });
+  assert.equal(erste.changed, true);
+  await erste.dauerhaft;
+  const zweite = a.bindInboundElConversation(call.id, { conversationId: KONVERSATION, nowIso: JETZT_ISO });
+  assert.equal(zweite.changed, false);
+  assert.equal("dauerhaft" in zweite, false);
+  assert.equal(schreibvorgaenge.length, 1);
+});
