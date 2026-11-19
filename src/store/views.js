@@ -45,7 +45,7 @@ export function findActiveNumber(state, tenantId, provider) {
     (provider === undefined || number.provider === provider);
   const ersatzNummern = ersatzZuAlterNummer(state);
   return (
-    state.numbers.find((number) => ersatzNummern.has(number?.id) && passt(number)) ??
+    state.numbers.find((number) => ersatzNummern.has(number?.id) && number != null && passt(number)) ??
     state.numbers.find(passt)
   );
 }
