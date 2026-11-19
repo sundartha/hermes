@@ -99,3 +99,9 @@ test("P11-P3 FR-Betreffzeilen byte-genau: subjectOutbound/subjectInbound", () =>
   assert.equal(t.subjectOutbound("+33123456789"), "Appel vers +33123456789");
   assert.equal(t.subjectInbound("+33123456789"), "Appel de +33123456789");
 });
+
+test("P11-P3 EN/DE-Betreffzeilen byte-genau", () => {
+  assert.equal(LOCALES.en.postCall.subjectOutbound("+441234567890"), "Call to +441234567890");
+  assert.equal(LOCALES.en.postCall.subjectInbound("+441234567890"), "Call from +441234567890");
+  assert.equal(LOCALES.de.postCall.subjectInbound("+491511234"), "Anruf von +491511234");
+});
