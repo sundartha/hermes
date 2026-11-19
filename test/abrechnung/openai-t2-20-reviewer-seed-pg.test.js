@@ -64,7 +64,7 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
   await store.save();
 
   const fresh = await reopen(runner);
-  const { calls, actionItems } = fresh.exportTenantData(REVIEWER_TENANT);
+  const { calls, actionItems } = await fresh.exportTenantDataGelesen(REVIEWER_TENANT);
   assert.equal(calls.length, SEED_CALL_COUNT);
   for (const call of calls) {
     assert.equal(call.direction, "inbound");
@@ -76,12 +76,12 @@ test("Reviewer-Seed pg: Zeilen ueberleben Flush + Neu-Hydrierung, Mandant unvera
   assert.equal(actionItems.filter((item) => !item.done).length, SEED_ITEM_COUNT);
   assert.deepEqual(tenantRow(fresh), rowBefore, "Mandanten-Zeile inkl. Abo/KYC unveraendert");
 
-  assert.deepEqual(applyReviewerSeed(fresh, REVIEWER_TENANT, ENDED_AT), {
+  assert.deepEqual(await applyReviewerSeedAndPersist(fresh, REVIEWER_TENANT, ENDED_AT), {
     callsCreated: 0,
     itemsCreated: 0,
   });
   assert.equal(
-    fresh.exportTenantData(BOOTSTRAP_TENANT_ID).calls.length,
+    (await fresh.exportTenantDataGelesen(BOOTSTRAP_TENANT_ID)).calls.length,
     0,
     "Betreiber ohne Seed-Zeilen",
   );
@@ -225,7 +225,7 @@ test("Reviewer-Seed pg ohne Migration: passendes Schema -> Seed ueber RLS, idemp
     itemsCreated: SEED_ITEM_COUNT,
   });
   const second = await openAsScript(db);
-  const { calls } = second.store.exportTenantData(REVIEWER_TENANT);
+  const { calls } = await second.store.exportTenantDataGelesen(REVIEWER_TENANT);
   assert.equal(calls.length, SEED_CALL_COUNT, "Seed-Zeilen nach Neu-Hydrierung da");
   assert.deepEqual(
     tenantRow(second.store),
