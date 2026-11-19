@@ -248,6 +248,7 @@ const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
 const FRISTEN_ABFRAGE = "WITH faellig AS";
+const HOECHSTDAUER_ANWEISUNG = "UPDATE call SET frist_hoechstdauer_at";
 const ANSPRUCH_ENDE = [ABSCHLUSS, ZURUECK];
 
 const naechsteNachAnspruch = (anweisungen) => {
@@ -266,7 +267,7 @@ async function poolVorwaermen(sql, signer, instanz) {
 
 async function warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten) {
   const enthaelt = (nr, merkmale) => anweisungenSeit(mitschnitt, nr, vorher).some((text) => merkmale.some((merkmal) => text.includes(merkmal)));
-  const istTakt = (nr) => enthaelt(nr, [FRISTEN_ABFRAGE]);
+  const istTakt = (nr) => enthaelt(nr, [FRISTEN_ABFRAGE, HOECHSTDAUER_ANWEISUNG]);
   await mitschnitt.bisBedingung(() => gehalten.every((nr) => istTakt(nr) || enthaelt(nr, ANSPRUCH_ENDE)));
   return gehalten.filter((nr) => !istTakt(nr));
 }
