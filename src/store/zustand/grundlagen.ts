@@ -1,13 +1,17 @@
+import { randomInt } from "node:crypto";
+
 const ID_RADIX = 36;
-const ID_RANDOM_START = 2;
-const ID_RANDOM_END = 6;
+const ID_RANDOM_LENGTH = 4;
+const ID_RANDOM_RANGE = ID_RADIX ** ID_RANDOM_LENGTH;
 
 export function newId(prefix: string): string {
   return (
     prefix +
     "_" +
     Date.now().toString(ID_RADIX) +
-    Math.random().toString(ID_RADIX).slice(ID_RANDOM_START, ID_RANDOM_END)
+    randomInt(ID_RANDOM_RANGE)
+      .toString(ID_RADIX)
+      .padStart(ID_RANDOM_LENGTH, "0")
   );
 }
 
