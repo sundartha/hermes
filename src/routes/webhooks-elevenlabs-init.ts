@@ -282,20 +282,16 @@ function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: Promise<unknown> | undefined; fristMs: number }): Promise<void> {
-  if (!dauerhaft) return;
-  let zeitgeber: NodeJS.Timeout | undefined;
+async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fristMs: number }): Promise<void> {
   const abgelaufen = new Promise<never>((_ignoriert, abbrechen) => {
-    zeitgeber = setTimeout(() => {
+    setTimeout(() => {
       abbrechen(new Error(`Frist von ${String(fristMs)} ms abgelaufen`));
-    }, fristMs);
+    }, fristMs).unref();
   });
   try {
     await Promise.race([dauerhaft, abgelaufen]);
   } catch (err) {
     console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
-  } finally {
-    clearTimeout(zeitgeber);
   }
 }
 
