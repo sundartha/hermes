@@ -60,7 +60,7 @@ export function todayIsoDate() {
 }
 
 function assertScheduleEntry(modelId, entry, rateFields) {
-  if (!ISO_DATE_PATTERN.test(entry?.validFrom ?? ""))
+  if (entry === null || entry === undefined || !ISO_DATE_PATTERN.test(entry.validFrom))
     throw new Error(`modelPricesUsd: Staffel '${modelId}' ohne gueltiges validFrom (YYYY-MM-DD)`);
   for (const field of rateFields) {
     const rate = entry[field];
