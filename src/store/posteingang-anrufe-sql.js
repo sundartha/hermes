@@ -1,10 +1,13 @@
 import * as ops from "./state-ops.js";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
-const WAHL_SQL = `SELECT * FROM call WHERE tenant_id = $1 AND inbox_entry_at IS NOT NULL AND ($2 OR inbox_seen_at IS NULL)
-  ORDER BY started_at COLLATE "C", seq LIMIT $3`;
-const ZAEHLEN_SQL = `SELECT count(*)::int AS anzahl FROM call WHERE tenant_id = $1 AND inbox_entry_at IS NOT NULL AND ($2 OR inbox_seen_at IS NULL)`;
-const ZEILEN_SQL = `SELECT id, inbox_entry_at FROM call WHERE tenant_id = $1 AND id = ANY($2)`;
+const OFFEN_BEDINGUNG = `tenant_id = $1 AND inbox_entry_at IS NOT NULL AND ($2 OR inbox_seen_at IS NULL)`;
+const LESEN_SQL = `WITH wahl AS (SELECT * FROM call WHERE ${OFFEN_BEDINGUNG} ORDER BY started_at COLLATE "C", seq LIMIT $3)
+  SELECT wahl.*,
+    (SELECT count(*)::int FROM call WHERE ${OFFEN_BEDINGUNG}) AS spiegel_anzahl,
+    (SELECT coalesce(json_agg(json_build_object('id', fremd.id, 'inbox_entry_at', fremd.inbox_entry_at)), '[]'::json)
+       FROM call fremd WHERE fremd.tenant_id = $1 AND fremd.id = ANY($4)) AS spiegel_fremde
+  FROM (SELECT 1) AS anker LEFT JOIN wahl ON true`;
 const MARKIEREN_SQL = `UPDATE call SET inbox_seen_at = $1 WHERE tenant_id = $2 AND id = ANY($3) AND inbox_seen_at IS NULL RETURNING id`;
 const FEHLER = "[pg] posteingang lesen fehlgeschlagen:";
 
@@ -14,11 +17,9 @@ export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
   const lesen = (tenantId, { includeSeen, limit }, spiegelKandidaten) =>
     runner.withClient(async (client) => {
       await client.query(KONTEXT_SQL, [tenantId]);
-      const { rows } = await client.query(WAHL_SQL, [tenantId, includeSeen, limit]);
-      const { rows: [{ anzahl }] } = await client.query(ZAEHLEN_SQL, [tenantId, includeSeen]);
-      const fremde = spiegelKandidaten.length
-        ? (await client.query(ZEILEN_SQL, [tenantId, spiegelKandidaten.map((call) => call.id)])).rows
-        : [];
+      const { rows: alle } = await client.query(LESEN_SQL, [tenantId, includeSeen, limit, spiegelKandidaten.map((call) => call.id)]);
+      const { spiegel_anzahl: anzahl, spiegel_fremde: fremde } = alle[0];
+      const rows = alle.filter((zeile) => zeile.id);
       return { rows, anzahl, fremde };
     });
   const markieren = (tenantId, ids, atIso) =>
