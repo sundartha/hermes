@@ -133,3 +133,31 @@ test("activeNumberFor: ohne Tausch gewinnt die erste aktive Nummer", () => {
   s.provisioningJobs = [];
   assert.equal(activeNumberFor(s, "t_a"), "+4930111111");
 });
+
+test("activeNumberFor: Ersatznummer vor der alten, unbeteiligte aktive Nummer dazwischen -> Ersatznummer", () => {
+  const s = {
+    numbers: [
+      { id: "n_neu", tenantId: "t_a", status: "active", e164: "+4930222222" },
+      { id: "n_fremd", tenantId: "t_a", status: "active", e164: "+4930333333" },
+      { id: "n_alt", tenantId: "t_a", status: "active", e164: "+4930111111" },
+    ],
+    provisioningJobs: [{ kind: "number_swap", numberId: "n_neu", idempotencyKey: "tausch_n_alt" }],
+  };
+  s.numbers.unshift({ id: "n_vorn", tenantId: "t_a", status: "active", e164: "+4930444444" });
+  assert.equal(activeNumberFor(s, "t_a"), "+4930222222");
+});
+
+test("numberStatusFor: eigene freigegebene Nummer -> 'none', nicht 'failed'", () => {
+  const s = makeDefaultState();
+  registerTenant(s, TENANT);
+  s.numbers.push({ id: "n_rel", tenantId: TENANT, status: "released", e164: "+4915700000010" });
+  assert.equal(numberStatusFor(s, TENANT), "none");
+});
+
+test("numberStatusFor: eigene freigegebene Nummer bei globalem Cap-Skip -> 'blocked', nicht 'failed'", () => {
+  const s = makeDefaultState();
+  registerTenant(s, TENANT);
+  s.numbers.push({ id: "n_rel", tenantId: TENANT, status: "released", e164: "+4915700000010" });
+  s.tenants.find((t) => t.id === TENANT).numberProvisionSkipReason = "global_cap";
+  assert.equal(numberStatusFor(s, TENANT), "blocked");
+});
