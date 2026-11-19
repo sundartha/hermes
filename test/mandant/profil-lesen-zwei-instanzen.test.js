@@ -110,7 +110,7 @@ test("Kriterium 3: ein Schreiben, das während des Lesens beginnt, wird nicht vo
 
   zustand.halten = true;
   const nachladen = b.einstellungenNachladen(tenant);
-  await gestartet.offen;
+  await Promise.race([gestartet.offen, nachladen]);
   b.setProfile(tenant, { allowLookup: true });
   lesen.freigeben();
   await nachladen;
