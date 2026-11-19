@@ -248,8 +248,7 @@ const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
 const FRISTEN_ABFRAGE = "WITH faellig AS";
-const ZEITGRENZE_ANWEISUNG = "SELECT set_config('statement_timeout'";
-const ANSPRUCH_MERKMALE = [ZEITGRENZE_ANWEISUNG, ANSPRUCH_ANWEISUNG, ABSCHLUSS, ZURUECK];
+const ANSPRUCH_ENDE = [ABSCHLUSS, ZURUECK];
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
@@ -268,7 +267,7 @@ async function poolVorwaermen(sql, signer, instanz) {
 async function warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten) {
   const enthaelt = (nr, merkmale) => anweisungenSeit(mitschnitt, nr, vorher).some((text) => merkmale.some((merkmal) => text.includes(merkmal)));
   const istTakt = (nr) => enthaelt(nr, [FRISTEN_ABFRAGE]);
-  await mitschnitt.bisBedingung(() => gehalten.every((nr) => istTakt(nr) || enthaelt(nr, ANSPRUCH_MERKMALE)));
+  await mitschnitt.bisBedingung(() => gehalten.every((nr) => istTakt(nr) || enthaelt(nr, ANSPRUCH_ENDE)));
   return gehalten.filter((nr) => !istTakt(nr));
 }
 
