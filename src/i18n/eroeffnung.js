@@ -33,6 +33,8 @@ const TEXTE = Object.freeze({
   }),
 });
 
+const TEXTE_NACH_SPRACHE = new Map(Object.entries(TEXTE));
+
 const GEDANKENSTRICH = "–";
 const NAME_PLATZHALTER = "\u0000";
 
@@ -60,11 +62,11 @@ export const PLACEHOLDER_OPENER = "{{";
 export function besitzerEroeffnung({ language, firstName }) {
   const vorname = typeof firstName === "string" ? firstName.trim() : "";
   if (!vorname || vorname.includes(PLACEHOLDER_OPENER)) return "";
-  return TEXTE[language].besitzer;
+  return TEXTE_NACH_SPRACHE.get(language).besitzer;
 }
 
 export function besitzerFrage(language) {
-  return TEXTE[language].besitzerFrage;
+  return TEXTE_NACH_SPRACHE.get(language).besitzerFrage;
 }
 
 export function drittEroeffnung({ language, ownerName, firstName, reason }) {
