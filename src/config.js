@@ -32,12 +32,12 @@ import { rohwertePrivacy } from "./konfiguration/rohwerte-privacy.ts";
 import { rohwerteResearch } from "./konfiguration/rohwerte-research.ts";
 import { rohwerteServer } from "./konfiguration/rohwerte-server.js";
 import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.ts";
-import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.js";
+import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.ts";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.ts";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.ts";
 import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.ts";
 import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.ts";
-import { rohwerteVoice } from "./konfiguration/rohwerte-voice.js";
+import { rohwerteVoice } from "./konfiguration/rohwerte-voice.ts";
 import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.ts";
 import {
   alertChannelFindings,
@@ -76,7 +76,7 @@ export const fristenEinstellungen = Object.freeze(rohwerteFristen(process.env, u
 export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.js";
 export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.js";
 export { TELNYX_API_BASE_STANDARD } from "./konfiguration/rohwerte-telephony.ts";
-export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.js";
+export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.ts";
 
 export function configFatalErrors() {
   return fatalConfigErrors.slice();

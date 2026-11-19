@@ -1,8 +1,19 @@
 import { MS_PER_MINUTE } from "../utils/timer.ts";
+import type { umgebungMit } from "./umgebung.ts";
 
 export const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 
-function elevenLabsZugang(env, { stripTrailingSlash, textEnv }) {
+type Helfer = ReturnType<typeof umgebungMit>;
+
+interface Zugang {
+  apiKey: string;
+  apiBase: string;
+}
+
+function elevenLabsZugang(
+  env: { ELEVENLABS_API_KEY?: string | undefined; ELEVENLABS_API_BASE?: string | undefined },
+  { stripTrailingSlash, textEnv }: Pick<Helfer, "stripTrailingSlash" | "textEnv">,
+): Zugang {
   return {
     apiKey: (env.ELEVENLABS_API_KEY ?? "").trim(),
     apiBase: stripTrailingSlash(
@@ -11,7 +22,29 @@ function elevenLabsZugang(env, { stripTrailingSlash, textEnv }) {
   };
 }
 
-function playTts(env, { boolEnv, numEnv, textEnv }, zugang) {
+function playTts(
+  env: {
+    ELEVENLABS_PLAY_TTS_ENABLED?: string | undefined;
+    ELEVENLABS_VOICE_ID?: string | undefined;
+    ELEVENLABS_MODEL?: string | undefined;
+    ELEVENLABS_OUTPUT_FORMAT?: string | undefined;
+    ELEVENLABS_SYNTH_TIMEOUT_MS?: string | undefined;
+    ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS?: string | undefined;
+    ELEVENLABS_TTS_TOKEN_TTL_MS?: string | undefined;
+  },
+  { boolEnv, numEnv, textEnv }: Pick<Helfer, "boolEnv" | "numEnv" | "textEnv">,
+  zugang: Zugang,
+): {
+  enabled: boolean;
+  apiKey: string;
+  voiceId: string;
+  model: string;
+  apiBase: string;
+  outputFormat: string;
+  synthTimeoutMs: number;
+  synthTotalTimeoutMs: number;
+  tokenTtlMs: number;
+} {
   return {
     enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", env.ELEVENLABS_PLAY_TTS_ENABLED, {
       fallback: false,
@@ -39,7 +72,31 @@ function playTts(env, { boolEnv, numEnv, textEnv }, zugang) {
   };
 }
 
-function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
+function ausgehend(
+  env: {
+    ELEVENLABS_AGENT_ID?: string | undefined;
+    ELEVENLABS_RESULT_POLL_MS?: string | undefined;
+    VORSPANN_WIEDERGABE_FRIST_MS?: string | undefined;
+    ANRUFSTART_WARTEFRIST_MS?: string | undefined;
+    EL_BRIDGE_START_DEADLINE_MS?: string | undefined;
+    ELEVENLABS_OPENING_LINE_LLM_ENABLED?: string | undefined;
+    ELEVENLABS_ENVIRONMENT?: string | undefined;
+    ELEVENLABS_ERWARTETER_MEDIENWEG?: string | undefined;
+  },
+  { boolEnv, enumEnv, numEnv }: Pick<Helfer, "boolEnv" | "enumEnv" | "numEnv">,
+  zugang: Zugang,
+): {
+  agentId: string;
+  resultPollMs: number;
+  vorspannWiedergabeFristMs: number;
+  anrufstartWartefristMs: number;
+  bridgeStartDeadlineMs: number;
+  apiKey: string;
+  apiBase: string;
+  openingLineLlm: boolean;
+  environment: string;
+  erwarteterMedienweg: string;
+} {
   return {
     agentId: (env.ELEVENLABS_AGENT_ID ?? "").trim(),
     resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", env.ELEVENLABS_RESULT_POLL_MS, {
@@ -83,7 +140,43 @@ function ausgehend(env, { boolEnv, enumEnv, numEnv }, zugang) {
   };
 }
 
-export function rohwerteVoice(env, helfer, standardSttProfile) {
+export function rohwerteVoice(
+  env: Parameters<typeof elevenLabsZugang>[0] &
+    Parameters<typeof playTts>[0] &
+    Parameters<typeof ausgehend>[0] & {
+      ELEVENLABS_TOOL_TOKEN?: string | undefined;
+      ELEVENLABS_TENANT_TOKEN_REQUIRED?: string | undefined;
+      SEND_SMS_SUMMARY?: string | undefined;
+      DAILY_SMS_CAP?: string | undefined;
+      STT_SPEECH_TIMEOUT_SEC?: string | undefined;
+      CALLER_SUBSTANCE_MIN_LEN?: string | undefined;
+      THINKING_SIGNAL_ENABLED?: string | undefined;
+      TOOL_FOLLOW_UP_ENABLED?: string | undefined;
+      OWNER_SELF_CALL_ENABLED?: string | undefined;
+      OWNER_SELF_CALL_TENANT_IDS?: string | undefined;
+      INBOUND_OWNER_GREETING_ENABLED?: string | undefined;
+      INBOUND_OWNER_GREETING_TENANT_IDS?: string | undefined;
+      STT_PROFILE?: string | undefined;
+    },
+  helfer: Helfer,
+  standardSttProfile: string,
+): {
+  elevenLabsPlayTts: ReturnType<typeof playTts>;
+  elevenLabsToolToken: string;
+  elevenLabsTenantTokenRequired: boolean;
+  elevenLabsOutbound: ReturnType<typeof ausgehend>;
+  sendSmsSummary: boolean;
+  dailySmsCap: number;
+  sttSpeechTimeoutSec: number;
+  callerSubstanceMinLen: number;
+  thinkingSignalEnabled: boolean;
+  toolFollowUpEnabled: boolean;
+  ownerSelfCallEnabled: boolean;
+  ownerSelfCallTenantIds: string[];
+  inboundOwnerGreetingEnabled: boolean;
+  inboundOwnerGreetingTenantIds: string[];
+  sttProfile: string;
+} {
   const zugang = elevenLabsZugang(env, helfer);
   const { boolEnv, csvEnv, numEnv, textEnv } = helfer;
   return {
