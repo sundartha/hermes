@@ -23,6 +23,7 @@ const INIT_TOKEN = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN;
 const KONVERSATION = "conv_h5137_neu";
 const ABSENDER = "+4930555000337";
 const ZIEL = "+4915112349937";
+const JETZT_ISO = new Date("2026-01-01T00:00:00.000Z").toISOString();
 
 config.voice.elevenLabsInbound.initWebhookToken = INIT_TOKEN;
 config.voice.elevenLabsOutbound.agentId = AGENT_ID;
@@ -93,7 +94,7 @@ test("H5137-1: der EL-Init antwortet erst, wenn die Konversations-ID des wartend
   Object.assign(call, {
     elevenlabsConversationId: null,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: new Date().toISOString(),
+    answeredAt: JETZT_ISO,
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   await a.persistCall(call.id);
@@ -113,7 +114,7 @@ test("H5137-2: schlaegt das Speichern fehl, antwortet der EL-Init trotzdem mit 2
   Object.assign(call, {
     elevenlabsConversationId: null,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: new Date().toISOString(),
+    answeredAt: JETZT_ISO,
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   await store.persistCall(call.id);
@@ -138,7 +139,7 @@ function wartendesAnruf(store) {
   Object.assign(call, {
     elevenlabsConversationId: null,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: new Date().toISOString(),
+    answeredAt: JETZT_ISO,
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   return call;
@@ -217,7 +218,7 @@ test("H5137-6: das gezielte Speichern schreibt die ID nur in die Zeile eines lau
     await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
     await client.query("UPDATE call SET status = 'completed' WHERE id = $1", [beendet.id]);
   });
-  const jetzt = new Date().toISOString();
+  const jetzt = JETZT_ISO;
   const beendetBindung = store.bindInboundElConversation(beendet.id, { conversationId: KONVERSATION, nowIso: jetzt });
   await beendetBindung.dauerhaft;
   assert.equal(await konversationInDatenbank(runner, beendet.id), null);
@@ -237,11 +238,11 @@ test("H5137-7: das gezielte Speichern hinterlaesst auf der Leitung nicht den Man
   Object.assign(call, {
     elevenlabsConversationId: null,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: new Date().toISOString(),
+    answeredAt: JETZT_ISO,
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   await store.persistCall(call.id);
-  await store.bindInboundElConversation(call.id, { conversationId: KONVERSATION, nowIso: new Date().toISOString() }).dauerhaft;
+  await store.bindInboundElConversation(call.id, { conversationId: KONVERSATION, nowIso: JETZT_ISO }).dauerhaft;
   const mandant = await runner.withClient(async (client) => {
     const { rows } = await client.query("SELECT current_setting('app.current_tenant', true) AS mandant");
     return rows[0].mandant;
