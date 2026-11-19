@@ -110,6 +110,10 @@ const STAMMDATEN_SPALTEN = Object.freeze({
   defaultLanguage: "default_language",
   timezone: "timezone",
   privateNumber: "private_number",
+  newsletterConsent: "newsletter_consent",
+  newsletterConsentAt: "newsletter_consent_at",
+  newsletterRecipients: "newsletter_recipients",
+  newsletterConfirmMailLog: "newsletter_confirm_mail_log",
 });
 
 function anbinden(zustand, { einstellungen, anrufpause, mandant, nutzung }) {
@@ -795,6 +799,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
     setNewsletterConsent(tenantId, consent) {
       const tenant = ops.setNewsletterConsent(requireState(), tenantId, consent);
       save();
+      mandant.schreiben(tenantId, ["newsletterConsent", "newsletterConsentAt"]);
       return tenant;
     },
     tenantNewsletterConsent: (tenantId) => ops.tenantNewsletterConsent(requireState(), tenantId),
@@ -807,21 +812,28 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
     addNewsletterRecipient(tenantId, recipientInput) {
       const recipient = ops.addNewsletterRecipient(requireState(), tenantId, recipientInput);
       save();
+      mandant.schreiben(tenantId, ["newsletterRecipients", "newsletterConfirmMailLog"]);
       return recipient;
     },
     removeNewsletterRecipient(tenantId, email) {
       const changed = ops.removeNewsletterRecipient(requireState(), tenantId, email);
-      if (changed) save();
+      if (!changed) return changed;
+      save();
+      mandant.schreiben(tenantId, ["newsletterRecipients"]);
       return changed;
     },
     confirmNewsletterRecipientByToken(tokenHash, nowIso) {
       const result = ops.confirmNewsletterRecipientByToken(requireState(), tokenHash, nowIso);
-      if (result) save();
+      if (!result) return result;
+      save();
+      mandant.schreiben(result.tenantId, ["newsletterRecipients"]);
       return result;
     },
     unsubscribeNewsletterRecipientByToken(token) {
       const result = ops.unsubscribeNewsletterRecipientByToken(requireState(), token);
-      if (result) save();
+      if (!result) return result;
+      save();
+      mandant.schreiben(result.tenantId, ["newsletterRecipients"]);
       return result;
     },
 
@@ -1612,11 +1624,7 @@ async function flushTenants(client, tenants) {
          number_release_pending=EXCLUDED.number_release_pending,
          workos_delete_pending=EXCLUDED.workos_delete_pending,
          cancellation_mail_pending=EXCLUDED.cancellation_mail_pending,
-         cancellation_mail_received_at=EXCLUDED.cancellation_mail_received_at,
-         newsletter_consent=EXCLUDED.newsletter_consent,
-         newsletter_consent_at=EXCLUDED.newsletter_consent_at,
-         newsletter_recipients=EXCLUDED.newsletter_recipients,
-         newsletter_confirm_mail_log=EXCLUDED.newsletter_confirm_mail_log`,
+         cancellation_mail_received_at=EXCLUDED.cancellation_mail_received_at`,
       [
         t.id,
         t.status,

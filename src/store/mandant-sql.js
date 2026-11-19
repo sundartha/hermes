@@ -52,6 +52,8 @@ export function sperreAusZustand(zustand, tenantId) {
   };
 }
 
+const jsonWert = (wert) => (Array.isArray(wert) ? JSON.stringify(wert) : wert);
+
 const schreiberFuer = (spalten) => async (client, tenantId, werte) => {
   const schluessel = Object.keys(werte);
   const setzen = schluessel.map(
@@ -59,7 +61,7 @@ const schreiberFuer = (spalten) => async (client, tenantId, werte) => {
   );
   const { rows } = await client.query(
     `UPDATE tenant SET ${setzen.join(", ")} WHERE id = $1 RETURNING ${SPERRE_SPALTEN}`,
-    [tenantId, ...schluessel.map((key) => werte[key])],
+    [tenantId, ...schluessel.map((key) => jsonWert(werte[key]))],
   );
   if (rows.length === 0) throw new Error("Mandant nicht in der Datenbank");
   return rows[0];
