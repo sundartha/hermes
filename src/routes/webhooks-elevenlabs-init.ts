@@ -48,6 +48,7 @@ interface Bindung {
   bound: boolean;
   changed: boolean;
   call: Anruf;
+  dauerhaft?: Promise<unknown>;
 }
 
 interface Speicher {
@@ -56,7 +57,6 @@ interface Speicher {
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
-  speichereKonversationsId?(callId: string): Promise<unknown>;
 }
 
 type NummernSatz = Parameters<typeof inboundElPathFor>[0]["numberRecord"];
@@ -282,8 +282,8 @@ function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
-async function bindungDauerhaft({ store, callId, fristMs }: { store: Speicher; callId: string; fristMs: number }): Promise<void> {
-  if (!store.speichereKonversationsId) return;
+async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: Promise<unknown> | undefined; fristMs: number }): Promise<void> {
+  if (!dauerhaft) return;
   let zeitgeber: NodeJS.Timeout | undefined;
   const abgelaufen = new Promise<never>((_ignoriert, abbrechen) => {
     zeitgeber = setTimeout(() => {
@@ -291,7 +291,7 @@ async function bindungDauerhaft({ store, callId, fristMs }: { store: Speicher; c
     }, fristMs);
   });
   try {
-    await Promise.race([store.speichereKonversationsId(callId), abgelaufen]);
+    await Promise.race([dauerhaft, abgelaufen]);
   } catch (err) {
     console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
   } finally {
@@ -325,7 +325,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
   if (bindung.changed) {
-    await bindungDauerhaft({ store, callId: call.id, fristMs: speicherFristMs });
+    await bindungDauerhaft({ dauerhaft: bindung.dauerhaft, fristMs: speicherFristMs });
     bridges.clearDeadlines(call.id);
   }
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
