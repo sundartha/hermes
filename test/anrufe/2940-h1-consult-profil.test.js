@@ -75,18 +75,19 @@ let speicher;
 before(async () => {
   schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(seedState({}));
+  const { config } = await import("../../src/config.js");
+  config.tenancy.consultEnabled = true;
+  config.tenancy.assistantContextEnabled = true;
   speicher = await import("../../src/store.js");
   ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
 });
 
-async function mitKaputtemProfil(run) {
+async function mitProfilLeser(resolveProfile, run) {
   const call = seedCall({ id: "call_h1", tenantId: TENANT, status: "active" });
   const store = {
     ...speicher,
     getCall: () => call,
-    resolveProfile: () => {
-      throw new Error("profil-kaputt");
-    },
+    resolveProfile,
   };
   const app = express();
   app.use(express.json());
@@ -125,6 +126,11 @@ async function mitKaputtemProfil(run) {
   }
 }
 
+const mitKaputtemProfil = (run) =>
+  mitProfilLeser(() => {
+    throw new Error("profil-kaputt");
+  }, run);
+
 test("2940-H1-4: wirft das Profil-Lesen, antworten beide Routen mit 500 statt gar nicht", async () => {
   await mitKaputtemProfil(async (basis) => {
     const abfrage = await abrufMitFrist(`${basis}/api/calls/call_h1/consult`);
@@ -135,5 +141,13 @@ test("2940-H1-4: wirft das Profil-Lesen, antworten beide Routen mit 500 statt ga
       body: JSON.stringify({ event_id: "c0", answers: ["a"] }),
     });
     assert.equal(antwort.status, HTTP_SERVER_ERROR);
+  });
+});
+
+test("2940-H1-5: liefert das Profil-Lesen sein Ergebnis erst spaeter, gilt die Freigabe darin und die Abfrage antwortet mit 200", async () => {
+  await mitProfilLeser(async () => ({ allowConsult: true }), async (basis) => {
+    const res = await abrufMitFrist(`${basis}/api/calls/call_h1/consult`);
+    assert.equal(res.status, HTTP_OK);
+    assert.deepEqual(await res.json(), {});
   });
 });
