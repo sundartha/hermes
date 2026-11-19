@@ -79,7 +79,10 @@ async function onboard(speicher, koerper) {
   }
 }
 
-const gespeichert = async (tenantId) => (await gemeinsam.query(ZEILE_SQL, [tenantId])).rows[0].idp_subject;
+const gespeichert = async (tenantId) => {
+  const { rows } = await gemeinsam.query(ZEILE_SQL, [tenantId]);
+  return rows[0].idp_subject;
+};
 
 test("Kriterium 1: die idp_subject von A steht nach den letzten Flushs beider Instanzen in der Zeile und eine neue Instanz findet den Mandanten", async () => {
   const { a, b, tenant, sub } = await zweiInstanzen();
