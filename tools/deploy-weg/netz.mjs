@@ -9,6 +9,8 @@ const GITHUB_VERSION = "2022-11-28";
 const KENNUNG = "hermes-deploy-weg";
 const MCP_TYP = "application/json, text/event-stream";
 const HTTP_OK = 200;
+const STATUS_FRIST_MS = 5000;
+const STOERUNG_STUFEN = Object.freeze(["minor", "major", "critical"]);
 const KEINE_ANTWORT = 0;
 const DEPLOY_PFAD = "/deploys";
 const HEALTHZ_PFAD = "/healthz";
@@ -49,6 +51,17 @@ export async function anfrage(
   } catch {
     return { status: KEINE_ANTWORT, typ: "", daten: null };
   }
+}
+
+async function anbieterGestoert({ name, url }) {
+  const { status, daten } = await anfrage(url, { fristMs: STATUS_FRIST_MS });
+  const stufe = daten?.status?.indicator;
+  return status === HTTP_OK && STOERUNG_STUFEN.includes(stufe) ? [name] : [];
+}
+
+export async function anbieterStoerungen(anbieter) {
+  const gestoert = await Promise.all(anbieter.map(anbieterGestoert));
+  return gestoert.flat();
 }
 
 function wachAntwort({ status, typ, daten }) {
