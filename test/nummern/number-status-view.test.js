@@ -113,3 +113,23 @@ test("numberStatusFor: 'failed' hat Vorrang vor gleichzeitigem globalem Cap-Skip
   assert.equal(retry.reason, "global_cap");
   assert.equal(numberStatusFor(s, "b"), "failed");
 });
+
+function zustandMitTausch() {
+  return {
+    numbers: [
+      { id: "n_alt", tenantId: "t_a", status: "active", e164: "+4930111111" },
+      { id: "n_neu", tenantId: "t_a", status: "active", e164: "+4930222222" },
+    ],
+    provisioningJobs: [{ kind: "number_swap", numberId: "n_neu", idempotencyKey: "tausch_n_alt" }],
+  };
+}
+
+test("activeNumberFor: bei laufendem Tausch gewinnt die Ersatznummer vor der alten", () => {
+  assert.equal(activeNumberFor(zustandMitTausch(), "t_a"), "+4930222222");
+});
+
+test("activeNumberFor: ohne Tausch gewinnt die erste aktive Nummer", () => {
+  const s = zustandMitTausch();
+  s.provisioningJobs = [];
+  assert.equal(activeNumberFor(s, "t_a"), "+4930111111");
+});
