@@ -1,17 +1,8 @@
 import VORLAGE from "../../elevenlabs/agent_configs/outbound-agent.template.json" with { type: "json" };
 import { GET_CONSULT_TOOL_NAME } from "../consult/in-call.js";
 
-interface VorlageStimme {
-  model_id?: string;
-  stability?: number;
-  similarity_boost?: number;
-  speed?: number;
-}
-
 interface Vorlage {
-  agent?: {
-    conversation_config?: { agent?: { prompt?: { prompt?: string } }; tts?: VorlageStimme };
-  };
+  agent?: { conversation_config?: { agent?: { prompt?: { prompt?: string } } } };
   tools?: Record<string, unknown>;
 }
 
@@ -82,20 +73,3 @@ const WITHOUT_CONSULT = Object.freeze({
 export function outboundAgentConfigFor({ consultAllowed }: { consultAllowed?: unknown }): AgentConfig {
   return consultAllowed === true ? WITH_CONSULT : WITHOUT_CONSULT;
 }
-
-const TTS_SECTION = conversationConfig.tts ?? {};
-
-export const AGENT_STIMME: Readonly<{
-  model: string | undefined;
-  voiceSettings: { stability: number; similarity_boost: number; speed?: number } | undefined;
-}> = Object.freeze({
-  model: TTS_SECTION.model_id,
-  voiceSettings:
-    TTS_SECTION.stability === undefined || TTS_SECTION.similarity_boost === undefined
-      ? undefined
-      : {
-          stability: TTS_SECTION.stability,
-          similarity_boost: TTS_SECTION.similarity_boost,
-          ...(TTS_SECTION.speed === undefined ? {} : { speed: TTS_SECTION.speed }),
-        },
-});

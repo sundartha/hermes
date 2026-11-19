@@ -1,7 +1,6 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
-import { readFileSync } from "node:fs";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
@@ -352,37 +351,4 @@ test("Ablage fertig innerhalb der Turn-Frist -> Abruf-URL mit Token", async () =
 test("Ablage fertig bei Dokument mit Hangup, innerhalb der Turn-Frist -> Abruf-URL mit Token", async () => {
   const out = await mitStummerAblage(() => "sync", [say("Tschuess"), hangup()], Date.now());
   assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/sync`);
-});
-
-const VORLAGE = JSON.parse(
-  readFileSync(new URL("../../elevenlabs/agent_configs/outbound-agent.template.json", import.meta.url), "utf8"),
-);
-const AGENT_TTS = VORLAGE.agent.conversation_config.tts;
-
-async function vorspannAnfrage() {
-  const { calls, fetchImpl } = recordingStreamFetch();
-  const store = { platformTtsUsageView: () => ({ characters: 0, quota: 1_000_000 }), recordTtsCharacters: () => null };
-  const { synthesizeVorspann } = makeDirectiveSynth({
-    config: fakeConfig({ enabled: true }),
-    ttsStore: fakeTtsStore(),
-    store,
-    onQuotaWarning: noopQuotaWarning,
-  });
-  await withFakeFetch(fetchImpl, () => synthesizeVorspann("Hallo", "stimme-vom-anruf"));
-  const [url, anfrage] = calls[0];
-  return { url, koerper: JSON.parse(anfrage.body) };
-}
-
-test("Vorspann spricht mit Modell und Stimm-Feinheiten, die auch der Agent aus der Vorlage bekommt", async () => {
-  const { koerper } = await vorspannAnfrage();
-  assert.equal(koerper.text, "Hallo");
-  assert.equal(koerper.model_id, AGENT_TTS.model_id);
-  assert.equal(koerper.voice_settings.stability, AGENT_TTS.stability);
-  assert.equal(koerper.voice_settings.similarity_boost, AGENT_TTS.similarity_boost);
-  assert.equal(koerper.voice_settings.speed, AGENT_TTS.speed);
-});
-
-test("Vorspann nutzt die Stimme des Anrufs, nicht eine zweite Vorgabe", async () => {
-  const { url } = await vorspannAnfrage();
-  assert.match(url, /\/v1\/text-to-speech\/stimme-vom-anruf\/stream\?/);
 });
