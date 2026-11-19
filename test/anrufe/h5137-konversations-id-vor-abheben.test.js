@@ -122,7 +122,7 @@ test("H5137-2: schlaegt das Speichern fehl, antwortet der EL-Init trotzdem mit 2
   await mitInitServer(kaputt, async (url) => {
     assert.equal((await initRuf(url)).status, HTTP_OK);
   });
-  assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen: Datenbank weg"]);
+  assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen oder Frist abgelaufen"]);
 });
 
 function mitSpeichern(store, speichern) {
@@ -188,7 +188,7 @@ test("H5137-4: speichert die Datenbank nicht innerhalb der Frist, antwortet der 
   await mitInitServer(haengt, async (url) => {
     assert.equal((await initRuf(url)).status, HTTP_OK);
   }, FRIST_MS);
-  assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen: Frist von 25 ms abgelaufen"]);
+  assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen oder Frist abgelaufen"]);
 });
 
 test("H5137-5: eine wiederholte Bindung ohne Aenderung wartet nicht aufs Speichern", async (t) => {
