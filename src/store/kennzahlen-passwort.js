@@ -1,5 +1,5 @@
 import { parse } from "pg-connection-string";
-import { merkeLogGeheimnis } from "../log-maske.js";
+import { merkeLogGeheimnis } from "../log-maske.ts";
 
 const ABFRAGE_PASSWORT = /[?&]password=([^&#]+)/;
 const AUTORITAET = /^[^:/?#]*:\/\/([^/?#]*)/;

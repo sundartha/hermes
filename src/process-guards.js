@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mitLogMaske } from "./log-maske.js";
+import { mitLogMaske } from "./log-maske.ts";
 import { SCHADEN_FEHLER, meldeSchaden } from "./utils/lokale-gesundheit.js";
 import { mitAnfrageKennung } from "./utils/anfrage-kennung.ts";
 

@@ -10,32 +10,35 @@ const LOG_GEHEIMNIS =
 const EMAIL_ADRESSE = /(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const LOG_MASKE = Symbol("logMaske");
 
-const geheimnisWerte = new Set();
+type Eintrag = [name: string, wert: string];
+type Schreiber = ((this: unknown, stueck: unknown, ...rest: unknown[]) => unknown) & { [LOG_MASKE]?: true };
 
-function istGeheimnis([name, wert]) {
+const geheimnisWerte = new Set<string>();
+
+function istGeheimnis([name, wert]: Eintrag): boolean {
   if (name === HERZSCHLAG_ADRESSE_NAME) return wert.length > 0;
   return GEHEIMNIS_NAME.test(name) && wert.length >= GEHEIMNIS_MINDESTLAENGE;
 }
 
-export function merkeLogGeheimnisse(umgebung) {
+export function merkeLogGeheimnisse(umgebung: Readonly<Record<string, string>>): void {
   const werte = Object.entries(umgebung).filter(istGeheimnis).map(([, wert]) => wert);
   for (const wert of werte.sort((links, rechts) => rechts.length - links.length)) geheimnisWerte.add(wert);
 }
 
-export function merkeLogGeheimnis(wert) {
+export function merkeLogGeheimnis(wert: string | undefined): void {
   if (wert) geheimnisWerte.add(wert);
 }
 
-export function maskiereLogText(text) {
+export function maskiereLogText(text: string): string {
   const ohneGeheimnisse = [...geheimnisWerte].reduce((rest, wert) => rest.replaceAll(wert, VERBORGEN), text);
   const ohneToken = maskRestrictedText(ohneGeheimnisse.replace(LOG_GEHEIMNIS, `$1${VERBORGEN}`));
-  return maskNumbersInText(ohneToken.replace(EMAIL_ADRESSE, (adresse) => `${VERBORGEN}@${hashEmail(adresse)}`));
+  return maskNumbersInText(ohneToken.replace(EMAIL_ADRESSE, (adresse: string) => `${VERBORGEN}@${hashEmail(adresse)}`));
 }
 
-export function mitLogMaske(schreibe, innen = (schreiber) => schreiber) {
+export function mitLogMaske(schreibe: Schreiber, innen: (schreiber: Schreiber) => Schreiber = (schreiber) => schreiber): Schreiber {
   if (schreibe[LOG_MASKE]) return schreibe;
   const darunter = innen(schreibe);
-  const gefiltert = function (stueck, ...rest) {
+  const gefiltert: Schreiber = function (this: unknown, stueck: unknown, ...rest: unknown[]) {
     return darunter.call(this, typeof stueck === "string" ? maskiereLogText(stueck) : stueck, ...rest);
   };
   gefiltert[LOG_MASKE] = true;
