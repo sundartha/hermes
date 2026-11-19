@@ -5,14 +5,7 @@ import { DIRECTIVE } from "../telephony/directives.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";
-import { AGENT_STIMME } from "../conversation/elevenlabs-agent-config.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.ts";
-
-const vorspannOptionen = (cfg, voiceId) => ({
-  ...synthOptionen({ ...cfg, voiceId }),
-  model: AGENT_STIMME.model ?? cfg.model,
-  voiceSettings: AGENT_STIMME.voiceSettings,
-});
 
 const synthOptionen = (cfg) => ({
   fetchImpl: anfrage,
@@ -85,7 +78,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function synthesizeVorspann(text, voiceId) {
     const nowIso = new Date().toISOString();
     if (ttsQuotaExhausted(store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
-    const result = await synthesizeSpeechStream(text, vorspannOptionen(config.voice.elevenLabsPlayTts, voiceId));
+    const result = await synthesizeSpeechStream(text, synthOptionen({ ...config.voice.elevenLabsPlayTts, voiceId }));
     if (!result.ok) return result;
     const warning = store.recordTtsCharacters(text.length, nowIso);
     if (warning?.exhausted) return { quotaErschoepft: true };

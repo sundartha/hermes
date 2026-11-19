@@ -13,15 +13,8 @@ interface SynthOptionen {
   model: string;
   apiBase: string;
   outputFormat: string;
-  voiceSettings?: StimmEinstellungen;
   firstChunkTimeoutMs: number;
   totalTimeoutMs: number;
-}
-
-export interface StimmEinstellungen {
-  stability: number;
-  similarity_boost: number;
-  speed?: number;
 }
 
 interface SynthAnfrage {
@@ -123,11 +116,11 @@ async function drainRest({
 }
 
 async function openAudioStream(text: string, opts: SynthOptionen, signal: AbortSignal): Promise<StreamGeoeffnet> {
-  const { fetchImpl, apiKey, model, voiceSettings } = opts;
+  const { fetchImpl, apiKey, model } = opts;
   const res = await fetchImpl(streamUrl(opts), {
     method: "POST",
     headers: { "xi-api-key": apiKey, "content-type": "application/json", accept: "audio/mpeg" },
-    body: JSON.stringify({ text, model_id: model, ...(voiceSettings ? { voice_settings: voiceSettings } : {}) }),
+    body: JSON.stringify({ text, model_id: model }),
     signal,
     fristMs: opts.totalTimeoutMs,
   });
