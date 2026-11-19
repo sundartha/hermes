@@ -156,3 +156,16 @@ test("voice-eingaben: eine callId, die kein Text ist, wird auf allen voice-Route
     }
   });
 });
+
+test("voice-eingaben: eine abgewiesene callId laesst den Anruf aus der CallSid des Koerpers unberuehrt", async () => {
+  await mitServer(async (srv) => {
+    const koerper = JSON.stringify({ CallSid: "call_vs_a", CallStatus: "failed", HangupCause: "x" });
+    const abgewiesen = await sende(srv, "/voice/status?callId[x]=b", { body: koerper });
+    assert.equal(abgewiesen.status, HTTP_BAD_REQUEST);
+    const richtig = await sende(srv, "/voice/status?callId=call_vs_b", { body: koerper.replace("call_vs_a", "call_vs_b") });
+    assert.equal(richtig.status, HTTP_OK);
+    await waitUntil(() => anruf(srv, "call_vs_b").endedAt, WARTEN);
+    assert.equal(anruf(srv, "call_vs_a").status, "active");
+    assert.equal(anruf(srv, "call_vs_a").endedAt, null);
+  });
+});
