@@ -876,7 +876,7 @@ test("AL-P13-41: ein Zeitablauf wird zu event=none, NICHT zu einem Werkzeugfehle
 });
 
 test("AL-P13-42: answer_consult mappt 200/400/409 auf die drei Locale-Texte", async () => {
-  const { localeFor } = await import("../../src/i18n/locales.js");
+  const { localeFor } = await import("../../src/i18n/locales.ts");
   const mcp = localeFor("en").mcp;
   const cases = [
     { status: 200, body: { accepted: true, merged_facts: 2 }, expect: mcp.consultAnswerAccepted(2), accepted: true },
@@ -895,7 +895,7 @@ test("AL-P13-42: answer_consult mappt 200/400/409 auf die drei Locale-Texte", as
 });
 
 test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurueck, unabhaengig vom Gateway-Body", async () => {
-  const { localeFor } = await import("../../src/i18n/locales.js");
+  const { localeFor } = await import("../../src/i18n/locales.ts");
   const mcp = localeFor("en").mcp;
   await withGateway(
     [{ path: "/api/calls/", status: HTTP_OK, body: { accepted: true, merged_facts: 7 } }],
@@ -910,7 +910,7 @@ test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurue
 });
 
 test("AL-P13-43: der Berechtigungs-Hinweis haengt EINMAL am place_call-Ergebnis", async () => {
-  const { localeFor } = await import("../../src/i18n/locales.js");
+  const { localeFor } = await import("../../src/i18n/locales.ts");
   const hint = localeFor("en").mcp.consultPermissionHint;
   await withGateway(
     [

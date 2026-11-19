@@ -1,4 +1,4 @@
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { withInboundNotice } from "../i18n/inbound-notice.ts";
 import { tenantLanguage } from "./views.js";
 

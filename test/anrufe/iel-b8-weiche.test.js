@@ -21,7 +21,7 @@ import {
   elUebergabeDirektiven,
 } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import * as ops from "../../src/store/state-ops.js";

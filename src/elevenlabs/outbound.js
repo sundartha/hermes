@@ -1,7 +1,7 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
 import { uebergabeEroeffnung } from "./uebergabe-override.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
-import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.js";
+import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";

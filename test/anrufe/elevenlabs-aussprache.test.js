@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.ts";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const TEMPLATE = JSON.parse(readFileSync(new URL(`../../${TEMPLATE_REL}`, import.meta.url), "utf8"));

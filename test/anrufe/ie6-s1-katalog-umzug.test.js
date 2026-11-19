@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { startInboundHarness } from "../helpers/inbound-router-harness.js";
-import { localeFor } from "../../src/i18n/locales.js";
+import { localeFor } from "../../src/i18n/locales.ts";
 import { voiceAttrs } from "../../src/telephony/adapters/telnyx/render.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannDiAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";

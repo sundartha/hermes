@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { localeFor, LOCALES } from "../i18n/locales.js";
+import { localeFor, LOCALES } from "../i18n/locales.ts";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
 import { callLocaleFor } from "./call-locale.ts";
 import { callTimeContext } from "./time-context.ts";

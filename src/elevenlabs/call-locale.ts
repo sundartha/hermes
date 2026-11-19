@@ -1,4 +1,4 @@
-import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
+import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";

@@ -34,7 +34,7 @@ import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor, supportedLanguageOf } from "../i18n/locales.js";
+import { localeFor, supportedLanguageOf } from "../i18n/locales.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";

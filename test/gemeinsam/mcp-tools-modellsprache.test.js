@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { captureToolDescriptions } from "../gemeinsam/werkzeug-registrierung.js";
 
 const REFERENCE_LANGUAGE = "en";

@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import * as store from "../store.js";
 import { speicherBereiche } from "../store.js";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import { CONSULT_POLL_ABORT_MS } from "./delivery.js";
 import { consultAllowedFor } from "./gate.js";

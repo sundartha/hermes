@@ -9,7 +9,7 @@ import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
 import type { VoiceProfile } from "../telephony/directives.ts";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { BUDGET_AXIS } from "../budget-gate.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { consultAllowedForCall } from "../../src/consult/gate.js";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 import { pinCall, pinStore, sendeAnrufstart } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";

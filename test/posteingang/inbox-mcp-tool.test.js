@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
-import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { seedState, seedCall, startServer, mcpPost, toolCall, readToolResult } from "../helpers.js";

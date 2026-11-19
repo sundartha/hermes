@@ -7,7 +7,7 @@ import { NOT_PLACED, failureReasonBase } from "../../src/telephony/failure-reaso
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
 import { MCP_BASE_INSTRUCTIONS } from "../../src/mcp-server-info.js";
 import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
-import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import {
   startServer,

@@ -1,6 +1,6 @@
 import { STIMMEN_ANZAHL_META_KEY } from "../ui/widget-i18n.js";
 import { resultCardView } from "../call-result.ts";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { maskRestrictedText } from "../restricted-data.js";
 import { failureReasonBase } from "../telephony/failure-reason.ts";
 

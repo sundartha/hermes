@@ -8,6 +8,8 @@ import { GATE_TEXTS } from "./gate-texts.js";
 import { afterGreeting, besitzerEroeffnung, besitzerFrage } from "./eroeffnung.js";
 import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.js";
 
+type Sprache = "de" | "en" | "fr";
+
 export const DEFAULT_GREETING = withInboundNotice(
   "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
   INBOUND_NOTICES.de,
@@ -36,16 +38,16 @@ const STYLE_CLAUSES_EN = Object.freeze({
   "formell-professionell": "Use a formal, neutral tone and address the other person politely.",
 });
 
-function makeStyleClause(clauses, neutralClause) {
-  return (styleId) => (Object.hasOwn(clauses, styleId) ? clauses[styleId] : neutralClause);
+function makeStyleClause(clauses: Readonly<Record<string, string>>, neutralClause: string) {
+  return (styleId: string) => (Object.hasOwn(clauses, styleId) ? clauses[styleId] : neutralClause);
 }
 
 const DISCLOSURE_OWNER_FALLBACK_DE = "meinem Auftraggeber";
 const DISCLOSURE_OWNER_FALLBACK_FR = "mon mandant";
 export const DISCLOSURE_OWNER_FALLBACK_EN = "its owner";
 
-function makeDisclosure(satz, ownerFallback) {
-  return (ownerName) => {
+function makeDisclosure(satz: (ownerName: string) => string, ownerFallback: string) {
+  return (ownerName: unknown) => {
     const name = typeof ownerName === "string" ? ownerName.trim() : "";
     return satz(name || ownerFallback);
   };
@@ -58,20 +60,20 @@ const SUMMARY_NOTICE = Object.freeze({
 });
 
 const INBOUND_SELBSTVORSTELLUNG = Object.freeze({
-  de: Object.freeze({ mitName: (name) => `der KI-Assistent von ${name}`, ohneName: "ein KI-Assistent" }),
-  en: Object.freeze({ mitName: (name) => `${name}'s AI assistant`, ohneName: "an AI assistant" }),
-  fr: Object.freeze({ mitName: (name) => `l'assistant IA de ${name}`, ohneName: "un assistant IA" }),
+  de: Object.freeze({ mitName: (name: string) => `der KI-Assistent von ${name}`, ohneName: "ein KI-Assistent" }),
+  en: Object.freeze({ mitName: (name: string) => `${name}'s AI assistant`, ohneName: "an AI assistant" }),
+  fr: Object.freeze({ mitName: (name: string) => `l'assistant IA de ${name}`, ohneName: "un assistant IA" }),
 });
 
 const INBOUND_NAME_SATZ_RAHMEN = Object.freeze({
-  de: (wer) => `Hier ist ${wer}.`,
-  en: (wer) => `This is ${wer}.`,
-  fr: (wer) => `Ici ${wer}.`,
+  de: (wer: string) => `Hier ist ${wer}.`,
+  en: (wer: string) => `This is ${wer}.`,
+  fr: (wer: string) => `Ici ${wer}.`,
 });
 const INBOUND_GRUSS_SATZ_RAHMEN = Object.freeze({
-  de: (wer) => `Hallo, hier ist ${wer}.`,
-  en: (wer) => `Hello, this is ${wer}.`,
-  fr: (wer) => `Bonjour, ici ${wer}.`,
+  de: (wer: string) => `Hallo, hier ist ${wer}.`,
+  en: (wer: string) => `Hello, this is ${wer}.`,
+  fr: (wer: string) => `Bonjour, ici ${wer}.`,
 });
 const INBOUND_FEHLERTEIL = Object.freeze({
   de: "Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.",
@@ -91,41 +93,41 @@ const INBOUND_FRAGE = Object.freeze({
   fr: "Comment puis-je aider ?",
 });
 
-function makeInboundSelbstvorstellungsSatz(sprache, rahmen) {
+function makeInboundSelbstvorstellungsSatz(sprache: Sprache, rahmen: Readonly<Record<Sprache, (wer: string) => string>>) {
   const { mitName, ohneName } = INBOUND_SELBSTVORSTELLUNG[sprache];
-  return (ownerName) => {
+  return (ownerName: unknown) => {
     const name = typeof ownerName === "string" ? ownerName.trim() : "";
     return rahmen[sprache](name ? mitName(name) : ohneName);
   };
 }
-const makeInboundNameSatz = (sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_NAME_SATZ_RAHMEN);
-const makeInboundGrussSatz = (sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_GRUSS_SATZ_RAHMEN);
+const makeInboundNameSatz = (sprache: Sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_NAME_SATZ_RAHMEN);
+const makeInboundGrussSatz = (sprache: Sprache) => makeInboundSelbstvorstellungsSatz(sprache, INBOUND_GRUSS_SATZ_RAHMEN);
 
-const inboundEroeffnungsRest = (sprache) => `${INBOUND_HINWEIS_SATZ[sprache]} ${INBOUND_FRAGE[sprache]}`;
+const inboundEroeffnungsRest = (sprache: Sprache) => `${INBOUND_HINWEIS_SATZ[sprache]} ${INBOUND_FRAGE[sprache]}`;
 
-function makeInboundEroeffnung(sprache) {
+function makeInboundEroeffnung(sprache: Sprache) {
   const gruss = makeInboundGrussSatz(sprache);
-  return (ownerName) => `${gruss(ownerName)} ${inboundEroeffnungsRest(sprache)}`;
+  return (ownerName: unknown) => `${gruss(ownerName)} ${inboundEroeffnungsRest(sprache)}`;
 }
 
-const makeOwnerOpening = (sprache) => (firstName) => besitzerEroeffnung({ language: sprache, firstName });
+const makeOwnerOpening = (sprache: Sprache) => (firstName: string) => besitzerEroeffnung({ language: sprache, firstName });
 
-function makeInboundGrussSatzOwner(sprache) {
+function makeInboundGrussSatzOwner(sprache: Sprache) {
   const kopf = makeOwnerOpening(sprache);
-  return (firstName) => kopf(firstName);
+  return (firstName: string) => kopf(firstName);
 }
 
-function makeInboundEroeffnungOwner(sprache) {
+function makeInboundEroeffnungOwner(sprache: Sprache) {
   const kopf = makeInboundGrussSatzOwner(sprache);
-  return (firstName) => {
+  return (firstName: string) => {
     const satz = kopf(firstName);
     return satz ? `${satz} ${besitzerFrage(sprache)}` : "";
   };
 }
 
-function makeInboundFehlersatz(sprache) {
+function makeInboundFehlersatz(sprache: Sprache) {
   const nameSatz = makeInboundNameSatz(sprache);
-  return (ownerName) => `${nameSatz(ownerName)} ${INBOUND_FEHLERTEIL[sprache]}`;
+  return (ownerName: unknown) => `${nameSatz(ownerName)} ${INBOUND_FEHLERTEIL[sprache]}`;
 }
 
 export const LOCALES = Object.freeze({
@@ -136,20 +138,20 @@ export const LOCALES = Object.freeze({
     voiceProfile: VOICE_PROFILE_DE,
     speechClause: "Nur natürlich gesprochenes Deutsch.",
     styleClause: makeStyleClause(STYLE_CLAUSES_DE, NEUTRAL_ADDRESS_CLAUSE_DE),
-    bridgePhrase: (goal) =>
+    bridgePhrase: (goal: string) =>
       /^ich\b/i.test(goal) ? `${goal}.` : `Es geht um Folgendes: ${goal}.`,
     openingQuestion: "Wie sieht es damit aus?",
     openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen zu klären.",
     disclosure: makeDisclosure(
-      (ownerName) =>
+      (ownerName: string) =>
         `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. ${SUMMARY_NOTICE.de}`,
       DISCLOSURE_OWNER_FALLBACK_DE,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
-    voicemailBody: (openingLine) =>
+    voicemailBody: (openingLine: string) =>
       `Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. ${openingLine} Ich versuche es später noch einmal. Auf Wiederhören.`,
     ownerOpening: makeOwnerOpening("de"),
-    summarySystem: (owner) =>
+    summarySystem: (owner: string) =>
       `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 Satz", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item. Ergebnis-Karte: outcome ist EIN Satz mit dem konkreten Ergebnis (vereinbartes Datum/Uhrzeit, Preis, Name) oder - wenn nichts erreicht wurde - woran es lag. commitments sind Zusagen, die der Assistent im Namen von ${owner} gemacht hat; counterparty_commitments sind Zusagen der Gegenstelle. open_points sind Fragen, die offen blieben. next_step ist der EINE naechste Schritt fuer ${owner}, sonst null. facts sind dauerhaft nuetzliche Angaben ueber die Gegenstelle (Oeffnungszeiten, Ansprechpartner, Preise). Jede Liste hoechstens 3 Eintraege, jeder Eintrag hoechstens 200 Zeichen. Erfinde nichts: fehlt eine Angabe im Transkript, bleibt die Liste leer bzw. das Feld null.`,
     summaryEvidenceClause:
       ' Ergaenze ausserdem "evidence": hoechstens 2 kurze, WOERTLICHE Zitate aus dem Transkript, die das Ergebnis belegen. Nur woertlich Gesagtes, nichts Zusammengefasstes.',
@@ -192,8 +194,8 @@ export const LOCALES = Object.freeze({
       failedTitle: "Anruf nicht zustande gekommen",
       statusBody: makeStatusBody("Status:", FAILURE_REASON_TEXTS.de),
       summaryTitle: "Neue Call Summary",
-      subjectOutbound: (to) => `Anruf bei ${to}`,
-      subjectInbound: (from) => `Anruf von ${from}`,
+      subjectOutbound: (to: string) => `Anruf bei ${to}`,
+      subjectInbound: (from: string) => `Anruf von ${from}`,
       actionItemsHeading: "Action Items:",
       mailTimeLabel: "Zeitpunkt:",
       mailDurationLabel: "Dauer:",
@@ -203,7 +205,7 @@ export const LOCALES = Object.freeze({
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Bestätigung: Anruf-Zusammenfassungen erhalten",
-      confirmMailText: (ownerName, confirmUrl) =>
+      confirmMailText: (ownerName: string, confirmUrl: string) =>
         `Hallo,\n\n${ownerName} hat diese E-Mail-Adresse eingetragen, um Anruf-Zusammenfassungen ` +
         `von Hermes zu erhalten. Bitte bestätige die Anmeldung über diesen Link:\n\n${confirmUrl}\n\n` +
         "Der Link ist 48 Stunden gültig. Wenn du das nicht warst, musst du nichts tun - " +
@@ -223,20 +225,20 @@ export const LOCALES = Object.freeze({
     voiceProfile: VOICE_PROFILE_FR,
     speechClause: "Réponds exclusivement en français parlé et naturel.",
     styleClause: makeStyleClause(STYLE_CLAUSES_FR, NEUTRAL_ADDRESS_CLAUSE_FR),
-    bridgePhrase: (goal) =>
+    bridgePhrase: (goal: string) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
     openingQuestion: "Qu'en est-il ?",
     openingReasonFallback: "J'appelle pour régler une petite demande.",
     disclosure: makeDisclosure(
-      (ownerName) =>
+      (ownerName: string) =>
         `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. ${SUMMARY_NOTICE.fr}`,
       DISCLOSURE_OWNER_FALLBACK_FR,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
-    voicemailBody: (openingLine) =>
+    voicemailBody: (openingLine: string) =>
       `Je laisse ce message parce que personne n'a décroché. ${openingLine} Je réessaierai plus tard. Au revoir.`,
     ownerOpening: makeOwnerOpening("fr"),
-    summarySystem: (owner) =>
+    summarySystem: (owner: string) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 phrase", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item. Fiche de résultat : outcome est UNE phrase avec le résultat concret (date/heure convenue, prix, nom) ou - si rien n'a été obtenu - la raison. commitments sont les engagements pris par l'assistant au nom de ${owner} ; counterparty_commitments sont les engagements de l'interlocuteur. open_points sont les questions restées ouvertes. next_step est LA prochaine étape pour ${owner}, sinon null. facts sont des informations durablement utiles sur l'interlocuteur (horaires, contact, prix). Chaque liste contient au maximum 3 éléments, chaque élément au maximum 200 caractères. N'invente rien : si une information manque dans le transcript, la liste reste vide ou le champ reste null.`,
     summaryEvidenceClause:
       ' Ajoute aussi "evidence" : au maximum 2 courtes citations LITTÉRALES du transcript qui étayent le résultat. Uniquement des propos littéraux, rien de résumé.',
@@ -279,8 +281,8 @@ export const LOCALES = Object.freeze({
       failedTitle: "Appel non abouti",
       statusBody: makeStatusBody("statut :", FAILURE_REASON_TEXTS.fr),
       summaryTitle: "Nouveau résumé d'appel",
-      subjectOutbound: (to) => `Appel vers ${to}`,
-      subjectInbound: (from) => `Appel de ${from}`,
+      subjectOutbound: (to: string) => `Appel vers ${to}`,
+      subjectInbound: (from: string) => `Appel de ${from}`,
       actionItemsHeading: "Actions à mener :",
       mailTimeLabel: "Heure :",
       mailDurationLabel: "Durée :",
@@ -290,7 +292,7 @@ export const LOCALES = Object.freeze({
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Confirmation : recevoir les résumés d'appel",
-      confirmMailText: (ownerName, confirmUrl) =>
+      confirmMailText: (ownerName: string, confirmUrl: string) =>
         `Bonjour,\n\n${ownerName} a inscrit cette adresse e-mail pour recevoir les résumés ` +
         `d'appel de Hermes. Merci de confirmer votre inscription via ce lien :\n\n${confirmUrl}\n\n` +
         "Ce lien est valable 48 heures. Si ce n'était pas vous, vous n'avez rien à faire - " +
@@ -310,20 +312,20 @@ export const LOCALES = Object.freeze({
     voiceProfile: VOICE_PROFILE_EN,
     speechClause: "Reply only in natural, spoken English.",
     styleClause: makeStyleClause(STYLE_CLAUSES_EN, NEUTRAL_ADDRESS_CLAUSE_EN),
-    bridgePhrase: (goal) =>
+    bridgePhrase: (goal: string) =>
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
     openingQuestion: "How does that look on your side?",
     openingReasonFallback: "I am calling to sort out a small matter with you.",
     disclosure: makeDisclosure(
-      (ownerName) =>
+      (ownerName: string) =>
         `Hello, this is an AI assistant calling on behalf of ${ownerName}. ${SUMMARY_NOTICE.en}`,
       DISCLOSURE_OWNER_FALLBACK_EN,
     ),
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
-    voicemailBody: (openingLine) =>
+    voicemailBody: (openingLine: string) =>
       `I am leaving this message because nobody picked up. ${openingLine} I will try again later. Goodbye.`,
     ownerOpening: makeOwnerOpening("en"),
-    summarySystem: (owner) =>
+    summarySystem: (owner: string) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 sentence", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item. Result card: outcome is ONE sentence with the concrete result (agreed date/time, price, name) or - if nothing was achieved - the reason why. commitments are promises the assistant made on behalf of ${owner}; counterparty_commitments are promises made by the other party. open_points are questions that stayed open. next_step is THE one next step for ${owner}, otherwise null. facts are durably useful details about the other party (opening hours, contact person, prices). Each list holds at most 3 entries, each entry at most 200 characters. Invent nothing: if a detail is missing from the transcript, the list stays empty or the field stays null.`,
     summaryEvidenceClause:
       ' Also add "evidence": at most 2 short, VERBATIM quotes from the transcript that support the outcome. Only verbatim wording, nothing summarised.',
@@ -364,8 +366,8 @@ export const LOCALES = Object.freeze({
       failedTitle: "Call did not connect",
       statusBody: makeStatusBody("status:", FAILURE_REASON_TEXTS.en),
       summaryTitle: "New call summary",
-      subjectOutbound: (to) => `Call to ${to}`,
-      subjectInbound: (from) => `Call from ${from}`,
+      subjectOutbound: (to: string) => `Call to ${to}`,
+      subjectInbound: (from: string) => `Call from ${from}`,
       actionItemsHeading: "Action items:",
       mailTimeLabel: "Time:",
       mailDurationLabel: "Duration:",
@@ -375,7 +377,7 @@ export const LOCALES = Object.freeze({
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Confirm: receive call summaries",
-      confirmMailText: (ownerName, confirmUrl) =>
+      confirmMailText: (ownerName: string, confirmUrl: string) =>
         `Hello,\n\n${ownerName} added this email address to receive call summaries from ` +
         `Hermes. Please confirm the signup via this link:\n\n${confirmUrl}\n\n` +
         "This link is valid for 48 hours. If this wasn't you, you don't need to do anything - " +
@@ -392,20 +394,20 @@ export const LOCALES = Object.freeze({
 
 export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 
-export function supportedLanguageOf(wert) {
+export function supportedLanguageOf(wert: unknown): string | null {
   if (typeof wert !== "string") return null;
   const code = wert.trim().toLowerCase();
   return SUPPORTED_LANGUAGES.find((unterstuetzt) => unterstuetzt === code) ?? null;
 }
 
 const DISCLOSURE_NAME_SENTINEL = "\u0000";
-export function disclosurePrefixFor(language) {
+export function disclosurePrefixFor(language: string): string {
   return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL, 1).join("");
 }
 
 export { afterGreeting };
 
-export const LANGUAGE_FOR_COUNTRY = Object.freeze({
+export const LANGUAGE_FOR_COUNTRY: Readonly<Record<string, string>> = Object.freeze({
   DE: "de",
   AT: "de",
   CH: "de",
@@ -414,12 +416,12 @@ export const LANGUAGE_FOR_COUNTRY = Object.freeze({
   IE: "en",
 });
 
-export function languageForCountry(country) {
+export function languageForCountry(country: string | number | boolean | null | undefined): string {
   return LANGUAGE_FOR_COUNTRY[String(country ?? "").toUpperCase()] ?? DEFAULT_LANGUAGE;
 }
 
-const LOCALE_BY_LANGUAGE = new Map(Object.entries(LOCALES));
+const LOCALE_BY_LANGUAGE = new Map<string | undefined, (typeof LOCALES)[Sprache]>(Object.entries(LOCALES));
 
-export function localeFor(language) {
+export function localeFor(language: string | undefined): (typeof LOCALES)[Sprache] {
   return LOCALE_BY_LANGUAGE.get(language) ?? LOCALES[DEFAULT_LANGUAGE];
 }

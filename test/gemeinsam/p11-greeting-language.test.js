@@ -7,7 +7,7 @@ import {
 } from "../../src/i18n/greeting-catalog.js";
 import { withInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { DEFAULT_GREETING } from "../../src/store.js";
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
 test("P11-G1 DE-Seed-Default auf einem EN-Tenant wird zur EN-Standardvorlage", () => {
   assert.equal(greetingForLanguage(DEFAULT_GREETING, "en"), greetingTemplatesFor("en")[0]);

@@ -1,6 +1,6 @@
 import { env } from "node:process";
 
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { DAUER_GRENZE_S } from "./urteil.mjs";
 import { ABSTAND_MS } from "./wiederholung.mjs";

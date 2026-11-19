@@ -33,7 +33,7 @@ function withLang(lang, fn) {
   }
 }
 
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../../src/i18n/locales.ts";
 import {
   SELF_SERVICE_FREE_FIELDS,
   SELF_SERVICE_RESTRICT_ONLY_FIELDS,

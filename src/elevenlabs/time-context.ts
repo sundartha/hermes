@@ -1,4 +1,4 @@
-import { LOCALES } from "../i18n/locales.js";
+import { LOCALES } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { TIMEZONE_FOR_COUNTRY, resolveTimezone } from "../begriffe/sprache-zeit.js";
 import { timezoneHypothesisForNumber } from "./nanp-area-codes.ts";

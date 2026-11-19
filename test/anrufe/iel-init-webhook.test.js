@@ -16,7 +16,7 @@ import {
 } from "../../src/elevenlabs/inbound-initiation.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
-import { LOCALES, localeFor } from "../../src/i18n/locales.js";
+import { LOCALES, localeFor } from "../../src/i18n/locales.ts";
 import {
   ELEVENLABS_INIT_PATH,
   EL_INIT_WIEDERHOLUNG_FRIST_MS,

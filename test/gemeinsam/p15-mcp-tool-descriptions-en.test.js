@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { GERMAN_STOPWORDS } from "../gemeinsam/deutsch-erkennung.mjs";
 import { captureToolDescriptions } from "../gemeinsam/werkzeug-registrierung.js";
 

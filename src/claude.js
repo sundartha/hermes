@@ -5,7 +5,7 @@ import { speicherBereiche } from "./store.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
 import { bookTokenUsage } from "./llm-usage.js";
-import { localeFor } from "./i18n/locales.js";
+import { localeFor } from "./i18n/locales.ts";
 import { metrics } from "./metrics.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";

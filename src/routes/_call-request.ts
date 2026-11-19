@@ -1,4 +1,4 @@
-import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES } from "../i18n/locales.ts";
 
 export const UNSUPPORTED_LANGUAGE = "unsupported_language";
 

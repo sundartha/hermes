@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES } from "../i18n/locales.ts";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 
 const CALL_SUBJECT_OUTPUT = {
