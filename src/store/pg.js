@@ -1419,7 +1419,11 @@ const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id =
 async function konversationsIdSchreiben(runner, call) {
   await runner.withClient(async (client) => {
     await setTenant(client, call.tenantId);
-    await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId]);
+    try {
+      await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId]);
+    } finally {
+      await setTenant(client, BOOTSTRAP_TENANT_ID);
+    }
   });
 }
 function brueckenZustandMutatoren({ requireState, save, runner }) {
