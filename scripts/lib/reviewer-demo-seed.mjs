@@ -50,9 +50,20 @@ function findSeedCall(calls, entry) {
   );
 }
 
-export function planReviewerSeed(store, tenantId) {
+export async function leseSeedAuszug(store, tenantId) {
+  if (typeof store.exportTenantDataGelesen !== "function") {
+    return store.exportTenantData(tenantId);
+  }
+  return store.exportTenantDataGelesen(tenantId);
+}
+
+export async function leseSeedAnrufe(store, tenantId) {
+  return (await leseSeedAuszug(store, tenantId)).calls;
+}
+
+export function planReviewerSeed(store, tenantId, auszug = store.exportTenantData(tenantId)) {
   assertSeedableTenant(store, tenantId);
-  const { calls, actionItems } = store.exportTenantData(tenantId);
+  const { calls, actionItems } = auszug;
   const openTexts = new Set(actionItems.filter((item) => !item.done).map((item) => item.text));
   return REVIEWER_SEED_CALLS.map((entry) => ({
     entry,
@@ -87,10 +98,10 @@ function addMissingItems(store, callId, texts) {
     .length;
 }
 
-export function applyReviewerSeed(store, tenantId, endedAtIso) {
+export function applyReviewerSeedAusAuszug(store, tenantId, { endedAtIso, auszug }) {
   assertEndedAtIso(endedAtIso);
   const counts = { callsCreated: 0, itemsCreated: 0 };
-  for (const step of planReviewerSeed(store, tenantId)) {
+  for (const step of planReviewerSeed(store, tenantId, auszug)) {
     const callId =
       step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso });
     if (step.callId === null) counts.callsCreated += 1;
@@ -99,17 +110,31 @@ export function applyReviewerSeed(store, tenantId, endedAtIso) {
   return counts;
 }
 
+export function applyReviewerSeed(store, tenantId, endedAtIso) {
+  return applyReviewerSeedAusAuszug(store, tenantId, {
+    endedAtIso,
+    auszug: store.exportTenantData(tenantId),
+  });
+}
+
 export async function applyReviewerSeedAndPersist(store, tenantId, endedAtIso) {
-  const counts = applyReviewerSeed(store, tenantId, endedAtIso);
+  const auszug = await leseSeedAuszug(store, tenantId);
+  const counts = applyReviewerSeedAusAuszug(store, tenantId, { endedAtIso, auszug });
   await store.save();
   await store.drainFlushes();
   return counts;
 }
 
 export function countSeedCallsInsideCostWindow(store, tenantId, endedAtIso) {
+  return zaehleSeedAnrufeImFenster(store, tenantId, {
+    endedAtIso,
+    calls: store.exportTenantData(tenantId).calls,
+  });
+}
+
+export function zaehleSeedAnrufeImFenster(store, tenantId, { endedAtIso, calls }) {
   assertEndedAtIso(endedAtIso);
   assertSeedableTenant(store, tenantId);
-  const { calls } = store.exportTenantData(tenantId);
   const windowStartMs = Date.parse(endedAtIso);
   return REVIEWER_SEED_CALLS.map((entry) => findSeedCall(calls, entry)).filter(
     (call) => call !== undefined && Date.parse(call.endedAt) > windowStartMs,
