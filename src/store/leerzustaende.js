@@ -1,4 +1,4 @@
-import { DEFAULT_GREETING } from "../i18n/locales.js";
+import { DEFAULT_GREETING } from "../i18n/locales.ts";
 import { defaultSettings, demoCalendar } from "../db/migrate.js";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 

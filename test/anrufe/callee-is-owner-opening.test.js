@@ -45,7 +45,7 @@ before(async () => {
     }),
   );
   ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
-  ({ LOCALES } = await import("../../src/i18n/locales.js"));
+  ({ LOCALES } = await import("../../src/i18n/locales.ts"));
 });
 
 const ownerCall = (over = {}) =>

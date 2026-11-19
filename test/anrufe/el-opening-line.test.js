@@ -90,7 +90,7 @@ before(async () => {
   );
   store = await import("../../src/store.js");
   ({ config } = await import("../../src/config.js"));
-  ({ localeFor, SUPPORTED_LANGUAGES, afterGreeting } = await import("../../src/i18n/locales.js"));
+  ({ localeFor, SUPPORTED_LANGUAGES, afterGreeting } = await import("../../src/i18n/locales.ts"));
   ({ usageFor } = await import("../../src/store/state-ops.js"));
   ({
     composedOpeningLine,
@@ -554,7 +554,7 @@ for (const [sprache, kandidat, erwartet] of ICH_FORMEN) {
 }
 
 test("Offenlegungs-Kern: eine Zeile mit dem Satzrest hinter dem Namen ist in jeder Sprache ungueltig (#3400)", async () => {
-  const { disclosurePrefixFor } = await import("../../src/i18n/locales.js");
+  const { disclosurePrefixFor } = await import("../../src/i18n/locales.ts");
   for (const sprache of SUPPORTED_LANGUAGES) {
     const praefix = disclosurePrefixFor(sprache);
     const kern = praefix.slice(praefix.indexOf(",") + 1).trim();

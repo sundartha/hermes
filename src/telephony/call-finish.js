@@ -1,7 +1,7 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { planSummaryMail } from "../mail-summary.ts";
 import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";

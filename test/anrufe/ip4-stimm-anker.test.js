@@ -10,7 +10,7 @@ import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { consultAllowedForCall } from "../../src/consult/gate.js";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
 const ZIEL_JE_SPRACHE = Object.freeze({
   de: "+491737250000",

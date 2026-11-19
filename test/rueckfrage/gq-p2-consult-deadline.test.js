@@ -56,7 +56,7 @@ before(async () => {
   claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
   delivery = await import("../../src/consult/delivery.js");
-  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
+  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));
 });
 
 after(async () => {

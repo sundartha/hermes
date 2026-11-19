@@ -1,4 +1,4 @@
-import { LOCALES } from "../i18n/locales.js";
+import { LOCALES } from "../i18n/locales.ts";
 
 const STT_LOCALE_BY_VOICE_PROFILE = Object.freeze(
   Object.fromEntries(

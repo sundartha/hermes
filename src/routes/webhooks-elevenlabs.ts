@@ -6,7 +6,7 @@ import { consultAllowedForCall } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { TENANT_TOKEN_VERDICT, tenantTokenVerdict } from "../elevenlabs/tenant-tool-token.ts";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.ts";
 import {

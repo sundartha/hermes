@@ -52,7 +52,7 @@ before(async () => {
   store = await import("../../src/store.js");
   defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");
-  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
+  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));
 });
 
 after(async () => {

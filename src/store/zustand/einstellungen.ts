@@ -1,7 +1,7 @@
 import { MAX_NOTIFICATIONS } from "../../begriffe/speicher.js";
 import { defaultSettings } from "../leerzustaende.js";
 import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.js";
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../i18n/locales.ts";
 import { hasInboundNotice } from "../../i18n/inbound-notice.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 import type { MandantRef } from "./grundzugriffe.ts";

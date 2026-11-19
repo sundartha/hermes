@@ -1,4 +1,4 @@
-import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./locales.ts";
 import { withInboundNotice } from "./inbound-notice.ts";
 
 function buildTemplates(locale) {

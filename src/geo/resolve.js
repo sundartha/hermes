@@ -1,5 +1,5 @@
 import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, TIMEZONE_FOR_COUNTRY } from "../begriffe/sprache-zeit.js";
-import { languageForCountry } from "../i18n/locales.js";
+import { languageForCountry } from "../i18n/locales.ts";
 
 export function normCountry(raw) {
   const cc = String(raw || "")

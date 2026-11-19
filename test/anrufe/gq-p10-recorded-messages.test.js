@@ -27,7 +27,7 @@ before(async () => {
   await import("../../src/config.js");
   store = await import("../../src/store.js");
   claude = await import("../../src/claude.js");
-  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
+  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));
 });
 
 function nextCall(prefix = "call_gqp10_") {

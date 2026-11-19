@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import * as store from "../store.js";
 import { speicherBereiche } from "../store.js";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { callLookups } from "../store/state-ops.js";
 import { LOOKUP_MAX_PER_CALL, inCallSearchProvider } from "./registry.js";

@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
 import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.ts";
-import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.js";
+import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.ts";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "../helpers.js";

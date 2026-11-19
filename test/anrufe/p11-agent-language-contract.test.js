@@ -16,7 +16,7 @@ before(async () => {
   );
   await import("../../src/config.js");
   ({ systemPrompt, toolDefs, agentToolNames } = await import("../../src/claude.js"));
-  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.js"));
+  ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));
 });
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });

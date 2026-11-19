@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.ts";
 import { consultAllowedForCall } from "../../src/consult/gate.js";
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { enthaeltBisAufErstenBuchstaben } from "../gemeinsam/erster-buchstabe.mjs";
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
-import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =

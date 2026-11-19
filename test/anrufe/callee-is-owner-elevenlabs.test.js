@@ -13,7 +13,7 @@ process.env.CONSULT_ENABLED = "true";
 process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.js");
 const { consultAllowedForCall } = await import("../../src/consult/gate.js");
-const { LOCALES } = await import("../../src/i18n/locales.js");
+const { LOCALES } = await import("../../src/i18n/locales.ts");
 const { OVERRIDE_ALLOWED_LEAF_PATHS, assertEroeffnungGeprueft } =
   await import("../../src/elevenlabs/convai.ts");
 const { GET_CONSULT_TOOL_NAME } = await import("../../src/consult/in-call.js");

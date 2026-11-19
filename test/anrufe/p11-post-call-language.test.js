@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { seedCall } from "../helpers.js";
 
 const AT = "2026-01-01T00:00:00Z";

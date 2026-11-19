@@ -16,7 +16,7 @@ import {
 } from "../helpers.js";
 import { registerTools } from "../../src/mcp-tools.js";
 import { registerNoTenantStubs, buildNoTenantResult, _noTenantFacade } from "../../src/mcp-no-tenant.js";
-import { localeFor } from "../../src/i18n/locales.js";
+import { localeFor } from "../../src/i18n/locales.ts";
 import { TOOL_SECURITY_SCHEMES } from "../../src/mcp-security-schemes.js";
 
 const HTTP_OK = 200;

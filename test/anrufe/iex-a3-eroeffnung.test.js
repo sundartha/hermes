@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { msSeitAnnahme } from "../../src/elevenlabs/inbound-rueckfall.ts";
 import { INBOUND_NOTICES, hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../../src/i18n/inbound-opening.ts";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 
 const OWNER_NAME = "Jonas Beispiel";
 const SPRACHEN = Object.freeze(["de", "en", "fr"]);

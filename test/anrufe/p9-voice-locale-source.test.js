@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { renderDirectives as renderTelnyx } from "../../src/telephony/adapters/telnyx/render.ts";
 import { sttLocaleForVoiceProfile } from "../../src/telephony/voice-locale.ts";
 import { say, gather, VOICE_PROFILE } from "../../src/telephony/directives.ts";
-import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.js";
+import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
 const EL = { apiKeyRef: "elevenlabs_prod", voiceId: "platform-de", model: "Default" };
 const OPTS = { elevenLabs: EL };

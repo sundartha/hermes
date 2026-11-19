@@ -20,7 +20,7 @@ import {
   widgetHtml,
   withI18nScript,
 } from "../../src/ui/widget-catalog.js";
-import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES, localeFor } from "../../src/i18n/locales.ts";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../../src/store/state-ops.js";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { registerTools } from "../../src/mcp-tools.js";

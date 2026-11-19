@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 import { TRANSLITERATION_STEMS } from "../umlaut-stems-helper.js";
 import { BASE_ENV } from "../helpers.js";
 

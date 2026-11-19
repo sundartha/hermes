@@ -1,6 +1,6 @@
 import { uiRendererFor } from "../ui/registry.js";
 import { WIDGET_CALL } from "../ui/widget-catalog.js";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor } from "../i18n/locales.ts";
 import { toolErrorText } from "./fehler.js";
 import { errText, makeDateFormatter } from "./ausgabe.js";
 import { boundedHop, placeCallHop, pollConsultHop } from "./gateway.js";

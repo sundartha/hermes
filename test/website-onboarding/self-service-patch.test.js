@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selfServicePatch, SELF_SERVICE_FREE_FIELDS } from "../../src/self-service.js";
-import { PERSONA_STYLE_IDS } from "../../src/i18n/locales.js";
+import { PERSONA_STYLE_IDS } from "../../src/i18n/locales.ts";
 
 const VALID_STYLE = PERSONA_STYLE_IDS[0];
 

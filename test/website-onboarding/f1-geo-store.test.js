@@ -18,7 +18,7 @@ import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.j
 import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.js";
 import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { applySchema, migrate } from "../../src/db/migrate.js";
-import { languageForCountry } from "../../src/i18n/locales.js";
+import { languageForCountry } from "../../src/i18n/locales.ts";
 
 const A = "tenant_a";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 5 };

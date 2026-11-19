@@ -1,5 +1,5 @@
 import { kiHinweisKernFor } from "../i18n/eroeffnung.js";
-import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.ts";
 import { openingLineHash } from "../store/state-ops.js";
 
 export const OPENING_LINE_MAX_CHARS = 120;

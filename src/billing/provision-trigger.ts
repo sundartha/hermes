@@ -4,7 +4,7 @@ import {
   requestNumber,
   redriveAgeHoldReason,
 } from "../store/state-ops.js";
-import { languageForCountry } from "../i18n/locales.js";
+import { languageForCountry } from "../i18n/locales.ts";
 import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import { kauflandFuer } from "../begriffe/rufnummern.js";
@@ -25,8 +25,8 @@ export function requestNumberForPaidTenant(
 ): Ergebnis {
   if (tenantHasLiveNumber(state, tenantId))
     return { ok: false, reason: "already_provisioned" };
-  const tenantCountry: unknown = tenantGeo(state, tenantId).country;
-  const language: unknown = languageForCountry(tenantCountry);
+  const tenantCountry: string | null | undefined = tenantGeo(state, tenantId).country;
+  const language: string = languageForCountry(tenantCountry);
   return requestNumber(state, {
     tenantId,
     provider: PROVIDER.TELNYX,

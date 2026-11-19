@@ -6,7 +6,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import * as ops from "../../src/store/state-ops.js";
-import { localeFor } from "../../src/i18n/locales.js";
+import { localeFor } from "../../src/i18n/locales.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = "p15-date-locale-secret-0123456789";

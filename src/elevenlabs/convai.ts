@@ -1,5 +1,5 @@
 import { kiHinweisRahmenFor } from "../i18n/eroeffnung.js";
-import { disclosurePrefixFor } from "../i18n/locales.js";
+import { disclosurePrefixFor } from "../i18n/locales.ts";
 
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";

@@ -1,4 +1,4 @@
-import { LOCALES } from "../../src/i18n/locales.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 
 export const ANNAHME_GRENZE_S = 15;
 export const DAUER_GRENZE_S = 60;
