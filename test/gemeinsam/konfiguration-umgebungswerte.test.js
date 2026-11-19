@@ -1976,3 +1976,31 @@ test("Rohwerte Abrechnung: leere Stripe-Basis und Währungen ergeben die Standar
   assert.equal(ist.billing.stripeBusinessPriceId, "");
   assert.equal(ist.billing.platformAlertSmsTo, "");
 });
+
+test("Rohwerte Server: leere Variablen fallen auf Render-Adresse, unbekannten Stand und Standardordner durch", () => {
+  const ist = ladeRohwerte({
+    PUBLIC_URL: "",
+    RENDER_EXTERNAL_URL: "https://r.test/",
+    RENDER_GIT_COMMIT: "",
+    DATA_DIR: "",
+    HERZSCHLAG_URL: "",
+    OPENAI_APPS_CHALLENGE_TOKEN: "",
+  });
+  assert.equal(ist.server.publicUrl, "https://r.test");
+  assert.equal(ist.server.publicUrlExplicit, false);
+  assert.equal(ist.server.deployedCommit, ist.unbekannt);
+  assert.equal(ist.server.deployedCommit, "unbekannt");
+  assert.equal(ist.server.dataDir, `${ROOT}/data`);
+  assert.equal(ist.server.herzschlagUrl, "");
+  assert.equal(ist.server.openaiAppsChallengeToken, "");
+});
+
+test("Rohwerte Server: ohne jede Adresse ist publicUrl leer, ohne Variablen gelten die Standards", () => {
+  const ist = ladeRohwerte({});
+  assert.equal(ist.server.publicUrl, "");
+  assert.equal(ist.server.publicUrlExplicit, false);
+  assert.equal(ist.server.isProduction, false);
+  assert.equal(ist.server.deployedCommit, "unbekannt");
+  assert.equal(ist.server.dataDir, `${ROOT}/data`);
+  assert.equal(ist.server.herzschlagUrl, "");
+});
