@@ -182,7 +182,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
         });
         if (shouldPersistProvisionResult(r)) {
           store.save();
-          if (sub) store.stammdatenSchreiben(tenantId, ["idpSubject"]);
+          if (sub) store.stammdatenSchreiben?.(tenantId, ["idpSubject"]);
         }
         return r;
       })
