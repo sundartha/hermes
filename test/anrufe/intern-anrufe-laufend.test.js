@@ -60,7 +60,7 @@ function anrufe(bezugMs) {
 }
 
 function speicherMit(calls) {
-  return { ...FASSADEN_TEIL, load: () => ({ calls }) };
+  return { ...FASSADEN_TEIL, load: () => ({ calls }), aktiveAnrufeAlle: async () => calls };
 }
 
 function routeMit(deployToken, calls = []) {
@@ -137,19 +137,19 @@ test("Paket 15: das richtige Token liefert nur das Feld laufend mit der Zahl lau
   assert.deepEqual(zeilen, []);
 });
 
-test("Paket 15: gezaehlt werden nur aktive Anrufe innerhalb ihrer Hoechstdauer", () => {
+test("Paket 15: gezaehlt werden nur aktive Anrufe innerhalb ihrer Hoechstdauer", async () => {
   const alle = anrufe(FESTE_UHR_MS);
   const zaehlen = (calls) => laufendeAnrufe(speicherMit(calls), FESTE_UHR_MS);
   const nur = (id) => zaehlen(alle.filter((anruf) => anruf.id === id));
-  assert.equal(zaehlen(alle), ERWARTET_LAUFEND);
-  assert.equal(zaehlen([]), 0);
-  assert.equal(nur("call_p15_frisch"), 1);
-  assert.equal(nur("call_p15_angenommen"), 1);
-  assert.equal(nur("call_p15_zombie"), 0);
-  assert.equal(nur("call_p15_eigene_grenze"), 0);
-  assert.equal(nur("call_p15_beendet"), 0);
-  assert.equal(nur("call_p15_gescheitert"), 0);
-  assert.equal(nur("call_p15_abgebrochen"), 0);
+  assert.equal(await zaehlen(alle), ERWARTET_LAUFEND);
+  assert.equal(await zaehlen([]), 0);
+  assert.equal(await nur("call_p15_frisch"), 1);
+  assert.equal(await nur("call_p15_angenommen"), 1);
+  assert.equal(await nur("call_p15_zombie"), 0);
+  assert.equal(await nur("call_p15_eigene_grenze"), 0);
+  assert.equal(await nur("call_p15_beendet"), 0);
+  assert.equal(await nur("call_p15_gescheitert"), 0);
+  assert.equal(await nur("call_p15_abgebrochen"), 0);
 });
 
 test("Paket 15: die Speicher-Fassade reicht classifyCallTime und MAX_CALL_DURATION_CAP_S an den Endpunkt weiter", async (kontext) => {

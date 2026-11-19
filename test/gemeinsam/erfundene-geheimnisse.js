@@ -101,3 +101,4 @@ export const H7C2B4B2_TOKEN_EINES_ANDEREN_MANDANTEN = "h7c2b4b2-mandanten-token-
 export const H7C2B4B2_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-nur-fuer-den-test";
 export const H7C2B4B2_FREMDER_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-eines-anderen-anrufs";
 export const H7C2B4B2_ERFUNDENES_TOKEN = "h7c2b4b2-erfundenes-token";
+export const H7C2B4B4_DEPLOY_TOKEN = "h7c2b4b4-deploy-token-testgeheim-mindestens-32-zeichen";
