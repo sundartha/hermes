@@ -33,7 +33,8 @@ async function vorspannKoerper() {
     });
     const result = await synthesizeVorspann("Hallo", "stimme-des-anrufs");
     assert.equal(result.ok, true);
-    return { url: aufzeichnung.urls[0], body: JSON.parse(aufzeichnung.calls[0][1].body) };
+    const [, anfrage] = aufzeichnung.calls[0];
+    return { url: aufzeichnung.urls[0], body: JSON.parse(anfrage.body) };
   } finally {
     globalThis.fetch = original;
   }
