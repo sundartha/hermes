@@ -91,3 +91,13 @@ export const EL_REGISTRIERUNG_BOOT_SCHLUESSEL = "el-registrierung-boot-erfunden"
 export const PROBE_STAGING_TEST_TOKEN = "stgtest-probe-token-erfunden";
 
 export const SIP_PASSWORT_BEISPIEL = "sip-pw-erfunden-nicht-echt";
+
+export const H7C2B4B2_UNBEKANNTER_BINDUNGS_TOKEN = "h7c2b4b2-token-den-niemand-hat";
+
+export const H7C2B4B2_FEHLER_NACH_DEM_SENDEN = "h7c2b4b2-nach-dem-senden";
+
+export const H7C2B4B2_WERKZEUG_TOKEN = "h7c2b4b2-werkzeug-token-testgeheim";
+export const H7C2B4B2_TOKEN_EINES_ANDEREN_MANDANTEN = "h7c2b4b2-mandanten-token-eines-anderen";
+export const H7C2B4B2_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-nur-fuer-den-test";
+export const H7C2B4B2_FREMDER_BINDUNGS_TOKEN = "h7c2b4b2-bindungs-token-eines-anderen-anrufs";
+export const H7C2B4B2_ERFUNDENES_TOKEN = "h7c2b4b2-erfundenes-token";

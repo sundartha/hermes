@@ -92,6 +92,8 @@ function baueConfig({
 function baueInitStore(state) {
   return {
     ...storeOpsFacade(state),
+    aktiveAnrufeAlle: async () => state.calls.filter((call) => call.status === "active"),
+    attachActiveCall: async (id) => state.calls.find((call) => call.id === id && call.status === "active") ?? null,
     bindInboundElConversation: (id, bindung) => ops.bindInboundElConversation(state, id, bindung),
     numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
     tenantTimezone: (id) => ops.tenantTimezone(state, id),

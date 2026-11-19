@@ -87,6 +87,8 @@ function storeDouble({ callId, conversationId, zustellenNachMs = null, quittiere
 
   const store = {
     load: () => state,
+    aktiveAnrufeAlle: async () => store.load().calls.filter((call) => call.status === "active"),
+    attachActiveCall: async (id) => store.load().calls.find((call) => call.id === id && call.status === "active") ?? null,
     save: () => {},
     getCall: (id) => ops.getCall(state, id),
     emitConsult: (id, questions) => {

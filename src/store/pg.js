@@ -580,6 +580,7 @@ function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern }
       ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
     activeCallsFor: (tenantId) => aktiveAnrufe.zaehlung(requireState(), tenantId),
     activeCallsForSql: (tenantId) => aktiveAnrufe.fuer(requireState(), tenantId),
+    aktiveAnrufeAlle: () => aktiveAnrufe.alle(requireState()),
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     tenantBudgetSnapshot: (tenantId, cfg) =>

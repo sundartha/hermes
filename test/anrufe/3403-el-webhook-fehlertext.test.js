@@ -21,6 +21,9 @@ async function fehlerZeilenBei(pfad, fehler) {
     load: () => {
       throw fehler;
     },
+    aktiveAnrufeAlle: async () => {
+      throw fehler;
+    },
   };
   const app = express();
   app.use(express.json());

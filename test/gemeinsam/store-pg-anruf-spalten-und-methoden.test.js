@@ -82,6 +82,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "addActionItem", "addCalendarEvent", "addLookupFacts",
   "addNewsletterRecipient", "addNotification", "addResearchFeeCostCents", "addTranscript",
   "addVoiceUsageCostCents", "advanceInCallConsult",
+  "aktiveAnrufeAlle",
   "anrufHierBewacht",
   "anrufpauseAktiv", "answerConsult",
   "applyCostCorrectionCents", "attachActiveCall", "billingHoldActive", "bindInboundElConversation",

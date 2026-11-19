@@ -59,7 +59,11 @@ function schrankenConfig() {
 function zugriffsZaehlenderStore() {
   const zaehlung = { zugriffe: 0 };
   const store = new Proxy(
-    { load: () => ({ calls: [] }) },
+    {
+      load: () => ({ calls: [] }),
+      aktiveAnrufeAlle: async () => [],
+      attachActiveCall: async () => null,
+    },
     {
       get(ziel, name) {
         zaehlung.zugriffe += 1;

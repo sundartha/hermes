@@ -669,6 +669,10 @@ export async function activeCallsForSql(tenantId) {
   return ops.activeCallsFor(load(), tenantId);
 }
 
+export async function aktiveAnrufeAlle() {
+  return load().calls.filter((call) => call.status === "active");
+}
+
 export async function numberHasActiveCall(e164) {
   return ops.activeCallOnNumber(load(), e164);
 }

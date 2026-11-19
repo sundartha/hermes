@@ -84,9 +84,12 @@ interface Anruf {
 }
 
 interface Speicher {
-  load(): { calls: Anruf[] };
+  aktiveAnrufeAlle(): Promise<Anruf[]>;
+  getCall(callId: string): Anruf | null | undefined;
+  attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   resolveProfile: (tenantId: string) => unknown;
   recordCallLookup(callId: string, query: string): number;
+  countCallLookup(callId: string): Promise<number>;
 }
 
 interface Konfiguration {
@@ -191,14 +194,10 @@ function traceConsultAbort({
   );
 }
 
-function activeCallBoundTo(store: Speicher, conversationId: string): Anruf | null {
+async function activeCallBoundTo(store: Speicher, conversationId: string): Promise<Anruf | null> {
   if (!conversationId) return null;
-  const calls = store.load().calls;
-  return (
-    calls.find(
-      (call) => call.elevenlabsConversationId === conversationId && call.status === "active",
-    ) ?? null
-  );
+  const calls = await store.aktiveAnrufeAlle();
+  return calls.find((call) => call.elevenlabsConversationId === conversationId) ?? null;
 }
 
 function toolDenied({ res, tag, status, logGrund, antwortGrund = logGrund, callId = null }: Abgelehnt): unknown {
@@ -227,7 +226,7 @@ function denyBoundCall({
   });
 }
 
-function boundCallFor({
+async function boundCallFor({
   store,
   config,
   koerper,
@@ -235,18 +234,21 @@ function boundCallFor({
   store: Speicher;
   config: Konfiguration;
   koerper: Koerper;
-}): Bindung {
-  const call = activeCallBoundTo(store, koerper.conversation_id);
+}): Promise<Bindung> {
+  const call = await activeCallBoundTo(store, koerper.conversation_id);
   if (!call) return { call: null, logGrund: "kein_laufender_anruf", callId: null };
   const urteil = tenantTokenVerdict({
     secret: config.voice.elevenLabsToolToken,
     tenantId: call.tenantId,
     presented: koerper.tenant_token,
   });
-  if (urteil === TENANT_TOKEN_VERDICT.PASSEND) return { call, logGrund: null, callId: call.id };
-  if (urteil === TENANT_TOKEN_VERDICT.FEHLT && config.voice.elevenLabsTenantTokenRequired !== true)
-    return { call, logGrund: null, callId: call.id };
-  return { call: null, logGrund: `mandant_${urteil}`, callId: call.id };
+  const zugelassen =
+    urteil === TENANT_TOKEN_VERDICT.PASSEND ||
+    (urteil === TENANT_TOKEN_VERDICT.FEHLT && config.voice.elevenLabsTenantTokenRequired !== true);
+  if (!zugelassen) return { call: null, logGrund: `mandant_${urteil}`, callId: call.id };
+  const angehaengt = store.getCall(call.id) ?? (await store.attachActiveCall(call.id));
+  if (!angehaengt) return { call: null, logGrund: "kein_laufender_anruf", callId: call.id };
+  return { call: angehaengt, logGrund: null, callId: call.id };
 }
 
 function lookupAnswer(
@@ -301,6 +303,11 @@ async function executeLookup({
   control: TurnControl;
   res: Response;
 }): Promise<unknown> {
+  const gezaehlt = await store.countCallLookup(call.id);
+  if (gezaehlt > LOOKUP_MAX_PER_CALL) {
+    console.log(`[${LOOKUP_LOG_TAG}] abgelehnt grund=kontingent call=${call.id}`);
+    return lookupAnswer(res, { callId: call.id, status: "declined", answer: control.lookUpDeclinedSpoken });
+  }
   const bereiche = speicherBereiche(store);
   const seq = store.recordCallLookup(call.id, query);
   bookLookupSearchFee({ tenantId: call.tenantId });
@@ -340,7 +347,7 @@ async function handleLookup(
     return toolDenied({ res, tag: LOOKUP_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
   const koerper = TOOL_KOERPER.parse(pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body));
-  const bindung = boundCallFor({ store, config, koerper });
+  const bindung = await boundCallFor({ store, config, koerper });
   if (!bindung.call)
     return denyBoundCall({
       res,
@@ -442,7 +449,7 @@ export function makeElevenLabsWebhookRoutes({
       return toolDenied({ res, tag: CONSULT_LOG_TAG, status: HTTP_FORBIDDEN, logGrund: "token" });
 
     const koerper = TOOL_KOERPER.parse(pruefeKoerper(res, { schema: TOOL_KOERPER }, req.body));
-    const bindung = boundCallFor({ store, config, koerper });
+    const bindung = await boundCallFor({ store, config, koerper });
     if (!bindung.call)
       return denyBoundCall({
         res,
