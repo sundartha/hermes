@@ -62,7 +62,7 @@ interface Platz<A extends Anruf> {
 interface Abhaengigkeiten<A extends Anruf> {
   store: {
     leseCall: (callId: string) => Promise<A | null | undefined>;
-    load: () => { calls: Anruf[] };
+    anderesAnrufMitKonversation: (callId: string, conversationId: string) => Promise<boolean>;
     anrufstartMarker: {
       setze: (anfrage: { callId: string; tenantId: string; jetztIso: string }) => Promise<boolean>;
       lies: (callId: string) => Promise<string | null>;
@@ -120,8 +120,8 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
     if (!gesetzt) throw new Error(`[anrufstart] Start schon versucht (call=${call.id}), kein zweiter Aufruf`);
   }
 
-  const anderemAnrufGebunden = (call: Anruf, conversationId: string): boolean =>
-    store.load().calls.some((andere) => andere.id !== call.id && andere.elevenlabsConversationId === conversationId);
+  const anderemAnrufGebunden = (call: Anruf, conversationId: string): Promise<boolean> =>
+    store.anderesAnrufMitKonversation(call.id, conversationId).catch(() => true);
 
   function gehoertZumAnruf(call: Anruf, gespraech: Gespraech | null): boolean {
     const erwartet = mandantenToken(call.tenantId);
@@ -135,9 +135,9 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
       call_start_after_unix: String(seitS),
       page_size: String(ABGLEICH_SEITE),
     });
-    const frei = (liste?.conversations ?? [])
-      .map((eintrag) => eintrag.conversation_id)
-      .filter((id) => !anderemAnrufGebunden(call, id));
+    const kennungen = (liste?.conversations ?? []).map((eintrag) => eintrag.conversation_id);
+    const gebunden = await Promise.all(kennungen.map((id) => anderemAnrufGebunden(call, id)));
+    const frei = kennungen.filter((_id, nr) => !gebunden[nr]);
     const gespraeche = await Promise.all(frei.map(async (id) => ({ id, daten: await anbieterGespraeche.hole(id) })));
     const treffer = gespraeche.filter(({ daten }) => gehoertZumAnruf(call, daten)).map(({ id }) => id);
     return { treffer, vollstaendig: liste?.has_more !== true };

@@ -26,7 +26,7 @@ async function neuerAufbau({ sperren = {}, startFehler = null, markerVorMs = nul
     await marker.setze({ callId: call.id, tenantId: MANDANT, jetztIso: new Date(FEST_MS - markerVorMs).toISOString() });
   const spur = [];
   const abhaengigkeiten = {
-    store: { leseCall: (id) => db.leseCall(id), load: () => db.load(), anrufstartMarker: marker },
+    store: { leseCall: (id) => db.leseCall(id), load: () => db.load(), anderesAnrufMitKonversation: (id, konv) => db.anderesAnrufMitKonversation(id, konv), anrufstartMarker: marker },
     starte: async () => {
       spur.push("starte");
       if (startFehler) throw startFehler;

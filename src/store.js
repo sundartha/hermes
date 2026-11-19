@@ -376,6 +376,8 @@ export const {
   activeCallsFor,
   activeCallsForSql,
   aktiveAnrufeAlle,
+  anderesAnrufMitKonversation,
+  anrufeDesMandanten,
   numberHasActiveCall,
   tenantBudgetSnapshot,
   addVoiceUsageCostCents,

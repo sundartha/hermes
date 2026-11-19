@@ -39,6 +39,8 @@ async function neuerAufbau({ markerVorMs = null, fremdGebunden = null, gestartet
     load: () => ({
       calls: [...db.load().calls, ...(fremdGebunden ? [{ id: "call-anderer", elevenlabsConversationId: fremdGebunden }] : [])],
     }),
+    anderesAnrufMitKonversation: async (id, konv) =>
+      konv === fremdGebunden || (await db.anderesAnrufMitKonversation(id, konv)),
     anrufstartMarker: marker,
   };
   const abhaengigkeiten = {
