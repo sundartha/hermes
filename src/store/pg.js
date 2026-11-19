@@ -119,9 +119,14 @@ const STAMMDATEN_SPALTEN = Object.freeze({
   newsletterConfirmMailLog: "newsletter_confirm_mail_log",
 });
 
-function anbinden(zustand, { einstellungen, anrufpause, mandant, nutzung }) {
+function anbinden(zustand, { einstellungen, profil, anrufpause, mandant, nutzung }) {
   nutzungJeZustand.set(zustand, nutzung);
-  einstellungenJeZustand.set(zustand, einstellungen);
+  einstellungenJeZustand.set(zustand, {
+    nachladen: async (tenantId) => {
+      const [lesbar] = await Promise.all([einstellungen.nachladen(tenantId), profil.nachladen(tenantId)]);
+      return lesbar;
+    },
+  });
   anrufpauseJeZustand.set(zustand, anrufpause);
   mandantJeZustand.set(zustand, mandant);
 }
@@ -150,7 +155,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     );
     inDatenbankMerken([...state.actionItems, ...state.notifications]);
     const nutzung = (tenantId) => nutzungAuffrischen({ einreihen, state, tenantId });
-    anbinden(state, { einstellungen, anrufpause: macheAnrufpauseSql(optionen), mandant, nutzung });
+    anbinden(state, { einstellungen, profil, anrufpause: macheAnrufpauseSql(optionen), mandant, nutzung });
     return state;
   }
 
