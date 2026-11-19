@@ -154,12 +154,10 @@ async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetention
 export const unbestaetigteZeilen = new WeakSet();
 
 export function macheAnrufeSql({ runner, einreihen, lese, anhaengen }) {
-  const imSpiegel = async (state, callId) => {
-    if (!ops.getCall(state, callId)) await einreihen(() => anhaengen(callId));
-  };
+  const nachlesen = (callId) => einreihen(() => anhaengen(callId));
   const schreibart = (tabelle, art) => async (state, callId, ...args) => {
     const { felder, sql, werte, aendern } = tabelle[art];
-    await imSpiegel(state, callId);
+    if (!ops.getCall(state, callId)) await nachlesen(callId);
     const vorher = ops.getCall(state, callId);
     const alt = vorher && Object.fromEntries(felder.map((feld) => [feld, structuredClone(vorher[feld])]));
     const { call, changed } = aendern(state, callId, ...args);
@@ -195,7 +193,7 @@ export function macheAnrufeSql({ runner, einreihen, lese, anhaengen }) {
     endCallRecord: lebenslauf("endeStandard"),
     setCallEndedAt: lebenslauf("ende"),
     transkriptAnhaengen: async (state, callId, { role, text }) => {
-      await imSpiegel(state, callId);
+      if (!ops.getCall(state, callId)) await nachlesen(callId);
       const call = ops.getCall(state, callId);
       if (!call) return undefined;
       ops.addTranscript(state, callId, role, text);
