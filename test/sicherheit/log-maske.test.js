@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 
-import { maskiereLogText, merkeLogGeheimnisse, mitLogMaske } from "../../src/log-maske.js";
+import { maskiereLogText, merkeLogGeheimnisse, mitLogMaske } from "../../src/log-maske.ts";
 import { installProcessGuards } from "../../src/process-guards.js";
 import { hashEmail, maskNumber } from "../../src/util.ts";
 import { mitKennung, setzeKennungInLogzeilen } from "../../src/utils/anfrage-kennung.ts";
