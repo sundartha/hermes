@@ -96,7 +96,8 @@ test("V3-4: ein Anruf, den es nicht gibt, wird nicht geschrieben", async () => {
   assert.ok(!call?.billedAt);
   await b.drainFlushes();
   await kontext(db, KUNDE);
-  assert.equal((await db.query(`SELECT count(*)::int AS n FROM transcript_segment`)).rows[0].n, 0);
+  const { rows } = await db.query(`SELECT count(*)::int AS n FROM transcript_segment`);
+  assert.equal(rows[0].n, 0);
 });
 
 test("V3-5: purgeTranscript loescht die Zeilen eines Anrufs, den nur die Datenbank kennt", async () => {
