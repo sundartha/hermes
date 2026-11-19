@@ -56,9 +56,10 @@ async function imVorgang(client, arbeit) {
   }
 }
 
-function ausSpiegelEntfernen(state, call, item) {
+function ausSpiegelEntfernen(state, item) {
   state.actionItems.splice(state.actionItems.indexOf(item), 1);
-  call.actionItemIds.splice(call.actionItemIds.indexOf(item.id), 1);
+  const ids = ops.getCall(state, item.callId)?.actionItemIds;
+  ids?.splice(ids.indexOf(item.id), 1);
 }
 
 async function einfuegen(client, call, item) {
@@ -79,16 +80,18 @@ async function meldungEinfuegen(client, call, meldung) {
   return rows.length > 0;
 }
 
-export function macheAktionspunkteSql({ runner, einreihen, save }) {
+export function macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden }) {
+  const anrufFuer = async (state, callId) => ops.getCall(state, callId) ?? (await leseCallUngebunden(callId));
   return {
-    benachrichtigen: (state, { title, body, callId }) => {
-      const call = callId ? ops.getCall(state, callId) : null;
+    benachrichtigen: async (state, { title, body, callId }) => {
+      const call = await anrufFuer(state, callId);
       if (!call) return null;
       ops.addNotification(state, title, body, callId);
       const meldung = state.notifications[0];
       return einreihen((client) => imVorgang(client, () => meldungEinfuegen(client, call, meldung))).then(
         (angelegt) => {
           if (angelegt) inDatenbank.add(meldung);
+          return true;
         },
         (err) => {
           state.notifications.splice(state.notifications.indexOf(meldung), 1);
@@ -96,8 +99,8 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
         },
       );
     },
-    umschalten: (state, item) => {
-      const call = ops.getCall(state, item.callId);
+    umschalten: async (state, item) => {
+      const call = await anrufFuer(state, item.callId);
       if (!call) return null;
       return einreihen(async (client) => {
         await client.query(KONTEXT_SQL, [call.tenantId]);
@@ -105,10 +108,11 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
       });
     },
     anlegen: async (state, callId, { text, type }) => {
-      const call = ops.getCall(state, callId);
+      const vorhanden = ops.callActionItems(state, callId).find((punkt) => ops.actionItemKey(punkt.text) === ops.actionItemKey(text));
+      if (vorhanden) return { item: vorhanden, duplicate: true };
+      const call = await anrufFuer(state, callId);
       if (!call) return null;
       const spiegel = ops.addActionItem(state, callId, text, type);
-      if (spiegel.duplicate) return spiegel;
       try {
         const { zeile, angelegt } = await einreihen((client) => imVorgang(client, () => einfuegen(client, call, spiegel.item)));
         if (zeile) {
@@ -120,7 +124,7 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
         else save();
         return spiegel;
       } catch (err) {
-        ausSpiegelEntfernen(state, call, spiegel.item);
+        ausSpiegelEntfernen(state, spiegel.item);
         throw err;
       }
     },
@@ -132,7 +136,7 @@ export function macheAktionspunkteSql({ runner, einreihen, save }) {
         return { actionItems, notifications };
       }),
     lesen: async (state, callId) => {
-      const call = ops.getCall(state, callId);
+      const call = await anrufFuer(state, callId);
       if (!call) return null;
       return runner.withClient(async (client) => {
         await client.query(KONTEXT_SQL, [call.tenantId]);
