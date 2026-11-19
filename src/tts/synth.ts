@@ -11,6 +11,7 @@ interface SynthOptionen {
   apiKey: string;
   voiceId: string;
   model: string;
+  voiceSettings?: Record<string, number> | undefined;
   apiBase: string;
   outputFormat: string;
   firstChunkTimeoutMs: number;
@@ -120,7 +121,7 @@ async function openAudioStream(text: string, opts: SynthOptionen, signal: AbortS
   const res = await fetchImpl(streamUrl(opts), {
     method: "POST",
     headers: { "xi-api-key": apiKey, "content-type": "application/json", accept: "audio/mpeg" },
-    body: JSON.stringify({ text, model_id: model }),
+    body: JSON.stringify({ text, model_id: model, ...(opts.voiceSettings ? { voice_settings: opts.voiceSettings } : {}) }),
     signal,
     fristMs: opts.totalTimeoutMs,
   });

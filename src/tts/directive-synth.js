@@ -1,3 +1,4 @@
+import { AGENT_STIMME } from "../conversation/elevenlabs-agent-config.ts";
 import { anfrage } from "../utils/anfrage.js";
 import { synthesizeSpeechStream } from "./synth.ts";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
@@ -12,6 +13,7 @@ const synthOptionen = (cfg) => ({
   apiKey: cfg.apiKey,
   voiceId: cfg.voiceId,
   model: cfg.model,
+  voiceSettings: cfg.voiceSettings,
   apiBase: cfg.apiBase,
   outputFormat: cfg.outputFormat,
   firstChunkTimeoutMs: cfg.synthTimeoutMs,
@@ -78,7 +80,9 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function synthesizeVorspann(text, voiceId) {
     const nowIso = new Date().toISOString();
     if (ttsQuotaExhausted(store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
-    const result = await synthesizeSpeechStream(text, synthOptionen({ ...config.voice.elevenLabsPlayTts, voiceId }));
+    const stimme = { ...config.voice.elevenLabsPlayTts, voiceId, voiceSettings: AGENT_STIMME.voiceSettings };
+    if (AGENT_STIMME.model) stimme.model = AGENT_STIMME.model;
+    const result = await synthesizeSpeechStream(text, synthOptionen(stimme));
     if (!result.ok) return result;
     const warning = store.recordTtsCharacters(text.length, nowIso);
     if (warning?.exhausted) return { quotaErschoepft: true };
