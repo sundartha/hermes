@@ -219,6 +219,7 @@ jobs:
 
       - name: Neue Tests scheitern ohne die Änderung unter src/
         id: probe
+        timeout-minutes: 40
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -241,9 +242,19 @@ jobs:
           ln -s "$PWD/node_modules" "$basis/node_modules"
           cd "$basis"
           gruen=()
+          haengt=()
           for datei in "${neu[@]}"; do
-            if npm test -- "$datei"; then gruen+=("$datei"); fi
+            status=0
+            timeout --kill-after=30s 10m npm test -- "$datei" || status=$?
+            if [ "$status" -eq 0 ]; then gruen+=("$datei")
+            elif [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+              haengt+=("$datei")
+              echo "::warning file=$datei::Rotprobe: $datei endet ohne die Änderung unter src/ nicht innerhalb von 10 min und zählt als gescheitert."
+            fi
           done
+          if [ "${#haengt[@]}" -gt 0 ]; then
+            echo "Rotprobe: Ohne die Änderung unter src/ nicht beendet (Frist 10 min): ${haengt[*]}"
+          fi
           echo "gruen=${gruen[*]}" >> "$GITHUB_OUTPUT"
           unerlaubt=()
           for datei in "${gruen[@]}"; do
