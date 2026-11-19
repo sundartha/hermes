@@ -121,6 +121,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "setzeAnrufpause", "stammdatenSchreiben", "stampBudgetPeriod", "takeInboxEntries", "tenantActiveSubscriber", "tenantBudgetSnapshot",
   "tenantContext", "tenantExists", "tenantGeo", "tenantIdpSubject", "tenantInactive", "tenantLanguage",
   "tenantNewsletterConsent", "tenantNewsletterRecipients", "tenantPrivateNumber", "tenantStripe",
+  "tenantPrivateNumberLesen",
   "tenantSubscription", "tenantSuspendedAt", "tenantTimezone", "tenantsPendingCancellationMail",
   "tenantsPendingContractEndCleanup", "timeOutStagedConsult", "toggleActionItem", "trackUsage",
   "trueUpAnsweredAt", "tryReserveOutboundBudget", "unsubscribeNewsletterRecipientByToken", "updateSettings",
