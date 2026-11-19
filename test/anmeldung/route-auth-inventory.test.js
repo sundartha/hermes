@@ -76,6 +76,7 @@ const inventoryDeps = () => ({
 
 const speicherMitEinemLaufendenAnruf = () => ({
   load: () => ({ numbers: [], calls: [EIN_LAUFENDER_ANRUF], tenants: {} }),
+  aktiveAnrufeAlle: async () => [EIN_LAUFENDER_ANRUF],
   classifyCallTime: () => ({ expired: false }),
   MAX_CALL_DURATION_CAP_S: MAX_DAUER_S,
 });
