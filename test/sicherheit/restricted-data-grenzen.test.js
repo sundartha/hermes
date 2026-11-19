@@ -79,6 +79,25 @@ for (const [name, text, erwartet] of TREFFER_TABELLE) {
   });
 }
 
+const KARTEN_TABELLE = [
+  ["erste Ziffer 6 (obere Grenze)", "6011 1111 1111 1117", true],
+  ["erste Ziffer 5", "5500 0000 0000 0004", true],
+  ["erste Ziffer 7 (über der Grenze)", "7111 0000 0000 0001", false],
+  ["letzte Gruppe mit 3 Ziffern", "4111 0000 0000 001", true],
+  ["letzte Gruppe mit 5 Ziffern", "4111 0000 0000 00001", false],
+  ["drei Gruppen 4-5-5, nur die erste passt", "4111 00000 00008", false],
+];
+
+for (const [name, karte, erkannt] of KARTEN_TABELLE) {
+  test(`restricted-data-grenzen: Kartenform, ${name}`, () => {
+    const text = `Kartennummer: ${karte}`;
+    assert.deepEqual(
+      findRestrictedData(text).map((hit) => [hit.category, text.slice(hit.start, hit.end)]),
+      erkannt ? [["payment_card", karte]] : [],
+    );
+  });
+}
+
 const MASKEN_TABELLE = [
   [
     "mehrere akzeptierte Spans",
