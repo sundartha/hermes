@@ -18,6 +18,8 @@ import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnum
 import { languageForCountry } from "../../i18n/locales.ts";
 import { resolvePeriodStartIso } from "../../billing/period.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
+import { swapKey, ersatzZuAlterNummer } from "./tauschschluessel.ts";
+export { swapKey, ersatzZuAlterNummer } from "./tauschschluessel.ts";
 import { spendMonthKeyOf } from "./nutzung.js";
 import {
   canTransitionNumber,
@@ -93,16 +95,6 @@ export function requestNumber(
   state.numbers.push(number);
   clearNumberProvisionSkip(tenant);
   return { ok: true, number };
-}
-
-const SWAP_KEY_PREFIX = "tausch_";
-export const swapKey = (oldNumberId) => `${SWAP_KEY_PREFIX}${oldNumberId}`;
-
-export function ersatzZuAlterNummer(state) {
-  const paare = new Map();
-  for (const job of state.provisioningJobs ?? [])
-    if (job.kind === NUMBER_SWAP_JOB) paare.set(job.numberId, job.idempotencyKey.slice(SWAP_KEY_PREFIX.length));
-  return paare;
 }
 
 function findSwapTrace(state, oldNumberId) {
