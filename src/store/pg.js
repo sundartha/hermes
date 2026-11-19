@@ -29,6 +29,7 @@ import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktiveAnrufeSql } from "./aktive-anrufe-sql.js";
 import { macheAnrufNummernSql } from "./anruf-nummern-sql.js";
+import { macheAnrufSucheSql } from "./anruf-suche-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
@@ -192,7 +193,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
 
   return {
     init,
@@ -565,7 +566,7 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern }) {
+function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern, anrufSuche }) {
   return {
     numberHasActiveCall: async (e164) =>
       ops.activeCallOnNumber(requireState(), e164) || anrufNummern.aktivBelegt(e164),
@@ -581,6 +582,9 @@ function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern }
     activeCallsFor: (tenantId) => aktiveAnrufe.zaehlung(requireState(), tenantId),
     activeCallsForSql: (tenantId) => aktiveAnrufe.fuer(requireState(), tenantId),
     aktiveAnrufeAlle: () => aktiveAnrufe.alle(requireState()),
+    anderesAnrufMitKonversation: (callId, konversationId) =>
+      anrufSuche.anderesMitKonversation(requireState(), callId, konversationId),
+    anrufeDesMandanten: (tenantId) => anrufSuche.anrufeDesMandanten(requireState(), tenantId),
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     tenantBudgetSnapshot: (tenantId, cfg) =>

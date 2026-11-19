@@ -20,6 +20,7 @@ async function neuerAufbau({ eingefroren, pausiert }) {
     store: {
       leseCall: (id) => db.leseCall(id),
       load: () => db.load(),
+      anderesAnrufMitKonversation: (id, konv) => db.anderesAnrufMitKonversation(id, konv),
       anrufstartMarker: speicher.makePostgresAnrufstartMarker(runner),
     },
     starte: async () => {

@@ -23,6 +23,7 @@ function aufbau({ markerFehler = null } = {}) {
     store: {
       leseCall: async () => call,
       load: () => ({ calls: [call] }),
+      anderesAnrufMitKonversation: async () => false,
       anrufstartMarker: markerFehler
         ? {
             setze: async () => {

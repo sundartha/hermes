@@ -28,7 +28,7 @@ function aufbau({ belegt = [], sperren = {}, vorher = null } = {}) {
   const marker = makeAnrufstartMarker();
   const versuche = [...belegt];
   const abhaengigkeiten = {
-    store: { leseCall: async () => call, load: () => ({ calls: [call] }), anrufstartMarker: marker },
+    store: { leseCall: async () => call, load: () => ({ calls: [call] }), anderesAnrufMitKonversation: async () => false, anrufstartMarker: marker },
     starte: async () => spur.push("starte"),
     anbieterGespraeche: { liste: async () => ({ conversations: [], has_more: false }), hole: async () => null },
     haltAnrufStartFest: () => spur.push("festgehalten"),

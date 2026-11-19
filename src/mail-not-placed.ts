@@ -36,7 +36,7 @@ export async function planNotPlacedMail({
   mailer,
   accounts,
 }: {
-  store: { load(): { calls: NotPlacedCall[] } };
+  store: { anrufeDesMandanten(tenantId: string): Promise<NotPlacedCall[]> };
   call: NotPlacedCall;
   mailer: unknown;
   accounts?: Accounts | null | undefined;
@@ -46,8 +46,12 @@ export async function planNotPlacedMail({
   if (!meldetAlsNichtGestartet(call.failureReason))
     return { send: false, targets: [], reason: null };
   if (!mailer) return { send: false, targets: [], reason: "no_mailer" };
-  if (notPlacedMailDebounced(store.load().calls, call))
-    return { send: false, targets: [], reason: null };
+  const fruehere = await store.anrufeDesMandanten(call.tenantId).catch((err: unknown) => {
+    console.error(`[mail] not-placed Entprellung nicht lesbar (call=${call.id}):`, String(err));
+    return null;
+  });
+  if (!fruehere) return { send: false, targets: [], reason: "lesefehler" };
+  if (notPlacedMailDebounced(fruehere, call)) return { send: false, targets: [], reason: null };
   const account = accounts ? await accounts.accountByTenant(call.tenantId) : null;
   if (!account?.email) return { send: false, targets: [], reason: "no_account_email" };
   return { send: true, targets: [{ email: account.email, unsubToken: null }], reason: null };

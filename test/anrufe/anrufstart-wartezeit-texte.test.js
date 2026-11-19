@@ -41,7 +41,7 @@ function wartenderAnruf() {
     startedAt: new Date(ANGELEGT_MS).toISOString(),
   };
   const auftrag = makeAnrufstartAuftrag({
-    store: { leseCall: async () => call, load: () => ({ calls: [call] }), anrufstartMarker: makeAnrufstartMarker() },
+    store: { leseCall: async () => call, load: () => ({ calls: [call] }), anderesAnrufMitKonversation: async () => false, anrufstartMarker: makeAnrufstartMarker() },
     starte: async () => spur.push("starte"),
     anbieterGespraeche: { liste: async () => ({ conversations: [], has_more: false }), hole: async () => null },
     haltAnrufStartFest: () => spur.push("festgehalten"),

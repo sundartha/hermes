@@ -673,6 +673,14 @@ export async function aktiveAnrufeAlle() {
   return load().calls.filter((call) => call.status === "active");
 }
 
+export async function anderesAnrufMitKonversation(callId, konversationId) {
+  return load().calls.some((call) => call.id !== callId && call.elevenlabsConversationId === konversationId);
+}
+
+export async function anrufeDesMandanten(tenantId) {
+  return load().calls.filter((call) => call.tenantId === tenantId);
+}
+
 export async function numberHasActiveCall(e164) {
   return ops.activeCallOnNumber(load(), e164);
 }
