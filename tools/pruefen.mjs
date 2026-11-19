@@ -509,7 +509,8 @@ export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
 export function mutantKandidaten(plan, zeile, hoechstens) {
   const rang = mutantReihenfolge(plan, zeile);
   const geaendert = plan.geaendert ?? [];
-  return { auswahl: rang.filter((datei, platz) => platz < hoechstens || geaendert.includes(datei)), kandidaten: rang.length };
+  const auswahl = rang.filter((datei, platz) => platz < hoechstens || geaendert.includes(datei));
+  return { auswahl, kandidaten: rang.length, ...(auswahl.length < rang.length && { gekuerzt: { geprueft: auswahl.length, kandidaten: rang.length } }) };
 }
 
 function ohneWerkzeugSteuerung(quelle) {
@@ -583,10 +584,8 @@ async function mutantGegenTests(plan) {
   const start = Date.now();
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
   const ort = schutzOrte(plan.dateien)[env[MUTANT]];
-  const kandidat = (datei) => (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
-  const { auswahl, kandidaten } = mutantKandidaten({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort), MUTANT_TESTS_HOECHSTENS);
-  const offen = auswahl.filter((datei) => !basisRot.has(datei));
-  const gekuerzt = auswahl.length < kandidaten ? { geprueft: auswahl.length, kandidaten } : undefined;
+  const kandidat = (datei) => !basisRot.has(datei) && (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
+  const { auswahl: offen, gekuerzt } = mutantKandidaten({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort), MUTANT_TESTS_HOECHSTENS);
   const ausgeschlossen = [];
   const stand = { test: null, frist: false, liefNoch: [] };
   const lauf = { laeufe: new Set(), gestartet: [], aktiv: new Set() };
