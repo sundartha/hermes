@@ -235,3 +235,46 @@ test("Kriterium 3: nur die gesetzten Vermerke eines Teil-Patches werden geschrie
   assert.ok(/SET workos_delete_pending = \$2 WHERE/.test(gezielt[0]));
   assert.ok(/SET cancellation_mail_received_at = \$2 WHERE/.test(gezielt[1]));
 });
+
+test("Kriterium 3: ein Aufruf ohne Patch wirft nicht, gibt den Mandanten zurueck und laesst die Zeile unveraendert", async () => {
+  const abfragen = [];
+  const { a, b, tenant } = await zweiInstanzen(
+    (text) => abfragen.push(text),
+    "number_release_pending = true, cancellation_mail_pending = true",
+  );
+  await b.tenantExists(tenant);
+
+  const aufraeumen = b.setContractEndCleanupPending(tenant, undefined);
+  const kuendigung = b.setCancellationMailPending(tenant, undefined);
+  await b.drainFlushes();
+
+  assert.equal(aufraeumen?.id, tenant);
+  assert.equal(kuendigung?.id, tenant);
+  assert.equal(abfragen.filter((text) => /^UPDATE tenant SET/.test(text)).length, 0);
+  await letzteFlushs(a);
+  const zeile = await gespeichert(tenant);
+  assert.equal(zeile.number_release_pending, true);
+  assert.equal(zeile.cancellation_mail_pending, true);
+});
+
+test("Kriterium 3: ein Patch ohne bekanntes Feld loest keinen Schreibzugriff auf die Mandantenzeile aus", async (t) => {
+  const abfragen = [];
+  const { a, b, tenant } = await zweiInstanzen(
+    (text) => abfragen.push(text),
+    "workos_delete_pending = true, cancellation_mail_received_at = '2026-11-18T10:00:00.000Z'",
+  );
+  const fehlerausgabe = t.mock.method(console, "error", () => {});
+
+  b.setContractEndCleanupPending(tenant, {});
+  b.setContractEndCleanupPending(tenant, { unbekannt: true });
+  b.setCancellationMailPending(tenant, {});
+  b.setCancellationMailPending(tenant, { unbekannt: true });
+  await b.drainFlushes();
+
+  assert.equal(abfragen.filter((text) => /^UPDATE tenant SET/.test(text)).length, 0);
+  assert.equal(fehlerausgabe.mock.calls.length, 0);
+  await letzteFlushs(a);
+  const zeile = await gespeichert(tenant);
+  assert.equal(zeile.workos_delete_pending, true);
+  assert.equal(new Date(zeile.cancellation_mail_received_at).toISOString(), EINGANG);
+});
