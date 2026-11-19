@@ -415,7 +415,7 @@ export const LANGUAGE_FOR_COUNTRY = Object.freeze({
 });
 
 export function languageForCountry(country) {
-  return LANGUAGE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_LANGUAGE;
+  return LANGUAGE_FOR_COUNTRY[String(country ?? "").toUpperCase()] || DEFAULT_LANGUAGE;
 }
 
 const LOCALE_BY_LANGUAGE = new Map(Object.entries(LOCALES));
