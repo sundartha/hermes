@@ -43,7 +43,10 @@ test("Zugang: UPDATE_WORKFLOW_TOKEN, GITHUB_TOKEN und Produktions-URL nur als Um
   assert.match(job, /^ {10}GITHUB_TOKEN: \$\{\{ github\.token \}\}$/m);
   assert.match(job, /^ {10}PRODUKTION_URL: https:\/\/app\.sundartha\.com$/m);
   const zeilen = job.split("\n").filter((zeile) => zeile.includes("secrets."));
-  assert.equal(zeilen.length, 1);
+  assert.equal(zeilen.length, 2);
+  assert.match(job, /^ {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}$/m);
+  assert.ok(zeilen.some((zeile) => zeile.includes("UPDATE_WORKFLOW_TOKEN")));
+  assert.ok(zeilen.some((zeile) => zeile.includes("SLACK_ALERT_URL")));
   assert.doesNotMatch(job, /run:.*(secrets\.|TOKEN)/);
 });
 
