@@ -241,6 +241,23 @@ test("Ein nur im Spiegel markierter Anruf mit spaeterem Beginn kommt nach zwei D
   assert.notEqual(spaet.id, callId);
 });
 
+test("Schon aufsteigend vorliegende Anrufe bleiben nach Anrufbeginn geordnet, der spaeteste faellt beim Limit weg und zaehlt in remaining", async () => {
+  const { a, b, db, callId } = await markierterAnruf();
+  const zweiter = a.createCall({ direction: "inbound", from: "+4915199999999", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  await a.persistCall(zweiter.id);
+  a.markInboxEntry(zweiter.id, true);
+  await a.drainFlushes();
+  await db.query(`UPDATE call SET started_at = '2003-01-01T00:00:00.000Z' WHERE id = $1`, [zweiter.id]);
+  await db.query(`UPDATE call SET started_at = '2002-01-01T00:00:00.000Z' WHERE id = $1`, [callId]);
+  await b.init();
+  const spaet = spiegelAnruf(b, "2099-01-01T00:00:00.000Z");
+  const alle = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: true });
+  assert.deepEqual(alle.entries.map((e) => e.call_id), [callId, zweiter.id, spaet.id]);
+  const seite = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 2, includeSeen: false });
+  assert.deepEqual(seite.entries.map((e) => e.call_id), [callId, zweiter.id]);
+  assert.equal(seite.remaining, 1);
+});
+
 test("Ein Spiegel-Anruf ohne Posteingangs-Marke taucht in keinem Abruf auf", async () => {
   const { b, callId } = await markierterAnruf();
   const ohne = spiegelAnruf(b, "2001-01-01T00:00:00.000Z", { marke: false });
