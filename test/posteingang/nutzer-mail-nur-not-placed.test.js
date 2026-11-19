@@ -40,6 +40,7 @@ function makeFakeStore(calls) {
   const state = { calls };
   return {
     load: () => state,
+    anrufeDesMandanten: async (tenantId) => state.calls.filter((c) => c.tenantId === tenantId),
     addNotification: () => {},
     purgeTranscript: () => {},
     tenantContext: () => ({ settings: { agentName: "Hermes" } }),
