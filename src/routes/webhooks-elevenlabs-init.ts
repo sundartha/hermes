@@ -290,8 +290,8 @@ async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fr
   });
   try {
     await Promise.race([dauerhaft, abgelaufen]);
-  } catch (err) {
-    console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
+  } catch {
+    console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen oder Frist abgelaufen`);
   }
 }
 

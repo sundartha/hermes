@@ -216,6 +216,7 @@ test("5137: Ende vor Bruecke mit ID speichert die Zeilen", async () => {
   assert.equal(anrufIn(callId).bridgedAt ?? null, null);
   await sende(callId, "call.hangup");
   await waitUntil(() => anrufIn(callId).billedAt);
+  await waitUntil(() => anrufIn(callId).transcript?.length === GESPRAECHSZEILEN && anrufIn(callId).summary);
   assert.equal(anrufIn(callId).transcript.length, GESPRAECHSZEILEN);
   assert.equal(anrufIn(callId).summary, CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary);
 });
