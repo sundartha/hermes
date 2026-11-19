@@ -206,3 +206,17 @@ test("[NIE3] die Tageswerte aus config.js bleiben 86 400 000 ms", () => {
     [DAY, DAY, DAY, DAY],
   );
 });
+
+test("B4A-RES-10: die Meldung nennt den abgelehnten Ratenwert im Klammertext", () => {
+  for (const [rate, text] of [
+    [NaN, "NaN"],
+    [-1, "-1"],
+    ["1.0", "1.0"],
+    [null, "null"],
+  ]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [entry({ outPerMTok: rate })] }, ANCHOR_DAY),
+      (err) => err.message.includes(`outPerMTok (${text}) - vier Raten sind Pflicht`),
+    );
+  }
+});

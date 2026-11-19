@@ -60,14 +60,14 @@ export function todayIsoDate() {
 }
 
 function assertScheduleEntry(modelId, entry, rateFields) {
-  if (!ISO_DATE_PATTERN.test(entry?.validFrom ?? ""))
+  if (!ISO_DATE_PATTERN.test(entry.validFrom))
     throw new Error(`modelPricesUsd: Staffel '${modelId}' ohne gueltiges validFrom (YYYY-MM-DD)`);
   for (const field of rateFields) {
     const rate = entry[field];
     if (!Number.isFinite(rate) || rate < 0)
       throw new Error(
         `modelPricesUsd: Staffel '${modelId}' ab ${entry.validFrom} hat keine gueltige Rate ` +
-          `${field} (${rate}) - vier Raten sind Pflicht`,
+          `${field} (${String(rate)}) - vier Raten sind Pflicht`,
       );
   }
 }
@@ -90,8 +90,7 @@ function resolveModelPricesMit(rateFields, schedules, todayIso) {
       "modelPricesUsd: keine Preisstaffel hinterlegt - keine Preisquelle fuer den Budget-Guard (Regel 1)",
     );
   const resolved = {};
-  for (const modelId of modelIds) {
-    const entries = schedules[modelId];
+  for (const [modelId, entries] of Object.entries(schedules)) {
     for (const entry of entries) assertScheduleEntry(modelId, entry, rateFields);
     const active = activeSchedule(entries, todayIso);
     if (!active)
