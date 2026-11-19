@@ -79,7 +79,7 @@ export function setProfile(state, tenantId, patch) {
 
 export function deleteProfile(state, tenantId) {
   if (!(tenantId in state.profiles)) return false;
-  delete state.profiles[tenantId];
+  Reflect.deleteProperty(state.profiles, tenantId);
   return true;
 }
 
