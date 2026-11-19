@@ -108,3 +108,15 @@ test("V3-5: purgeTranscript loescht die Zeilen eines Anrufs, den nur die Datenba
   await b.purgeTranscript(callId);
   assert.deepEqual(await transkript(db, callId), []);
 });
+
+test("V3-6: purgeTranscript loescht auch, wenn die zweite Instanz den Anruf vorher nie gelesen hat", async () => {
+  const { db, b } = await aufbau();
+  const a2 = await neueInstanz(db);
+  const call = a2.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: KUNDE, provider: "telnyx" });
+  await a2.persistCall(call.id);
+  await a2.addTranscript(call.id, "callee", "nur in der Datenbank");
+  await a2.drainFlushes();
+  assert.equal((await transkript(db, call.id)).length, 1);
+  await b.purgeTranscript(call.id);
+  assert.deepEqual(await transkript(db, call.id), []);
+});
