@@ -204,14 +204,20 @@ test("3603-K4: Ergebnis beim Anbieter nicht abrufbar -> trotzdem abgerechnet, Lo
   }
 });
 
-test("3603-K5: Angerufener legt waehrend des Vorspanns auf -> kein Ergebnisabruf, keine Gespraechszeilen, trotzdem abgerechnet", async () => {
+test("3603-K5: Angerufener legt waehrend des Vorspanns auf -> trotzdem abgerechnet", async () => {
   const callId = await gebundenerAnruf();
-  const abrufeVorher = abrufe().length;
   await sende(callId, "call.hangup");
   await waitUntil(() => anrufIn(callId).billedAt);
-  assert.equal(abrufe().length, abrufeVorher);
-  assert.equal(anrufIn(callId).transcript.length, 0);
-  assert.equal(anrufIn(callId).summary ?? null, null);
+  assert.equal(anrufIn(callId).status, "completed");
+});
+
+test("5137: Ende vor Bruecke mit ID speichert die Zeilen", async () => {
+  const callId = await gebundenerAnruf();
+  assert.equal(anrufIn(callId).bridgedAt ?? null, null);
+  await sende(callId, "call.hangup");
+  await waitUntil(() => anrufIn(callId).billedAt);
+  assert.equal(anrufIn(callId).transcript.length, GESPRAECHSZEILEN);
+  assert.equal(anrufIn(callId).summary, CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary);
 });
 
 test("3603-K6: Speichern des EL-Ergebnisses scheitert -> Logzeile nennt den Anruf, trotzdem abgerechnet", async () => {
