@@ -25,6 +25,15 @@ const PROCESS_ENV_REGEL = {
   message:
     "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
 };
+const KALIBRIERUNG_IMPORTE = {
+  paths: ENDUNGEN_LISTE.map((endung) => ({
+    name: `../telephony/outbound-gates.${endung}`,
+    importNames: ["tariffCentsPerMin"],
+    message:
+      "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
+  })),
+};
+
 const UHR_MELDUNG =
   "Uhr als Wert übergeben: Fachlogik im Anrufbereich liest die Uhr nicht selbst (Date.now, new Date(), performance.now, setTimeout, setInterval, setImmediate, node:timers, sleep und defaultSetTimer aus utils/uhr-warten), sondern bekommt sie vom Aufrufer. Tests steuern die Zeit mit t.mock.timers oder einem übergebenen now-Wert.";
 const UHR_BESTAND = [
@@ -491,17 +500,7 @@ const dateiBloecke = [
     name: "kalibrierung-ohne-gate-tarif",
     files: [`src/billing/cost-calibration.${ENDUNGEN}`],
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: ENDUNGEN_LISTE.map((endung) => ({
-            name: `../telephony/outbound-gates.${endung}`,
-            importNames: ["tariffCentsPerMin"],
-            message:
-              "Die Kosten-Kalibrierung rechnet mit dem Tarif aus der Konfiguration, nicht mit tariffCentsPerMin der Gates (P5-12).",
-          })),
-        },
-      ],
+      "no-restricted-imports": ["error", KALIBRIERUNG_IMPORTE],
     },
   },
   {
@@ -850,6 +849,23 @@ export default [
         { object: "globalThis", property: "setImmediate", message: UHR_MELDUNG },
         { object: "globalThis", property: "setTimeout", message: UHR_MELDUNG },
         { object: "globalThis", property: "setInterval", message: UHR_MELDUNG },
+      ],
+    },
+  },
+  {
+    name: "uhr-als-wert-quellen-kalibrierung",
+    files: [`src/billing/cost-calibration.${ENDUNGEN}`],
+    ignores: UHR_QUELLEN_BESTAND,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            ...ZEITGLIEDER_MODULE.map((name) => ({ name, message: UHR_MELDUNG })),
+            ...KALIBRIERUNG_IMPORTE.paths,
+          ],
+          patterns: [{ regex: "(^|/)utils/(timer|uhr-warten)(\\.(js|ts))?$", importNames: ["sleep", "defaultSetTimer"], message: UHR_MELDUNG }],
+        },
       ],
     },
   },
