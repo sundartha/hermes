@@ -385,6 +385,11 @@ const hermesBloecke = [
 const testRegeln = (await import(TESTREGELN_DATEI.href)).default;
 const ZEITGLIEDER_MELDUNG =
   "Echte Wartezeit in Tests ist gesperrt. Erlaubt: simulierte Zeit (t.mock.timers, jumpClock aus test/fake-clock.js), auf ein Ereignis warten, Reihenfolge über setImmediate oder queueMicrotask, Frist über die Option timeout von node:test oder spawn oder AbortSignal.timeout. echtWarten aus test/echt-warten.js gilt nur noch für den Altbestand in tools/basis/echte-wartezeiten.json.";
+const ZEITGLIEDER_EIGENSCHAFTEN = [
+  { object: "Atomics", property: "wait", message: ZEITGLIEDER_MELDUNG },
+  { object: "globalThis", property: "setTimeout", message: ZEITGLIEDER_MELDUNG },
+  { object: "globalThis", property: "setInterval", message: ZEITGLIEDER_MELDUNG },
+];
 const testRegelBloecke = [
   {
     name: "hermes-testregeln",
@@ -1107,9 +1112,7 @@ export default [
       ],
       "no-restricted-properties": [
         "error",
-        { object: "Atomics", property: "wait", message: ZEITGLIEDER_MELDUNG },
-        { object: "globalThis", property: "setTimeout", message: ZEITGLIEDER_MELDUNG },
-        { object: "globalThis", property: "setInterval", message: ZEITGLIEDER_MELDUNG },
+        ...ZEITGLIEDER_EIGENSCHAFTEN,
       ],
     },
   },
@@ -1126,6 +1129,7 @@ export default [
       ],
       "no-restricted-properties": [
         "error",
+        ...ZEITGLIEDER_EIGENSCHAFTEN,
         { object: "Date", property: "now", message: UHR_TESTS_MELDUNG },
         { object: "performance", property: "now", message: UHR_TESTS_MELDUNG },
         { object: "process", property: "hrtime", message: UHR_TESTS_MELDUNG },

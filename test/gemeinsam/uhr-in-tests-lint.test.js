@@ -74,6 +74,17 @@ test("uhr-in-tests: setTimeout in einer neuen Testdatei meldet weiter der Block 
   assert.equal(gefunden.filter((meldung) => /Echte Wartezeit/.test(meldung.message)).length, 1);
 });
 
+for (const [name, quelltext] of [
+  ["Atomics.wait", "export const a = (x) => Atomics.wait(x, 0, 0, 5);\n"],
+  ["globalThis.setTimeout", "export const a = () => globalThis.setTimeout(() => 1, 5);\n"],
+  ["globalThis.setInterval", "export const a = () => globalThis.setInterval(() => 1, 5);\n"],
+]) {
+  test(`uhr-in-tests: ${name} in einer neuen Testdatei bleibt als echte Wartezeit gemeldet`, async () => {
+    const gefunden = await meldungen("test/anrufe/probe-uhr.test.js", quelltext);
+    assert.equal(gefunden.filter((meldung) => /Echte Wartezeit/.test(meldung.message)).length, 1);
+  });
+}
+
 test("uhr-in-tests: Demeter und uebersprungene Tests bleiben in Testdateien gesperrt", async () => {
   const demeter = await meldungen("test/anrufe/probe-uhr.test.js", "export const a = (x) => x.b.c.d.e.f;\n");
   assert.ok(demeter.some((meldung) => /Demeter/.test(meldung.message)));
