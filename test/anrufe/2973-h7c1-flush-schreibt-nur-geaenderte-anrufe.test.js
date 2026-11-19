@@ -67,6 +67,7 @@ test("H7c1-1: ein Anruf, den nur eine andere Instanz aendert, wird vom Flush die
 
 test("H7c1-2: ein Anruf, den diese Instanz aendert, wird beim Flush geschrieben", async () => {
   const { db, a, callId } = await mitGeladenemAnruf();
+  await a.leseCall(callId);
   a.recordFailureReason(callId, "von A");
   await a.drainFlushes();
   assert.equal((await zeileVon(db, callId)).failure_reason, "von A");

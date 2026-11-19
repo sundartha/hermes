@@ -6,7 +6,7 @@ import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
-import { anrufZustandVon } from "../begriffe/anruf-zustand.ts";
+import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
@@ -315,7 +315,7 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     if (bekannt && eigene.has(id)) return bekannt;
     if (bekannt) return kopieNeuLesen(id, bekannt, uebernehmen);
     try {
-      const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id) });
+      const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id), nurFrist: true });
       return gelesen ? uebernehmen(state, gelesen) : null;
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);
@@ -1271,8 +1271,19 @@ async function loadTenantRows(client, tenantId) {
   };
 }
 
+async function pruefeAnrufZustaende(client, tenantId) {
+  const unbekannt = (
+    await client.query(`SELECT id, status FROM call WHERE tenant_id = $1 AND status <> ALL($2) LIMIT 1`, [
+      tenantId,
+      [...ANRUF_ZUSTAENDE],
+    ])
+  ).rows;
+  unbekannt.forEach(pruefeAnrufZustand);
+}
+
 async function hydrateTenantInto(client, state, tenantId) {
   const rows = await loadTenantRows(client, tenantId);
+  await pruefeAnrufZustaende(client, tenantId);
   if (rows.settingsRows.length) {
     Object.assign(state.settings, { [tenantId]: rowToSettings(rows.settingsRows[0]) });
   }
