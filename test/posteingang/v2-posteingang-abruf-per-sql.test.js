@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
   makePgStore,
@@ -13,7 +13,7 @@ function runnerFuer(db, vorQuery = () => {}) {
     withClient: (fn) =>
       fn({
         query: (text, params) => {
-          vorQuery(text);
+          vorQuery(text, params);
           return db.query(text, params);
         },
         exec: (sql) => db.exec(sql),
@@ -298,4 +298,46 @@ test("Setzt der Spiegel die Marke waehrend des Markierens selbst, bleibt sein Ze
   const seite = await eigener.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
   assert.equal(seite.marked, 1);
   assert.equal(eigener.getCall(call.id).inboxSeenAt, "2001-01-02T00:00:00.000Z");
+});
+
+test("Ein nur im Spiegel markierter Anruf geht nicht an das Markieren in der Datenbank", async () => {
+  const markierte = [];
+  const { b, callId } = await markierterAnruf({
+    vorQuery: (text, params) => {
+      if (/UPDATE call SET inbox_seen_at/.test(text)) markierte.push(params[2]);
+    },
+  });
+  const nurHier = spiegelAnruf(b, "2001-01-01T00:00:00.000Z");
+  const seite = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(seite.entries.map((e) => e.call_id), [nurHier.id, callId]);
+  assert.deepEqual(markierte, [[callId]]);
+});
+
+test("Schlaegt das Markieren fehl, wirft der Abruf und der Fehler wird gemeldet", async () => {
+  let kaputt = false;
+  const { b } = await markierterAnruf({
+    vorQuery: (text) => {
+      if (kaputt && /UPDATE call SET inbox_seen_at/.test(text)) throw new Error("Markierfehler");
+    },
+  });
+  kaputt = true;
+  const meldung = mock.method(console, "error", () => {});
+  try {
+    await assert.rejects(() => b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false }), /Markierfehler/);
+    assert.deepEqual(meldung.mock.calls.map((aufruf) => aufruf.arguments), [["[pg] posteingang lesen fehlgeschlagen:", "Markierfehler"]]);
+  } finally {
+    meldung.mock.restore();
+  }
+});
+
+test("Ein in der Datenbank markierter Anruf ist danach auch im Spiegel gesehen, mit der Marke der Datenbank", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+4915112345678", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  await store.persistCall(call.id);
+  await db.query(`UPDATE call SET inbox_entry_at = '2001-01-01T00:00:00.000Z' WHERE id = $1`, [call.id]);
+  assert.equal(store.getCall(call.id).inboxSeenAt ?? null, null);
+  const seite = await store.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(seite.entries.map((e) => e.call_id), [call.id]);
+  assert.equal(seite.marked, 1);
+  assert.equal(store.getCall(call.id).inboxSeenAt, await markeVon(db, call.id));
 });
