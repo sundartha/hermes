@@ -23,7 +23,8 @@ test("updateSettings übernimmt nur bekannte Felder passenden Typs und meldet di
   assert.deepEqual(speicher.updateSettings(TENANT, { language: "de" }).changed, []);
   assert.equal(speicher.updateSettings(TENANT, { language: "" }).settings.language, null);
   assert.deepEqual(speicher.updateSettings(TENANT, { language: "klingonisch" }).changed, []);
-  assert.equal(speicher.load().settings[TENANT].language, null);
+  const gespeichert = speicher.load().settings[TENANT];
+  assert.equal(gespeichert.language, null);
   assert.deepEqual(speicher.updateSettings(TENANT, { greeting: "Hallo, hier ist die Praxis." }).changed, []);
 });
 
