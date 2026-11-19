@@ -1,6 +1,10 @@
 import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.ts";
+import type { umgebungMit } from "./umgebung.ts";
 
-export function rohwerteFristen(env, { numEnv }) {
+export function rohwerteFristen(
+  env: { FRISTEN_TAKT_MS?: string | undefined; FRISTEN_LIMIT_JE_MANDANT?: string | undefined },
+  { numEnv }: Pick<ReturnType<typeof umgebungMit>, "numEnv">,
+): { fristenTaktMs: number; fristenLimitJeMandant: number } {
   return {
     fristenTaktMs: numEnv("FRISTEN_TAKT_MS", env.FRISTEN_TAKT_MS, {
       fallback: 15000,
@@ -15,7 +19,44 @@ export function rohwerteFristen(env, { numEnv }) {
   };
 }
 
-export function rohwerteSafety(env, { boolEnv, csvEnv, numEnv, textEnv }) {
+export function rohwerteSafety(
+  env: {
+    OUTBOUND_FROZEN?: string | undefined;
+    ALLOWED_COUNTRY_CODES?: string | undefined;
+    MAX_CALLS_PER_HOUR?: string | undefined;
+    PER_TARGET_CALL_CAP?: string | undefined;
+    PER_TARGET_WINDOW_MS?: string | undefined;
+    CAP_FAREWELL_LEAD_MS?: string | undefined;
+    RESERVE_RELEASE_GRACE_MS?: string | undefined;
+    BUDGET_WATCHDOG_INTERVAL_MS?: string | undefined;
+    RATE_LIMIT_PER_MIN?: string | undefined;
+    SERVER_INSTANCES?: string | undefined;
+    CSRF_ENFORCE?: string | undefined;
+    MCP_ALLOWED_ORIGINS?: string | undefined;
+    MCP_ORIGIN_ENFORCE?: string | undefined;
+    SKIP_TWILIO_SIGNATURE_CHECK?: string | undefined;
+    FAKE_ORIGINATE?: string | undefined;
+    FAKE_ORIGINATE_ELEVENLABS?: string | undefined;
+  },
+  { boolEnv, csvEnv, numEnv, textEnv }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "csvEnv" | "numEnv" | "textEnv">,
+): {
+  outboundFrozen: boolean;
+  allowedCountryCodes: string[];
+  maxCallsPerHour: number;
+  perTargetCallCap: number;
+  perTargetWindowMs: number;
+  capFarewellLeadMs: number;
+  reserveReleaseGraceMs: number;
+  budgetWatchdogIntervalMs: number;
+  rateLimitPerMin: number;
+  serverInstanzen: number;
+  csrfEnforce: boolean;
+  mcpAllowedOrigins: string[];
+  mcpOriginEnforce: boolean;
+  skipTwilioSignatureCheck: boolean;
+  fakeOriginate: boolean;
+  fakeOriginateElevenlabs: boolean;
+} {
   return {
     outboundFrozen: boolEnv("OUTBOUND_FROZEN", env.OUTBOUND_FROZEN, { fallback: false }),
     allowedCountryCodes: csvEnv(textEnv(env.ALLOWED_COUNTRY_CODES, "+49,+33,+44")),
