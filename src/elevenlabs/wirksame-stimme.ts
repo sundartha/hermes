@@ -3,7 +3,6 @@ import { anfrage } from "../utils/anfrage.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { callLocaleFor } from "./call-locale.ts";
 import { fetchAgent, type ConvaiKonto } from "./convai.ts";
-import type { MandantZustand } from "../store/zustand/mandant.ts";
 
 const STIMMEN_FRIST_S = 10;
 
@@ -37,6 +36,8 @@ interface Anruf {
   to: string;
   language?: string;
 }
+
+type MandantZustand = Parameters<typeof callLocaleFor>[0];
 
 interface Speicher {
   load: () => MandantZustand;

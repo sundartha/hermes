@@ -1,4 +1,3 @@
-import type { MandantZustand } from "../store/zustand/mandant.ts";
 import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
@@ -25,6 +24,7 @@ interface Zugriff {
   numberRecord: { language?: string | null } | null | undefined;
 }
 
+type MandantZustand = Parameters<typeof resolveCallLanguage>[0];
 const aufgeloesteSprache: (state: MandantZustand, zugriff: Zugriff) => string = resolveCallLanguage;
 const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
