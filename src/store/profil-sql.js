@@ -13,6 +13,7 @@ export function macheProfilSql({
   requireState,
   protokoll = console,
   fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS,
+  innerhalbFrist,
 }) {
   const offen = new Map();
   const aenderungen = new Map();
@@ -53,15 +54,7 @@ export function macheProfilSql({
 
   async function nachladen(tenantId) {
     if (offen.has(tenantId)) return;
-    let uhr;
-    const abgelaufen = new Promise((fertig) => {
-      uhr = setTimeout(() => {
-        protokoll.error(NACHLADEN_FEHLER, "Frist abgelaufen");
-        fertig();
-      }, fristMs);
-    });
-    await Promise.race([einzeln(tenantId), abgelaufen]);
-    clearTimeout(uhr);
+    await innerhalbFrist(einzeln(tenantId), fristMs, () => protokoll.error(NACHLADEN_FEHLER, "Frist abgelaufen"));
   }
 
   return {

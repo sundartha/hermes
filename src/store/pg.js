@@ -37,6 +37,7 @@ import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import {
   einstellungenSchreiben,
+  innerhalbFrist,
   macheEinstellungenSchreiber,
   rowToSettings,
 } from "./einstellungen-sql.js";
@@ -187,7 +188,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const optionen = { einreihen, runner, requireState, fristMs: einstellungenFristMs };
   const einstellungen = macheEinstellungenSchreiber(optionen);
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
-  const profil = macheProfilSql(optionen);
+  const profil = macheProfilSql({ ...optionen, innerhalbFrist });
 
   async function drainFlushes() {
     let ref = flushChain;
