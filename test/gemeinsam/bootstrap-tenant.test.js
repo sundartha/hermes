@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bootstrapTenant, makeDefaultState, findTenant } from "../../src/store/state-ops.js";
-import { hasActiveNumber } from "../../src/store/views.js";
+import { hasActiveNumber } from "../../src/store/views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../../src/begriffe/mandant.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";

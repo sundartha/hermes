@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
+import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.ts";
+import type { AnrufSicht, Zustand } from "../store/views.ts";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
@@ -8,18 +9,19 @@ import { monthStart } from "../utils/month.js";
 import { speicherBereiche } from "../store.js";
 
 interface Speicher {
-  load: () => unknown;
+  load: () => Zustand;
+  getCalendar: (tenantId: string) => { end: string }[];
   usageOf: (tenantId: string) => { inputTokens: number; outputTokens: number; calls: number };
   getCall: (id: string | undefined) => unknown;
-  leseCallUngebunden: (id: string) => Promise<unknown>;
+  leseCallUngebunden: (id: string) => Promise<AnrufSicht | null | undefined>;
   einstellungenNachladen?: (tenantId: string) => unknown;
   leitungsplaetze?: { belegteAnrufe: (callIds: string[]) => Promise<Set<string>> };
 }
 
-type AnrufAnsicht = Record<string, unknown>;
+type AnrufAnsicht = AnrufSicht;
 
 interface AnrufAuszug {
-  calls: unknown[];
+  calls: AnrufSicht[];
   actionItems: unknown[];
   notifications: unknown[];
 }
@@ -29,7 +31,7 @@ interface Bereiche {
     tenantContext: (tenantId: string) => Promise<{ settings: unknown; ownerName: unknown }>;
   };
   zustandAnrufe: {
-    anrufeFuerZustand: (tenantId: string, limit: number) => Promise<unknown[]>;
+    anrufeFuerZustand: (tenantId: string, limit: number) => Promise<AnrufSicht[]>;
     anzahlSeit: (tenantId: string, seitIso: string) => Promise<number>;
   };
   konto: {
@@ -51,8 +53,8 @@ interface Mandant {
   tenantOwnsCall: (call: unknown, tenantId: string) => boolean;
 }
 
-const aktiveNummerVon: (state: unknown, tenantId: string) => string = activeNumberFor;
-const kalenderAb: (store: unknown, tenantId: string) => unknown[] = upcomingCalendar;
+const aktiveNummerVon: (state: Zustand, tenantId: string) => string = activeNumberFor;
+const kalenderAb: (store: Speicher, tenantId: string) => unknown[] = upcomingCalendar;
 
 export const STATE_CALLS = 30,
   STATE_ACTION_ITEMS = 50,
