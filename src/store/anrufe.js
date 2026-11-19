@@ -153,9 +153,13 @@ async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetention
 
 export const unbestaetigteZeilen = new WeakSet();
 
-export function macheAnrufeSql({ runner, einreihen, lese }) {
+export function macheAnrufeSql({ runner, einreihen, lese, anhaengen }) {
+  const imSpiegel = async (state, callId) => {
+    if (!ops.getCall(state, callId)) await einreihen(() => anhaengen(callId));
+  };
   const schreibart = (tabelle, art) => async (state, callId, ...args) => {
     const { felder, sql, werte, aendern } = tabelle[art];
+    await imSpiegel(state, callId);
     const vorher = ops.getCall(state, callId);
     const alt = vorher && Object.fromEntries(felder.map((feld) => [feld, structuredClone(vorher[feld])]));
     const { call, changed } = aendern(state, callId, ...args);
@@ -191,6 +195,7 @@ export function macheAnrufeSql({ runner, einreihen, lese }) {
     endCallRecord: lebenslauf("endeStandard"),
     setCallEndedAt: lebenslauf("ende"),
     transkriptAnhaengen: async (state, callId, { role, text }) => {
+      await imSpiegel(state, callId);
       const call = ops.getCall(state, callId);
       if (!call) return undefined;
       ops.addTranscript(state, callId, role, text);
@@ -210,7 +215,7 @@ export function macheAnrufeSql({ runner, einreihen, lese }) {
     },
     transkriptLoeschen: (state, callId) =>
       einreihen(async (client) => {
-        const call = ops.getCall(state, callId);
+        const call = ops.getCall(state, callId) ?? (await anhaengen(callId));
         if (!call) return;
         await client.query(KONTEXT_SQL, [call.tenantId]);
         await client.query(TRANSKRIPT_LOESCHEN_SQL, [call.tenantId, callId]);

@@ -202,7 +202,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnruf }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
