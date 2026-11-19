@@ -70,7 +70,10 @@ test("pfad-kennung-geprueft: eine abgewiesene Kennung loest keine Wirkung am Anr
   const srv = await startServer({
     env: { ...vorspannMandantenUmgebung([MANDANT]), CONSULT_ENABLED: "true", ASSISTANT_CONTEXT_ENABLED: "true", ALLOWED_COUNTRY_CODES: "+49" },
     seed: seedState({
-      calls: [seedCall({ id: lang, status: "active" })],
+      calls: [
+        seedCall({ id: lang, status: "active" }),
+        seedCall({ id: "call_ohne_kennung", status: "active", twilioSid: undefined, consultPolledAtMs: 0 }),
+      ],
       profiles: { [MANDANT]: { allowConsult: true } },
     }),
   });
@@ -86,9 +89,10 @@ test("pfad-kennung-geprueft: eine abgewiesene Kennung loest keine Wirkung am Anr
     const abfrage = await rufe(srv, ROUTEN[1], lang);
     assert.equal(abfrage.status, HTTP_BAD_REQUEST);
     assert.doesNotMatch(srv.stdout, /ERR_HTTP_HEADERS_SENT|ZodError|\[error\]/);
-    const anrufe = srv.readStore().calls;
-    assert.equal(anrufe.find((c) => c.id === lang).status, "active");
   } finally {
     await srv.stop();
   }
+  const anrufe = srv.readStore().calls;
+  assert.equal(anrufe.find((c) => c.id === lang).status, "active");
+  assert.equal(anrufe.find((c) => c.id === "call_ohne_kennung").consultPolledAtMs, 0);
 });
