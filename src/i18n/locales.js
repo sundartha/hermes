@@ -400,7 +400,7 @@ export function supportedLanguageOf(wert) {
 
 const DISCLOSURE_NAME_SENTINEL = "\u0000";
 export function disclosurePrefixFor(language) {
-  return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL)[0];
+  return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL, 1).join("");
 }
 
 export { afterGreeting };
