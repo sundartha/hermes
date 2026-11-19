@@ -20,7 +20,7 @@ import {
 import {
   isSelfServiceLive,
   pruefungenProduktionMit,
-} from "./konfiguration/pruefungen-produktion.js";
+} from "./konfiguration/pruefungen-produktion.ts";
 import { pruefungenStartMit } from "./konfiguration/pruefungen-start.js";
 import { umgebungMit } from "./konfiguration/umgebung.ts";
 import { rohwerteAuth } from "./konfiguration/rohwerte-auth.ts";

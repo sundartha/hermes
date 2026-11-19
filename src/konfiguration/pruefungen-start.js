@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import path from "path";
 import { alarmEingangFindings } from "./alarm-eingang-pruefung.ts";
-import { isInsecureHttpIssuer, isSelfServiceLive } from "./pruefungen-produktion.js";
+import { isInsecureHttpIssuer, isSelfServiceLive } from "./pruefungen-produktion.ts";
 
 const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 
