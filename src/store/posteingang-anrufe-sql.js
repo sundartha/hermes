@@ -27,7 +27,7 @@ export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
       return (await client.query(MARKIEREN_SQL, [atIso, tenantId, ids])).rows.map((zeile) => zeile.id);
     });
   return {
-    async abrufen(state, tenantId, { limit, includeSeen, offeneTexte }) {
+    async abrufen(state, tenantId, { limit, includeSeen, offeneTexte, uhr }) {
       const spiegel = ops
         .tenantCallScope(state, tenantId)
         .calls.filter((call) => call.inboxEntryAt && (includeSeen || !call.inboxSeenAt));
@@ -43,7 +43,7 @@ export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
       const ausZeilen = zeilenZuAnrufen(gelesen.rows, [], []);
       const aus = includeSeen ? ausZeilen : ausZeilen.filter((call) => !ops.getCall(state, call.id)?.inboxSeenAt);
       const gewaehlt = [...aus, ...nurHier].sort(nachStart).slice(0, limit);
-      const jetzt = new Date().toISOString();
+      const jetzt = uhr().toISOString();
       let markiert = new Set();
       if (!includeSeen) {
         const ids = gewaehlt.filter((call) => !nurHier.includes(call)).map((call) => call.id);
