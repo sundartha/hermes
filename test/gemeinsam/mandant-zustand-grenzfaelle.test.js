@@ -84,3 +84,38 @@ test("tenantContext: ohne gespeicherten Vorname ist der Vorname das erste Wort d
   assert.equal(kontext.ownerName, "Anna Beispiel");
   assert.equal(kontext.firstName, "Anna");
 });
+
+test("tenantSubscription: gesetzte Abo-Felder kommen je Schluessel an, ungesetzte und fehlender Mandant liefern die Standardwerte", async () => {
+  const store = await speicherMitMandanten();
+  const standard = {
+    subscriptionId: null,
+    planSlug: null,
+    currentPeriodEnd: null,
+    currentPeriodStart: null,
+    numberSetupFeeExempt: false,
+    activationPending: false,
+    periodCreditRevoked: false,
+    cancelAtPeriodEnd: false,
+  };
+  assert.deepEqual(store.tenantSubscription(OHNE_NAMEN), standard);
+  assert.deepEqual(store.tenantSubscription(UNBEKANNT), standard);
+  await store.setTenantSubscription(MIT_NAMEN, {
+    subscriptionId: "sub_x1",
+    currentPeriodEnd: "2030-02-01T00:00:00.000Z",
+    currentPeriodStart: "2030-01-01T00:00:00.000Z",
+    numberSetupFeeExempt: true,
+    activationPending: true,
+    periodCreditRevoked: true,
+    cancelAtPeriodEnd: true,
+  });
+  assert.deepEqual(store.tenantSubscription(MIT_NAMEN), {
+    subscriptionId: "sub_x1",
+    planSlug: null,
+    currentPeriodEnd: "2030-02-01T00:00:00.000Z",
+    currentPeriodStart: "2030-01-01T00:00:00.000Z",
+    numberSetupFeeExempt: true,
+    activationPending: true,
+    periodCreditRevoked: true,
+    cancelAtPeriodEnd: true,
+  });
+});

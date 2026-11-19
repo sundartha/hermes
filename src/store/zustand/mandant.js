@@ -172,8 +172,8 @@ export function setTenantSubscription(state, tenantId, patch = {}) {
 export function tenantSubscription(state, tenantId) {
   const tenant = findTenant(state, tenantId);
   const result = {};
-  for (const [key, fallback] of Object.entries(SUBSCRIPTION_READ_DEFAULTS)) {
-    result[key] = tenant?.[SUBSCRIPTION_PATCH_FIELDS[key]] ?? fallback;
+  for (const [key, field] of Object.entries(SUBSCRIPTION_PATCH_FIELDS)) {
+    result[key] = tenant?.[field] ?? SUBSCRIPTION_READ_DEFAULTS[key];
   }
   return result;
 }
