@@ -418,6 +418,8 @@ export function languageForCountry(country) {
   return LANGUAGE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_LANGUAGE;
 }
 
+const LOCALE_BY_LANGUAGE = new Map(Object.entries(LOCALES));
+
 export function localeFor(language) {
-  return Object.hasOwn(LOCALES, language) ? LOCALES[language] : LOCALES[DEFAULT_LANGUAGE];
+  return LOCALE_BY_LANGUAGE.get(language) ?? LOCALES[DEFAULT_LANGUAGE];
 }
