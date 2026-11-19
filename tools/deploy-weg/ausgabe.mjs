@@ -257,6 +257,8 @@ const KATALOG = new Map([
     "nachkontrolle_fehlgeschlagen",
     "Rot: Nachkontrolle: Produktion fährt den Commit {commit} nach {minuten} Minuten nicht",
   ],
+  ["live_probe_gut", "Nachkontrolle: Webhooks auf Produktion weisen fremde Signatur ab"],
+  ["live_probe_abweichung", "Rot: Live-Probe: Webhook {teil} antwortet mit {http}"],
   ["nachkontrolle_ersetzt", "Nachkontroll-Issue #{nummer}: Text ersetzt"],
   ["nachkontrolle_angelegt", "Nachkontroll-Issue #{nummer} angelegt"],
   [

@@ -179,7 +179,13 @@ das nicht, oder schlug der Deploy fehl, legt er genau einen Revert-PR auf dem
 Zweig `revert/<sha7>` an und meldet es im GitHub-Issue
 `Nachkontrolle: Update-Deploy zurückgenommen`. Der Revert-PR geht durch
 dieselbe Pflicht-CI und wird nie automatisch gemergt. Fehlt das Token, gibt es
-keinen PR, und das Issue nennt den Handweg. Bei Deploys, die kein Update-PR
+keinen PR, und das Issue nennt den Handweg. Hat die Produktion den Commit
+bestaetigt, schickt die Nachkontrolle zusaetzlich je einen fremd signierten
+Webhook an `/voice/outbound` und `/voice/status` (Probe ohne Anruf, SMS oder
+MCP-Aufruf, Code in `tools/deploy-weg/zurueckrollen.mjs`); beide muessen `403`
+liefern. Sonst endet der Lauf rot und `SLACK_ALERT_URL` bekommt eine Meldung mit
+Lauf-Link und, falls Telnyx oder ElevenLabs eine Stoerung melden, der
+Anbieterzeile; einen Revert-PR gibt es dafuer nicht. Bei Deploys, die kein Update-PR
 ausgeloest hat, passiert nichts. Der schnelle manuelle Weg bleibt der
 Workflow `notfall` mit `zurueckrollen` (Schritt 6 oben).
 

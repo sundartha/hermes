@@ -53,7 +53,8 @@ async function starten(optionen) {
     const teile = [];
     anfrage.on("data", (stueck) => teile.push(stueck));
     anfrage.on("end", () => {
-      const koerper = teile.length > 0 ? JSON.parse(Buffer.concat(teile).toString()) : null;
+      const roh = Buffer.concat(teile).toString();
+      const koerper = anfrage.headers["content-type"]?.includes("json") ? JSON.parse(roh) : null;
       anfragen.push({
         methode: anfrage.method,
         pfad: url.pathname,
@@ -75,6 +76,8 @@ function standardAntwort(optionen) {
   const offen = optionen.offenerPr ?? [];
   const routen = new Map([
     ["GET /healthz", () => optionen.healthz ?? [200, { ok: true, commit: COMMIT }]],
+    ["POST /voice/outbound", () => [403, {}]],
+    ["POST /voice/status", () => [403, {}]],
     [`GET /repos/${REPO}/commits/${COMMIT}/pulls`, () => [200, optionen.prs ?? [updatePr()]]],
     [
       `GET /repos/${REPO}/pulls`,
@@ -117,7 +120,7 @@ async function laufen(optionen = {}) {
   return { ergebnis, zeilen, anfragen, revert };
 }
 
-const schreibend = (anfragen) => anfragen.filter((a) => a.methode !== "GET");
+const schreibend = (anfragen) => anfragen.filter((a) => a.methode !== "GET" && !a.pfad.startsWith("/voice/"));
 const enthalten = (zeilen, teil) => zeilen.some((zeile) => zeile.includes(teil));
 
 test("Update-Deploy, Produktion fährt den neuen Commit und meldet ok: kein PR, kein Issue", async () => {

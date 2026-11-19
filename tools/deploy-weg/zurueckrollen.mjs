@@ -8,10 +8,10 @@ import { promisify } from "node:util";
 import { Abbruch, COMMIT_MUSTER, DEPLOY_ID } from "./ausgabe.mjs";
 import { produktionAbwarten, statusBeobachter } from "./deploy.mjs";
 import { notfallErlaubt } from "./herkunft.mjs";
-import { nachkontrolleIssueSchreiben } from "./hoertest.mjs";
+import { liveProbeMelden, nachkontrolleIssueSchreiben } from "./hoertest.mjs";
 import { githubZugang, hermesZugang, renderZugang } from "./netz.mjs";
 import { abwarten, DEPLOY_TAKTE, ECHTE_UHR } from "./takt.mjs";
-import { skriptStarten } from "./staging.mjs";
+import { fremdeWebhooksProbieren, skriptStarten } from "./staging.mjs";
 
 const PROBE_PFAD = "scripts/probe-auth.sh";
 const ANRUFPAUSE_PFAD = "src/routes/intern-anrufpause.js";
@@ -50,6 +50,7 @@ const HTTP_OK = 200;
 const HTTP_ANGELEGT = 201;
 const HTTP_ABGELEHNT_AB = 400;
 const HTTP_NICHT_ANGEMELDET = 401;
+const HTTP_VERBOTEN = 403;
 const HTTP_SERVERFEHLER_AB = 500;
 const EXIT_OK = 0;
 const LIVE = "live";
@@ -416,6 +417,19 @@ async function revertVersuchen(kontext, commit) {
   return null;
 }
 
+async function liveProbe(kontext, commit) {
+  const { einstellungen, ausgabe, hermes, uhr } = kontext;
+  const ergebnisse = await fremdeWebhooksProbieren({ hermes, commit, ausgabe, uhr });
+  const abweichungen = ergebnisse.filter(({ http }) => http !== HTTP_VERBOTEN);
+  if (abweichungen.length === 0) {
+    ausgabe.melde("live_probe_gut");
+    return true;
+  }
+  for (const abweichung of abweichungen) ausgabe.melde("live_probe_abweichung", abweichung);
+  await liveProbeMelden({ einstellungen, abweichungen, ausgabe });
+  return false;
+}
+
 export async function updateNachkontrolle({
   einstellungen,
   commit,
@@ -433,7 +447,7 @@ export async function updateNachkontrolle({
   const kontrolle = await produktionKontrollieren(kontext, commit);
   if (kontrolle.gut) {
     ausgabe.melde("nachkontrolle_gut", { commit });
-    return true;
+    return liveProbe(kontext, commit);
   }
   ausgabe.melde("nachkontrolle_fehlgeschlagen", { commit, minuten: kontrolle.minuten });
   const revertUrl = await revertVersuchen(kontext, commit);
