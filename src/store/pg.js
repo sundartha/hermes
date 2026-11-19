@@ -388,7 +388,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
           .filter((punkt) => punkt.callId === callId && !punkt.done)
           .reverse()
           .map((punkt) => punkt.text);
-      const result = await posteingangAnrufe.abrufen(requireState(), tenantId, options, offeneTexte);
+      const result = await posteingangAnrufe.abrufen(requireState(), tenantId, { ...options, offeneTexte });
       if (result.marked) save();
       return result;
     },

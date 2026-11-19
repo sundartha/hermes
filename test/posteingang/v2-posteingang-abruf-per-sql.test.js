@@ -21,6 +21,11 @@ function runnerFuer(db, vorQuery = () => {}) {
   };
 }
 
+async function markeVon(db, callId) {
+  const { rows } = await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId]);
+  return rows[0].inbox_seen_at;
+}
+
 async function markierterAnruf({ tenantId = BOOTSTRAP_TENANT_ID, vorQuery } = {}) {
   const { store: a, db } = await makePgTestStore();
   const b = makePgStore(runnerFuer(db, vorQuery));
@@ -46,24 +51,24 @@ test("Der Posteingang von B liefert den markierten Anruf von A samt offenem Punk
 test("Ein zweiter Abruf liefert den Anruf nicht mehr, die Marke steht in der Datenbank", async () => {
   const { a, b, db, callId } = await markierterAnruf();
   await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
-  const [{ inbox_seen_at: marke }] = (await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId])).rows;
+  const marke = await markeVon(db, callId);
   assert.match(marke, /^\d{4}-\d\d-\d\dT/);
   const zweiter = await a.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
   assert.deepEqual(zweiter.entries, []);
   assert.equal(zweiter.marked, 0);
   await a.drainFlushes();
-  assert.equal((await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId])).rows[0].inbox_seen_at, marke);
+  assert.equal(await markeVon(db, callId), marke);
 });
 
 test("Mit includeSeen kommt der gesehene Anruf wieder und die Marke bleibt unveraendert", async () => {
   const { a, b, db, callId } = await markierterAnruf();
   await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
   await a.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
-  const davor = (await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId])).rows[0].inbox_seen_at;
+  const davor = await markeVon(db, callId);
   const seite = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: true });
   assert.deepEqual(seite.entries.map((e) => e.call_id), [callId]);
   assert.equal(seite.marked, 0);
-  assert.equal((await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId])).rows[0].inbox_seen_at, davor);
+  assert.equal(await markeVon(db, callId), davor);
   const eigener = await a.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: true });
   assert.deepEqual(eigener.entries.map((e) => e.call_id), [callId]);
 });
@@ -94,7 +99,7 @@ test("Hat eine andere Instanz den Anruf zwischen Lesen und Markieren geliefert, 
   const seite = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
   assert.deepEqual(seite.entries, []);
   assert.equal(seite.marked, 0);
-  assert.equal((await db.query(`SELECT inbox_seen_at FROM call WHERE id = $1`, [callId])).rows[0].inbox_seen_at, "FRUEHER");
+  assert.equal(await markeVon(db, callId), "FRUEHER");
 });
 
 test("Ein Anruf, den nur der eigene Spiegel markiert hat, kommt einmal und ist danach gesehen", async () => {
