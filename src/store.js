@@ -326,7 +326,6 @@ export const {
   recordSipCallId,
   recordCostProfile,
   bindInboundElConversation,
-  speichereKonversationsId,
   markInboundElFallback,
   markInboundElNachlaufStarted,
   markNumberElInboundTrunkBelegt,

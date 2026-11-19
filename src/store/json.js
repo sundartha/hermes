@@ -252,8 +252,6 @@ export function save() {
 
 export async function drainFlushes() {}
 
-export async function speichereKonversationsId() {}
-
 export const newId = ops.newId;
 
 export function createCall(input) {
