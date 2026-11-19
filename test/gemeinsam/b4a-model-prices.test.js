@@ -220,3 +220,13 @@ test("B4A-RES-10: die Meldung nennt den abgelehnten Ratenwert im Klammertext", (
     );
   }
 });
+
+test("B4A-RES-11: ein fehlender Staffel-Eintrag (undefined oder null) wirft die validFrom-Meldung mit Modell-ID", () => {
+  for (const missing of [undefined, null]) {
+    assert.throws(
+      () => resolveModelPrices({ [HAIKU]: [missing] }, ANCHOR_DAY),
+      (err) =>
+        err.message === `modelPricesUsd: Staffel '${HAIKU}' ohne gueltiges validFrom (YYYY-MM-DD)`,
+    );
+  }
+});
