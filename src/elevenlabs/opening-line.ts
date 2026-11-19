@@ -9,6 +9,8 @@ export const OPENING_QUESTION_MAX_CHARS = 40;
 const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
 const SENTENCE_END = /[.!?]$/;
+const EIGENER_GRUSS_ODER_NAME =
+  /\b(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening)|hier (?:ist|spricht)|mein name ist|my name is|je m'appelle)\b/i;
 
 interface Sprachtexte {
   bridgePhrase: (ziel: string) => string;
@@ -55,6 +57,7 @@ export function validOpeningLine(candidate: unknown): string | null {
   if (!SENTENCE_END.test(line)) return null;
   if (!fragtHoechstensAmEnde(line)) return null;
   if (PRICE_PATTERNS.some((pattern) => pattern.test(line))) return null;
+  if (EIGENER_GRUSS_ODER_NAME.test(line)) return null;
   const lower = line.toLowerCase();
   if (DISCLOSURE_CORES.some((core) => lower.includes(core))) return null;
   return line;
