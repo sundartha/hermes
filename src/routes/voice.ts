@@ -39,6 +39,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
 import { sleep } from "../utils/uhr-warten.ts";
+import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
@@ -226,6 +227,29 @@ function repeatDeliveryXml(call: AnrufTeil, deps: VoiceDeps): string {
 }
 
 const queryText = (wert: unknown): string => z.string().catch("").parse(wert);
+
+const TTS_TOKEN_MAX = 128;
+const TTS_TOKEN = z.string().max(TTS_TOKEN_MAX).regex(/^[A-Za-z0-9_-]+$/);
+const TEXT_FELD = z.string().optional();
+const VOICE_ABFRAGE = z.object({ callId: TEXT_FELD });
+const ZAHL_ODER_TEXT = z.union([z.string(), z.number()]).optional();
+const STATUS_FELDER = {
+  CallSid: TEXT_FELD,
+  CallStatus: TEXT_FELD,
+  CallDuration: ZAHL_ODER_TEXT,
+  HangupCause: TEXT_FELD,
+  HangupSource: TEXT_FELD,
+  SipHangupCause: TEXT_FELD,
+};
+const STATUS_KOERPER = z.object(STATUS_FELDER);
+const VORSPANN_NUTZLAST = z.object({ call_control_id: TEXT_FELD, status: TEXT_FELD });
+const VORSPANN_DATEN = z.object({ event_type: TEXT_FELD, payload: VORSPANN_NUTZLAST.optional() });
+const VORSPANN_KOERPER = z.object({ data: VORSPANN_DATEN.optional() });
+
+function anfrageGeprueft(req: { query: unknown; body: unknown }, res: Response, koerper?: z.ZodType): boolean {
+  if (pruefeAbfrage(res, { schema: VOICE_ABFRAGE }, req.query) === undefined) return false;
+  return koerper === undefined || pruefeKoerper(res, { schema: koerper }, req.body) !== undefined;
+}
 
 const VOICE_KOERPER = z.object({
   To: z.string().optional().catch(undefined),
@@ -453,6 +477,7 @@ const AUSGEHENDER_RUECKFALL: RueckfallWeg = Object.freeze({
 const rueckfallWegFuer = (call: AnrufOderLeer): RueckfallWeg => (istOutboundElProfil(call) ? AUSGEHENDER_RUECKFALL : EINGEHENDER_RUECKFALL);
 
 async function antworteAufElRueckfall(req: Aufruf, res: Antwort, deps: VoiceDeps): Promise<void> {
+  if (!anfrageGeprueft(req, res)) return;
   let call: AnrufOderLeer = null;
   try {
     call = await aktiverCallFuer(queryText(req.query.callId), deps);
@@ -517,6 +542,7 @@ const statusCallFinden = (req: Aufruf, store: Speicher): Promise<{ call?: AnrufO
 };
 
 async function vermerkeElBein(req: Aufruf, res: Antwort, { store, inboundBridges, webhookEvents }: VoiceDeps): Promise<void> {
+  if (!anfrageGeprueft(req, res, STATUS_KOERPER)) return;
   res.sendStatus(HTTP_OK);
   const callId = queryText(req.query.callId);
   const gespiegelt = store.getCall(callId);
@@ -533,6 +559,7 @@ async function antworteAufVorspannEreignis(
   res: Antwort,
   { store, config, webhookEvents, vorspannAblauf }: VoiceDeps,
 ): Promise<void> {
+  if (!anfrageGeprueft(req, res, VORSPANN_KOERPER)) return;
   res.sendStatus(HTTP_OK);
   const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
   if (!call) return;
@@ -636,6 +663,10 @@ export function makeVoiceRoutes({
   });
 
   const liefereTts = async (req: Request<{ token: string }>, res: Antwort): Promise<void> => {
+    if (!TTS_TOKEN.safeParse(req.params.token).success) {
+      res.status(HTTP_NOT_FOUND).end();
+      return;
+    }
     try {
       const audio = await ttsStore.takeOnce(req.params.token);
       if (!audio) {
@@ -746,6 +777,7 @@ export function makeVoiceRoutes({
     return (await wiederanbinden({ store, lifecycle: statusLifecycleFuer(gefunden, lifecycle) }, gefunden, callId)).call;
   };
   const verarbeiteStatus = async (req: Aufruf, res: Antwort): Promise<void> => {
+    if (!anfrageGeprueft(req, res, STATUS_KOERPER)) return;
     res.sendStatus(HTTP_OK);
     const call = await statusAnruf(req, (await statusCallFinden(req, store)).call);
     if (!call) return;
