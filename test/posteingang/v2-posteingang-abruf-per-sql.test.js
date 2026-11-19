@@ -170,3 +170,41 @@ test("Ohne Superuser-Rechte bleibt die Trennung der Mandanten bestehen", async (
   const fuerY = await b.takeInboxEntries("mandant-y", { limit: 5, includeSeen: true });
   assert.deepEqual(fuerY.entries.map((e) => e.call_id), [call.id]);
 });
+
+test("Mit includeSeen kommt ein ungesehener Anruf ohne Marke, danach liefert der Abruf ohne includeSeen ihn genau einmal", async () => {
+  const { b, db, callId } = await markierterAnruf();
+  await b.init();
+  const mitSeen = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: true });
+  assert.deepEqual(mitSeen.entries.map((e) => e.call_id), [callId]);
+  assert.equal(mitSeen.marked, 0);
+  assert.equal(await markeVon(db, callId), null);
+  const ohneSeen = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(ohneSeen.entries.map((e) => e.call_id), [callId]);
+  assert.equal(ohneSeen.marked, 1);
+  const dritter = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(dritter.entries, []);
+});
+
+test("Mit includeSeen bleibt ein nur im Spiegel markierter Anruf ungesehen und kommt danach genau einmal", async () => {
+  const { store } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+4915112345678", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  store.markInboxEntry(call.id, true);
+  const mitSeen = await store.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: true });
+  assert.deepEqual(mitSeen.entries.map((e) => e.call_id), [call.id]);
+  assert.equal(mitSeen.marked, 0);
+  assert.equal(store.getCall(call.id).inboxSeenAt ?? null, null);
+  const ohneSeen = await store.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(ohneSeen.entries.map((e) => e.call_id), [call.id]);
+  assert.equal(ohneSeen.marked, 1);
+});
+
+test("Gleicher Anrufbeginn: die Anrufe kommen in der Reihenfolge ihrer Anlage", async () => {
+  const { a, b, db, callId } = await markierterAnruf();
+  const zweiter = a.createCall({ direction: "inbound", from: "+4915199999999", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  await a.persistCall(zweiter.id);
+  a.markInboxEntry(zweiter.id, true);
+  await a.drainFlushes();
+  await db.query(`UPDATE call SET started_at = '2021-05-05T10:00:00.000Z'`);
+  const seite = await b.takeInboxEntries(BOOTSTRAP_TENANT_ID, { limit: 5, includeSeen: false });
+  assert.deepEqual(seite.entries.map((e) => e.call_id), [callId, zweiter.id]);
+});
