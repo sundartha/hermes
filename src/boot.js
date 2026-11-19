@@ -33,7 +33,7 @@ import {
   angekuendigterOriginFindings,
 } from "./boot-guard.js";
 import { sleep } from "./utils/uhr-warten.ts";
-import { hasActiveNumber } from "./store/views.js";
+import { hasActiveNumber } from "./store/views.ts";
 import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";

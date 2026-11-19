@@ -10,7 +10,7 @@ import {
 import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
-import { findActiveNumber } from "../store/views.js";
+import { findActiveNumber } from "../store/views.ts";
 import { sendeAusgabenwarnung } from "./ausgabenwarnung.ts";
 import { E164 } from "../begriffe/anruf-pruefung.ts";
 import { invalidText, validateAssistantContext, validateMandate } from "../i18n/anruf-eingabe-texte.ts";

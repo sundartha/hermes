@@ -1,6 +1,6 @@
 import { speicherBereiche } from "../store.js";
 import * as ops from "../store/state-ops.js";
-import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
+import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.ts";
 import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.ts";
 import { PROVISION_RETRY_OUTCOME, retriggerFailedProvisioning } from "./provision-retry.ts";
 

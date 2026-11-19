@@ -12,7 +12,7 @@ before(async () => {
   await import("../../src/config.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
-  ({ publicCall } = await import("../../src/store/views.js"));
+  ({ publicCall } = await import("../../src/store/views.ts"));
 });
 
 async function makePgTestStore() {

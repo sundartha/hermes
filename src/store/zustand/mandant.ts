@@ -26,6 +26,7 @@ interface Mandant extends MandantRef {
   stripePaymentMethodType?: string | null;
   stripeSubscriptionId?: string | null;
   stripeActivationPending?: boolean;
+  numberProvisionSkipReason?: string | null;
   [feld: string]: unknown;
 }
 

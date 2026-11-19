@@ -86,7 +86,7 @@ const UHR_QUELLEN_BESTAND = [
   "src/store/state-ops.js",
   "src/store/stripe-ereignis-register.js",
   "src/store/tts-ablage.js",
-  "src/store/views.js",
+  "src/store/views.ts",
   "src/store/webhook-zustellung.js",
   "src/store/zustand/einstellungen.ts",
   "src/store/zustand/grundlagen.js",

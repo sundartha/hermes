@@ -118,7 +118,7 @@ test("INBOX-P1-S7 json: Bestandszeile ohne die Felder hydriert auf null (CALL_FI
 });
 
 test("INBOX-P1-S8: publicCall strippt BEIDE Marker (kein API-Leak)", async () => {
-  const { publicCall } = await import("../../src/store/views.js");
+  const { publicCall } = await import("../../src/store/views.ts");
   const sichtbar = publicCall({ id: "call_x", inboxEntryAt: SEEN_AT, inboxSeenAt: SEEN_AT, summary: "x" });
   assert.deepEqual(Object.keys(sichtbar).sort(), ["id", "summary"]);
 });
