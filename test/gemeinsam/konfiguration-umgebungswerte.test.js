@@ -1955,3 +1955,24 @@ test("Rohwerte Sicherheit und Stimme: leer gesetzte Text-Variablen ergeben die S
   assert.equal(ist.voice.elevenLabsPlayTts.outputFormat, "mp3_44100_128");
   assert.equal(ist.voice.sttProfile, "accurate");
 });
+
+test("Rohwerte Abrechnung: leere Stripe-Basis und Währungen ergeben die Standards, leere Schlüssel bleiben leer", () => {
+  const ist = ladeAbrechnungRohwerte({
+    STRIPE_API_BASE: "",
+    PAYMENT_CURRENCY: "",
+    PROVIDER_CURRENCY: "",
+    STRIPE_SECRET_KEY: "",
+    STRIPE_WEBHOOK_SECRET: "",
+    STRIPE_STARTER_PRICE_ID: "",
+    STRIPE_BUSINESS_PRICE_ID: "",
+    PLATFORM_ALERT_SMS_TO: "",
+  });
+  assert.equal(ist.billing.stripeApiBase, "https://api.stripe.com");
+  assert.equal(ist.billing.paymentCurrency, "eur");
+  assert.equal(ist.billing.providerCurrency, "USD");
+  assert.equal(ist.billing.stripeSecretKey, "");
+  assert.equal(ist.billing.stripeWebhookSecret, "");
+  assert.equal(ist.billing.stripeStarterPriceId, "");
+  assert.equal(ist.billing.stripeBusinessPriceId, "");
+  assert.equal(ist.billing.platformAlertSmsTo, "");
+});

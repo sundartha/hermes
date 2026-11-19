@@ -11,18 +11,18 @@ const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
 const PAID_WITHOUT_NUMBER_GRACE_HOURS_DEFAULT = 1;
 
 
-function zahlungsRohwerte(env, { boolEnv, isoInstantEnv, numEnv, stripTrailingSlash }) {
+function zahlungsRohwerte(env, { boolEnv, isoInstantEnv, numEnv, stripTrailingSlash, textEnv }) {
   return {
     paymentEnabled: boolEnv("PAYMENT_ENABLED", env.PAYMENT_ENABLED, { fallback: false }),
-    stripeSecretKey: env.STRIPE_SECRET_KEY || "",
-    stripeApiBase: stripTrailingSlash(env.STRIPE_API_BASE || "https://api.stripe.com"),
+    stripeSecretKey: env.STRIPE_SECRET_KEY ?? "",
+    stripeApiBase: stripTrailingSlash(textEnv(env.STRIPE_API_BASE, "https://api.stripe.com")),
     numberSetupFeeCents: numEnv("NUMBER_SETUP_FEE_CENTS", env.NUMBER_SETUP_FEE_CENTS, {
       fallback: 0,
       min: 0,
     }),
     flushEpochIso: isoInstantEnv("BILLING_FLUSH_EPOCH", env.BILLING_FLUSH_EPOCH),
-    paymentCurrency: (env.PAYMENT_CURRENCY || "eur").toLowerCase(),
-    providerCurrency: (env.PROVIDER_CURRENCY || "USD").toUpperCase(),
+    paymentCurrency: textEnv(env.PAYMENT_CURRENCY, "eur").toLowerCase(),
+    providerCurrency: textEnv(env.PROVIDER_CURRENCY, "USD").toUpperCase(),
     providerToBucketRateMicro: numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", env.PROVIDER_TO_BUCKET_RATE_MICRO, {
       fallback: 920000,
       min: 1,
@@ -89,7 +89,7 @@ function tarifRohwerte(env, { numEnv, routeCentsEnv }, kostenprofile) {
       env.PLATFORM_SPEND_WARN_PERCENT,
       { fallback: 80, min: 0, max: 100 },
     ),
-    platformAlertSmsTo: env.PLATFORM_ALERT_SMS_TO || "",
+    platformAlertSmsTo: env.PLATFORM_ALERT_SMS_TO ?? "",
     betterstackAlertUrl: leseBetterStackAlertUrl(env),
   };
 }
@@ -187,8 +187,8 @@ function kontingentRohwerte(env, { boolEnv, numEnv }) {
       fallback: 92,
       min: 0,
     }),
-    stripeStarterPriceId: env.STRIPE_STARTER_PRICE_ID || "",
-    stripeBusinessPriceId: env.STRIPE_BUSINESS_PRICE_ID || "",
+    stripeStarterPriceId: env.STRIPE_STARTER_PRICE_ID ?? "",
+    stripeBusinessPriceId: env.STRIPE_BUSINESS_PRICE_ID ?? "",
     priceDriftMinIntervalMs: numEnv("PRICE_DRIFT_MIN_INTERVAL_MS", env.PRICE_DRIFT_MIN_INTERVAL_MS, {
       fallback: MS_PER_DAY,
       min: 0,
@@ -198,7 +198,7 @@ function kontingentRohwerte(env, { boolEnv, numEnv }) {
       env.PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER,
       { fallback: 3, min: 0 },
     ),
-    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? "",
     stripeCustomerRetryDelayMs: numEnv(
       "STRIPE_CUSTOMER_RETRY_DELAY_MS",
       env.STRIPE_CUSTOMER_RETRY_DELAY_MS,
