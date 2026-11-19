@@ -62,13 +62,14 @@ const initRuf = (url, token = H7C2B4B2_BINDUNGS_TOKEN) =>
     }),
   });
 
-async function mitInitServer(store, lauf) {
+async function mitInitServer(store, lauf, speicherFristMs = undefined) {
   const app = express();
   app.use(express.json());
   app.use(
     makeElevenLabsInitWebhookRoutes({
       store,
       config,
+      speicherFristMs,
       bridges: { clearDeadlines: () => {} },
       outboundInitInhalt: () => ({ marke: "h5137" }),
       vorspannText: () => "",
@@ -117,10 +118,112 @@ test("H5137-2: schlaegt das Speichern fehl, antwortet der EL-Init trotzdem mit 2
   });
   await store.persistCall(call.id);
   const kaputt = Object.assign(Object.create(store), {
-    drainFlushes: () => Promise.reject(new Error("Datenbank weg")),
+    speichereKonversationsId: () => Promise.reject(new Error("Datenbank weg")),
   });
   await mitInitServer(kaputt, async (url) => {
     assert.equal((await initRuf(url)).status, HTTP_OK);
   });
   assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen: Datenbank weg"]);
+});
+
+function wartendesAnruf(store) {
+  const call = store.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" });
+  Object.assign(call, {
+    elevenlabsConversationId: null,
+    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+    answeredAt: new Date().toISOString(),
+    streamToken: H7C2B4B2_BINDUNGS_TOKEN,
+  });
+  return call;
+}
+
+test("H5137-3: haengt fremde, langsame Arbeit in der Speicherkette, antwortet der EL-Init trotzdem mit der gebundenen ID in der Datenbankzeile", async () => {
+  const { runner } = await makePgTestStore();
+  const sperre = { offen: null };
+  const gesperrt = {
+    withClient: async (arbeit) => {
+      const halten = sperre.offen;
+      sperre.offen = null;
+      if (halten) await halten.promise;
+      return runner.withClient(arbeit);
+    },
+  };
+  const a = makePgStore(gesperrt);
+  await a.init();
+  const call = wartendesAnruf(a);
+  await a.persistCall(call.id);
+  const fremd = wartendesAnruf(a);
+  await a.drainFlushes();
+  const halten = Promise.withResolvers();
+  sperre.offen = halten;
+  const fremdSpeichern = a.persistCall(fremd.id);
+  try {
+    await mitInitServer(a, async (url) => {
+      const antwort = await initRuf(url);
+      assert.equal(antwort.status, HTTP_OK);
+      assert.equal(await konversationInDatenbank(runner, call.id), KONVERSATION);
+    });
+  } finally {
+    halten.resolve();
+    await fremdSpeichern;
+  }
+});
+
+test("H5137-4: speichert die Datenbank nicht innerhalb der Frist, antwortet der EL-Init mit 200 und meldet die Frist im Protokoll", async (t) => {
+  const protokoll = [];
+  t.mock.method(console, "error", (...teile) => protokoll.push(teile.join(" ")));
+  const { store } = await makePgTestStore();
+  const call = wartendesAnruf(store);
+  await store.persistCall(call.id);
+  const haengt = Object.assign(Object.create(store), {
+    speichereKonversationsId: () => new Promise(() => {}),
+  });
+  const FRIST_MS = 25;
+  await mitInitServer(haengt, async (url) => {
+    assert.equal((await initRuf(url)).status, HTTP_OK);
+  }, FRIST_MS);
+  assert.deepEqual(protokoll, ["[el-init] speichern fehlgeschlagen: Frist von 25 ms abgelaufen"]);
+});
+
+test("H5137-5: eine wiederholte Bindung ohne Aenderung wartet nicht aufs Speichern", async (t) => {
+  const protokoll = [];
+  t.mock.method(console, "error", (...teile) => protokoll.push(teile.join(" ")));
+  const { store } = await makePgTestStore();
+  const call = wartendesAnruf(store);
+  await store.persistCall(call.id);
+  let gespeichert = 0;
+  const zaehlend = Object.assign(Object.create(store), {
+    speichereKonversationsId: (id) => {
+      gespeichert += 1;
+      return store.speichereKonversationsId(id);
+    },
+  });
+  await mitInitServer(zaehlend, async (url) => {
+    assert.equal((await initRuf(url)).status, HTTP_OK);
+    assert.equal((await initRuf(url)).status, HTTP_OK);
+  });
+  assert.equal(gespeichert, 1);
+  assert.deepEqual(protokoll, []);
+});
+
+test("H5137-6: das gezielte Speichern schreibt die ID nur in die Zeile eines laufenden Anrufs und nichts ohne ID", async () => {
+  const { store, runner } = await makePgTestStore();
+  const ohneId = wartendesAnruf(store);
+  await store.persistCall(ohneId.id);
+  await store.speichereKonversationsId(ohneId.id);
+  assert.equal(await konversationInDatenbank(runner, ohneId.id), null);
+  const beendet = wartendesAnruf(store);
+  await store.persistCall(beendet.id);
+  await runner.withClient(async (client) => {
+    await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+    await client.query("UPDATE call SET status = 'completed' WHERE id = $1", [beendet.id]);
+  });
+  beendet.elevenlabsConversationId = KONVERSATION;
+  await store.speichereKonversationsId(beendet.id);
+  assert.equal(await konversationInDatenbank(runner, beendet.id), null);
+  const laufend = wartendesAnruf(store);
+  await store.persistCall(laufend.id);
+  laufend.elevenlabsConversationId = KONVERSATION;
+  await store.speichereKonversationsId(laufend.id);
+  assert.equal(await konversationInDatenbank(runner, laufend.id), KONVERSATION);
 });
