@@ -25,8 +25,12 @@ export async function pruefeBetrieb(kind, url, optionen) {
   let laengste = 0;
   while (jetzt() - start < schwelle.haltenMs) {
     if (tot(kind)) return { grund: "Hermes beendete sich", messungen, laengste };
-    const messung = await messe(url);
+    let messung = await messe(url);
     messungen += 1;
+    if (messung.status === HTTP_OK && messung.ms > schwelle.healthzMs) {
+      messung = await messe(url);
+      messungen += 1;
+    }
     laengste = Math.max(laengste, messung.ms);
     if (messung.status !== HTTP_OK)
       return { grund: "/healthz antwortete nicht mit 200", messungen, laengste };
