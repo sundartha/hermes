@@ -224,5 +224,5 @@ test("Kriterium 2: das Löschen von Mandantendaten mit nur einem Anruf speichert
 
   assert.equal(entfernt.calls, 1);
   assert.equal(entfernt.actionItems, 0);
-  assert.notEqual(abfragen.length, 0);
+  assert.ok(abfragen.includes("BEGIN"));
 });
