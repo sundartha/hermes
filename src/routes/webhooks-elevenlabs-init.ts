@@ -56,6 +56,7 @@ interface Speicher {
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
+  drainFlushes?(): Promise<unknown>;
 }
 
 type NummernSatz = Parameters<typeof inboundElPathFor>[0]["numberRecord"];
@@ -279,6 +280,12 @@ function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
 }
 
+async function bindungDauerhaft(store: Speicher): Promise<void> {
+  await store.drainFlushes?.().catch((err: unknown) => {
+    console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen: ${fehlerNachricht(err) || "unbekannt"}`);
+  });
+}
+
 async function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): Promise<unknown> {
   const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt, vorspannText } = deps;
@@ -304,6 +311,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   });
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
+  await bindungDauerhaft(store);
   if (bindung.changed) bridges.clearDeadlines(call.id);
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
 
