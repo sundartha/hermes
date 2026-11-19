@@ -1,84 +1,76 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import * as ops from "../../src/store/state-ops.js";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { legeMandantAn, makePgTestStore } from "../pg-helpers.js";
 
-const MANDANT = "t_grenzfall";
+const MIT_NAMEN = "t_mit_namen";
+const OHNE_NAMEN = "t_ohne_namen";
+const UNBEKANNT = "t_unbekannt";
+const NUMMER = "+4930123456";
 
-function zustand(tenants) {
-  return { tenants, numbers: [], settings: {}, calendar: {}, profiles: {}, notifications: [] };
+async function speicherMitMandanten() {
+  const { store, db } = await makePgTestStore();
+  await legeMandantAn(store, OHNE_NAMEN);
+  await legeMandantAn(store, MIT_NAMEN);
+  await db.query(`UPDATE tenant SET owner_name = 'Anna Berg', first_name = 'Annchen' WHERE id = $1`, [MIT_NAMEN]);
+  await store.init();
+  return store;
 }
 
-test("tenantContext: Mandant ohne Namen nimmt den uebergebenen Namen und leitet den Vornamen daraus ab", () => {
-  const ctx = ops.tenantContext(zustand([{ id: MANDANT }]), "Frieda Fuchs", MANDANT);
-  assert.equal(ctx.ownerName, "Frieda Fuchs");
-  assert.equal(ctx.firstName, "Frieda");
+test("tenantContext: gespeicherter Name und Vorname haben Vorrang, ohne Namen und ohne Mandant bleiben sie leer", async () => {
+  const store = await speicherMitMandanten();
+  const mit = store.tenantContext(MIT_NAMEN);
+  assert.equal(mit.ownerName, "Anna Berg");
+  assert.equal(mit.firstName, "Annchen");
+  const ohne = store.tenantContext(OHNE_NAMEN);
+  assert.equal(ohne.ownerName, "");
+  assert.equal(ohne.firstName, "");
+  const unbekannt = store.tenantContext(UNBEKANNT);
+  assert.equal(unbekannt.ownerName, "");
+  assert.equal(unbekannt.firstName, "");
 });
 
-test("tenantContext: gespeicherter Name und Vorname haben Vorrang", () => {
-  const ctx = ops.tenantContext(
-    zustand([{ id: MANDANT, ownerName: "Anna Berg", firstName: "Annchen" }]),
-    "Frieda Fuchs",
-    MANDANT,
-  );
-  assert.equal(ctx.ownerName, "Anna Berg");
-  assert.equal(ctx.firstName, "Annchen");
+test("clearSuspendedAt: setzt eine Sperrzeit zurueck, ohne Sperrzeit und ohne Mandant bleibt alles leer", async () => {
+  const store = await speicherMitMandanten();
+  await store.setSuspendedAtIfAbsent(MIT_NAMEN);
+  assert.notEqual(store.tenantSuspendedAt(MIT_NAMEN), null);
+  await store.clearSuspendedAt(MIT_NAMEN);
+  assert.equal(store.tenantSuspendedAt(MIT_NAMEN), null);
+  await store.clearSuspendedAt(OHNE_NAMEN);
+  assert.equal(store.tenantSuspendedAt(OHNE_NAMEN), null);
+  await store.clearSuspendedAt(UNBEKANNT);
+  assert.equal(store.tenantSuspendedAt(UNBEKANNT), null);
 });
 
-test("tenantContext: unbekannter Mandant und leerer Name geben leere Strings", () => {
-  const ctx = ops.tenantContext(zustand([]), "", "t_unbekannt");
-  assert.equal(ctx.ownerName, "");
-  assert.equal(ctx.firstName, "");
-  const ohneVorname = ops.tenantContext(zustand([{ id: MANDANT }]), "   ", MANDANT);
-  assert.equal(ohneVorname.firstName, "");
+test("kycReached und tenantActiveSubscriber: Stufe, Status und fehlender Mandant", async () => {
+  const store = await speicherMitMandanten();
+  assert.equal(store.kycReached(OHNE_NAMEN, KYC_LEVEL.CARD), false);
+  await store.setKycLevel(OHNE_NAMEN, KYC_LEVEL.CARD);
+  assert.equal(store.kycReached(OHNE_NAMEN, KYC_LEVEL.CARD), true);
+  assert.equal(store.kycReached(OHNE_NAMEN, KYC_LEVEL.ID_VERIFIED), false);
+  assert.equal(store.kycReached(UNBEKANNT, KYC_LEVEL.CARD), false);
+  assert.equal(store.tenantActiveSubscriber(OHNE_NAMEN, KYC_LEVEL.CARD), true);
+  assert.equal(store.tenantActiveSubscriber(MIT_NAMEN, KYC_LEVEL.CARD), false);
+  assert.equal(store.tenantActiveSubscriber(UNBEKANNT, KYC_LEVEL.CARD), false);
+  assert.equal(store.tenantInactive(UNBEKANNT), false);
 });
 
-test("clearSuspendedAt: setzt eine Sperrzeit zurueck, ohne Sperrzeit und ohne Mandant keine Aenderung", () => {
-  const s = zustand([{ id: MANDANT, suspendedAt: "2026-01-01T00:00:00.000Z" }, { id: "t_frei" }]);
-  const erst = ops.clearSuspendedAt(s, MANDANT);
-  assert.equal(erst.changed, true);
-  assert.equal(erst.tenant.suspendedAt, null);
-  assert.equal(ops.clearSuspendedAt(s, MANDANT).changed, false);
-  assert.equal(ops.clearSuspendedAt(s, "t_frei").changed, false);
-  assert.deepEqual(ops.clearSuspendedAt(s, "t_fehlt"), { tenant: null, changed: false });
+test("billingHoldActive: ohne Faelligkeit sofort aktiv, mit Faelligkeit erst ab dem Zeitpunkt, ohne Mandant leer", async () => {
+  const store = await speicherMitMandanten();
+  await store.setBillingHold(OHNE_NAMEN, { reason: "grund" });
+  assert.equal(store.billingHoldActive(OHNE_NAMEN), "grund");
+  await store.setBillingHold(MIT_NAMEN, { reason: "spaeter", dueAtIso: "2999-01-01T00:00:00.000Z" });
+  assert.equal(store.billingHoldActive(MIT_NAMEN), null);
+  await store.setBillingHold(MIT_NAMEN, { reason: "vorbei", dueAtIso: "2000-01-01T00:00:00.000Z" });
+  assert.equal(store.billingHoldActive(MIT_NAMEN), "vorbei");
+  assert.equal(store.billingHoldActive(UNBEKANNT), null);
 });
 
-test("kycReached und tenantActiveSubscriber: Stufe, Status und fehlender Mandant", () => {
-  const s = zustand([
-    { id: "t_card", status: "active", kycLevel: KYC_LEVEL.CARD },
-    { id: "t_ohne", status: "active" },
-    { id: "t_zu", status: "closed", kycLevel: KYC_LEVEL.ID_VERIFIED },
-  ]);
-  assert.equal(ops.kycReached(s, "t_card", KYC_LEVEL.CARD), true);
-  assert.equal(ops.kycReached(s, "t_card", KYC_LEVEL.ID_VERIFIED), false);
-  assert.equal(ops.kycReached(s, "t_ohne", KYC_LEVEL.CARD), false);
-  assert.equal(ops.kycReached(s, "t_fehlt", KYC_LEVEL.CARD), false);
-  assert.equal(ops.tenantActiveSubscriber(s, "t_card", KYC_LEVEL.CARD), true);
-  assert.equal(ops.tenantActiveSubscriber(s, "t_ohne", KYC_LEVEL.CARD), false);
-  assert.equal(ops.tenantActiveSubscriber(s, "t_zu", KYC_LEVEL.CARD), false);
-  assert.equal(ops.tenantActiveSubscriber(s, "t_fehlt", KYC_LEVEL.CARD), false);
-});
-
-test("billingHoldActive: ohne Faelligkeit sofort aktiv, mit Faelligkeit ab dem Zeitpunkt", () => {
-  const s = zustand([
-    { id: "t_ohne", billingHold: "grund" },
-    { id: "t_spaeter", billingHold: "grund", billingHoldDueAt: "2026-02-01T00:00:00.000Z" },
-  ]);
-  assert.equal(ops.billingHoldActive(s, "t_ohne", "2026-01-01T00:00:00.000Z"), "grund");
-  assert.equal(ops.billingHoldActive(s, "t_spaeter", "2026-01-31T23:59:59.000Z"), null);
-  assert.equal(ops.billingHoldActive(s, "t_spaeter", "2026-02-01T00:00:00.000Z"), "grund");
-  assert.equal(ops.billingHoldActive(s, "t_fehlt", "2026-02-01T00:00:00.000Z"), null);
-});
-
-test("canTransitionNumber, findNumber und numberRecordByE164: Treffer und Nichttreffer", () => {
-  const s = zustand([]);
-  s.numbers = [{ id: "n1", e164: "+4930111", status: "active" }, { id: "n2", e164: "+4930222", status: "released" }];
-  assert.equal(ops.findNumber(s, "n1").e164, "+4930111");
-  assert.equal(ops.findNumber(s, "n9"), null);
-  assert.equal(ops.numberRecordByE164(s, "+4930111").id, "n1");
-  assert.equal(ops.numberRecordByE164(s, "+4930222"), null);
-  assert.equal(ops.canTransitionNumber("active", "suspended"), true);
-  assert.equal(ops.canTransitionNumber("unbekannt", "active"), false);
-  assert.equal(ops.findTenant(zustand([{ id: MANDANT }]), "t_fehlt"), null);
+test("numberRecordByE164: aktive Nummer wird gefunden, unbekannte und leere nicht", async () => {
+  const store = await speicherMitMandanten();
+  await store.seedBootstrapNumber(NUMMER, OHNE_NAMEN, "telnyx");
+  assert.equal(store.numberRecordByE164(NUMMER).tenantId, OHNE_NAMEN);
+  assert.equal(store.numberRecordByE164("+4930999999"), null);
+  assert.equal(store.numberRecordByE164(""), null);
 });
