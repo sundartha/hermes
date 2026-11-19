@@ -122,7 +122,7 @@ const WORT_NUR_IN_EINTRAEGE = [
       "src/billing/cost-calibration.ts",
       "src/billing/metering.js",
       "src/config.js",
-      "src/konfiguration/rohwerte-billing.js",
+      "src/konfiguration/rohwerte-billing.ts",
     ],
     meldung:
       "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.ts (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
