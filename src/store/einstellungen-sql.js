@@ -86,7 +86,7 @@ export function einstellungenLesen(client, tenantId) {
   });
 }
 
-function innerhalbFrist(versprechen, fristMs, beiAblauf) {
+export function innerhalbFrist(versprechen, fristMs, beiAblauf) {
   let uhr;
   const abgelaufen = new Promise((resolve) => {
     uhr = setTimeout(() => {
