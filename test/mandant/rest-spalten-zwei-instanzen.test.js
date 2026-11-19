@@ -4,7 +4,7 @@ import express from "express";
 
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { speicherBereiche } from "../../src/store.js";
-import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
+import { requestNumber } from "../../src/store/state-ops.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
@@ -167,7 +167,7 @@ test("Kriterium 1+2: der Ueberspringgrund aus dem Webhook-Nummernkauf von A steh
     numberProvisioning: () => ({}),
     handleProvisionJob: async () => ({}),
     resolveProvisionRetry: (zustand) =>
-      requestNumberForPaidTenant(zustand, { tenantId: tenant, maxNumbers: 0, maxNumbersPerTenant: 5 }),
+      requestNumber(zustand, { tenantId: tenant, maxNumbers: 0, maxNumbersPerTenant: 5 }),
     audit: () => {},
     recordProvisioningJob: () => null,
     markProvisioningJob: () => null,
