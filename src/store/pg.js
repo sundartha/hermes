@@ -195,7 +195,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -860,10 +860,14 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
 
     addNotification(title, body, callId) {
       const state = requireState();
-      const ausDatenbank = posteingang.benachrichtigen(state, { title, body, callId });
-      if (ausDatenbank) return ausDatenbank;
-      ops.addNotification(state, title, body, callId);
-      save();
+      const spiegeln = () => {
+        ops.addNotification(state, title, body, callId);
+        save();
+      };
+      if (!callId) return spiegeln();
+      return posteingang.benachrichtigen(state, { title, body, callId }).then((angelegt) => {
+        if (!angelegt) spiegeln();
+      });
     },
 
     seedBootstrapNumber(e164, tenantId, provider) {
