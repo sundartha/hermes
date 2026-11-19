@@ -32,7 +32,7 @@ const conversationConfig = TEMPLATE.agent?.conversation_config ?? {};
 const agentSection = conversationConfig.agent ?? {};
 const promptSection = agentSection.prompt ?? {};
 
-export function stimmeAusVorlage(tts: VorlagenTts | undefined): AgentStimme {
+function stimmeAusVorlage(tts: VorlagenTts | undefined): AgentStimme {
   if (tts?.stability === undefined || tts.similarity_boost === undefined) {
     return { model: tts?.model_id, voiceSettings: undefined };
   }
