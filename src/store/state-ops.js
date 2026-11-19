@@ -9,7 +9,6 @@ import {
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
 import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { E164 } from "../begriffe/rufnummern.js";
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.js";
@@ -44,7 +43,7 @@ export {
 import { newId, getCall } from "./zustand/grundlagen.js";
 export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
 import { findTenant, seedBootstrapKyc } from "./zustand/mandant.ts";
-export { tenantContext, registerTenant } from "./zustand/mandant.ts";
+export { tenantContext, registerTenant, resolveCallLanguage } from "./zustand/mandant.ts";
 export {
   numberRecordByE164,
   findTenantByNumber,
@@ -1093,12 +1092,6 @@ export function addCalendarEvent(state, { tenantId, title, startIso, endIso }) {
 
 export function findConflict(s, tenantId, startIso, endIso) {
   return getCalendar(s, tenantId).find((ev) => ev.start < endIso && startIso < ev.end) || null;
-}
-
-export function resolveCallLanguage(state, { tenantId, numberRecord }) {
-  const settingsLang = settingsFor(state, tenantId).language;
-  const tenant = findTenant(state, tenantId);
-  return (settingsLang ?? "") || (numberRecord?.language ?? "") || (tenant?.defaultLanguage ?? "") || DEFAULT_LANGUAGE;
 }
 
 export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {

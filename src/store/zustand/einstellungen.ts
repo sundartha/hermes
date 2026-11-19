@@ -6,7 +6,10 @@ import { hasInboundNotice } from "../../i18n/inbound-notice.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 import type { MandantRef } from "./grundzugriffe.ts";
 
-type Einstellungen = Record<string, unknown>;
+interface Einstellungen {
+  language?: string | null;
+  [feld: string]: unknown;
+}
 type Profil = Record<string, unknown>;
 type Termin = Record<string, unknown>;
 type Pruefung = (wert: unknown) => boolean;
