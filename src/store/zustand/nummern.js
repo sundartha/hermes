@@ -27,7 +27,7 @@ import {
   tenantMayRequestNumber,
   tenantSuspendedAt,
   tenantSubscription,
-} from "./mandant.js";
+} from "./mandant.ts";
 
 function occupiesCapacity(number) {
   return number.status !== NUMBER_STATUS.RELEASED && number.status !== NUMBER_STATUS.FAILED;

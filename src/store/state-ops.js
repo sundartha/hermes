@@ -43,8 +43,8 @@ export {
 } from "./zustand/budget.js";
 import { newId, getCall } from "./zustand/grundlagen.js";
 export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
-import { findTenant, seedBootstrapKyc } from "./zustand/mandant.js";
-export { tenantContext, registerTenant } from "./zustand/mandant.js";
+import { findTenant, seedBootstrapKyc } from "./zustand/mandant.ts";
+export { tenantContext, registerTenant } from "./zustand/mandant.ts";
 export {
   numberRecordByE164,
   findTenantByNumber,
@@ -80,7 +80,7 @@ export {
   tenantTimezone,
   failedNumberCount,
   tenantMayRequestNumber,
-} from "./zustand/mandant.js";
+} from "./zustand/mandant.ts";
 import {
   usageFor,
   PLATFORM_TTS_COST_CENTER_ID,

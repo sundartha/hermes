@@ -15,10 +15,9 @@ interface Ergebnis {
   [feld: string]: unknown;
 }
 
-interface Zustand {
-  numbers: { id: string; tenantId: string; status: string }[];
+type Zustand = Parameters<typeof tenantGeo>[0] & {
   provisioningJobs: { id: string; numberId: string; status: string }[];
-}
+};
 
 export function requestNumberForPaidTenant(
   state: Zustand,

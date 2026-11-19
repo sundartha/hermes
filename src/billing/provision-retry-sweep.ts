@@ -14,7 +14,8 @@ type Zaehler = "angestossen" | "gedrosselt" | "erschoepft" | "ungeeignet";
 
 type TypNachtrag = Parameters<typeof fillPaymentMethodType>[0];
 
-type SweepStore = TypNachtrag["store"] & {
+type SweepStore = Omit<TypNachtrag["store"], "load"> & {
+  load: () => Parameters<typeof ops.tenantStripe>[0];
   save: () => void;
   withStoreLock: <T>(arbeit: () => T) => Promise<T>;
 };
@@ -35,10 +36,7 @@ interface SweepDeps {
 
 const offenerAusfall: (state: unknown, code: string) => { lastSeenAt?: string | null } | null = ops.openOutageAlert;
 
-const stripeDatenOf: (
-  state: unknown,
-  tenantId: string,
-) => { paymentMethodId?: string | null; paymentMethodType?: string | null } = ops.tenantStripe;
+const stripeDatenOf = ops.tenantStripe;
 
 interface Bereiche {
   ausfall: {
