@@ -28,7 +28,7 @@ async function aufbau() {
   await a.persistCall(call.id);
   await a.drainFlushes();
   await db.query(`UPDATE call SET elevenlabs_conversation_id = $1 WHERE id = $2`, [KONVERSATION, call.id]);
-  return { b: await neueInstanz(db), callId: call.id };
+  return { b: await neueInstanz(db), callId: call.id, db };
 }
 
 test("V3-F1: eine zweite Instanz sieht die belegte Nummer eines Anrufs, den nur die Datenbank kennt", async () => {
@@ -49,4 +49,15 @@ test("V3-F3: eine zweite Instanz zaehlt und listet aktive Anrufe sowie Anrufe se
   assert.deepEqual((await b.activeCallsForSql(KUNDE)).map((call) => call.id), [callId]);
   assert.ok((await b.aktiveAnrufeAlle()).some((call) => call.id === callId));
   assert.equal(await b.zaehleAnrufeSeit(KUNDE, "2000-01-01T00:00:00.000Z"), 1);
+});
+
+test("V3-F4: eine zweite Instanz liest Posteingang-Anrufe und Aktionspunkte aus der Datenbank", async () => {
+  const { b, callId, db } = await aufbau();
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [KUNDE]);
+  await db.query("UPDATE call SET inbox_entry_at = now() WHERE id = $1", [callId]);
+  const posteingang = await b.takeInboxEntries(KUNDE, { limit: 10, includeSeen: true });
+  assert.ok(posteingang.entries.some((eintrag) => eintrag.call_id === callId));
+  await b.addActionItem(callId, "Rückruf klären");
+  const c = await neueInstanz(db);
+  assert.deepEqual((await c.callActionItems(callId)).map((punkt) => punkt.text), ["Rückruf klären"]);
 });
