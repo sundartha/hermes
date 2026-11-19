@@ -506,8 +506,9 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
     "beide Pflichtfelder persistiert (waere budgetCents=undefined gesetzt worden, haette die " +
       "BIGINT-NOT-NULL-Verletzung die GESAMTE Transaktion inkl. Call zurueckgerollt)",
   );
+  const gelesen = await store2.exportTenantDataGelesen(tenantId);
   assert.equal(
-    (await store2.exportTenantDataGelesen(tenantId)).calls.filter((c) => c.tenantId === tenantId).length,
+    gelesen.calls.filter((c) => c.tenantId === tenantId).length,
     1,
     "der im selben Flush geschriebene Call ist ebenfalls da (Mit-Verlust-Beweis)",
   );
