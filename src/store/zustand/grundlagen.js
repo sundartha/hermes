@@ -11,8 +11,8 @@ export function newId(prefix) {
   );
 }
 
-export const tenantsOf = (state) => state.tenants || [];
+export const tenantsOf = (state) => state.tenants ?? [];
 
 export function getCall(state, id) {
-  return state.calls.find((call) => call.id === id || call.twilioSid === id) || null;
+  return state.calls.find((call) => call.id === id || call.twilioSid === id) ?? null;
 }

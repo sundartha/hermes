@@ -6,7 +6,7 @@ import { hasInboundNotice } from "../../i18n/inbound-notice.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 
 export function settingsFor(state, tenantId) {
-  return (state.settings[tenantId] ||= defaultSettings());
+  return (state.settings[tenantId] ??= defaultSettings());
 }
 
 function resolveOptionalEnumOverride(value, allowedValues) {
@@ -38,7 +38,7 @@ export function updateSettings(state, tenantId, patch) {
   const allowed = defaultSettings();
   const changed = [];
   const target = settingsFor(state, tenantId);
-  for (const [key, value] of Object.entries(patch || {})) {
+  for (const [key, value] of Object.entries(patch ?? {})) {
     if (!(key in allowed)) continue;
     const neu = neuerWert(key, value, allowed);
     if (!neu) continue;
@@ -52,11 +52,11 @@ export function resolveProfile(state, tenantId) {
   return resolveProfileFrom(tenantId, tenantId ? state.profiles[tenantId] : undefined);
 }
 
-const subIndexOf = (state) => state.subIndex || {};
+const subIndexOf = (state) => state.subIndex ?? {};
 
 export function bindSubToTenant(state, sub, tenantId) {
   if (!sub || !tenantId) return;
-  (state.subIndex ||= {})[sub] = tenantId;
+  (state.subIndex ??= {})[sub] = tenantId;
 }
 
 export function resolveTenant(state, idpSubject) {
@@ -73,7 +73,7 @@ export function listProfiles(state) {
 
 export function setProfile(state, tenantId, patch) {
   const clean = sanitizeProfile(patch);
-  state.profiles[tenantId] = { ...(state.profiles[tenantId] || {}), ...clean };
+  state.profiles[tenantId] = { ...(state.profiles[tenantId] ?? {}), ...clean };
   return { profile: state.profiles[tenantId], changed: Object.keys(clean) };
 }
 
@@ -84,7 +84,7 @@ export function deleteProfile(state, tenantId) {
 }
 
 export function calendarFor(state, tenantId) {
-  return (state.calendar[tenantId] ||= []);
+  return (state.calendar[tenantId] ??= []);
 }
 
 export function benachrichtigungHinzufuegen(state, { title, body, callId }) {
