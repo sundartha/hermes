@@ -203,6 +203,29 @@ test("Kriterium 3: ist die Nummer nicht lesbar, laeuft der Anruf mit vollem Satz
   assert.equal(ergebnis.meldungen.filter((meldung) => NICHT_LESBAR.test(meldung)).length, 1);
 });
 
+test("Kriterium 3: der Lesefehler steht mit Aktionsname im Audit und mit Praefix im Log", async () => {
+  const { a, b, lesen } = await zweiInstanzen();
+  await nummerSpeichern(a, NUMMER_ALT);
+  lesen.an = false;
+  const zeilen = [];
+  const original = console.error;
+  console.error = (...teile) => zeilen.push(teile);
+
+  let ergebnis;
+  try {
+    ergebnis = await rufeAn(b, NUMMER_ALT);
+  } finally {
+    console.error = original;
+  }
+
+  const audit = ergebnis.meldungen.filter((meldung) => NICHT_LESBAR.test(meldung));
+  assert.equal(audit.length, 1);
+  assert.ok(audit[0].startsWith("place_call_eigene_nummer grund=eigene_nummer_nicht_lesbar tenant="));
+  const log = zeilen.filter((teile) => String(teile[0]).includes("eigene Nummer nicht lesbar"));
+  assert.equal(log.length, 1);
+  assert.equal(log[0][0], "[place_call] eigene Nummer nicht lesbar:");
+});
+
 test("Kriterium 3: ist die Nummer lesbar, steht kein Lesefehler im Audit", async () => {
   const { a, b } = await zweiInstanzen();
   await nummerSpeichern(a, NUMMER_ALT);
