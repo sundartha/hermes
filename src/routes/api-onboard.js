@@ -5,7 +5,7 @@ import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.ts";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";
-import { PROVIDER, shouldPersistProvisionResult } from "../begriffe/nummern-vergabe.js";
+import { PROVIDER, SKIP_VERMERK_SCHLUESSEL, shouldPersistProvisionResult } from "../begriffe/nummern-vergabe.js";
 import { KYC_OUTBOUND_MIN, tenantIdForSubject } from "../begriffe/mandant.js";
 import { kauflandFuer } from "../begriffe/rufnummern.js";
 import {
@@ -182,7 +182,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
         });
         if (shouldPersistProvisionResult(r)) {
           store.save();
-          if (sub) store.stammdatenSchreiben?.(tenantId, ["idpSubject"]);
+          store.stammdatenSchreiben?.(tenantId, [...(sub ? ["idpSubject"] : []), ...SKIP_VERMERK_SCHLUESSEL]);
         }
         return r;
       })
