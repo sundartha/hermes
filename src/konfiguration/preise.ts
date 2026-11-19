@@ -1,3 +1,18 @@
+interface Raten {
+  inPerMTok: number;
+  cacheWritePerMTok: number;
+  cacheReadPerMTok: number;
+  outPerMTok: number;
+}
+interface Staffel extends Raten {
+  validFrom: string;
+  asOf: string;
+  source: string;
+}
+interface AktiveStaffel extends Staffel {
+  nextValidFrom: string | null;
+}
+
 export const FX_MICRO_PER_UNIT = 1_000_000;
 
 export const EXCHANGE_RATE_DEFAULTS = Object.freeze({
@@ -7,7 +22,7 @@ export const EXCHANGE_RATE_DEFAULTS = Object.freeze({
 const ANTHROPIC_PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
 const DEEPSEEK_PRICING_SOURCE = "https://api-docs.deepseek.com/quick_start/pricing";
 
-export const MODEL_PRICE_SCHEDULES = Object.freeze({
+export const MODEL_PRICE_SCHEDULES: Readonly<Record<string, readonly Staffel[]>> = Object.freeze({
   "claude-haiku-4-5": [
     {
       validFrom: "2026-08-08",
@@ -55,11 +70,15 @@ export const MODEL_PRICE_SCHEDULES = Object.freeze({
 const ISO_DATE_LENGTH = 10;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export function todayIsoDate() {
+export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, ISO_DATE_LENGTH);
 }
 
-function assertScheduleEntry(modelId, entry, rateFields) {
+function assertScheduleEntry(
+  modelId: string,
+  entry: Staffel | null | undefined,
+  rateFields: readonly (keyof Raten)[],
+): void {
   if (entry === null || entry === undefined || !ISO_DATE_PATTERN.test(entry.validFrom))
     throw new Error(`modelPricesUsd: Staffel '${modelId}' ohne gueltiges validFrom (YYYY-MM-DD)`);
   for (const field of rateFields) {
@@ -72,24 +91,28 @@ function assertScheduleEntry(modelId, entry, rateFields) {
   }
 }
 
-function activeSchedule(entries, todayIso) {
+function activeSchedule(entries: readonly Staffel[], todayIso: string): Staffel | null {
   return entries
     .filter((entry) => entry.validFrom <= todayIso)
-    .reduce((latest, entry) => (latest === null || entry.validFrom > latest.validFrom ? entry : latest), null);
+    .reduce<Staffel | null>((latest, entry) => (latest === null || entry.validFrom > latest.validFrom ? entry : latest), null);
 }
 
-function nextValidFrom(entries, todayIso) {
+function nextValidFrom(entries: readonly Staffel[], todayIso: string): string | null {
   const future = entries.filter((entry) => entry.validFrom > todayIso).map((entry) => entry.validFrom);
   return future.length ? future.reduce((min, date) => (date < min ? date : min)) : null;
 }
 
-function resolveModelPricesMit(rateFields, schedules, todayIso) {
+function resolveModelPricesMit(
+  rateFields: readonly (keyof Raten)[],
+  schedules: Readonly<Record<string, readonly Staffel[]>>,
+  todayIso: string,
+): Record<string, AktiveStaffel> {
   const modelIds = Object.keys(schedules);
   if (!modelIds.length)
     throw new Error(
       "modelPricesUsd: keine Preisstaffel hinterlegt - keine Preisquelle fuer den Budget-Guard (Regel 1)",
     );
-  const resolved = {};
+  const resolved: Record<string, AktiveStaffel> = {};
   for (const [modelId, entries] of Object.entries(schedules)) {
     for (const entry of entries) assertScheduleEntry(modelId, entry, rateFields);
     const active = activeSchedule(entries, todayIso);
@@ -103,7 +126,12 @@ function resolveModelPricesMit(rateFields, schedules, todayIso) {
   return resolved;
 }
 
-export function preiseMit(rateFields) {
+export function preiseMit(rateFields: readonly (keyof Raten)[]): {
+  resolveModelPrices: (
+    schedules: Readonly<Record<string, readonly Staffel[]>>,
+    todayIso: string,
+  ) => Record<string, AktiveStaffel>;
+} {
   return {
     resolveModelPrices: (schedules, todayIso) => resolveModelPricesMit(rateFields, schedules, todayIso),
   };

@@ -10,7 +10,7 @@ import {
   MODEL_PRICE_SCHEDULES,
   preiseMit,
   todayIsoDate,
-} from "./konfiguration/preise.js";
+} from "./konfiguration/preise.ts";
 import { gatewayUrlForPort, gatewayUrlMit } from "./konfiguration/gateway-url.ts";
 import {
   attachNamespaces,
