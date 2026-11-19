@@ -50,7 +50,7 @@ import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.ts";
 import { LLM_PROVIDER } from "./llm/provider.ts";
 import { MS_PER_MINUTE } from "./utils/timer.ts";
-import { merkeLogGeheimnisse } from "./log-maske.js";
+import { merkeLogGeheimnisse } from "./log-maske.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV !== "test") {
