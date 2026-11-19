@@ -23,5 +23,5 @@ export const SCHWELLEN = Object.freeze({
 });
 
 export const ANFRAGE_FRIST_MS = 5000;
-export const BEREIT_FRIST_MS = 30_000;
+export const BEREIT_FRIST_MS = 90_000;
 export const GESAMT_FRIST_MS = 110_000;

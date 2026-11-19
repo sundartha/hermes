@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
-import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { abrufOhnePool } from "../gemeinsam/abruf-ohne-pool.mjs";
 import { EL_R5_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 
@@ -70,7 +70,7 @@ let zielZaehler = 0;
 const naechstesZiel = () => `+49151123${String(40000 + zielZaehler++)}`;
 
 async function rufe(srv, koerper) {
-  const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
+  const res = await abrufOhnePool(`${srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: naechstesZiel(), ...koerper }),

@@ -1,4 +1,15 @@
-export function alarmEingangFindings({ betterstackAlertUrl, isProduction }) {
+interface AlarmEingangFinding {
+  fatal: boolean;
+  message: string;
+}
+
+export function alarmEingangFindings({
+  betterstackAlertUrl,
+  isProduction,
+}: {
+  betterstackAlertUrl: string | undefined;
+  isProduction: boolean;
+}): AlarmEingangFinding[] {
   if (!betterstackAlertUrl)
     return [
       {

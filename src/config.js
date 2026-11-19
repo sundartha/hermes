@@ -10,7 +10,7 @@ import {
   MODEL_PRICE_SCHEDULES,
   preiseMit,
   todayIsoDate,
-} from "./konfiguration/preise.js";
+} from "./konfiguration/preise.ts";
 import { gatewayUrlForPort, gatewayUrlMit } from "./konfiguration/gateway-url.ts";
 import {
   attachNamespaces,
@@ -30,7 +30,7 @@ import { rohwerteMail } from "./konfiguration/rohwerte-mail.ts";
 import { rohwerteMetrics } from "./konfiguration/rohwerte-metrics.ts";
 import { rohwertePrivacy } from "./konfiguration/rohwerte-privacy.ts";
 import { rohwerteResearch } from "./konfiguration/rohwerte-research.ts";
-import { rohwerteServer } from "./konfiguration/rohwerte-server.js";
+import { rohwerteServer } from "./konfiguration/rohwerte-server.ts";
 import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.ts";
 import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.ts";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.ts";
@@ -73,8 +73,8 @@ export const {
 const { detectProduction } = umgebung;
 
 export const fristenEinstellungen = Object.freeze(rohwerteFristen(process.env, umgebung));
-export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.js";
-export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.js";
+export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.ts";
+export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.ts";
 export { TELNYX_API_BASE_STANDARD } from "./konfiguration/rohwerte-telephony.ts";
 export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.ts";
 

@@ -90,6 +90,7 @@ const MUTANT_OHNE_PROCESS = [
 const MUTANT_VORLADEN = `--import=data:text/javascript,${encodeURIComponent(MUTANT_OHNE_PROCESS)}`;
 const MUTATION_PARALLEL = 4;
 const MUTANTEN_JE_TEIL = 4;
+const MUTANT_TESTS_HOECHSTENS = 300;
 const TEILE_HOECHSTENS = 20;
 const ZAEHLEN = "MUTANTEN_ZAEHLEN";
 const ABDECKUNG = "MUTATION_ABDECKUNG";
@@ -505,6 +506,13 @@ export function mutantReihenfolge({ tests, geaendert = [] }, zeile) {
   return [...tests].sort((links, rechts) => Number(geaendert.includes(rechts)) - Number(geaendert.includes(links)) || treffer.get(rechts) - treffer.get(links) || links.localeCompare(rechts));
 }
 
+export function mutantKandidaten(plan, zeile, hoechstens) {
+  const rang = mutantReihenfolge(plan, zeile);
+  const geaendert = plan.geaendert ?? [];
+  const auswahl = rang.filter((datei, platz) => platz < hoechstens || geaendert.includes(datei));
+  return { auswahl, kandidaten: rang.length, ...(auswahl.length < rang.length && { gekuerzt: { geprueft: auswahl.length, kandidaten: rang.length } }) };
+}
+
 function ohneWerkzeugSteuerung(quelle) {
   return Object.fromEntries(Object.entries(quelle).filter(([name]) => !WERKZEUG_STEUERUNG.includes(name)));
 }
@@ -576,8 +584,8 @@ async function mutantGegenTests(plan) {
   const start = Date.now();
   const basisRot = new Set(existsSync(plan.basisRot) ? JSON.parse(readFileSync(plan.basisRot, "utf8")) : []);
   const ort = schutzOrte(plan.dateien)[env[MUTANT]];
-  const kandidat = (datei) => (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
-  const offen = mutantReihenfolge({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort)).filter((datei) => !basisRot.has(datei));
+  const kandidat = (datei) => !basisRot.has(datei) && (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
+  const { auswahl: offen, gekuerzt } = mutantKandidaten({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort), MUTANT_TESTS_HOECHSTENS);
   const ausgeschlossen = [];
   const stand = { test: null, frist: false, liefNoch: [] };
   const lauf = { laeufe: new Set(), gestartet: [], aktiv: new Set() };
@@ -612,7 +620,7 @@ async function mutantGegenTests(plan) {
   await Promise.all(Array.from({ length: MUTATION_PARALLEL }, arbeiter));
   clearTimeout(fristUhr);
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
-  const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt", ...(stand.liefNoch.length > 0 && { liefNoch: stand.liefNoch }) } : { ergebnis: GETOETET, test: stand.test };
+  const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt", ...(stand.liefNoch.length > 0 && { liefNoch: stand.liefNoch }), ...(!stand.frist && gekuerzt !== undefined && { gekuerzt }) } : { ergebnis: GETOETET, test: stand.test };
   return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
 }
 
@@ -695,7 +703,7 @@ export function mutationUrteil(mutanten, minuten) {
   const lebend = mutanten.filter(({ ergebnis }) => ergebnis !== GETOETET);
   const grund = ({ schluessel, ergebnis }) => (ergebnis === "überlebt" ? begruendet.get(schluessel) : undefined);
   const offen = lebend.filter((mutant) => !grund(mutant));
-  const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis}${mutant.liefNoch === undefined ? "" : `, lief noch: ${mutant.liefNoch.map(({ datei, sekunden }) => `${datei} ${sekunden} s`).join(", ")}`} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
+  const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis}${mutant.gekuerzt === undefined ? "" : ` (${mutant.gekuerzt.geprueft} von ${mutant.gekuerzt.kandidaten} Tests)`}${mutant.liefNoch === undefined ? "" : `, lief noch: ${mutant.liefNoch.map(({ datei, sekunden }) => `${datei} ${sekunden} s`).join(", ")}`} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
   const unbelegtZeilen = unbelegt.map(({ schluessel, datei }) => `Rot: \`${datei}\` ist auf master grün; ${schluessel === "ohne Eintrag" ? "der PR-Text nennt sie nicht unter „## Überlebende Mutanten“" : `der PR-Text nennt \`${schluessel}\`, die Mutation tötet ihn aber nicht mit genau diesem Test`}.`);
