@@ -1,3 +1,4 @@
+import type { MandantZustand } from "../store/zustand/mandant.ts";
 import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
@@ -21,10 +22,10 @@ interface AnrufSprache {
 
 interface Zugriff {
   tenantId: string;
-  numberRecord: unknown;
+  numberRecord: { language?: string | null } | null | undefined;
 }
 
-const aufgeloesteSprache: (state: unknown, zugriff: Zugriff) => string = resolveCallLanguage;
+const aufgeloesteSprache: (state: MandantZustand, zugriff: Zugriff) => string = resolveCallLanguage;
 const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
@@ -34,12 +35,12 @@ function calleeLanguage(to: string): string | null {
   return (land && SPRACHE_JE_LAND[land]) ?? null;
 }
 
-function conversationLanguageOf(state: unknown, { tenantId, numberRecord, callLanguage }: Zugriff & { callLanguage?: string | undefined }): string {
+function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord, callLanguage }: Zugriff & { callLanguage?: string | undefined }): string {
   if (callLanguage) return callLanguage;
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-function disclosureLanguageOf(state: unknown, { tenantId, numberRecord, to }: Zugriff & { to: string }): string {
+function disclosureLanguageOf(state: MandantZustand, { tenantId, numberRecord, to }: Zugriff & { to: string }): string {
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -55,7 +56,7 @@ export function providerVoicemailMessage({ locale, ownerName, openingLine }: { l
 }
 
 export function callLocaleFor(
-  state: unknown,
+  state: MandantZustand,
   { tenantId, numberRecord, ownerName, defaultVoiceId, to, callLanguage }: Zugriff & { ownerName: string; defaultVoiceId: string; to: string; callLanguage?: string | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
