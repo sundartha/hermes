@@ -27,6 +27,7 @@ const FAELLE = [
   { name: "Höchstdauer-Takt auf der zweiten gehaltenen Verbindung zählt nicht als Anspruchsverbindung", verbindungen: [NUR_ZURUECK, TAKT], erwartet: [0] },
   { name: "Höchstdauer-Takt, der erst den Kontext gesetzt hat, zählt nicht als Anspruchsverbindung", verbindungen: [[BEGINN, KONTEXT], NUR_ZURUECK], erwartet: [1] },
   { name: "Anspruch mit UPDATE und COMMIT nach Fristablauf bleibt Anspruchsverbindung", verbindungen: [TAKT, MIT_UPDATE], erwartet: [1] },
+  { name: "Fremde Verbindung mit Zeitgrenze und ROLLBACK ohne Anspruch zählt nicht als Anspruchsverbindung", verbindungen: [[BEGINN, ZEITGRENZE, ZURUECK], NUR_ZURUECK], erwartet: [1] },
   { name: "Anspruch mit nur ROLLBACK ist Anspruchsverbindung", verbindungen: [NUR_ZURUECK, TAKT], erwartet: [0] },
 ];
 
