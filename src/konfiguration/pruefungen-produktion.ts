@@ -8,7 +8,7 @@ export interface PruefungenKonfiguration {
   safety: { skipTwilioSignatureCheck: boolean };
   store: { storeBackend: string };
   server: { publicUrl: string; publicUrlExplicit: boolean };
-  tenancy: { selfServiceEnabled: boolean; multiTenant: boolean };
+  tenancy: { selfServiceEnabled: boolean | undefined; multiTenant: boolean | undefined };
 }
 
 interface Umgebung {
@@ -111,7 +111,7 @@ function productionAuthHints(cfg: PruefungenKonfiguration, isProduction: boolean
 }
 
 export function isSelfServiceLive(cfg: PruefungenKonfiguration): boolean {
-  return cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant;
+  return Boolean(cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant);
 }
 
 export function pruefungenProduktionMit({
