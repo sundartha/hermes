@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { starteHermesMitPglite, vorspannBelegFelder, LOGIN_SUB } from "../abrechnung/server-mit-testdatenbank.js";
+import {
+  starteHermesMitPglite,
+  vorspannBelegFelder,
+  LOGIN_SUB,
+} from "../abrechnung/server-mit-testdatenbank.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_GATEWAY = 502;
@@ -16,7 +20,10 @@ const ERSATZ_NUMMERN = ["+12025550141", "+12025550142", "+12025550143"];
 const MONATSBELEG = "number_month";
 
 process.env.OUTAGE_ALERT_WINDOW_MS = "0";
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", vorspannWahlAbgelehnt: true });
+const laufendesHermes = await starteHermesMitPglite({
+  alarmPostfach: "",
+  vorspannWahlAbgelehnt: true,
+});
 const { config } = await import("../../src/config.js");
 const store = await import("../../src/store.js");
 const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
@@ -43,9 +50,18 @@ function deutscheNummer(tenantId) {
 function mandantenMitDeutscherNummer() {
   const state = store.load();
   const betreiberNummer = state.numbers.find((nummer) => nummer.tenantId === BETREIBER);
-  Object.assign(betreiberNummer, { providerNumberId: "pnum_betreiber", country: "DE", monthlyCostCents: MONATSMIETE_CENTS });
+  Object.assign(betreiberNummer, {
+    providerNumberId: "pnum_betreiber",
+    country: "DE",
+    monthlyCostCents: MONATSMIETE_CENTS,
+  });
   for (const tenantId of Object.keys(ALTE_NUMMERN)) {
-    state.tenants.push({ id: tenantId, status: "active", kycLevel: "card", ownerName: "Tausch Tester" });
+    state.tenants.push({
+      id: tenantId,
+      status: "active",
+      kycLevel: "card",
+      ownerName: "Tausch Tester",
+    });
     state.numbers.push(deutscheNummer(tenantId));
   }
 }
@@ -64,7 +80,8 @@ const registrierung = {
   },
 };
 
-const nummernVon = (tenantId) => store.load().numbers.filter((nummer) => nummer.tenantId === tenantId);
+const nummernVon = (tenantId) =>
+  store.load().numbers.filter((nummer) => nummer.tenantId === tenantId);
 
 function paarVon(tenantId) {
   const [alt, ersatz] = nummernVon(tenantId);
@@ -89,7 +106,10 @@ async function tauschen() {
     logger: { log() {}, warn() {}, error() {} },
   });
   for (const tenantId of [BETREIBER, ...Object.keys(ALTE_NUMMERN)])
-    Object.assign(paarVon(tenantId).ersatz, { monthlyCostCents: MONATSMIETE_CENTS, ...vorspannBelegFelder() });
+    Object.assign(paarVon(tenantId).ersatz, {
+      monthlyCostCents: MONATSMIETE_CENTS,
+      ...vorspannBelegFelder(),
+    });
   store.save();
   await store.drainFlushes();
   return ergebnisse;
@@ -108,7 +128,9 @@ function anrufen(ziel = ZIEL, senden = hermes.anfrage) {
 await anrufen(AUFWAERM_ZIEL, hermes.aufwaermen);
 
 async function aktiveNummerImDashboard() {
-  const antwort = await hermes.anfrage("/api/state", { headers: { "x-internal-identity": LOGIN_SUB } });
+  const antwort = await hermes.anfrage("/api/state", {
+    headers: { "x-internal-identity": LOGIN_SUB },
+  });
   assert.equal(antwort.status, HTTP_OK);
   return (await antwort.json()).agent.number;
 }
@@ -136,7 +158,11 @@ async function mitZahlung(ablauf) {
 }
 
 const monatsbelegeVon = (tenantId) =>
-  store.load().usageEvents.filter((ereignis) => ereignis.kind === MONATSBELEG && ereignis.tenantId === tenantId);
+  store
+    .load()
+    .usageEvents.filter(
+      (ereignis) => ereignis.kind === MONATSBELEG && ereignis.tenantId === tenantId,
+    );
 
 test("Kriterium 6: der Tausch hat fuer jeden Mandanten eine aktive Ersatznummer hinter der alten Nummer abgelegt", () => {
   assert.deepEqual(
@@ -145,10 +171,27 @@ test("Kriterium 6: der Tausch hat fuer jeden Mandanten eine aktive Ersatznummer 
   );
   const { alt, ersatz } = paarVon(BETREIBER);
   const reihenfolge = store.load().numbers.map((nummer) => nummer.id);
-  assert.ok(reihenfolge.indexOf(alt.id) < reihenfolge.indexOf(ersatz.id), "alte Nummer steht vor der Ersatznummer");
+  assert.ok(
+    reihenfolge.indexOf(alt.id) < reihenfolge.indexOf(ersatz.id),
+    "alte Nummer steht vor der Ersatznummer",
+  );
   assert.equal(alt.status, "active");
   assert.equal(ersatz.status, "active");
   assert.ok(ersatz.e164.startsWith("+1"));
+});
+
+test("Kriterium 6: die Tausch-Spur jedes Mandanten traegt den Schluessel tausch_ mit der alten Nummer", () => {
+  const spuren = store.load().provisioningJobs.filter((job) => job.kind === "number_swap");
+  const erwartet = [BETREIBER, ...Object.keys(ALTE_NUMMERN)].map((tenantId) => {
+    const { alt, ersatz } = paarVon(tenantId);
+    return { numberId: ersatz.id, idempotencyKey: `tausch_${alt.id}` };
+  });
+  assert.deepEqual(
+    spuren
+      .map((job) => ({ numberId: job.numberId, idempotencyKey: job.idempotencyKey }))
+      .sort((a, b) => a.numberId.localeCompare(b.numberId)),
+    erwartet.sort((a, b) => a.numberId.localeCompare(b.numberId)),
+  );
 });
 
 test("Kriterium 6: ein Anruf ueber POST /api/calls geht nach dem Tausch von der Ersatznummer aus", async () => {
@@ -156,7 +199,11 @@ test("Kriterium 6: ein Anruf ueber POST /api/calls geht nach dem Tausch von der 
 
   const antwort = await anrufen();
 
-  assert.equal(antwort.status, HTTP_BAD_GATEWAY, "der Anrufstart scheitert erst beim Anbieter, nach resolve_outbound");
+  assert.equal(
+    antwort.status,
+    HTTP_BAD_GATEWAY,
+    "der Anrufstart scheitert erst beim Anbieter, nach resolve_outbound",
+  );
   const anruf = store.load().calls.find((eintrag) => eintrag.to === ZIEL);
   assert.equal(anruf.from, ersatz.e164);
 });
@@ -181,7 +228,10 @@ test("Kriterium 7: ist die alte Nummer im Monat schon gebucht, bucht die Monatsa
 
   await mitZahlung(() => monatsabrechnungAnstossen(MANDANT_GEBUCHT));
 
-  assert.deepEqual(monatsbelegeVon(MANDANT_GEBUCHT).map((ereignis) => ereignis.numberId), [alt.id]);
+  assert.deepEqual(
+    monatsbelegeVon(MANDANT_GEBUCHT).map((ereignis) => ereignis.numberId),
+    [alt.id],
+  );
 });
 
 test("Kriterium 7: wechselt der Monat bei zwei aktiven Nummern, entsteht genau ein Beleg je Mandant", async () => {
