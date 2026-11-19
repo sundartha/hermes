@@ -11,7 +11,7 @@ const FEHLER = "[pg] posteingang lesen fehlgeschlagen:";
 const nachStart = (links, rechts) => (links.startedAt < rechts.startedAt ? -1 : links.startedAt > rechts.startedAt ? 1 : 0);
 
 export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
-  const lesen = (tenantId, includeSeen, limit, spiegelKandidaten) =>
+  const lesen = (tenantId, { includeSeen, limit }, spiegelKandidaten) =>
     runner.withClient(async (client) => {
       await client.query(KONTEXT_SQL, [tenantId]);
       const { rows } = await client.query(WAHL_SQL, [tenantId, includeSeen, limit]);
@@ -27,13 +27,13 @@ export function macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }) {
       return (await client.query(MARKIEREN_SQL, [atIso, tenantId, ids])).rows.map((zeile) => zeile.id);
     });
   return {
-    async abrufen(state, tenantId, { limit, includeSeen }, offeneTexte) {
+    async abrufen(state, tenantId, { limit, includeSeen, offeneTexte }) {
       const spiegel = ops
         .tenantCallScope(state, tenantId)
         .calls.filter((call) => call.inboxEntryAt && (includeSeen || !call.inboxSeenAt));
       let gelesen;
       try {
-        gelesen = await lesen(tenantId, includeSeen, limit, spiegel);
+        gelesen = await lesen(tenantId, { includeSeen, limit }, spiegel);
       } catch (err) {
         console.error(FEHLER, err.message);
         throw err;
