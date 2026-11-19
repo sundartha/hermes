@@ -13,6 +13,7 @@ export const GATE_TEXTS = Object.freeze({
     hourLimit: "Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
     perTargetLimit: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
     atCapacity: "Hermes ist gerade ausgelastet. Bitte in wenigen Minuten erneut versuchen.",
+    queueUnavailable: "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.",
     concurrentLimit:
       "Fuer dieses Hermes-Konto laufen bereits so viele Anrufe gleichzeitig wie erlaubt. Bitte warten, bis ein laufender Anruf endet.",
     budgetCapReached: (spentEur, capEur) =>
@@ -39,6 +40,7 @@ export const GATE_TEXTS = Object.freeze({
     hourLimit: "Hourly limit for outbound calls reached. Please try again later.",
     perTargetLimit: "Repeat limit for this destination reached. Please try again later.",
     atCapacity: "Hermes is at capacity right now. Please try again in a few minutes.",
+    queueUnavailable: "The call could not be created. No call was dialled and you will not be charged.",
     concurrentLimit:
       "This Hermes account already has as many calls running at once as allowed. Please wait until a running call ends.",
     budgetCapReached: (spentEur, capEur) =>
@@ -65,6 +67,7 @@ export const GATE_TEXTS = Object.freeze({
     hourLimit: "Limite horaire d'appels sortants atteinte. Veuillez réessayer plus tard.",
     perTargetLimit: "Limite de rappels pour cette destination atteinte. Veuillez réessayer plus tard.",
     atCapacity: "Hermes est actuellement à pleine capacité. Veuillez réessayer dans quelques minutes.",
+    queueUnavailable: "L'appel n'a pas pu être créé. Aucun numéro n'a été composé et aucun frais ne sera facturé.",
     concurrentLimit:
       "Ce compte Hermes a déjà atteint le nombre d'appels simultanés autorisé. Veuillez attendre la fin d'un appel en cours.",
     budgetCapReached: (spentEur, capEur) =>
