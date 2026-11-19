@@ -219,7 +219,6 @@ jobs:
 
       - name: Neue Tests scheitern ohne die Änderung unter src/
         id: probe
-        timeout-minutes: 40
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
