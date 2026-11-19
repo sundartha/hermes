@@ -1,6 +1,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
+import fs from "node:fs";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../../src/turn-budget.ts";
@@ -351,4 +352,40 @@ test("Ablage fertig innerhalb der Turn-Frist -> Abruf-URL mit Token", async () =
 test("Ablage fertig bei Dokument mit Hangup, innerhalb der Turn-Frist -> Abruf-URL mit Token", async () => {
   const out = await mitStummerAblage(() => "sync", [say("Tschuess"), hangup()], Date.now());
   assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/sync`);
+});
+
+const VORLAGE_TTS = JSON.parse(fs.readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8")).agent
+  .conversation_config.tts;
+
+async function vorspannKoerper() {
+  const aufzeichnung = recordingStreamFetch();
+  await withFakeFetch(aufzeichnung.fetchImpl, () =>
+    makeDirectiveSynth({
+      config: fakeConfig({ enabled: true }),
+      ttsStore: {},
+      store: { platformTtsUsageView: () => ({ characters: 0, quota: 1_000_000 }), recordTtsCharacters: () => null },
+      onQuotaWarning: noopQuotaWarning,
+    }).synthesizeVorspann("Hallo", "stimme-des-anrufs"),
+  );
+  return { url: aufzeichnung.urls[0], body: JSON.parse(aufzeichnung.calls[0][1].body) };
+}
+
+test("Vorspann: Modell, stability und similarity_boost stammen aus dem tts-Abschnitt der Vorlage", async () => {
+  const { body } = await vorspannKoerper();
+  assert.equal(body.model_id, VORLAGE_TTS.model_id);
+  assert.equal(body.model_id, "eleven_v4_turbo");
+  assert.equal(body.voice_settings.stability, 0.65);
+  assert.equal(body.voice_settings.similarity_boost, 0.75);
+});
+
+test("Vorspann: die Vorlage setzt kein speed, also steht speed nicht im Koerper", async () => {
+  const { body } = await vorspannKoerper();
+  assert.equal(VORLAGE_TTS.speed, undefined);
+  assert.deepEqual(Object.keys(body.voice_settings).sort(), ["similarity_boost", "stability"]);
+});
+
+test("Vorspann: die Stimme bleibt die wirksame Stimme des Anrufs, nicht die der Vorlage", async () => {
+  const { url } = await vorspannKoerper();
+  assert.match(url, /\/v1\/text-to-speech\/stimme-des-anrufs\/stream/);
+  assert.doesNotMatch(url, new RegExp(VORLAGE_TTS.voice_id));
 });

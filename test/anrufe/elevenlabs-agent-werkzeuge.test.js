@@ -505,3 +505,26 @@ test("Agent-Konfiguration: beide Gate-Staende liefern den Prompt und die Werkzeu
     abschnitte.filter((abschnitt) => !abschnitt.includes("get_consult")).join("\n\n"),
   );
 });
+
+const STIMME_FAELLE = [
+  [
+    "speed gesetzt",
+    { model_id: "m1", stability: 0.5, similarity_boost: 0.6, speed: 1.1 },
+    { model: "m1", voiceSettings: { stability: 0.5, similarity_boost: 0.6, speed: 1.1 } },
+  ],
+  [
+    "speed fehlt",
+    { model_id: "m1", stability: 0.5, similarity_boost: 0.6 },
+    { model: "m1", voiceSettings: { stability: 0.5, similarity_boost: 0.6 } },
+  ],
+  ["stability fehlt", { model_id: "m1", similarity_boost: 0.6 }, { model: "m1", voiceSettings: undefined }],
+  ["similarity_boost fehlt", { model_id: "m1", stability: 0.5 }, { model: "m1", voiceSettings: undefined }],
+  ["kein tts-Abschnitt", undefined, { model: undefined, voiceSettings: undefined }],
+];
+
+for (const [name, tts, erwartet] of STIMME_FAELLE) {
+  test(`Vorlagen-Stimme: ${name}`, async () => {
+    const module = await import(SEAM.module);
+    assert.deepEqual(module.stimmeAusVorlage(tts), erwartet);
+  });
+}
