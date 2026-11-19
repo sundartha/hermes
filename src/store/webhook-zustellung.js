@@ -47,8 +47,9 @@ const ZEITGRENZE_SQL = `SELECT set_config('statement_timeout', $1, true), set_co
 
 const fristFehler = () => Object.assign(new Error("webhook_zustellung: Zugriffsfrist abgelaufen"), { frist: true });
 
-async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT" }) {
+async function inTransaktion(client, { frist, arbeit, abschluss = () => "COMMIT", nurFrist = false }) {
   const anweisung = { query: (text, params) => (frist.abgelaufen ? Promise.reject(fristFehler()) : client.query(text, params)) };
+  if (nurFrist) return arbeit(anweisung);
   await anweisung.query("BEGIN");
   try {
     await anweisung.query(ZEITGRENZE_SQL, [String(ZUGRIFF_FRIST_MS)]);
