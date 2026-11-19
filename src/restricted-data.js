@@ -114,14 +114,15 @@ function hasUniformSeparator(raw) {
 }
 
 function groupSizesMatch(groups, sizes) {
-  return groups.length === sizes.length && sizes.every((size, index) => groups[index].length === size);
+  return groups.length === sizes.length && groups.every((group, index) => group.length === sizes[index]);
 }
 
 function hasCardGroupShape(raw) {
   const groups = raw.split(/\D+/);
   if (groups.length === 1) return true;
   if (groupSizesMatch(groups, AMEX_GROUP_SIZES) || groupSizesMatch(groups, DINERS_GROUP_SIZES)) return true;
-  const lastGroupLength = groups.at(-1).length;
+  const [lastGroup = ""] = groups.slice(-1);
+  const lastGroupLength = lastGroup.length;
   const leadingGroupsFull = groups.slice(0, -1).every((group) => group.length === CARD_GROUP_SIZE);
   return leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
 }
@@ -143,7 +144,8 @@ function isCardNumber(raw, minDigits) {
   if (!hasUniformSeparator(raw) || !hasCardGroupShape(raw)) return false;
   const digits = raw.replace(/\D/g, "");
   const lengthOk = digits.length >= minDigits && digits.length <= CARD_MAX_DIGITS;
-  const iinOk = digits[0] >= CARD_IIN_MIN && digits[0] <= CARD_IIN_MAX;
+  const firstDigit = digits.charAt(0);
+  const iinOk = firstDigit >= CARD_IIN_MIN && firstDigit <= CARD_IIN_MAX;
   return lengthOk && iinOk && luhnValid(digits);
 }
 
@@ -151,8 +153,10 @@ function bestCardWindow(raw, minDigits) {
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
-    for (let first = 0; first + size <= groups.length; first++) {
-      const window = { start: groups[first].start, end: groups[first + size - 1].end };
+    for (const [first, head] of groups.entries()) {
+      const tail = groups[first + size - 1];
+      if (!tail) break;
+      const window = { start: head.start, end: tail.end };
       if (isCardNumber(raw.slice(window.start, window.end), minDigits)) return window;
     }
   }
@@ -233,8 +237,11 @@ function findCardSpans(originalText) {
 function findLabeledValueSpans(text, { pattern, acceptsValue }) {
   const spans = [];
   for (const match of text.matchAll(pattern)) {
-    const [start, end] = match.indices[1];
-    if (acceptsValue(match[1])) spans.push({ start, end });
+    const group = match.indices?.[1];
+    const value = match[1];
+    if (!group || value === undefined) throw new Error("restricted-data: Muster ohne Index-Gruppe");
+    const [start, end] = group;
+    if (acceptsValue(value)) spans.push({ start, end });
   }
   return spans;
 }
@@ -303,7 +310,7 @@ const TOKEN_PATTERNS = Object.freeze(
 
 function tokenEnd(text, index) {
   let end = index;
-  while (end < text.length && TOKEN_CHAR.test(text[end])) end++;
+  while (end < text.length && TOKEN_CHAR.test(text.charAt(end))) end++;
   return end;
 }
 
@@ -361,9 +368,14 @@ function addNonOverlapping(accepted, candidates) {
   const kept = [];
   let cursor = 0;
   for (const candidate of [...candidates].sort(byStart)) {
-    while (cursor < accepted.length && accepted[cursor].end <= candidate.start) cursor++;
-    const blockedByAccepted = cursor < accepted.length && accepted[cursor].start < candidate.end;
-    const blockedByKept = kept.length > 0 && kept.at(-1).end > candidate.start;
+    let next = accepted[cursor];
+    while (next !== undefined && next.end <= candidate.start) {
+      cursor++;
+      next = accepted[cursor];
+    }
+    const blockedByAccepted = next !== undefined && next.start < candidate.end;
+    const last = kept.at(-1);
+    const blockedByKept = last !== undefined && last.end > candidate.start;
     if (!blockedByAccepted && !blockedByKept) kept.push(candidate);
   }
   return [...accepted, ...kept].sort(byStart);
@@ -414,8 +426,8 @@ export function firstRestrictedField(value, exemptKeys) {
 }
 
 function restrictedFieldInString(value, path) {
-  const hits = findRestrictedData(value);
-  return hits.length ? { category: hits[0].category, field: path ?? "(root)" } : null;
+  const [first] = findRestrictedData(value);
+  return first ? { category: first.category, field: path ?? "(root)" } : null;
 }
 
 function restrictedFieldInArray(value, exemptKeys, path) {
