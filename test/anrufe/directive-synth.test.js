@@ -354,8 +354,8 @@ test("Ablage fertig bei Dokument mit Hangup, innerhalb der Turn-Frist -> Abruf-U
   assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/sync`);
 });
 
-const VORLAGE_TTS = JSON.parse(fs.readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8")).agent
-  .conversation_config.tts;
+const VORLAGE = JSON.parse(fs.readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8"));
+const VORLAGE_TTS = VORLAGE.agent.conversation_config.tts;
 
 async function vorspannKoerper() {
   const aufzeichnung = recordingStreamFetch();
@@ -367,7 +367,8 @@ async function vorspannKoerper() {
       onQuotaWarning: noopQuotaWarning,
     }).synthesizeVorspann("Hallo", "stimme-des-anrufs"),
   );
-  return { url: aufzeichnung.urls[0], body: JSON.parse(aufzeichnung.calls[0][1].body) };
+  const [, anfrage] = aufzeichnung.calls[0];
+  return { url: aufzeichnung.urls[0], body: JSON.parse(anfrage.body) };
 }
 
 test("Vorspann: Modell, stability und similarity_boost stammen aus dem tts-Abschnitt der Vorlage", async () => {
