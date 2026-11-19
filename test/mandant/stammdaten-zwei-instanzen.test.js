@@ -184,3 +184,45 @@ test("Kriterium 2: das Löschen der Mandantendaten entfernt die eigene Nummer au
   assert.equal(entfernt.privateNumber, 1);
   assert.equal((await zeile(tenant)).private_number, null);
 });
+
+test("Kriterium 2: ein Patch mit nur der Zeitzone lässt das Land stehen, das eine andere Instanz gesetzt hat", async () => {
+  const { a, b, tenant } = await zweiInstanzen();
+  b.setTenantGeo(tenant, { country: "AT" });
+  await b.drainFlushes();
+
+  a.setTenantGeo(tenant, { timezone: "Europe/Vienna" });
+  await a.drainFlushes();
+  b.save();
+  await b.drainFlushes();
+
+  const stand = await zeile(tenant);
+  assert.equal(stand.country, "AT");
+  assert.equal(stand.timezone, "Europe/Vienna");
+});
+
+test("Kriterium 2: das Löschen von Mandantendaten ohne eigene Nummer lässt die Nummer einer anderen Instanz stehen", async () => {
+  const { a, b, tenant } = await zweiInstanzen();
+  b.setPrivateNumber(tenant, EIGENE_NUMMER);
+  await b.drainFlushes();
+
+  const entfernt = await a.eraseTenantData(tenant);
+  await a.drainFlushes();
+
+  assert.equal(entfernt.privateNumber, 0);
+  assert.equal((await zeile(tenant)).private_number, EIGENE_NUMMER);
+});
+
+test("Kriterium 2: das Löschen von Mandantendaten mit nur einem Anruf speichert den Zustand", async () => {
+  const abfragen = [];
+  const { b: a, tenant } = await zweiInstanzen((text) => abfragen.push(text));
+  a.createCall({ direction: "outbound", to: "+4915100000001", goal: "Test", tenantId: tenant });
+  await a.drainFlushes();
+  abfragen.length = 0;
+
+  const entfernt = await a.eraseTenantData(tenant);
+  await a.drainFlushes();
+
+  assert.equal(entfernt.calls, 1);
+  assert.equal(entfernt.actionItems, 0);
+  assert.notEqual(abfragen.length, 0);
+});
