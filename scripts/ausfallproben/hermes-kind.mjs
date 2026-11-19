@@ -123,12 +123,13 @@ export async function starteKind({ weicheUrl, datenVerzeichnis, datenbankUrl }) 
   return { prozess, port, umgebung, kopie, ausgabe, beendet, url: `http://${LOOPBACK}:${port}` };
 }
 
-export async function warteBereit(kind) {
-  const frist = Date.now() + BEREIT_FRIST_MS;
-  while (Date.now() < frist) {
+export async function warteBereit(kind, optionen = {}) {
+  const { messe = messeHealthz, jetzt = Date.now, pause = warte } = optionen;
+  const frist = jetzt() + BEREIT_FRIST_MS;
+  while (jetzt() < frist) {
     if (kind.prozess.exitCode !== null) return false;
-    if ((await messeHealthz(kind.url)).status === HTTP_OK) return true;
-    await warte(BEREIT_TAKT_MS);
+    if ((await messe(kind.url)).status === HTTP_OK) return true;
+    await pause(BEREIT_TAKT_MS);
   }
   return false;
 }
