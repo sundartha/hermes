@@ -1,10 +1,20 @@
 import VORLAGE from "../../elevenlabs/agent_configs/outbound-agent.template.json" with { type: "json" };
 import { GET_CONSULT_TOOL_NAME } from "../consult/in-call.js";
 
+interface VorlagenTts {
+  model_id?: string;
+  stability?: number;
+  similarity_boost?: number;
+  speed?: number;
+}
+
 interface Vorlage {
-  agent?: { conversation_config?: { agent?: { prompt?: { prompt?: string } } } };
+  agent?: { conversation_config?: { agent?: { prompt?: { prompt?: string } }; tts?: VorlagenTts } };
   tools?: Record<string, unknown>;
 }
+
+export type StimmEinstellungen = Readonly<{ stability: number; similarity_boost: number; speed?: number }>;
+export type AgentStimme = Readonly<{ model: string | undefined; voiceSettings: StimmEinstellungen | undefined }>;
 
 type AgentConfig = Readonly<{ prompt: string; toolNames: readonly string[] }>;
 
@@ -21,6 +31,19 @@ const DYNAMIC_VARIABLE = /\{\{\s*[A-Za-z0-9_]+\s*\}\}/g;
 const conversationConfig = TEMPLATE.agent?.conversation_config ?? {};
 const agentSection = conversationConfig.agent ?? {};
 const promptSection = agentSection.prompt ?? {};
+
+export function stimmeAusVorlage(tts: VorlagenTts | undefined): AgentStimme {
+  if (tts?.stability === undefined || tts.similarity_boost === undefined) {
+    return { model: tts?.model_id, voiceSettings: undefined };
+  }
+  const { stability, similarity_boost, speed } = tts;
+  return {
+    model: tts.model_id,
+    voiceSettings: { stability, similarity_boost, ...(speed === undefined ? {} : { speed }) },
+  };
+}
+
+export const AGENT_STIMME = stimmeAusVorlage(conversationConfig.tts);
 
 const FULL_PROMPT = promptSection.prompt ?? "";
 const DECLARED_TOOL_NAMES = Object.keys(TEMPLATE.tools ?? {}).filter(
