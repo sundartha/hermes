@@ -4,7 +4,6 @@ import express from "express";
 
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { speicherBereiche } from "../../src/store.js";
-import { requestNumber } from "../../src/store/state-ops.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
@@ -166,8 +165,12 @@ test("Kriterium 1+2: der Ueberspringgrund aus dem Webhook-Nummernkauf von A steh
     metering: {},
     numberProvisioning: () => ({}),
     handleProvisionJob: async () => ({}),
-    resolveProvisionRetry: (zustand) =>
-      requestNumber(zustand, { tenantId: tenant, maxNumbers: 0, maxNumbersPerTenant: 5 }),
+    resolveProvisionRetry: (zustand) => {
+      const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenant);
+      mandant.numberProvisionSkipReason = GLOBALE_DECKE;
+      mandant.numberProvisionSkipAt = EINGANG;
+      return { ok: false, reason: GLOBALE_DECKE };
+    },
     audit: () => {},
     recordProvisioningJob: () => null,
     markProvisioningJob: () => null,
