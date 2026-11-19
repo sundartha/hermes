@@ -1,4 +1,7 @@
-type AlarmEingangFinding = { fatal: boolean; message: string };
+interface AlarmEingangFinding {
+  fatal: boolean;
+  message: string;
+}
 
 export function alarmEingangFindings({
   betterstackAlertUrl,
