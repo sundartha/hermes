@@ -226,3 +226,19 @@ test("Kriterium 2: das Löschen von Mandantendaten mit nur einem Anruf speichert
   assert.equal(entfernt.actionItems, 0);
   assert.ok(abfragen.includes("BEGIN"));
 });
+
+test("Kriterium 2: das Löschen von Mandantendaten ohne etwas zu entfernen speichert nichts", async () => {
+  const abfragen = [];
+  const { b: a, tenant } = await zweiInstanzen((text) => abfragen.push(text));
+  await a.drainFlushes();
+  abfragen.length = 0;
+
+  const entfernt = await a.eraseTenantData(tenant);
+  await a.drainFlushes();
+
+  assert.equal(entfernt.calls, 0);
+  assert.equal(entfernt.actionItems, 0);
+  assert.equal(entfernt.privateNumber, 0);
+  assert.ok(!abfragen.includes("BEGIN"));
+  assert.ok(!abfragen.some((text) => /^\s*(UPDATE|INSERT)[^;]*\btenants?\b/i.test(text)));
+});
