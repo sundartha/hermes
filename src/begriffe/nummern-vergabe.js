@@ -27,6 +27,8 @@ export const REQUEST_NUMBER_REASON = Object.freeze({
   GLOBAL_CAP: GLOBAL_CAP_REASON,
 });
 
+export const SKIP_VERMERK_SCHLUESSEL = Object.freeze(["numberProvisionSkipReason", "numberProvisionSkipAt"]);
+
 export function shouldPersistProvisionResult(provisionResult) {
   return provisionResult.ok || provisionResult.reason === GLOBAL_CAP_REASON;
 }

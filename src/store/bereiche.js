@@ -1,4 +1,5 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { SKIP_VERMERK_SCHLUESSEL } from "../begriffe/nummern-vergabe.js";
 import * as ausfall from "./zustand/ausfall.js";
 import { expireOrphanedConsults } from "./state-ops.js";
 import { tenantLanguage } from "./views.js";
@@ -177,7 +178,9 @@ function nummernkaufBereich(speicher) {
     alleMandantenIds: async () => allTenantIds(speicher.load()),
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {
-        if (markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) speicher.save();
+        if (!markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) return;
+        speicher.save();
+        speicher.stammdatenSchreiben?.(tenantId, SKIP_VERMERK_SCHLUESSEL);
       }),
   };
 }

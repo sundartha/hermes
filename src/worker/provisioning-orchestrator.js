@@ -3,6 +3,7 @@ import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import {
   PROVIDER,
   PROVISION_NUMBER_JOB,
+  SKIP_VERMERK_SCHLUESSEL,
   shouldPersistProvisionResult,
 } from "../begriffe/nummern-vergabe.js";
 import { ANRUFSTART_JOB } from "../begriffe/anrufe.js";
@@ -99,7 +100,10 @@ export function makeProvisioningOrchestrator({
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
-        if (shouldPersistProvisionResult(r)) store.save();
+        if (shouldPersistProvisionResult(r)) {
+          store.save();
+          store.stammdatenSchreiben?.(tenantId, SKIP_VERMERK_SCHLUESSEL);
+        }
         return r;
       })
       .catch((e) => {
