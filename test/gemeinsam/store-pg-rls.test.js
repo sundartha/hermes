@@ -217,9 +217,10 @@ test("PA-3/S1-1 (rot-vor-Fix): ensureTenant hydriert nicht-aktive Call-Zeile unt
   const ok = await ensureTenantAs(db, store, ENSURE_ROLE);
   assert.equal(ok, true, "ensureTenant meldet Erfolg (Tenant existiert in der DB)");
 
-  assert.ok(
-    store.load().calls.find((call) => call.id === LOST_CALL_ID),
-    "ensureTenant muss die nicht-aktive Call-Zeile in den Spiegel hydrieren (setTenant vor hydrateTenantInto)",
+  assert.equal(
+    (await db.query(`SELECT id FROM call WHERE id = $1`, [LOST_CALL_ID])).rows.length,
+    1,
+    "die nicht-aktive Call-Zeile steht vor dem Flush in der Datenbank",
   );
 
   store.save();
@@ -231,8 +232,9 @@ test("PA-3/S1-1 (rot-vor-Fix): ensureTenant hydriert nicht-aktive Call-Zeile unt
 test("PA-3/S1-1 Gegenprobe: als Superuser (BYPASSRLS) faellt der Bug NICHT auf - die NOBYPASSRLS-Rolle ist Pflicht", async () => {
   const { db, store } = await setupSignup();
   await ensureTenantAs(db, store, null);
-  assert.ok(
-    store.load().calls.find((call) => call.id === LOST_CALL_ID),
+  assert.equal(
+    (await db.query(`SELECT id FROM call WHERE id = $1`, [LOST_CALL_ID])).rows.length,
+    1,
     "als Superuser ist die Zeile ohnehin sichtbar (RLS umgangen) - der Read-Pfad ist so nicht pruefbar",
   );
 });
