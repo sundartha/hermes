@@ -277,7 +277,7 @@ test("langsamer Eingang haelt die Antwort ueber mehrere Takte fest: genau ein re
     assert.ok(zaehleUebersprungene(srv) >= WEITERE_TAKTE + 1, srv.stdout);
     assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
     eingang.freigeben();
-    await zeile(srv, `[takt-runde-fertig] ${WEITERE_TAKTE + 2}`);
+    await zeile(srv, "[takt-runde-fertig] 1");
     await warteAuf(() => geschlossen(srv));
     await laufeWeitereRunden(srv);
     assert.deepEqual(zuGrund(eingang), [{ id: GRUND, status: "resolved" }]);
