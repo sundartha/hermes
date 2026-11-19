@@ -74,3 +74,13 @@ test("numberRecordByE164: aktive Nummer wird gefunden, unbekannte und leere nich
   assert.equal(store.numberRecordByE164("+4930999999"), null);
   assert.equal(store.numberRecordByE164(""), null);
 });
+
+test("tenantContext: ohne gespeicherten Vorname ist der Vorname das erste Wort des vollen Namens", async () => {
+  const { store, db } = await makePgTestStore();
+  await legeMandantAn(store, MIT_NAMEN);
+  await db.query(`UPDATE tenant SET owner_name = 'Anna Beispiel' WHERE id = $1`, [MIT_NAMEN]);
+  await store.init();
+  const kontext = store.tenantContext(MIT_NAMEN);
+  assert.equal(kontext.ownerName, "Anna Beispiel");
+  assert.equal(kontext.firstName, "Anna");
+});
