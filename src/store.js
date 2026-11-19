@@ -439,6 +439,7 @@ export const {
   tenantsPendingCancellationMail,
   setPrivateNumber,
   tenantPrivateNumber,
+  tenantPrivateNumberLesen,
   setTenantGeo,
   tenantGeo,
   tenantTimezone,

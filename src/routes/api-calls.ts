@@ -179,7 +179,6 @@ interface Konfiguration {
 
 interface Speicher {
   tenantLanguage: (tenantId: string | undefined) => string;
-  tenantPrivateNumber: (tenantId: string | undefined) => string | null | undefined;
   tenantGeo: (tenantId: string | undefined) => { country: string; defaultLanguage: string };
   activeCallsForSql: (tenantId: string | undefined) => Promise<Anruf[]>;
   createCall: (felder: object) => Anruf;
@@ -212,6 +211,7 @@ interface Bereiche {
     markConsultAskDelivered: (callId: string, eventId: string) => Promise<unknown>;
   };
   anrufe: { resolveCallLanguage: (anfrage: { tenantId: string | undefined; numberRecord: unknown }) => Promise<string> };
+  konto: { tenantPrivateNumberLesen: (tenantId: string | undefined) => Promise<string | null | undefined> };
   mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
   einstellungen: {
     recordCostProfile: (callId: string, profil: string) => Promise<unknown>;
@@ -439,8 +439,18 @@ async function answerConsultFinal({ bereiche, audit, req, res, call, eventId, an
   return res.json({ accepted: true, merged_facts: mergedFacts });
 }
 
-function resolveCallPrivacyFlags({ store, config, ctx }: { store: Speicher; config: Konfiguration; ctx: Kontext }) {
-  const ownNumber = store.tenantPrivateNumber(ctx.tenantId);
+async function eigeneNummerLesen({ bereiche, audit, ctx }: { bereiche: Bereiche; audit: Protokoll; ctx: Kontext }) {
+  try {
+    return await bereiche.konto.tenantPrivateNumberLesen(ctx.tenantId);
+  } catch (fehler) {
+    console.error("[place_call] eigene Nummer nicht lesbar:", nachrichtOf(fehler));
+    audit("place_call_eigene_nummer", ctx.req, `grund=eigene_nummer_nicht_lesbar tenant=${String(ctx.tenantId)}`);
+    return null;
+  }
+}
+
+async function resolveCallPrivacyFlags({ bereiche, audit, config, ctx }: { bereiche: Bereiche; audit: Protokoll; config: Konfiguration; ctx: Kontext }) {
+  const ownNumber = await eigeneNummerLesen({ bereiche, audit, ctx });
   const diagnostic = diagnosticRetentionGranted({
     requested: ctx.b.diagnostic,
     to: ctx.to,
@@ -841,8 +851,9 @@ export function makeCallRoutes({
       const language =
         requestedLanguage ??
         (await bereiche.anrufe.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord }));
-      const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
-        store,
+      const { diagnostic, calleeIsOwnerOfThisCall } = await resolveCallPrivacyFlags({
+        bereiche,
+        audit,
         config,
         ctx,
       });

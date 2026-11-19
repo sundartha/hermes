@@ -920,6 +920,10 @@ export function tenantPrivateNumber(tenantId) {
   return ops.tenantPrivateNumber(load(), tenantId);
 }
 
+export async function tenantPrivateNumberLesen(tenantId) {
+  return tenantPrivateNumber(tenantId);
+}
+
 export function setTenantGeo(tenantId, patch) {
   const tenant = ops.setTenantGeo(load(), tenantId, patch);
   save();
