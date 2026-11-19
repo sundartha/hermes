@@ -25,6 +25,12 @@ interface ConvaiDaten {
   [schluessel: string]: unknown;
 }
 
+export interface ConvaiNummer {
+  phone_number?: unknown;
+  phone_number_id?: unknown;
+  [schluessel: string]: unknown;
+}
+
 interface ConvaiAntwort {
   ok: boolean;
   status: number;
@@ -307,8 +313,8 @@ export function fetchPhoneNumber({
   });
 }
 
-export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }: MitFrist): Promise<ConvaiDaten | null> {
-  return convaiFetch({
+export async function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }: MitFrist): Promise<ConvaiNummer[]> {
+  const antwort = await convaiFetch({
     fetchImpl,
     account,
     path: PHONE_NUMBERS_PATH,
@@ -316,6 +322,8 @@ export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEO
     init: { method: "GET" },
     timeoutMs,
   });
+  if (!Array.isArray(antwort)) throw new Error("ElevenLabs Nummernliste: Antwort ohne Liste");
+  return antwort;
 }
 
 export async function createPhoneNumber({
