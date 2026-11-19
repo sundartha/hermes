@@ -1,5 +1,6 @@
 import { leseBetterStackAlertUrl } from "./betterstack-alarm.ts";
 import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.ts";
+import type { umgebungMit } from "./umgebung.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
@@ -10,8 +11,70 @@ const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
 const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
 const PAID_WITHOUT_NUMBER_GRACE_HOURS_DEFAULT = 1;
 
+interface BillingEnv {
+  BETTERSTACK_ALERT_URL?: string | undefined;
+  BILLING_FLUSH_EPOCH?: string | undefined;
+  BUDGET_MONTH_ENABLED?: string | undefined;
+  COST_ALERT_DEBOUNCE_MS?: string | undefined;
+  COST_CALIBRATION_MIN_SAMPLES?: string | undefined;
+  COST_DRIFT_WARN_PERCENT?: string | undefined;
+  COST_SETTLE_DEADLINE_HOURS?: string | undefined;
+  COST_TRUING_COVERAGE_STALL_SWEEPS?: string | undefined;
+  COST_TRUING_DELAY_MINUTES?: string | undefined;
+  COST_TRUING_MAX_ATTEMPTS?: string | undefined;
+  COST_TRUING_MIN_COVERAGE_PERCENT?: string | undefined;
+  COST_TRUING_REQUIRED_RECORD_TYPES?: string | undefined;
+  COST_TRUING_SWEEP_INTERVAL_MS?: string | undefined;
+  DEFAULT_TENANT_BUDGET_CENTS?: string | undefined;
+  EL_EVIDENCE_MIN_AGE_MINUTES?: string | undefined;
+  INBOUND_OUTAGE_ALERT_FAIL_SHARE_PERCENT?: string | undefined;
+  INBOUND_OUTAGE_ALERT_MIN_ATTEMPTS?: string | undefined;
+  INBOUND_OUTAGE_ALERT_MIN_FAILURES?: string | undefined;
+  INBOUND_OUTAGE_ALERT_WINDOW_MS?: string | undefined;
+  KOSTEN_HEARTBEAT_FENSTER_H?: string | undefined;
+  NUMBER_MONTHLY_COST_CENTS?: string | undefined;
+  NUMBER_SETUP_FEE_CENTS?: string | undefined;
+  OUTAGE_ALERT_DEBOUNCE_MS?: string | undefined;
+  OUTAGE_ALERT_FAIL_SHARE_PERCENT?: string | undefined;
+  OUTAGE_ALERT_MIN_ATTEMPTS?: string | undefined;
+  OUTAGE_ALERT_MIN_FAILURES?: string | undefined;
+  OUTAGE_ALERT_RETRY_MS?: string | undefined;
+  OUTAGE_ALERT_SELF_TEST_INTERVAL_MS?: string | undefined;
+  OUTAGE_ALERT_WINDOW_MS?: string | undefined;
+  PAID_WITHOUT_NUMBER_GRACE_MS?: string | undefined;
+  PAYMENT_CURRENCY?: string | undefined;
+  PAYMENT_ENABLED?: string | undefined;
+  PLATFORM_ALERT_SMS_TO?: string | undefined;
+  PLATFORM_FIXED_COST_CENTS_PER_MONTH?: string | undefined;
+  PLATFORM_HOLD_ESCALATION_MAX_AGE_MS?: string | undefined;
+  PLATFORM_SPEND_WARN_PERCENT?: string | undefined;
+  PRICE_DRIFT_MIN_INTERVAL_MS?: string | undefined;
+  PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER?: string | undefined;
+  PROVIDER_CURRENCY?: string | undefined;
+  PROVIDER_TO_BUCKET_RATE_MICRO?: string | undefined;
+  SMS_COST_CENTS?: string | undefined;
+  STRIPE_API_BASE?: string | undefined;
+  STRIPE_BUSINESS_PRICE_ID?: string | undefined;
+  STRIPE_CUSTOMER_RETRY_DELAY_MS?: string | undefined;
+  STRIPE_SECRET_KEY?: string | undefined;
+  STRIPE_STARTER_PRICE_ID?: string | undefined;
+  STRIPE_WEBHOOK_SECRET?: string | undefined;
+  TTS_CHARACTER_QUOTA?: string | undefined;
+  TTS_CHARACTER_QUOTA_WARN_PERCENT?: string | undefined;
+  TTS_QUOTA_CYCLE_ANCHOR_DAY?: string | undefined;
+  VOICE_TARIFF_DEFAULT_CENTS?: string | undefined;
+  VOICE_TARIFF_DOMESTIC_CENTS?: string | undefined;
+  VOICE_TARIFF_FULL_COST_FLOOR_CENTS?: string | undefined;
+  VOICE_TARIFF_GRUNDBETRAG_CENTS?: string | undefined;
+  VOICE_TARIFF_INBOUND_CENTS?: string | undefined;
+}
 
-function zahlungsRohwerte(env, { boolEnv, isoInstantEnv, numEnv, stripTrailingSlash, textEnv }) {
+type Helfer<K extends keyof ReturnType<typeof umgebungMit>> = Pick<ReturnType<typeof umgebungMit>, K>;
+
+function zahlungsRohwerte(
+  env: BillingEnv,
+  { boolEnv, isoInstantEnv, numEnv, stripTrailingSlash, textEnv }: Helfer<"boolEnv" | "isoInstantEnv" | "numEnv" | "stripTrailingSlash" | "textEnv">,
+) {
   return {
     paymentEnabled: boolEnv("PAYMENT_ENABLED", env.PAYMENT_ENABLED, { fallback: false }),
     stripeSecretKey: env.STRIPE_SECRET_KEY ?? "",
@@ -30,7 +93,10 @@ function zahlungsRohwerte(env, { boolEnv, isoInstantEnv, numEnv, stripTrailingSl
   };
 }
 
-function abgleichRohwerte(env, { csvEnv, numEnv }) {
+function abgleichRohwerte(
+  env: BillingEnv,
+  { csvEnv, numEnv }: Helfer<"csvEnv" | "numEnv">,
+) {
   return {
     costTruingDelayMinutes: numEnv("COST_TRUING_DELAY_MINUTES", env.COST_TRUING_DELAY_MINUTES, { fallback: 30, min: 0 }),
     costTruingSweepIntervalMs: numEnv("COST_TRUING_SWEEP_INTERVAL_MS", env.COST_TRUING_SWEEP_INTERVAL_MS, {
@@ -54,7 +120,11 @@ function abgleichRohwerte(env, { csvEnv, numEnv }) {
   };
 }
 
-function tarifRohwerte(env, { numEnv, routeCentsEnv }, kostenprofile) {
+function tarifRohwerte(
+  env: BillingEnv,
+  { numEnv, routeCentsEnv }: Helfer<"numEnv" | "routeCentsEnv">,
+  kostenprofile: readonly string[],
+) {
   return {
     voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", env.VOICE_TARIFF_DOMESTIC_CENTS, {
       fallback: 20,
@@ -94,7 +164,10 @@ function tarifRohwerte(env, { numEnv, routeCentsEnv }, kostenprofile) {
   };
 }
 
-function alarmRohwerte(env, { numEnv }) {
+function alarmRohwerte(
+  env: BillingEnv,
+  { numEnv }: Helfer<"numEnv">,
+) {
   return {
     outageAlertWindowMs: numEnv("OUTAGE_ALERT_WINDOW_MS", env.OUTAGE_ALERT_WINDOW_MS, {
       fallback: MS_PER_HOUR,
@@ -159,7 +232,10 @@ function alarmRohwerte(env, { numEnv }) {
   };
 }
 
-function kontingentRohwerte(env, { boolEnv, numEnv }) {
+function kontingentRohwerte(
+  env: BillingEnv,
+  { boolEnv, numEnv }: Helfer<"boolEnv" | "numEnv">,
+) {
   return {
     budgetMonthEnabled: boolEnv("BUDGET_MONTH_ENABLED", env.BUDGET_MONTH_ENABLED, {
       fallback: false,
@@ -207,7 +283,15 @@ function kontingentRohwerte(env, { boolEnv, numEnv }) {
   };
 }
 
-export function rohwerteBilling(env, umgebung, kostenprofile) {
+export function rohwerteBilling(
+  env: BillingEnv,
+  umgebung: ReturnType<typeof umgebungMit>,
+  kostenprofile: readonly string[],
+): ReturnType<typeof zahlungsRohwerte> &
+  ReturnType<typeof abgleichRohwerte> &
+  ReturnType<typeof tarifRohwerte> &
+  ReturnType<typeof alarmRohwerte> &
+  ReturnType<typeof kontingentRohwerte> {
   return {
     ...zahlungsRohwerte(env, umgebung),
     ...abgleichRohwerte(env, umgebung),
