@@ -93,3 +93,9 @@ test("P11-P3 DE-Gegenprobe byte-genau: cancelledTitle/subjectOutbound/summaryTit
   assert.equal(t.summaryTitle, "Neue Call Summary");
   assert.equal(t.actionItemsHeading, "Action Items:");
 });
+
+test("P11-P3 FR-Betreffzeilen byte-genau: subjectOutbound/subjectInbound", () => {
+  const t = LOCALES.fr.postCall;
+  assert.equal(t.subjectOutbound("+33123456789"), "Appel vers +33123456789");
+  assert.equal(t.subjectInbound("+33123456789"), "Appel de +33123456789");
+});
