@@ -278,3 +278,41 @@ test("Kriterium 3: ein Patch ohne bekanntes Feld loest keinen Schreibzugriff auf
   assert.equal(zeile.workos_delete_pending, true);
   assert.equal(new Date(zeile.cancellation_mail_received_at).toISOString(), EINGANG);
 });
+
+test("Kriterium 1+2: ein Webhook-Nummernkauf mit nicht zu speicherndem Ergebnis schreibt die Vermerke nicht in die Zeile", async () => {
+  const { a, b, tenant } = await zweiInstanzen();
+  const vorher = (await gespeichert(tenant)).number_provision_skip_reason;
+  const original = a.stammdatenSchreiben;
+  let schreibAufrufe = 0;
+  a.stammdatenSchreiben = (...args) => {
+    schreibAufrufe += 1;
+    return original?.apply(a, args);
+  };
+  const orchestrator = makeProvisioningOrchestrator({
+    store: a,
+    config: withConfigNamespaces({ paymentEnabled: false, provisioningEnabled: false }),
+    queue: {},
+    billing: {},
+    metering: {},
+    numberProvisioning: () => ({}),
+    handleProvisionJob: async () => ({}),
+    resolveProvisionRetry: (zustand) => {
+      const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenant);
+      mandant.numberProvisionSkipReason = "tenant_cap";
+      mandant.numberProvisionSkipAt = EINGANG;
+      return { ok: false, reason: "tenant_cap" };
+    },
+    audit: () => {},
+    recordProvisioningJob: () => null,
+    markProvisioningJob: () => null,
+    classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
+    findNumber: () => null,
+  });
+
+  await orchestrator.triggerTenantProvisioning(tenant);
+  await letzteFlushs(a, b);
+
+  assert.equal(vorher, null);
+  assert.equal((await gespeichert(tenant)).number_provision_skip_reason, vorher);
+  assert.equal(schreibAufrufe, 0);
+});
