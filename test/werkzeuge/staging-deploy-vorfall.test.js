@@ -227,7 +227,7 @@ test("Workflow: beide Melde-Schritte reichen SLACK_ALERT_URL aus den Secrets dur
   const schritte = WORKFLOW.split("- name: ").filter((teil) => /^Roten (Staging-Deploy|Nachtlauf) melden/.test(teil));
   assert.equal(schritte.length, 2);
   for (const schritt of schritte) assert.match(schritt, /\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n/);
-  assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 8);
+  assert.equal(WORKFLOW.match(/SLACK_ALERT_URL/g).length, 10);
 });
 
 async function alarmprobeLaufen({ slack = true, slackAntwort = 200 } = {}) {
