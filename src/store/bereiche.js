@@ -11,7 +11,7 @@ import {
   tenantsForStripeReconcile,
   tenantsMitProfilen,
 } from "./zustand/listen.js";
-import { setTenantIdentityIfAbsent, tenantGeo } from "./zustand/mandant.js";
+import { setTenantIdentityIfAbsent, tenantGeo } from "./zustand/mandant.ts";
 import {
   claimOutageAlert,
   markTenantNeedsManualReconcile,

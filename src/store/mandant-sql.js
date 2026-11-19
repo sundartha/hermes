@@ -4,7 +4,7 @@ import {
   kycReached,
   tenantActiveSubscriber,
   tenantInactive,
-} from "./zustand/mandant.js";
+} from "./zustand/mandant.ts";
 
 const SPALTE_JE_SCHLUESSEL = Object.freeze({
   idpSubject: "idp_subject",

@@ -15,7 +15,7 @@ export const PROVISION_RETRY_OUTCOME = Object.freeze({
   ERROR: "error",
 });
 
-const failedNumberCountOf: (state: unknown, tenantId: string) => number = failedNumberCount;
+type Zustand = Parameters<typeof failedNumberCount>[0];
 
 const NO_RETRY_ATTEMPTS = 0;
 
@@ -26,13 +26,13 @@ interface RetryDecision {
 }
 
 interface RetryStore {
-  load: () => unknown;
+  load: () => Zustand;
   save: () => void;
   withStoreLock: (arbeit: () => void) => Promise<unknown>;
 }
 
 export function resolveAutoProvisionRetry(
-  state: unknown,
+  state: Zustand,
   { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }: { tenantId: string; maxAttempts: number; kycMinLevel?: typeof KYC_OUTBOUND_MIN },
 ): RetryDecision {
   if (maxAttempts <= 0)
@@ -51,7 +51,7 @@ export function resolveAutoProvisionRetry(
       outcome: PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE,
       attempts: NO_RETRY_ATTEMPTS,
     };
-  const attempts = failedNumberCountOf(state, tenantId);
+  const attempts = failedNumberCount(state, tenantId);
   if (attempts >= maxAttempts)
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED, attempts };
   return { retry: true, outcome: PROVISION_RETRY_OUTCOME.RETRY, attempts };

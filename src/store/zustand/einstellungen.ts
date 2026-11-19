@@ -11,7 +11,7 @@ type Profil = Record<string, unknown>;
 type Termin = Record<string, unknown>;
 type Pruefung = (wert: unknown) => boolean;
 
-interface EinstellungenZustand {
+export interface EinstellungenZustand {
   settings: Record<string, Einstellungen>;
   profiles: Record<string, Profil>;
   calendar: Record<string, Termin[]>;
