@@ -374,6 +374,9 @@ async function hermesAufbauen({
     await db.query("UPDATE tenant SET status = 'active' WHERE id = $1", [tenantId]);
     Object.assign(tenant, { status: "active", ownerName: "Kai Betreiber" });
     state.profiles[tenantId] = { ...planProfileFor("starter") };
+    const gewuenschtesProfil = state.profiles[tenantId];
+    delete state.profiles[tenantId];
+    store.setProfile(tenantId, gewuenschtesProfil);
     state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber", ...vorspannNummerFelder() });
     store.save();
     await store.setKycLevel(tenantId, "card");
