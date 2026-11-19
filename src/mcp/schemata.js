@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 
 const CALL_SUBJECT_OUTPUT = {
   to: z.string().nullable().optional(),
@@ -199,8 +200,6 @@ function maxDurationField(maxDurationCapS) {
         "than that; it never extends a call.",
     );
 }
-
-const RECIPIENT_NAME_MAX_LENGTH = 80;
 
 function recipientNameField() {
   const eingabe = z.string().max(RECIPIENT_NAME_MAX_LENGTH).optional();

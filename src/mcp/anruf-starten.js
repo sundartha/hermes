@@ -41,15 +41,14 @@ export function registerPlaceCall({
       ...callWidgetUi,
     },
     async (args) => {
-      const { recipient_name: recipientName, ...callArgs } = args;
-      const placed = await placeCallHopCall(callArgs);
+      const placed = await placeCallHopCall(args);
       requireFields(placed, { callId: "string" });
       const data = {
         call_id: placed.callId,
         status: "dialing",
         to: placed.to ?? null,
         objective: placed.objective ?? null,
-        recipient_name: recipientName?.trim() || null,
+        recipient_name: args.recipient_name?.trim() || null,
         ...callTimestamps({ startedAt: placed.startedAt }),
         duration_s: 0,
         last_transcript_lines: [],

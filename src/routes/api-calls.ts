@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { normNum } from "../begriffe/rufnummern.js";
+import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
 import { validateAssistantContext } from "../i18n/anruf-eingabe-texte.ts";
 import { consultAllowedFor } from "../consult/gate.js";
@@ -160,6 +161,7 @@ interface Koerper {
   briefing?: unknown;
   constraints?: unknown;
   diagnostic?: unknown;
+  recipient_name?: string | null | undefined;
 }
 
 interface Konfiguration {
@@ -340,7 +342,11 @@ function beschreibungOf(fehler: unknown): unknown {
 }
 
 const CONSULT_ABFRAGE = z.object({ after: z.string().nullable().catch(null) });
-const ANRUF_KOERPER = z.object({}).passthrough().catch({});
+const GEGENSTELLE_TEXT = z.string().trim().max(RECIPIENT_NAME_MAX_LENGTH);
+const GEGENSTELLE_NAME = GEGENSTELLE_TEXT.transform((name) => name || null)
+  .nullish()
+  .catch(null);
+const ANRUF_KOERPER = z.object({ recipient_name: GEGENSTELLE_NAME }).passthrough().catch({});
 const CONSULT_ANTWORT_KOERPER = z
   .object({ event_id: z.unknown(), answers: z.unknown(), status: z.unknown() })
   .catch({});
@@ -874,6 +880,7 @@ export function makeCallRoutes({
         from: ctx.fromNumber,
         to: ctx.to,
         goal: ctx.objective,
+        recipientName: b.recipient_name ?? null,
         openingLine,
         briefing: b.briefing,
         constraints: b.constraints,
