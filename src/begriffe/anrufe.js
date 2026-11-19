@@ -13,3 +13,5 @@ export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
 
 export const ANRUFSTART_JOB = "anrufstart";
+
+export const RECIPIENT_NAME_MAX_LENGTH = 80;

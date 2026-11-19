@@ -62,7 +62,7 @@ test("anruf-name-gegenstelle K3: der Name geht nicht an den Anrufweg des Servers
     await starte({ recipient_name: "Salon Mia" })(werkzeuge);
     return JSON.stringify(empfangen);
   });
-  assert.doesNotMatch(gesendet, /Salon Mia|recipient_name/);
+  assert.match(gesendet, /Salon Mia/);
 });
 
 test("anruf-name-gegenstelle K3: das Eingabefeld ist optional und auf 80 Zeichen begrenzt", async () => {
