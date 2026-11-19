@@ -73,7 +73,7 @@ export const {
 const { detectProduction } = umgebung;
 
 export const fristenEinstellungen = Object.freeze(rohwerteFristen(process.env, umgebung));
-export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.js";
+export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.ts";
 export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.ts";
 export { TELNYX_API_BASE_STANDARD } from "./konfiguration/rohwerte-telephony.ts";
 export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.ts";
