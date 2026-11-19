@@ -4,7 +4,7 @@ import { TENANT_STATUS, KYC_LEVEL, KYC_ORDER } from "../../begriffe/mandant.js";
 import { isKnownPlanSlug } from "../../plans.ts";
 import { isDenied } from "../../telephony/number-denylist.ts";
 import { tenantsOf } from "./grundlagen.js";
-import { settingsFor, calendarFor } from "./einstellungen.js";
+import { settingsFor, calendarFor } from "./einstellungen.ts";
 import { seedTenantDefaultBudget } from "./budget.js";
 
 export function numberRecordByE164(state, e164) {

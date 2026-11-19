@@ -126,7 +126,7 @@ export {
   schliesseKostenAbgleich,
   oeffneKostenAbgleichErneut,
 } from "./zustand/nutzung.js";
-import { settingsFor, calendarFor, benachrichtigungHinzufuegen } from "./zustand/einstellungen.js";
+import { settingsFor, calendarFor, benachrichtigungHinzufuegen } from "./zustand/einstellungen.ts";
 import {
   bootstrapNummerAnlegen,
   bootstrapNummerAusKonfigAnlegen,
@@ -142,7 +142,7 @@ export {
   listProfiles,
   setProfile,
   deleteProfile,
-} from "./zustand/einstellungen.js";
+} from "./zustand/einstellungen.ts";
 export {
   tenantHasLiveNumber,
   markTenantNeedsManualReconcile,

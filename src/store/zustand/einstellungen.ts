@@ -4,26 +4,48 @@ import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../i18n/locales.js";
 import { hasInboundNotice } from "../../i18n/inbound-notice.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
+import type { MandantRef } from "./grundzugriffe.ts";
 
-export function settingsFor(state, tenantId) {
+type Einstellungen = Record<string, unknown>;
+type Profil = Record<string, unknown>;
+type Termin = Record<string, unknown>;
+type Pruefung = (wert: unknown) => boolean;
+
+interface EinstellungenZustand {
+  settings: Record<string, Einstellungen>;
+  profiles: Record<string, Profil>;
+  calendar: Record<string, Termin[]>;
+  subIndex?: Record<string, string>;
+  tenants?: MandantRef[];
+  notifications: Record<string, unknown>[];
+}
+
+interface Neuer {
+  value: unknown;
+}
+
+export function settingsFor(state: EinstellungenZustand, tenantId: string): Einstellungen {
   return (state.settings[tenantId] ??= defaultSettings());
 }
 
-function resolveOptionalEnumOverride(value, allowedValues) {
+function resolveOptionalEnumOverride(
+  value: unknown,
+  allowedValues: readonly string[],
+): { accepted: boolean; value: string | null } {
   if (value === null || value === "") return { accepted: true, value: null };
   if (typeof value !== "string") return { accepted: false, value: null };
   const canonical = allowedValues.find((allowed) => allowed.toLowerCase() === value.toLowerCase());
   return canonical === undefined ? { accepted: false, value: null } : { accepted: true, value: canonical };
 }
 
-const OPTIONAL_ENUM_FIELDS = Object.freeze({
+const OPTIONAL_ENUM_FIELDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   language: SUPPORTED_LANGUAGES,
   agentStyle: PERSONA_STYLE_IDS,
 });
 
-const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
+const FIELD_GUARDS: Readonly<Record<string, Pruefung>> = Object.freeze({ greeting: hasInboundNotice });
 
-function neuerWert(key, value, allowed) {
+function neuerWert(key: string, value: unknown, allowed: Einstellungen): Neuer | null {
   const enumValues = OPTIONAL_ENUM_FIELDS[key];
   if (enumValues) {
     const override = resolveOptionalEnumOverride(value, enumValues);
@@ -34,9 +56,13 @@ function neuerWert(key, value, allowed) {
   return guard && !guard(value) ? null : { value };
 }
 
-export function updateSettings(state, tenantId, patch) {
+export function updateSettings(
+  state: EinstellungenZustand,
+  tenantId: string,
+  patch?: Einstellungen | null,
+): { settings: Einstellungen; changed: string[] } {
   const allowed = defaultSettings();
-  const changed = [];
+  const changed: string[] = [];
   const target = settingsFor(state, tenantId);
   for (const [key, value] of Object.entries(patch ?? {})) {
     if (!(key in allowed)) continue;
@@ -48,18 +74,18 @@ export function updateSettings(state, tenantId, patch) {
   return { settings: target, changed };
 }
 
-export function resolveProfile(state, tenantId) {
+export function resolveProfile(state: EinstellungenZustand, tenantId: string | null): unknown {
   return resolveProfileFrom(tenantId, tenantId ? state.profiles[tenantId] : undefined);
 }
 
-const subIndexOf = (state) => state.subIndex ?? {};
+const subIndexOf = (state: EinstellungenZustand) => state.subIndex ?? {};
 
-export function bindSubToTenant(state, sub, tenantId) {
+export function bindSubToTenant(state: EinstellungenZustand, sub: string | null, tenantId: string | null): void {
   if (!sub || !tenantId) return;
   (state.subIndex ??= {})[sub] = tenantId;
 }
 
-export function resolveTenant(state, idpSubject) {
+export function resolveTenant(state: EinstellungenZustand, idpSubject: string | null): string | null {
   if (!idpSubject) return null;
   const merged = subIndexOf(state)[idpSubject];
   if (merged) return merged;
@@ -67,27 +93,30 @@ export function resolveTenant(state, idpSubject) {
   return tenant ? tenant.id : null;
 }
 
-export function listProfiles(state) {
+export function listProfiles(state: EinstellungenZustand): Record<string, Profil> {
   return state.profiles;
 }
 
-export function setProfile(state, tenantId, patch) {
+export function setProfile(state: EinstellungenZustand, tenantId: string, patch: Profil): { profile: Profil | undefined; changed: string[] } {
   const clean = sanitizeProfile(patch);
   state.profiles[tenantId] = { ...(state.profiles[tenantId] ?? {}), ...clean };
   return { profile: state.profiles[tenantId], changed: Object.keys(clean) };
 }
 
-export function deleteProfile(state, tenantId) {
+export function deleteProfile(state: EinstellungenZustand, tenantId: string): boolean {
   if (!(tenantId in state.profiles)) return false;
   Reflect.deleteProperty(state.profiles, tenantId);
   return true;
 }
 
-export function calendarFor(state, tenantId) {
+export function calendarFor(state: EinstellungenZustand, tenantId: string): Termin[] {
   return (state.calendar[tenantId] ??= []);
 }
 
-export function benachrichtigungHinzufuegen(state, { title, body, callId }) {
+export function benachrichtigungHinzufuegen(
+  state: EinstellungenZustand,
+  { title, body, callId }: { title: string; body: string; callId: string },
+): void {
   state.notifications.unshift({
     id: newId("nt"),
     title,
