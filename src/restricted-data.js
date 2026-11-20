@@ -266,7 +266,7 @@ const ID_GROUP = `(?:${ID_GROUP_WITH_DIGIT}|[A-Za-z](?=[ ./-]\\d))`;
 const GOVERNMENT_ID_MAX_EXTRA_GROUPS = 12;
 const GOVERNMENT_ID_PATTERN = new RegExp(
   `${wordAlternationSource(GOVERNMENT_ID_LABELS)}${GOVERNMENT_ID_JOINER}` +
-    `(${ID_GROUP_WITH_DIGIT}(?:[ ./-]${ID_GROUP}){0,${GOVERNMENT_ID_MAX_EXTRA_GROUPS}})`,
+    `(${ID_GROUP_WITH_DIGIT}(?:[ ./-]${ID_GROUP}){0,${String(GOVERNMENT_ID_MAX_EXTRA_GROUPS)}})`,
   "dgiu",
 );
 
