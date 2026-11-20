@@ -24,4 +24,28 @@ export const SCHWELLEN = Object.freeze({
 
 export const ANFRAGE_FRIST_MS = 5000;
 export const BEREIT_FRIST_MS = 90_000;
-export const GESAMT_FRIST_MS = 110_000;
+export const AUFRAEUM_RESERVE_MS = 20_000;
+
+const KINDER = {
+  "elevenlabs-aus": 1,
+  "elevenlabs-langsam": 1,
+  "postgres-neustart": 1,
+  "instanz-tod": 2,
+  "deploy-bei-anruf": 1,
+};
+
+const LAUFZEIT_NACH_BEREIT_MS = {
+  "elevenlabs-aus": (s) => s.messungen * (s.messTaktMs + s.anbieterAufrufFristMs),
+  "elevenlabs-langsam": (s) => s.messungen * (s.messTaktMs + s.anbieterAufrufFristMs),
+  "postgres-neustart": (s) => s.abweisenMs + s.wiederBereitMs,
+  "instanz-tod": (s) => s.haltenMs + s.healthzMs,
+  "deploy-bei-anruf": (s) => s.beendetMs + s.anfrageFristMs + s.anbieterHaltenMs,
+};
+
+export function gesamtFristMs(probe) {
+  return (
+    KINDER[probe] * BEREIT_FRIST_MS +
+    LAUFZEIT_NACH_BEREIT_MS[probe](SCHWELLEN[probe]) +
+    AUFRAEUM_RESERVE_MS
+  );
+}

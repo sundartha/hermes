@@ -3,7 +3,7 @@ import { postgresNeustart } from "./ausfallproben/proben/postgres-neustart.mjs";
 import { instanzTod } from "./ausfallproben/proben/instanz-tod.mjs";
 import { anbieterStoerung } from "./ausfallproben/proben/anbieter-stoerung.mjs";
 import { deployBeiAnruf } from "./ausfallproben/proben/deploy-bei-anruf.mjs";
-import { GESAMT_FRIST_MS, SCHWELLEN } from "./ausfallproben/schwellen.mjs";
+import { SCHWELLEN, gesamtFristMs } from "./ausfallproben/schwellen.mjs";
 import { leseAufruf } from "./ausfallproben/ziel.mjs";
 
 const PROBEN = {
@@ -24,7 +24,7 @@ const EXIT_ROT = 1;
 const EXIT_AUFRUF = 2;
 const ARGUMENTE_AB = 2;
 
-function frist() {
+function frist(probe) {
   return new Promise((resolve) => {
     setTimeout(
       () =>
@@ -34,7 +34,7 @@ function frist() {
           gemessen: null,
           grund: "Zeitueberschreitung der Probe",
         }),
-      GESAMT_FRIST_MS,
+      gesamtFristMs(probe),
     ).unref();
   });
 }
@@ -50,7 +50,7 @@ function kontextAusUmgebung(umgebung) {
 
 async function laufe(probe, kontext) {
   try {
-    return await Promise.race([PROBEN[probe](kontext), frist()]);
+    return await Promise.race([PROBEN[probe](kontext), frist(probe)]);
   } catch (fehler) {
     return {
       ergebnis: "rot",
