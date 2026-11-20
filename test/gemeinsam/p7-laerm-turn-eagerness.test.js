@@ -13,6 +13,7 @@ const LIVE_PFAD = "conversation_config.turn.turn_eagerness";
 const TURN_PRAEFIX = "conversation_config.turn.";
 const VAD_ASR_PRAEFIXE = ["conversation_config.vad", "conversation_config.asr"];
 const BESESSENE_TURN_PFADE = [
+  "conversation_config.turn.initial_wait_time",
   "conversation_config.turn.silence_end_call_timeout",
   "conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages",
   "conversation_config.turn.soft_timeout_config.llm_generated_message_prompt_override",
