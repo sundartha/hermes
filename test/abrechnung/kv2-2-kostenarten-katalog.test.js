@@ -8,7 +8,7 @@ import {
   EINSAMMLER,
   pruefeKostenart,
   pruefeProfil,
-} from "../../src/billing/kostenarten.js";
+} from "../../src/billing/kostenarten.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "../../src/telephony/adapters/telnyx/voice.js";
 import { ohne } from "../gemeinsam/umgebung.mjs";
 

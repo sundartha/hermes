@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { kostenBuchBericht } from "../../src/billing/kosten-deckung.ts";
-import { KOSTENPROFIL, pflichtTraegerFuerProfil } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL, pflichtTraegerFuerProfil } from "../../src/billing/kostenarten.ts";
 import {
   ENDZUSTAND,
   ABSCHLUSS_GRUND,

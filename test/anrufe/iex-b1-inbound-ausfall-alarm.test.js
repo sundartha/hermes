@@ -12,7 +12,7 @@ import {
 import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE } from "../../src/telephony/outage-classes.ts";
 import { reportSystematicOutage, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { BASE_ENV, seedCall } from "../helpers.js";

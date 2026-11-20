@@ -3,7 +3,7 @@ import http from "node:http";
 import { test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_OUTBOUND_AGENT_ID_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import {
   EL_OUTBOUND_BOOT_ENV,

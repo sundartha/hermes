@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../../src/billing/cost-truing.ts";
-import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import {
   makeDefaultState,
   createCall,

@@ -18,7 +18,7 @@ import {
   EL_BELEG_ABLEHNUNG,
   EL_BELEG_QUELLE,
 } from "../../src/elevenlabs/kosten-beleg.js";
-import { KOSTENART } from "../../src/billing/kostenarten.js";
+import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import {
   CONVERSATION_DONE_MIT_KOSTEN,
   CONVERSATION_FAILED_INVALID_DESTINATION,

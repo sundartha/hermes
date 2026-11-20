@@ -18,7 +18,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
-import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { fakeConfig, fakeVoiceControl, isoMinutesAgo, makeStubStore } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";
 

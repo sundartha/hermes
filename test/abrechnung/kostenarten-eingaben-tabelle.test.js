@@ -10,7 +10,7 @@ import {
   pflichttypenFuerProfil,
   pruefeKostenart,
   pruefeProfil,
-} from "../../src/billing/kostenarten.js";
+} from "../../src/billing/kostenarten.ts";
 
 const ENV_PFLICHTTYPEN = Object.freeze(["sip-trunking", "recording"]);
 

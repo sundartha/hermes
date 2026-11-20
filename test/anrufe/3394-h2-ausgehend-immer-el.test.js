@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { seedState, startServer, EL_OUTBOUND_ZUGANG_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 
 const HTTP_OK = 200;
 const ZIEL = "+4915112345678";

@@ -15,7 +15,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { registerTools } from "../../src/mcp-tools.js";
 import { starteMailAttrappe } from "./mail-attrappe.js";
 import { starteAttrappe } from "./attrappen-server.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { seedCall, seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
 import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
 

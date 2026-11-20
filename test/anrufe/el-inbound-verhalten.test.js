@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { BASE_ENV, seedCall, seedState, startServer, waitForLog, waitUntil, TELNYX_TEST_SIGNATURE_HEADERS } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { INBOUND_FROM, INBOUND_TO, TRAEGER_SID, elInboundInitSpawnEnv, isoVor } from "../_iel-inbound-harness.js";
