@@ -124,7 +124,7 @@ function planeFachdatei(wurzel, baustein, name) {
     PASCAL: pascal(name),
     KONSTANTE: name.toUpperCase().replaceAll("-", "_"),
     BEGRIFF: begriff[1],
-    ZU_BEGRIFFEN: relativ(datei, begriffe),
+    ZU_BEGRIFFEN: relativ(datei, quelle),
     ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.js"),
     ZU_TIMER: relativ(datei, "src/utils/timer.ts"),
   };
