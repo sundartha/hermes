@@ -2,7 +2,7 @@
 
 Regel: `docs/betrieb/grafana/anrufregeln.json`, Eintrag `anruf-annahmezeit` (Ziel, Fenster, Faktoren und Mindestmenge stehen nur dort, im Feld `burnrate`). Messgröße: `hermes.call.answer_time` (Histogramm, Grenze `le="5"`).
 
-Das Ziel und die Schwellen sind ein Vorschlag, durch Messung zu bestätigen. Das Ziel (99 % der Anrufe unter 5 s) gilt für die Annahmezeit.
+Das Ziel und die Schwellen sind ein Vorschlag, durch Messung zu bestätigen. Das Ziel steht in `anrufregeln.json` unter `burnrate.slo` und gilt für die Annahmezeit; es zählen nur eingehende Anrufe (`direction="inbound"`).
 
 ## Symptom
 
