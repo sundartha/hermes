@@ -12,10 +12,12 @@ const HTTP_OK = 200;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
+const TTS_WARTE_MS = 5_000;
 const EINMAL = 1;
 const ZWEIMAL = 2;
 const NUMMER_PRAEFIX = "+4915112391";
 const AUDIO_BYTES = 200_000;
+const ERSTES_PAKET_BYTES = 1_000;
 const KENNUNG = "ob-3365-grenzfall";
 const GRUND = "el_uebergabe_gescheitert";
 const NUR_LESEN = 0o555;
@@ -49,6 +51,10 @@ function beantworteFehler({ req, res }, anfrage, steuerung) {
 }
 
 function beantworte({ req, res }, anfrage, steuerung) {
+  if (req.url.startsWith("/v1/text-to-speech/") && steuerung.synthesseHaengt) {
+    res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+    return res.write(Buffer.alloc(ERSTES_PAKET_BYTES, 1));
+  }
   if (req.url.startsWith("/v1/text-to-speech/")) {
     res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
     return res.end(Buffer.alloc(AUDIO_BYTES, 1));
@@ -140,9 +146,16 @@ async function neuerAnruf() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren" }),
-  });
+  }, { wartezeitMs: TTS_WARTE_MS });
   return (await antwort.json()).callId;
 }
+
+test("3365-G0: Synthese haengt bis zur TTS-Frist -> Anruf wird trotzdem angenommen, Anfrage bricht nicht ab", async () => {
+  umgebung.attrappe.steuerung.synthesseHaengt = true;
+  const callId = await neuerAnruf();
+  delete umgebung.attrappe.steuerung.synthesseHaengt;
+  assert.ok(anrufIn(callId));
+});
 
 test("3365-G1: Wiedergabe scheitert, EL-Bein steht -> beide Beine aufgelegt, kein Vermerk el_fehler", async () => {
   const { attrappe, srv } = umgebung;
