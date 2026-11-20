@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs";
+import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { APPROVERS, IMPORT_PRAEFIX, QUELLDATEI, alleSeiten, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn } from "./github.mjs";
+import { APPROVERS, IMPORT_PRAEFIX, QUELLDATEI, alleSeiten, api, apiSenden, entfernteZeilen, ereignis, geaenderteDateien, inhaltAn, jobLog } from "./github.mjs";
 
 const LABEL = "verhalten-geaendert";
 const GESCHUETZT = /^test\//;
@@ -94,7 +95,84 @@ async function freigegebenVon(pr) {
   return APPROVERS.includes(letztes.actor?.login) ? letztes.actor.login : null;
 }
 
+const WACKELIG = "wackelig";
+const SAMMEL_JOB = "CI";
+const ROT = "failure";
+const LAUF_ZAEHLER = /^Neulauf-Wackler Nr\. \d+: /;
+const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
+const ZEITSTEMPEL = /^\S+Z /;
+const DATEI_ZEILE = /^# Subtest: (.+\.test\.[cm]?[jt]s)$/;
+const TEST_ZEILE = /^\s+not ok \d+ - (.+?)(?: # .*)?$/;
+const TESTORDNER = /^.*?\/((?:apps\/web\/)?test\/)/;
+
+function rotTests(log, jobName) {
+  const namen = [];
+  let datei;
+  for (const roh of log.split("\n")) {
+    const zeile = roh.replace(ZEITSTEMPEL, "").replace(/\r$/, "");
+    const neueDatei = DATEI_ZEILE.exec(zeile)?.[1];
+    if (neueDatei !== undefined) datei = neueDatei.replace(TESTORDNER, "$1");
+    const name = TEST_ZEILE.exec(zeile)?.[1];
+    if (name !== undefined) namen.push(datei === undefined ? `${jobName} › ${name}` : `${datei} › ${name}`);
+  }
+  return namen.length === 0 ? [jobName] : namen;
+}
+
+function wacklerTitel(versuche, logs) {
+  const titel = new Set();
+  for (const { jobs } of versuche) {
+    for (const job of jobs.filter(({ conclusion, name }) => conclusion === ROT && name !== SAMMEL_JOB)) {
+      for (const eintrag of rotTests(logs[job.id] ?? "", job.name)) titel.add(`Wackelig: ${eintrag}`);
+    }
+  }
+  return [...titel];
+}
+
+export function wacklerAuswerten({ versuche, logs, offeneIssues, laufLink }) {
+  return wacklerTitel(versuche, logs).map((title) => {
+    const offen = offeneIssues.find((issue) => issue.title === title);
+    if (offen === undefined) return { anlegen: { title, labels: [WACKELIG], body: `Neulauf-Wackler Nr. 1: ${laufLink}` } };
+    return { kommentieren: { nummer: offen.number, body: `Neulauf-Wackler Nr. ${offen.laeufe + ERSTES_VORKOMMEN_ZAEHLT_MIT}: ${laufLink}` } };
+  });
+}
+
+async function offeneWackler(github) {
+  const offene = await github.alleSeiten(`/issues?state=open&labels=${WACKELIG}`);
+  return Promise.all(offene.map(async ({ number, title }) => {
+    const kommentare = await github.alleSeiten(`/issues/${number}/comments`);
+    return { number, title, laeufe: kommentare.filter(({ body }) => LAUF_ZAEHLER.test(body)).length };
+  }));
+}
+
+async function fruehereVersuche(github, umgebung) {
+  const aktuell = Number(umgebung.GITHUB_RUN_ATTEMPT);
+  const nummern = Array.from({ length: aktuell - 1 }, (leer, i) => i + 1);
+  return Promise.all(nummern.map(async (versuch) => {
+    const { jobs } = await github.lesen(`/actions/runs/${umgebung.GITHUB_RUN_ID}/attempts/${versuch}/jobs?per_page=100`);
+    return { versuch, jobs };
+  }));
+}
+
+export async function wacklerErfassen(github, umgebung) {
+  if (Number(umgebung.GITHUB_RUN_ATTEMPT) <= 1) return;
+  const versuche = await fruehereVersuche(github, umgebung);
+  const logs = {};
+  for (const { jobs } of versuche) {
+    for (const job of jobs.filter(({ conclusion, name }) => conclusion === ROT && name !== SAMMEL_JOB)) logs[job.id] = await github.log(job.id);
+  }
+  const laufLink = `${umgebung.GITHUB_SERVER_URL}/${umgebung.GITHUB_REPOSITORY}/actions/runs/${umgebung.GITHUB_RUN_ID}/attempts/${umgebung.GITHUB_RUN_ATTEMPT}`;
+  const aktionen = wacklerAuswerten({ versuche, logs, offeneIssues: await offeneWackler(github), laufLink });
+  for (const { anlegen, kommentieren } of aktionen) {
+    if (anlegen === undefined) await github.senden(`/issues/${kommentieren.nummer}/comments`, "POST", { body: kommentieren.body });
+    else await github.senden("/issues", "POST", anlegen);
+  }
+}
+
 async function main() {
+  if (process.argv.includes("--wackler")) {
+    await wacklerErfassen({ lesen: api, alleSeiten, senden: apiSenden, log: jobLog }, env);
+    return;
+  }
   const { pr, basis, kopf } = ereignis();
   const befunde = testschutzBefunde(basis, kopf);
   if (befunde.length === 0) {

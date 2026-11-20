@@ -49,6 +49,26 @@ export async function api(pfad) {
   return (await anfrage(`${API}/repos/${env.GITHUB_REPOSITORY}${pfad}`)).daten;
 }
 
+export async function apiSenden(pfad, methode, koerper) {
+  const adresse = `${API}/repos/${env.GITHUB_REPOSITORY}${pfad}`;
+  const antwort = await fetch(adresse, {
+    method: methode,
+    headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json", "content-type": "application/json" },
+    body: JSON.stringify(koerper),
+  });
+  if (!antwort.ok) throw new Error(`GitHub ${adresse}: HTTP ${antwort.status}`);
+  return antwort.json();
+}
+
+export async function jobLog(jobId) {
+  const adresse = `${API}/repos/${env.GITHUB_REPOSITORY}/actions/jobs/${jobId}/logs`;
+  const antwort = await fetch(adresse, {
+    headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json" },
+  });
+  if (!antwort.ok) throw new Error(`GitHub ${adresse}: HTTP ${antwort.status}`);
+  return antwort.text();
+}
+
 export async function fremdeApi(repo, pfad) {
   return (await anfrage(`${API}/repos/${repo}${pfad}`)).daten;
 }
