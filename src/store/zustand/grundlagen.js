@@ -6,13 +6,13 @@ let letzteMillisekunde = 0;
 let vergebeneIds = new Set();
 
 export function newId(prefix) {
+  const jetzt = Date.now();
   const basis = (
     prefix +
     "_" +
-    Date.now().toString(ID_RADIX) +
+    jetzt.toString(ID_RADIX) +
     Math.random().toString(ID_RADIX).slice(ID_RANDOM_START, ID_RANDOM_END)
   );
-  const jetzt = Date.now();
   if (jetzt !== letzteMillisekunde) {
     letzteMillisekunde = jetzt;
     vergebeneIds = new Set();
