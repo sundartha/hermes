@@ -121,6 +121,7 @@ const KATALOG = new Map([
   ["staging_ohne_commit", "Staging meldet noch keinen gültigen Commit"],
   ["staging_erreicht", "Staging fährt den erwarteten Commit {commit}"],
   ["staging_ueberholt", "Rot: Staging ist überholt und fährt schon den neueren Commit {commit}"],
+  ["pin_wartet", "Staging meldet noch nicht den Commit {commit}, neuer Versuch nach dem Takt"],
   ["probe_auth", "Negativproben ohne Zugangsdaten gegen Staging: Exit {exit}"],
   ["probe_auth_zeile", "Probe: {zeile}"],
   ["telnyx_schluessel", "Telnyx-Signaturschlüssel laut /intern/status: HTTP {http}, ok: {ok}"],
