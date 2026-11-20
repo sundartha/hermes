@@ -8,7 +8,7 @@ import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";
 
 interface StoreMitZustand {
-  load: () => Zustand;
+  load: () => Zustand & Parameters<typeof openPlatformBindingByPurpose>[0];
 }
 
 interface AlarmAbsender {
