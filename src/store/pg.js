@@ -709,16 +709,7 @@ function mandantBudgetMethoden({ requireState, save, mandant }) {
   };
 }
 
-const ABO_SCHLUESSEL = [
-  ["subscriptionId", "stripeSubscriptionId"],
-  ["planSlug", "stripePlanSlug"],
-  ["currentPeriodEnd", "stripeCurrentPeriodEnd"],
-  ["currentPeriodStart", "stripeCurrentPeriodStart"],
-  ["numberSetupFeeExempt", "stripeNumberSetupFeeExempt"],
-  ["activationPending", "stripeActivationPending"],
-  ["periodCreditRevoked", "stripePeriodCreditRevoked"],
-  ["cancelAtPeriodEnd", "stripeCancelAtPeriodEnd"],
-];
+const ABO_SCHLUESSEL = Object.entries(ops.SUBSCRIPTION_PATCH_FIELDS);
 
 const STRIPE_SCHLUESSEL = [
   ["customerId", "stripeCustomerId"],
