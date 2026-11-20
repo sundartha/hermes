@@ -107,6 +107,8 @@ const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_FRIST_MINUTEN = 25;
 const MUTANT_FRIST_MS = MUTANT_FRIST_MINUTEN * MINUTE_MS;
+const MUTANT_TESTDATEI_FRIST_MINUTEN = 3;
+const MUTANT_TESTDATEI_FRIST_MS = MUTANT_TESTDATEI_FRIST_MINUTEN * MINUTE_MS;
 const KONTROLLLAEUFE = 2;
 const SCHUTZ = /stryMutAct_\w+\("(\d+)"\)/g;
 const BEGRUENDUNG_MINDESTENS = 20;
@@ -517,13 +519,13 @@ function ohneWerkzeugSteuerung(quelle) {
   return Object.fromEntries(Object.entries(quelle).filter(([name]) => !WERKZEUG_STEUERUNG.includes(name)));
 }
 
-function testdateiGruen(datei, mitMutant, lauf) {
+function testdateiGruen(datei, { mitMutant, fristMs } = {}, lauf) {
   const { laeufe, abdeckung, gestartet, aktiv } = lauf;
   gestartet.push(datei);
   const eintrag = { datei, start: Date.now() };
   aktiv.add(eintrag);
   const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
-  return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore" }, laeufe).finally(() => aktiv.delete(eintrag));
+  return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", fristMs }, laeufe).finally(() => aktiv.delete(eintrag));
 }
 
 export function schutzOrte(dateien) {
@@ -554,7 +556,7 @@ async function abdeckungMessen(plan) {
   const messen = async () => {
     for (let datei = offen.shift(); datei !== undefined && !stand.frist; datei = offen.shift()) {
       const ordner = join(mkdtempSync(join(tmpdir(), "abdeckung-")), "v8");
-      const gruen = await testdateiGruen(datei, false, { ...lauf, abdeckung: ordner });
+      const gruen = await testdateiGruen(datei, { mitMutant: false }, { ...lauf, abdeckung: ordner });
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
       abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
       rmSync(dirname(ordner), { recursive: true, force: true });
@@ -590,6 +592,7 @@ async function mutantGegenTests(plan) {
   const stand = { test: null, frist: false, liefNoch: [] };
   const lauf = { laeufe: new Set(), gestartet: [], aktiv: new Set() };
   const ende = Math.min(plan.frist, start + MUTANT_FRIST_MS);
+  const testdateiFristMs = plan.testdateiFrist ?? MUTANT_TESTDATEI_FRIST_MS;
   const beendet = () => stand.test !== null || stand.frist;
   const fristErreicht = () => {
     if (beendet()) return;
@@ -598,9 +601,9 @@ async function mutantGegenTests(plan) {
     beendeRestlaeufe(lauf.laeufe);
   };
   const pruefe = async (datei) => {
-    if (beendet() || (await testdateiGruen(datei, true, lauf)) || beendet()) return;
+    if (beendet() || (await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf)) || beendet()) return;
     let basisGruen = false;
-    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = await testdateiGruen(datei, false, lauf);
+    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = await testdateiGruen(datei, { mitMutant: false }, lauf);
     if (beendet()) return;
     if (!basisGruen) {
       basisRot.add(datei);
@@ -672,7 +675,7 @@ function mutationTeil(argv) {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));

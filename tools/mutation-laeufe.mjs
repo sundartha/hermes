@@ -28,17 +28,25 @@ function signalisiere(kind, signal) {
   }
 }
 
-export function starteLauf(argumente, optionen, laeufe) {
+export function beendeLauf(kind) {
+  signalisiere(kind, "SIGTERM");
+  setTimeout(() => signalisiere(kind, "SIGKILL"), ABBRUCH_NACHFRIST_MS).unref();
+}
+
+export function starteLauf(argumente, { fristMs, ...optionen }, laeufe) {
   const kind = spawn(process.execPath, argumente, { ...optionen, ...ALS_EIGENE_PROZESSGRUPPE });
   laeufe.add(kind);
-  return new Promise((fertig) => kind.on("exit", (code) => fertig(laeufe.delete(kind) && code === 0)));
+  const uhr = fristMs === undefined ? null : setTimeout(() => beendeLauf(kind), fristMs);
+  return new Promise((fertig) =>
+    kind.on("exit", (code) => {
+      if (uhr !== null) clearTimeout(uhr);
+      fertig(laeufe.delete(kind) && code === 0);
+    }),
+  );
 }
 
 export function beendeRestlaeufe(laeufe) {
-  for (const kind of laeufe) {
-    signalisiere(kind, "SIGTERM");
-    setTimeout(() => signalisiere(kind, "SIGKILL"), ABBRUCH_NACHFRIST_MS).unref();
-  }
+  for (const kind of laeufe) beendeLauf(kind);
 }
 
 function zerlegen(version) {
