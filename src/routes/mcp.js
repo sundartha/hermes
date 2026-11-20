@@ -113,12 +113,7 @@ export function makeMcpRoutes({ config, store, requestTenant, mcpDrosseln, bodyP
         identity,
         scopedTenant,
         consultAllowed: consultLoop,
-        consultTore: {
-          master: config.tenancy.consultEnabled === true,
-          kontext: config.tenancy.assistantContextEnabled === true,
-          mandant: profile?.allowConsult === true,
-          in_call: config.tenancy.inCallConsultEnabled === true,
-        },
+        consultTore: consultToreFor(profile),
         uiHost,
         language,
       });
