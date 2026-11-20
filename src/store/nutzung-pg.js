@@ -1,4 +1,4 @@
-import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.js";
+import { CENTS_PER_EUR, isBookableCents, USAGE_CORRUPT_REASON } from "../begriffe/abrechnung.ts";
 import { BUDGET_RESERVIERUNG_DB_FRIST_MS, NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { emptyUsage } from "./leerzustaende.js";
 import { dbReserveSetzen, reserveUeberschreitetBudget } from "./zustand/budget.js";

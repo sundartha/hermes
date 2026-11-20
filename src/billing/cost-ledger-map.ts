@@ -1,4 +1,4 @@
-import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 
 interface LedgerRow {
   kind: string | null;

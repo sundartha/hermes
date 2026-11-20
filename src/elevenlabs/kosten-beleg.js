@@ -1,4 +1,4 @@
-import { REIFE } from "../begriffe/abrechnung.js";
+import { REIFE } from "../begriffe/abrechnung.ts";
 import { isBelegRef } from "../store/cost-evidence.ts";
 import { KOSTENART, KOSTENARTEN, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "../billing/kostenarten.js";
 import { parseDecimalToMicroCents } from "../telephony/adapters/telnyx/cost-parse.ts";

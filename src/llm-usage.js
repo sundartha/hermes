@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.ts";
 import { aiCostCents, inputTokensOf, tokenCostMicroCents } from "./store/state-ops.js";
 
 function meterAiTokens({ tenantId, callId, tokens }) {

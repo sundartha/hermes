@@ -1,6 +1,6 @@
 import { E164, normNum } from "./begriffe/rufnummern.js";
 import { PROVIDER, PLATFORM_NUMBER_PURPOSE } from "./begriffe/nummern-vergabe.js";
-import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "./begriffe/abrechnung.js";
+import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "./begriffe/abrechnung.ts";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.ts";
 import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";

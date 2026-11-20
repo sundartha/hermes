@@ -1,5 +1,5 @@
 import { config as defaultConfig } from "../config.js";
-import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 import { callStartAnchorMs, carrierEndMsOf, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 import { MS_PER_MINUTE } from "../utils/timer.ts";

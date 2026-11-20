@@ -1,4 +1,4 @@
-import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
 import { localeFor } from "../i18n/locales.ts";
