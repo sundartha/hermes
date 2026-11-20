@@ -63,12 +63,17 @@ const MIT_NAMEN = [
   ["en", "This is Anna, I would like to move an appointment", "I am calling to sort out a small matter with you."],
   ["fr", "C'est Anna, je voudrais déplacer un rendez-vous", "J'appelle pour régler une petite demande."],
   ["fr", "Ici Anna, je voudrais déplacer un rendez-vous", "J'appelle pour régler une petite demande."],
+  ["en", "I am Anna Muster and I would like to move an appointment.", "I am calling to sort out a small matter with you."],
+  ["en", "I'm Anna Muster and I would like to move an appointment.", "I am calling to sort out a small matter with you."],
+  ["fr", "Je suis Anna Muster et je voudrais déplacer un rendez-vous.", "J'appelle pour régler une petite demande."],
 ];
 
 const OHNE_NAMEN = [
   ["de", "Ich rufe an, um einen Termin zu verschieben."],
   ["en", "I am calling to move an appointment."],
   ["fr", "J'appelle pour déplacer un rendez-vous."],
+  ["en", "This shirt needs to be exchanged."],
+  ["fr", "Voici Lundi comme date pour déplacer un rendez-vous."],
 ];
 
 test("vorstellung-mit-namen: Ziel mit Selbstvorstellung samt Namen wird nicht gesprochen, der feste Anlass ersetzt es", async () => {
@@ -77,6 +82,7 @@ test("vorstellung-mit-namen: Ziel mit Selbstvorstellung samt Namen wird nicht ge
       const { gesprochen } = await ruf(ziel, sprache);
       assert.ok(gesprochen.toLowerCase().includes(fallback.replace(/\.$/, "").toLowerCase()), `${ziel} -> ${gesprochen}`);
       assert.ok(!gesprochen.includes("Anna"), `${ziel} -> ${gesprochen}`);
+      if (sprache === "de") assert.equal(gesprochen.split("Hermes").length - 1, EINMAL, `${ziel} -> ${gesprochen}`);
     }
   });
 });

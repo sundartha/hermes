@@ -12,7 +12,7 @@ const SENTENCE_END = /[.!?]$/;
 const EIGENER_GRUSS_ODER_NAME =
   /\b(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening)|hier (?:ist|spricht)|mein name ist|my name is|je m'appelle)\b/i;
 
-const VORSTELLUNG_MIT_NAMEN = /\b(?:[Ii]ch bin|[Tt]his is|[Cc]['\u2019]est|[Ii]ci) \p{Lu}\p{L}/u;
+const VORSTELLUNG_MIT_NAMEN = /\b(?:[Ii]ch bin|I am|I['\u2019]m|[Jj]e suis|[Tt]his is|[Cc]['\u2019]est|[Ii]ci) \p{Lu}\p{L}/u;
 const EIGENE_VORSTELLUNGEN = [EIGENER_GRUSS_ODER_NAME, VORSTELLUNG_MIT_NAMEN];
 
 interface Sprachtexte {
