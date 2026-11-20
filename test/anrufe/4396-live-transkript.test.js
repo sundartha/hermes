@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
 

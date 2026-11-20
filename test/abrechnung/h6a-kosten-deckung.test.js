@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { kostenBuchBericht, istBuchBefundCode, deckungsZeile, KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
-import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.ts";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
 
 const MS_PER_SECOND = 1000;

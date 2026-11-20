@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import express from "express";
 
-import { KOSTENART, KOSTENPROFIL, pflichtTraegerFuerProfil } from "../../src/billing/kostenarten.js";
+import { KOSTENART, KOSTENPROFIL, pflichtTraegerFuerProfil } from "../../src/billing/kostenarten.ts";
 import { nachlaufPolitikFuer } from "../../src/elevenlabs/nachlauf-politik.ts";
 import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { hangup } from "../../src/telephony/directives.ts";

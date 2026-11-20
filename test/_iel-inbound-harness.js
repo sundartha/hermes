@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import http from "node:http";
 import { voiceMinutesOf } from "../src/billing/metering.js";
-import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../src/elevenlabs/inbound-sip-uri.ts";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import * as ops from "../src/store/state-ops.js";

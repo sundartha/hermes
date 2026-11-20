@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { startServer, makeTelnyxSigner, nowSeconds, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;

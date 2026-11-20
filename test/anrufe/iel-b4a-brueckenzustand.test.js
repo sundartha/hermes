@@ -18,7 +18,7 @@ before(async () => {
   ({ makePgStore } = await import("../../src/store/pg.js"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ publicCall } = await import("../../src/store/views.ts"));
-  ({ KOSTENPROFIL } = await import("../../src/billing/kostenarten.js"));
+  ({ KOSTENPROFIL } = await import("../../src/billing/kostenarten.ts"));
   ({ BRIDGE_STATE, bridgeStateOf } = await import("../../src/elevenlabs/inbound-bridge-state.ts"));
 });
 

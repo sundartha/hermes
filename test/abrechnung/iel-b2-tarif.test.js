@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 
 const DOMESTIC_CENTS = 23;
 const DEFAULT_CENTS = 37;

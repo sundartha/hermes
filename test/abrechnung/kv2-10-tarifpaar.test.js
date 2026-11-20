@@ -12,7 +12,7 @@ import {
   tarifpaarZeile,
   vollkostenStichprobenJeRoute,
 } from "../../src/billing/cost-calibration.ts";
-import { KOSTENART } from "../../src/billing/kostenarten.js";
+import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 import { EL_STICHPROBE, STICHPROBEN_ENDE_MS, eigenCentQuelleJeAnruf, elVollkostenState } from "../fixtures/kostenv2-vollkosten-stichprobe.js";

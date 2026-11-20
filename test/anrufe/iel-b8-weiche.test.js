@@ -6,7 +6,7 @@ import express from "express";
 
 import { starteAnbieterServer } from ".././gemeinsam/anbieter-attrappe.mjs";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import {
   EL_BINDING_AFTER_ANSWER_MS,
   EL_BRIDGE_START_DEADLINE_MS,

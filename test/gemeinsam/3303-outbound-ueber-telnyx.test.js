@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   TELNYX_TEST_PEER_NUMBER,

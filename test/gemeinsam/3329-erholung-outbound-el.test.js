@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { CONV_ID, isoVor } from "../_iel-inbound-harness.js";
 import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./erfundene-geheimnisse.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { budgetedMemoryLines, memoryLine } from "../../src/call-memory.ts";
 import { findeB1Treffer } from "../../src/elevenlabs/b1-doppelankaendigung.ts";
 import {

@@ -9,7 +9,7 @@ import {
   KOSTENPROFIL, KOSTENART, KOSTENPROFILE, KOSTENARTEN,
   PFLICHTTYPEN_AUS_ENV, PFLICHTTYPEN_UNGEMESSEN,
   pflichttypenFuerProfil, legacyKostenprofil, kostenprofilFuerAnruf,
-} from "../../src/billing/kostenarten.js";
+} from "../../src/billing/kostenarten.ts";
 import { sweepTraegerFuerProfil, sweepBelegBetrag, belegVollstaendig, SWEEP_BELEG_ABLEHNUNG } from "../../src/billing/sweep-kostenbeleg.ts";
 import { isBelegRef } from "../../src/store/cost-evidence.ts";
 

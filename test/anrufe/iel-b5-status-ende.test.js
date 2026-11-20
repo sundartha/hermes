@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 
 import { voiceMinutesOf } from "../../src/billing/metering.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { makeVoiceRoutes } from "../../src/routes/voice.ts";

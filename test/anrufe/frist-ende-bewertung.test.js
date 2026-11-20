@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 
 const MAX_DAUER_S = 2;

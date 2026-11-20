@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { inboundAbgewiesen } from "../../src/elevenlabs/inbound-bridge-state.ts";
 import * as pfad from "../../src/elevenlabs/inbound-path-decision.ts";
 import * as beleg from "../../src/elevenlabs/inbound-trunk-beleg.ts";
