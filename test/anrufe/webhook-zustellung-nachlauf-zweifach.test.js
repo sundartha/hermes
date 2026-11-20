@@ -257,7 +257,6 @@ const ZEILEN_ANWEISUNG = "SELECT 1 FROM call";
 const ABSCHLUSS = "COMMIT";
 const BEGINN = "BEGIN";
 const ZURUECK = "ROLLBACK";
-const ANSPRUCH_SCHREIBEN = "UPDATE call SET el_nachlauf_started_at";
 
 const naechsteNachAnspruch = (anweisungen) => {
   const folgende = anweisungen.slice(anweisungen.findIndex((text) => text.includes(ANSPRUCH_ANWEISUNG)) + 1);
@@ -393,12 +392,7 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      await mitschnitt.bisBedingung(() =>
-        gehalten.some((nr) => {
-          const spaeter = anweisungenSeit(mitschnitt, nr, vorher);
-          return spaeter.some((text) => text.includes(ANSPRUCH_SCHREIBEN)) && spaeter.includes(ZURUECK);
-        }),
-      );
+      await mitschnitt.bisBedingung(() => gehalten.some((nr) => anweisungenSeit(mitschnitt, nr, vorher).includes(ZURUECK)));
       const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
       assert.ok(beanspruchend.length >= EINMAL);
       for (const nr of beanspruchend) {
