@@ -246,3 +246,25 @@ test("Kriterium 6: auf dem JSON-Backend der Fassade laufen offeneAusfallZustand 
   assert.ok(offen && typeof offen === "object");
   assert.equal(typeof geclaimt, "object");
 });
+
+test("Kriterium 23: legt eine andere Instanz den Marker vor dem Anlegen an, liefert sendeplatzReservieren false und es bleibt eine offene Zeile", async () => {
+  const zustand = { angelegt: false, code: "" };
+  const { b, code } = await zweiInstanzen(async (text) => {
+    if (zustand.angelegt || !/^\s*INSERT INTO outage_alert/.test(text)) return;
+    zustand.angelegt = true;
+    await gemeinsam.query(
+      `INSERT INTO outage_alert (id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at, delivered_channels)
+       VALUES ($1, $2, $3, $3, $3, $3, $4)`,
+      ["otg-andere-instanz", zustand.code, new Date(FRUEHER_MS).toISOString(), "email"],
+    );
+  });
+  zustand.code = code;
+  const frei = (marker) => !marker;
+
+  const reserviert = await b.ausfall.sendeplatzReservieren({ bucket: code, nowMs: JETZT_MS, frei });
+
+  assert.equal(zustand.angelegt, true);
+  assert.equal(reserviert, false);
+  assert.equal((await offene(code)).length, 1);
+  assert.equal(await alle(code), 1);
+});
