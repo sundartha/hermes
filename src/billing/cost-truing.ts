@@ -206,7 +206,7 @@ type Sweepergebnis =
 const kostenprofilVon: (call: KostenAnruf) => string = kostenprofilFuerAnruf;
 const nextAttemptOf: (call: KostenAnruf) => number = nextCostTruingAttempt;
 const bereicheVon: (store: Speicher) => Bereiche = speicherBereiche;
-const pflichttypenFuer: (profil: string, envPflichttypen: string[]) => string[] = pflichttypenFuerProfil;
+const pflichttypenFuer: (profil: string, envPflichttypen: string[]) => readonly string[] = pflichttypenFuerProfil;
 const kanalZeileVon: (kanaele: unknown) => string = alarmKanalZeile;
 
 type Auditschreiber = (ereignis: string, ziel: null, zeile: string) => unknown;
@@ -329,7 +329,7 @@ export const PROVIDER_COST_RECORD_WINDOW_MS = PROVIDER_COST_RECORD_WINDOW_DAYS *
 const isEndedCall = (call: KostenAnruf): boolean => !!call.endedAt;
 const providerLegIdOf = legRefOfCall;
 
-const pflichttypenVon = (call: KostenAnruf, billing: Abrechnung): string[] =>
+const pflichttypenVon = (call: KostenAnruf, billing: Abrechnung): readonly string[] =>
   pflichttypenFuer(kostenprofilVon(call), billing.costTruingRequiredRecordTypes);
 
 const versucheUebrig = (call: KostenAnruf, billing: Abrechnung): boolean => nextCostTruingAttempt(call) <= billing.costTruingMaxAttempts;
@@ -483,7 +483,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     }, 0);
   }
 
-  function classifyRecords(records: Detailsatz[] | undefined, requiredRecordTypes: string[]): Messung | null {
+  function classifyRecords(records: Detailsatz[] | undefined, requiredRecordTypes: readonly string[]): Messung | null {
     if (!Array.isArray(records) || records.length === 0) return null;
     const total = sumRecordMicroCents(records);
     if (total === null) return null;
