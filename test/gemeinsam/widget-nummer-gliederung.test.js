@@ -4,10 +4,55 @@ import vm from "node:vm";
 
 import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js";
 
-const WIDGETS = await ausgelieferteWidgets();
-const SKRIPT = skriptbloecke(WIDGETS.call).find((s) => s.includes("function groupNumber"));
-const FUNKTION = /function groupNumber\(raw\) \{[\s\S]*?\n    \}/.exec(SKRIPT)[0];
-const gliedere = vm.runInNewContext("(" + FUNKTION + ")");
+const ANRUF = (await ausgelieferteWidgets()).call;
+const ERGEBNIS = "ui/notifications/tool-result";
+
+function knoten() {
+  return {
+    className: "",
+    style: {},
+    attribute: {},
+    text: "",
+    get textContent() {
+      return this.text;
+    },
+    set textContent(wert) {
+      this.text = wert;
+    },
+    setAttribute(name, wert) {
+      this.attribute[name] = wert;
+    },
+    removeAttribute(name) {
+      delete this.attribute[name];
+    },
+    addEventListener() {},
+  };
+}
+
+function karte() {
+  const knoten_je_wahl = new Map();
+  const hole = (sel) => {
+    if (!knoten_je_wahl.has(sel)) knoten_je_wahl.set(sel, knoten());
+    return knoten_je_wahl.get(sel);
+  };
+  hole(".w").className = "w";
+  const hoerer = [];
+  const gesendet = [];
+  const fenster = {
+    document: { querySelector: hole },
+    addEventListener: (art, f) => hoerer.push({ art, f }),
+    parent: { postMessage: (nachricht) => gesendet.push(nachricht.params) },
+    __hermesUiReady: true,
+    setInterval: () => 1,
+    clearInterval() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+  };
+  fenster.window = fenster;
+  vm.runInContext(skriptbloecke(ANRUF).filter((s) => s.includes("TOOL_GET_STATUS")).at(-1), vm.createContext(fenster));
+  const schicke = (inhalt) => hoerer.filter((h) => h.art === "message").forEach((h) => h.f({ data: { method: ERGEBNIS, params: { structuredContent: { call_id: "c1", ...inhalt } } } }));
+  return { hole, schicke };
+}
 
 const TABELLE = [
   ["Berlin", "+493012345678", "+49 30 12345678"],
@@ -24,7 +69,9 @@ const TABELLE = [
 ];
 
 for (const [name, roh, erwartet] of TABELLE) {
-  test("widget-nummer-gliederung: " + name + " erscheint als " + erwartet, () => {
-    assert.equal(gliedere(roh), erwartet);
+  test("widget-nummer-gliederung: " + name + " erscheint als " + erwartet + " in der Nummernanzeige", () => {
+    const s = karte();
+    s.schicke({ status: "dialing", to: roh });
+    assert.equal(s.hole("[data-number-display]").text, erwartet);
   });
 }
