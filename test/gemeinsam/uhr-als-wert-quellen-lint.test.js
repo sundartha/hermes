@@ -74,6 +74,10 @@ test("uhr-als-wert-quellen: die Cent-Regel im Speicher und die Router-Form in Ro
     filePath: resolve(WURZEL, "src/routes/probe-uhr.js"),
   });
   assert.equal(route.messages.filter((meldung) => /Uhr als Wert/.test(meldung.message)).length, 1);
+  const [handler] = await eslint.lintText("export const probeHandler = () => 1;\n", {
+    filePath: resolve(WURZEL, "src/routes/probe-uhr.js"),
+  });
+  assert.equal(handler.messages.filter((meldung) => /Router-Form/.test(meldung.message)).length, 1);
 });
 
 test("uhr-als-wert-quellen: process.env bleibt in neuen Dateien der Ordner gesperrt", async () => {
