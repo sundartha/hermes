@@ -109,7 +109,7 @@
         "schreibweg_besitz": [
           "overrides.agent.first_message"
         ],
-        "_hinweis": "Verglichen wird, WELCHE Zusatzsprachen der Agent fuehrt, nicht der Inhalt ihrer overrides: der Inhalt eines Presets kann Felder tragen, die die Vorlage nicht besitzt (z.B. eine im Dashboard gewaehlte Stimme je Sprache). Wer den Inhalt eines Presets besitzen will, traegt ihn als eigenen Eintrag ein - fuer den ersten Satz ist das seit 2026-08-17 geschehen (language_presets_offenlegung, art 'texte'). Frei ist der Inhalt damit NICHT: was ein Preset auf keinen Fall setzen darf, steht als Verbot unter 'regeln' - ein Namensvergleich kann das nicht ausdruecken, weil er nur die heutigen Namen kennt und nichts ueber den Inhalt sagt.",
+        "_hinweis": "Verglichen wird, WELCHE Zusatzsprachen der Agent fuehrt, nicht der Inhalt ihrer overrides: der Inhalt eines Presets kann Felder tragen, die die Vorlage nicht besitzt (z.B. ein weiterer Text je Sprache; eine Stimme je Sprache ist verboten, s. regeln: stimme_nie_je_sprache_ueberschreiben). Wer den Inhalt eines Presets besitzen will, traegt ihn als eigenen Eintrag ein - fuer den ersten Satz ist das seit 2026-08-17 geschehen (language_presets_offenlegung, art 'texte'). Frei ist der Inhalt damit NICHT: was ein Preset auf keinen Fall setzen darf, steht als Verbot unter 'regeln' - ein Namensvergleich kann das nicht ausdruecken, weil er nur die heutigen Namen kennt und nichts ueber den Inhalt sagt.",
         "_schreibweg_begruendung": "Wie bei data_collection: eine KARTE, an der beide Seiten Verschiedenes besitzen. Der Live-Eintrag traegt die volle Anbieter-Form (asr/turn/tts/conversation/agent, jedes Unterfeld ausgeschrieben und auf null), die Vorlage nur den einen besessenen Satz. Bestehende Sprachen behalten deshalb ihren Live-Eintrag und bekommen ausschliesslich 'overrides.agent.first_message' neu; eine Sprache, die nur live existiert, bricht ab statt zu verschwinden - im Dashboard angelegte Presets sind der wahrscheinlichste Fall und werden nicht im Vorbeigehen weggeraeumt."
       },
       {
@@ -669,6 +669,15 @@
         "meldung": "Ein language_preset darf den Offenlegungssatz nicht durch eine hier entstandene UEBERSETZUNG ersetzen. first_message ist die Offenlegung nach Artikel 50 EU AI Act (s. agent._first_message_hinweis); ein vom Anbieter uebersetzter erster Satz ist ein Text, den niemand kuratiert hat. Braucht eine Sprache einen eigenen Offenlegungssatz, kommt er WOERTLICH aus src/i18n/locales.ts (LOCALES.<sprache>.disclosure) und steht als besessener Wert in dieser Vorlage (Besitz-Eintrag language_presets_offenlegung).",
         "_verboten_hinweis": "GEAENDERT 2026-08-17, und die Aenderung VERSCHAERFT: bis dahin standen hier ZWEI Pfade, 'overrides.agent.first_message' und 'first_message_translation.text'. Der erste ist herausgenommen, weil ein ANWESENHEITS-Verbot am ersten Satz die falsche Haelfte schuetzt: es ist genau dann erfuellt, wenn ein deutscher Angerufener den englischen Satz hoert - gemessen an Anruf 2 (2026-08-17, am Ohr des Eigentuemers bestaetigt). Es schuetzt gegen den FALSCHEN Satz und laesst den FEHLENDEN durch. An seine Stelle tritt ein WERT-Vergleich (Besitz-Eintrag language_presets_offenlegung, art 'texte'), der beides faengt: fehlt der Satz einer Sprache oder traegt er einen anderen Text als LOCALES.<sprache>.disclosure, schlaegt der Drift-Lauf an, und der Test T5 (e) haelt die Vorlage byte-identisch am Code fest. Der zweite Pfad BLEIBT verboten und unveraendert: 'first_message_translation.text' ist die vom Anbieter ERZEUGTE Uebersetzung - ein Text, den kein Mensch kuratiert hat, und der eine Rechtsaussage erfindet. null zaehlt als 'nicht gesetzt' - der Anbieter fuehrt die Felder eines Presets vollstaendig und setzt die ungenutzten auf null.",
         "_praezedenzfall": "Dieselbe Bewegung wie bei Abschnitt 2 am 2026-08-16 (Eigentuemer-Entscheidung, Weg A): eine zu grob formulierte Regel wird nicht aufgeweicht, sondern durch eine ersetzt, die die geschuetzte EIGENSCHAFT genauer durchsetzt. Die Eigenschaft lautet hier: der erste gesprochene Satz ist IMMER die Offenlegung, in einer Sprache, die der Angerufene versteht, byte-identisch aus dem Code - nie erfunden, nie uebersetzt, nie leer."
+      },
+      {
+        "regel": "stimme_nie_je_sprache_ueberschreiben",
+        "art": "verboten_je_eintrag",
+        "live": "conversation_config.language_presets",
+        "verboten": [
+          "overrides.tts.voice_id"
+        ],
+        "meldung": "Ein language_preset darf keine eigene Stimme setzen. Die Stimme nach dem Vorspann kommt aus der Init-Antwort des Codes (src/elevenlabs/outbound.js#conversationConfigOverride); eine Preset-Stimme schlaegt diese Uebersteuerung still und der Angerufene hoert beim Uebergang eine andere Stimme."
       }
     ],
     "_nicht_besessen": [
