@@ -44,14 +44,16 @@ test("nach einer Millisekunde ist die ID wieder die ohne Zähler", async (t) => 
   t.mock.method(Date, "now", () => uhrzeit);
   store.addNotification("a", "a", null);
   store.addNotification("b", "b", null);
+  store.addNotification("b2", "b2", null);
   uhrzeit += 1;
   store.addNotification("c", "c", null);
   uhrzeit = ANDERE_UHRZEIT_MS;
   store.addNotification("d", "d", null);
-  const [d, c, b, a] = store.load().notifications;
+  const [d, c, b2, b, a] = store.load().notifications;
   assert.ok(c.id.endsWith(`${ZEITSTELLEN}${ZUFALLSSTELLEN}`));
   assert.notEqual(a.id, b.id);
   assert.ok(b.id.startsWith(a.id));
   assert.equal(b.id, `${a.id}0`);
+  assert.equal(b2.id, `${a.id}1`);
   assert.equal(d.id, a.id);
 });
