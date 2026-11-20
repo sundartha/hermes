@@ -56,7 +56,7 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v48.html",
+        "place_call": "ui://hermes/call/v49.html",
         "get_agent_number": "ui://hermes/my-number/v34.html",
         "list_calls": "ui://hermes/calls/v34.html",
         "get_agent_status": "ui://hermes/agent-status/v33.html"
@@ -67,7 +67,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v48.html",
+          "uri": "ui://hermes/call/v49.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -459,7 +459,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v48.html",
+        "place_call": "ui://hermes/call/v49.html",
         "get_agent_number": "ui://hermes/my-number/v34.html",
         "list_calls": "ui://hermes/calls/v34.html",
         "get_agent_status": "ui://hermes/agent-status/v33.html"
@@ -470,7 +470,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v48.html",
+          "uri": "ui://hermes/call/v49.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -588,7 +588,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v48.html",
+        "place_call": "ui://hermes/call/v49.html",
         "get_agent_number": "ui://hermes/my-number/v34.html",
         "list_calls": "ui://hermes/calls/v34.html",
         "get_agent_status": "ui://hermes/agent-status/v33.html"
@@ -599,7 +599,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v48.html",
+          "uri": "ui://hermes/call/v49.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -824,7 +824,7 @@
         ]
       },
       "widgets": {
-        "place_call": "ui://hermes/call/v48.html",
+        "place_call": "ui://hermes/call/v49.html",
         "get_agent_number": "ui://hermes/my-number/v34.html",
         "list_calls": "ui://hermes/calls/v34.html",
         "get_agent_status": "ui://hermes/agent-status/v33.html"
@@ -835,7 +835,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v48.html",
+          "uri": "ui://hermes/call/v49.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -894,7 +894,7 @@
       ],
       "sicherheitsschemata": {},
       "widgets": {
-        "place_call": "ui://hermes/call/v48.html",
+        "place_call": "ui://hermes/call/v49.html",
         "get_agent_number": "ui://hermes/my-number/v34.html",
         "list_calls": "ui://hermes/calls/v34.html",
         "get_agent_status": "ui://hermes/agent-status/v33.html"
@@ -905,7 +905,7 @@
           "mimeType": "text/html;profile=mcp-app"
         },
         {
-          "uri": "ui://hermes/call/v48.html",
+          "uri": "ui://hermes/call/v49.html",
           "mimeType": "text/html;profile=mcp-app"
         },
         {
@@ -2091,6 +2091,12 @@
       "art": "bruch",
       "begruendung": "call v48: Anrufkarte ohne Zeilen Ziel und Fazit (#5338)",
       "stand_sha256": "3202804438a57f82837e93adce2a03c207e890d8049600febee87bacd3dfed80"
+    },
+    {
+      "datum": "2026-11-20",
+      "art": "bruch",
+      "begruendung": "call v49: Anrufkarte zeigt Wird ausgewertet, solange das Ergebnis aussteht (#5345)",
+      "stand_sha256": "f9844670348b28f010036851836285101810d3e8d3fb9e1684535f9586d01608"
     }
   ]
 }

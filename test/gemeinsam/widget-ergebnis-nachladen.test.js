@@ -128,7 +128,7 @@ for (const [sprache, platzhalter] of PLATZHALTER) {
     assert.equal(widget.abrufe().length, 1);
     widget.beantworte({ result_summary: platzhalter, objective_achieved: "unclear" });
     assert.notEqual(widget.zusammenfassung(), platzhalter);
-    assert.equal(widget.zusammenfassungSichtbar(), false);
+    assert.equal(widget.zusammenfassungSichtbar(), true);
     assert.equal(widget.nachladeUhren().length, 1);
     widget.laufeAb();
     assert.equal(widget.abrufe().length, 2);
@@ -154,7 +154,7 @@ test("Ergebnis nachladen: nach fuenf Wiederholungen ohne Ergebnis kein sechster 
   }
   assert.equal(widget.abrufe().length, 1 + MAX_NACHLADEN);
   assert.equal(widget.nachladeUhren().length, MAX_NACHLADEN);
-  assert.equal(widget.zusammenfassungSichtbar(), false);
+  assert.equal(widget.zusammenfassungSichtbar(), true);
   assert.notEqual(widget.zusammenfassung(), platzhalter);
 });
 
