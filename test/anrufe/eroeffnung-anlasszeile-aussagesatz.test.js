@@ -197,3 +197,34 @@ test("E4 de: Modellzeile mit hier ist, doppeltem Leerzeichen und Namen fällt au
   assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK.de), openingLine);
   assert.ok(!openingLine.includes("Anna Müller"), openingLine);
 });
+
+const GRUESSE_NACH_SATZZEICHEN = Object.freeze({
+  Hallo: "Hallo",
+  Hi: "Hi",
+  Hey: "Hey",
+  Hello: "Hello",
+  Bonjour: "Bonjour",
+  Bonsoir: "Bonsoir",
+  Salut: "Salut",
+  "Guten Tag": "Guten Tag",
+  "Guten Morgen": "Guten Morgen",
+  "Guten Abend": "Guten Abend",
+  "Good morning": "Good morning",
+  "Good afternoon": "Good afternoon",
+  "Good evening": "Good evening",
+});
+
+test("E4 de: Gruß hinter Doppelpunkt und mehreren Leerzeichen fällt auf den festen Rückfall", async () => {
+  for (const [name, gruss] of Object.entries(GRUESSE_NACH_SATZZEICHEN)) {
+    const zeile = `Ich rufe an, um Folgendes zu sagen:  ${gruss} zusammen.`;
+    const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "de", modellZeile: zeile });
+    assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK.de), `${name}: ${openingLine}`);
+    assert.ok(!openingLine.includes(gruss), `${name}: ${openingLine}`);
+  }
+});
+
+test("E4 de: Wort, das nur mit einem Gruß beginnt, wird übernommen", async () => {
+  const zeile = "Ich rufe an, um Folgendes zu sagen:  Hilfe beim Umzug wäre schön.";
+  const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "de", modellZeile: zeile });
+  assert.ok(openingLine.includes("Hilfe beim Umzug"), openingLine);
+});
