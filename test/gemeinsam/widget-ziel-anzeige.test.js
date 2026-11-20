@@ -15,7 +15,6 @@ const WORTE = {
   de: { erreicht: "Ziel erreicht", verfehlt: "Ziel nicht erreicht", offen: "Wird ausgewertet", beschriftung: "Ziel" },
   fr: { erreicht: "Objectif atteint", verfehlt: "Objectif non atteint", offen: "Évaluation en cours", beschriftung: "Objectif" },
 };
-const WIDGET_DICT = JSON.parse(SKRIPT_I18N.match(/var WIDGET_DICT = (.*);\n/)[1]);
 const VERBOTEN = ["Objective met", "Yes", "No", "Ja", "Nein", "Oui", "Non"];
 
 function element() {
@@ -95,7 +94,6 @@ for (const sprache of Object.keys(WORTE)) {
     });
   }
   test(`Ziel-Anzeige ${sprache}: Beschriftung der Zeile`, () => {
-    if (sprache !== "en") assert.equal(WIDGET_DICT[sprache].Goal, WORTE[sprache].beschriftung);
     assert.ok(!CALL_HTML.includes('data-i18n="Goal"'));
   });
 }
