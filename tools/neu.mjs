@@ -117,7 +117,8 @@ function planeFachdatei(wurzel, baustein, name) {
   if (!ordner) throw new Abbruch(`Der Baustein ${baustein} hat in ${KARTE} keinen Ordner für neue Dateien.`);
   const datei = `${ordner}${name}.js`;
   const begriffe = `src/begriffe/${baustein}.js`;
-  const begriff = existsSync(join(wurzel, begriffe)) && BEGRIFF.exec(readFileSync(join(wurzel, begriffe), "utf8"));
+  const quelle = [begriffe, begriffe.replace(/\.js$/, ".ts")].find((pfad) => existsSync(join(wurzel, pfad)));
+  const begriff = quelle && BEGRIFF.exec(readFileSync(join(wurzel, quelle), "utf8"));
   if (!begriff) throw new Abbruch(`Der Baustein ${baustein} hat keine ${begriffe} mit einem Begriff.`);
   const werte = {
     PASCAL: pascal(name),
