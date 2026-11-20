@@ -1,4 +1,4 @@
-import { REIFE, COST_TRUING_SOURCE, isProviderMicroCents } from "../begriffe/abrechnung.js";
+import { REIFE, COST_TRUING_SOURCE, isProviderMicroCents } from "../begriffe/abrechnung.ts";
 import { isBelegRef } from "../store/cost-evidence.ts";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
 import { legRefOfCall } from "./call-leg-ref.ts";

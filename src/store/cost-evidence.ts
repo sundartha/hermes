@@ -4,7 +4,7 @@ import {
   REIFE_TERMINAL,
   REIFE_SUMMIERBAR,
   isProviderMicroCents,
-} from "../begriffe/abrechnung.js";
+} from "../begriffe/abrechnung.ts";
 import { KOSTENARTEN } from "../billing/kostenarten.js";
 
 interface Wertfelder {

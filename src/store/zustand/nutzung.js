@@ -12,7 +12,7 @@ import {
   PROVIDER_RATE_SCALE,
   isProviderMicroCents,
   COST_TRUING_SOURCE,
-} from "../../begriffe/abrechnung.js";
+} from "../../begriffe/abrechnung.ts";
 import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.js";
 import {
   assertCostEvidenceInput,

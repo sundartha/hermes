@@ -4,7 +4,7 @@ import {
   isBookableCents,
   isProviderMicroCents,
   istBeweisendeHerkunft,
-} from "../begriffe/abrechnung.js";
+} from "../begriffe/abrechnung.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";

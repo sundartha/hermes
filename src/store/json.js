@@ -13,7 +13,7 @@ import { sanitizeProfile } from "../begriffe/profil.js";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
 import { normNum, E164 } from "../begriffe/rufnummern.js";
 import { resolveSeedProvider } from "../begriffe/nummern-vergabe.js";
-import { CENTS_PER_EUR } from "../begriffe/abrechnung.js";
+import { CENTS_PER_EUR } from "../begriffe/abrechnung.ts";
 import { findActiveNumber, tenantLanguage as tenantLanguageOf } from "./views.ts";
 import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";

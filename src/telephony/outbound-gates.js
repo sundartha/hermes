@@ -7,7 +7,7 @@ import {
   homeCountryCode,
   normalizeDialTarget,
 } from "../begriffe/rufnummern.js";
-import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.js";
+import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
 import { findActiveNumber } from "../store/views.ts";

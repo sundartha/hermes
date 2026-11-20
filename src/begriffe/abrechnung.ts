@@ -16,12 +16,12 @@ export const COST_TRUING_SOURCE = Object.freeze({
   UNAVAILABLE: "unavailable",
 });
 
-const BEWEISENDE_HERKUNFT = Object.freeze([
+const BEWEISENDE_HERKUNFT: readonly unknown[] = Object.freeze([
   COST_TRUING_SOURCE.DETAIL_RECORDS,
   COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG,
 ]);
 
-export function istBeweisendeHerkunft(source) {
+export function istBeweisendeHerkunft(source: unknown): boolean {
   return BEWEISENDE_HERKUNFT.includes(source);
 }
 
@@ -42,13 +42,13 @@ export const CENTS_PER_EUR = 100;
 
 export const EUR_DECIMALS = 2;
 
-export function eurText(cents) {
+export function eurText(cents: number): string {
   return (cents / CENTS_PER_EUR).toFixed(EUR_DECIMALS);
 }
 
 const ISO_DATE_LENGTH = 10;
 
-export function spendMonthEndDate(nowMs) {
+export function spendMonthEndDate(nowMs: number): string {
   const at = new Date(nowMs);
   return lastDayOfMonth(at).toISOString().slice(0, ISO_DATE_LENGTH);
 }
@@ -57,7 +57,7 @@ export const MICRO_CENTS_PER_CENT = 1_000_000;
 
 export const USAGE_CORRUPT_REASON = "usage_korrupt";
 
-export function isBookableCents(cents) {
+export function isBookableCents(cents: unknown): boolean {
   return (
     typeof cents === "number" && Number.isFinite(cents) && Number.isInteger(cents) && cents >= 0
   );
@@ -65,11 +65,11 @@ export function isBookableCents(cents) {
 
 export const PROVIDER_RATE_SCALE = 1_000_000;
 
-export function isCorrectionCents(cents) {
+export function isCorrectionCents(cents: unknown): boolean {
   return Number.isFinite(cents) && Number.isInteger(cents);
 }
 
-export function isProviderMicroCents(wert) {
+export function isProviderMicroCents(wert: unknown): boolean {
   return typeof wert === "number" && Number.isSafeInteger(wert) && wert >= 0;
 }
 
@@ -82,12 +82,12 @@ export const MODEL_PRICE_RATE_FIELDS = Object.freeze([
   "outPerMTok",
 ]);
 
-export function globalCapCents(cfg) {
+export function globalCapCents(cfg: { platformSpendCapCents: number }): number {
   return cfg.platformSpendCapCents;
 }
 
 export const RESERVE_LEAD_MINUTES = 2;
 
-export function outboundReserveCents(tariffCentsPerMin) {
+export function outboundReserveCents(tariffCentsPerMin: number): number {
   return tariffCentsPerMin * RESERVE_LEAD_MINUTES;
 }

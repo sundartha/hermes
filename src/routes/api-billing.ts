@@ -6,7 +6,7 @@ import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.ts";
 import { kostenBuchBericht } from "../billing/kosten-deckung.ts";
 import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.ts";
-import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.js";
+import { MICRO_CENTS_PER_CENT } from "../begriffe/abrechnung.ts";
 import { speicherBereiche } from "../store.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
