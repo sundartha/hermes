@@ -13,7 +13,7 @@ import {
 } from "../../src/billing/cost-calibration.ts";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { config } from "../../src/config.js";
-import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

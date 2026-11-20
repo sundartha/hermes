@@ -9,7 +9,7 @@ import {
   convertProviderMicroToBucketCents,
 } from "../../src/store/state-ops.js";
 import { emptyUsage } from "../../src/store.js";
-import { isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
+import { isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.ts";
 import { fehlerausgabeVon } from ".././gemeinsam/fehlerausgabe.js";
 
 const TENANT_A = "tenant_a";

@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.js";
+import { USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.ts";
 import {
   makeDefaultState,
   setTenantBudget,

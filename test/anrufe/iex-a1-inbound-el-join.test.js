@@ -45,7 +45,7 @@ before(async () => {
   await import("../../src/config.js");
   jsonStore = await import("../../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
-  ({ REIFE } = await import("../../src/begriffe/abrechnung.js"));
+  ({ REIFE } = await import("../../src/begriffe/abrechnung.ts"));
 });
 
 function ergebnisweg() {

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { mitDatenbankVorDemStart } from "../anrufe/zwei-instanzen-postgres.js";
 
 test("P5-B3: BASE_ENV (leerer Alarmkanal) -> Server startet, genau eine PLATFORM_ALERT_SMS_TO-WARN, kein Boot-Refusal", async () => {

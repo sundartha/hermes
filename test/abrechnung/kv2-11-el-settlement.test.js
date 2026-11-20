@@ -11,7 +11,7 @@ import {
   convertProviderMicroToBucketCents,
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { COST_TRUING_SOURCE, REIFE, istBeweisendeHerkunft } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE, REIFE, istBeweisendeHerkunft } from "../../src/begriffe/abrechnung.ts";
 import { emptyUsage } from "../../src/store.js";
 import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";

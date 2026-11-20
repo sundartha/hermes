@@ -11,7 +11,7 @@ import {
   recordCallCostEvidence,
   callCostEvidence,
 } from "../../src/store/state-ops.js";
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/begriffe/abrechnung.ts";
 import {
   recordElevenLabsKostenBelege,
   elBelegBetrag,

@@ -5,7 +5,7 @@ import { seedState, tempDataDir } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { settlementProjektion } from "../../src/billing/kosten-projektion.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.js";
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/begriffe/abrechnung.ts";
 
 const TELNYX = KOSTENART.TELNYX_CALL_RECORDS;
 const REF_MAX = 128;

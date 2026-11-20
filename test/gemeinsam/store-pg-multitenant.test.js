@@ -5,7 +5,7 @@ import { defaultSettings, demoCalendar } from "../../src/store.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
-import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { aggregateMeterEvents } from "../../src/billing/meter.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import * as ops from "../../src/store/state-ops.js";

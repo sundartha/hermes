@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { kostenBuchBericht, KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
 import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.js";
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/begriffe/abrechnung.ts";
 
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;

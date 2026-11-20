@@ -8,7 +8,7 @@ process.env.PROVIDER_CURRENCY = "USD";
 const { telnyxVoice, ASSIGNABLE_COST_RECORD_TYPES } = await import("../../src/telephony/adapters/telnyx/voice.js");
 const { makeCostTruing, SWEEP_TRIGGER } = await import("../../src/billing/cost-truing.ts");
 const { makeDefaultState, usageFor } = await import("../../src/store/state-ops.js");
-const { COST_TRUING_SOURCE } = await import("../../src/begriffe/abrechnung.js");
+const { COST_TRUING_SOURCE } = await import("../../src/begriffe/abrechnung.ts");
 const { BOOTSTRAP_TENANT_ID } = await import("../../src/begriffe/mandant.js");
 const { emptyUsage } = await import("../../src/store.js");
 const {

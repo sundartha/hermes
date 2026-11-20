@@ -8,7 +8,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
-import { REIFE, COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { REIFE, COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { makeStubStore, fakeConfig, fakeVoiceControl } from "../cost-truing-harness.js";
 import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 

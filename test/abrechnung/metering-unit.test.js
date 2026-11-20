@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeMetering } from "../../src/billing/metering.js";
 import { config } from "../../src/config.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
-import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { emptyUsage } from "../../src/store.js";
 import { makeDefaultState, recordUsageEvent } from "../../src/store/state-ops.js";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";

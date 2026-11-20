@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { kostenBuchBericht, istBuchBefundCode, deckungsZeile, KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
 import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.js";
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/begriffe/abrechnung.ts";
 
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;

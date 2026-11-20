@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { BOOTSTRAP_TENANT_ID, makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { speicherBereiche } from "../../src/store.js";
-import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { operatorAuthPassThrough, startRouterApp } from "../operator-route-app.js";
