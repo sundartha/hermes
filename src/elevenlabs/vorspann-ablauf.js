@@ -143,8 +143,8 @@ const persistEndGeschuetzt = ({ store, call, abgehoben, endStatus }) =>
     }),
   );
 
-const auflegenFuer = ({ aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }) =>
-  aufzeichnung.bridgedAt ? hangUpForCall({ call: aufzeichnung, hangUp: traegerAuflegen, awaitAndPersistInboundElResult }) : traegerAuflegen;
+const auflegenFuer = ({ warBereitsGebunden, aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }) =>
+  warBereitsGebunden ? hangUpForCall({ call: aufzeichnung, hangUp: traegerAuflegen, awaitAndPersistInboundElResult }) : traegerAuflegen;
 
 const elVorBruecke = ({ vomElBein, stand }) => vomElBein && !stand.has(STAND.BRUECKE) && !stand.has(STAND.ABGEBROCHEN);
 
@@ -241,15 +241,15 @@ export function makeVorspannAblauf({
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
     const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
     const aufzeichnung = await store.leseCall(call.id);
-    const traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
+    const warBereitsGebunden = Boolean(aufzeichnung.bridgedAt), traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
     await terminateAndBillCall({
       persistEnd: persistEndGeschuetzt({ store, call, abgehoben, endStatus: endStatusVon({ abgehoben, aufzeichnung }) }),
-      hangUp: auflegenFuer({ aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }),
+      hangUp: auflegenFuer({ warBereitsGebunden, aufzeichnung, traegerAuflegen, awaitAndPersistInboundElResult }),
       onHangUpError: (fehler) => logFehler("nachlauf", call.id, fehler),
       bill: billThunk(finishCall, store, call.id),
       callId: call.id,
     });
-    if (!aufzeichnung.bridgedAt) void awaitAndPersistInboundElResult(call.id).catch((fehler) => logFehler("nachlauf", call.id, fehler));
+    if (!warBereitsGebunden) void awaitAndPersistInboundElResult(call.id).catch((fehler) => logFehler("nachlauf", call.id, fehler));
   }
 
   const BEHANDLER = Object.freeze({
