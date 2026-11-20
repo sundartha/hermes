@@ -5,7 +5,7 @@
 - speicher: audit-store.js, durable-audit.js, store.js. Zweck und Darf nutzen: stehen in `src/store/CLAUDE.md`, dem ersten Ordner von speicher. Eingang: audit-store.js, store.js.
 - mcp: mcp-no-tenant.js, mcp-rate-limit.js, mcp-security-schemes.js, mcp-server-info.js, mcp-tools.js. Zweck und Darf nutzen: stehen in `src/mcp/CLAUDE.md`, dem ersten Ordner von mcp. Eingang: kein Eingang hier.
 - mail: brevo-mail.js, smtp-mail.js. Zweck: Mailversand über Brevo und SMTP. Darf nutzen: basis, begriffe, konfiguration. Eingang: brevo-mail.js, smtp-mail.js.
-- sperrdaten: restricted-data.js. Zweck: Erkennen und Maskieren eingeschränkter Daten. Darf nutzen: basis, begriffe, konfiguration. Eingang: restricted-data.js.
+- sperrdaten: restricted-data.ts. Zweck: Erkennen und Maskieren eingeschränkter Daten. Darf nutzen: basis, begriffe, konfiguration. Eingang: restricted-data.ts.
 - posteingang: inbox-entry.ts, sms-summary.ts. Zweck: Posteingang und Zusammenfassungen nach dem Anruf. Darf nutzen: basis, begriffe, konfiguration, speicher, texte, mail, sperrdaten. Eingang: kein Eingang hier.
 - abrechnung: budget-gate.js, llm-usage.js, plans.ts. Zweck und Darf nutzen: stehen in `src/billing/CLAUDE.md`, dem ersten Ordner von abrechnung. Eingang: budget-gate.js, llm-usage.js, plans.ts.
 - nummern: onboarding.js, release-reconcile.js. Zweck und Darf nutzen: stehen in `src/worker/CLAUDE.md`, dem ersten Ordner von nummern. Eingang: release-reconcile.js.

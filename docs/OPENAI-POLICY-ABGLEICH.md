@@ -426,16 +426,16 @@ nie gemessen.
   und Kategorie nennt, nie den Wert; es entsteht kein Anruf.
 - Mechanismus, Ausgabe: dieselbe Erkennung maskiert Treffer in `get_call_status`,
   `get_call_result`, `await_call_event`, `list_calls`, `check_inbox` und `list_action_items`
-  (`src/restricted-data.js#maskRestrictedText`). Gespeichert bleibt der Rohtext; maskiert wird nur, was an
+  (`src/restricted-data.ts#maskRestrictedText`). Gespeichert bleibt der Rohtext; maskiert wird nur, was an
   OpenAI/ChatGPT geht.
 - Erkannt werden: Zahlungskartennummern (15 bis 19 Ziffern mit Luhn-Pruefsumme, 13 bis 14
-  Ziffern nur mit einem Kartenwort daneben, `src/restricted-data.js#luhnValid`); behoerdliche
+  Ziffern nur mit einem Kartenwort daneben, `src/restricted-data.ts#luhnValid`); behoerdliche
   Kennnummern NUR mit Beschriftung, etwa "SSN", "Steuer-ID", "Reisepassnummer", "numero de
-  securite sociale", gefolgt von mindestens sechs Ziffern (`src/restricted-data.js#GOVERNMENT_ID_LABELS`);
+  securite sociale", gefolgt von mindestens sechs Ziffern (`src/restricted-data.ts#GOVERNMENT_ID_LABELS`);
   private Schluessel ab der Kopfzeile "BEGIN ... PRIVATE KEY" (auch PGP) und Zugangs-Tokens mit festem
   Anbieter-Praefix in jeder Laenge, stets als ganzes Token maskiert
-  (`src/restricted-data.js#TOKEN_PATTERNS`); beschriftete Passwoerter, PINs, TANs und Einmalcodes
-  (`src/restricted-data.js#CREDENTIAL_LABELS`).
+  (`src/restricted-data.ts#TOKEN_PATTERNS`); beschriftete Passwoerter, PINs, TANs und Einmalcodes
+  (`src/restricted-data.ts#CREDENTIAL_LABELS`).
 - Umgang mit Fehlalarmen: eine Ziffernfolge ohne Trennzeichen direkt nach einem Wort wie
   "Rückrufnummer" oder "Telefon" (hoechstens 15 Ziffern) oder nach einem Wort wie
   "Bestellnummer", "invoice" oder "facture" (nur ausserhalb der Praefixbereiche der
@@ -449,10 +449,10 @@ nie gemessen.
   Noetige (siehe "Werkzeugbeschreibungen" unten); eine Einwilligung holt der Server nicht ein
   (Luecke 3).
 - Nicht erkannt werden, bewusst: Gesundheitsangaben und die anderen besonderen Kategorien (keine Struktur; eine Stichwortsperre
-  wuerde gerade die Terminvereinbarung beim Arzt verhindern, `src/restricted-data.js#RESTRICTED_CATEGORY`);
+  wuerde gerade die Terminvereinbarung beim Arzt verhindern, `src/restricted-data.ts#RESTRICTED_CATEGORY`);
   Kennnummern ohne Beschriftung; beschriftete Passwoerter nur aus Buchstaben; Kartennummern
   als Zahlwoerter oder in Zweier-/Dreiergruppen. IBAN und Bankkonto sind keine der vier
-  Kategorien und werden weder abgelehnt noch maskiert (`src/restricted-data.js#RESTRICTED_CATEGORY`).
+  Kategorien und werden weder abgelehnt noch maskiert (`src/restricted-data.ts#RESTRICTED_CATEGORY`).
 - Werkzeugbeschreibungen: sie schliessen Geheimnisse, Passwoerter und Zahlungsdaten aus und
   begrenzen sensible Angaben in `briefing` und `context` auf das Noetige, ohne die
   Kategorien einzeln aufzuzaehlen; amtliche Kennnummern nennen sie nicht.
@@ -844,13 +844,13 @@ src/mcp-tools.js#pickCallStatus.last_transcript_lines | maskRestrictedText(
 src/mcp/eingabe.js#CALL_ARGS_EXEMPT_KEYS | export const CALL_ARGS_EXEMPT_KEYS = Object.freeze(["to", "confirmation_code", "language"]);
 src/mcp/gateway.js#placeCallHop | rejectRestrictedData(body, CALL_ARGS_EXEMPT_KEYS);
 src/mcp-tools.js#uiTool("answer_consult") | rejectRestrictedData({ answers }, []);
-src/restricted-data.js#maskRestrictedText | export function maskRestrictedText(text)
-src/restricted-data.js#luhnValid | function luhnValid(digits)
-src/restricted-data.js#GOVERNMENT_ID_LABELS | const GOVERNMENT_ID_LABELS
-src/restricted-data.js#TOKEN_PATTERNS | const TOKEN_PATTERNS
-src/restricted-data.js#CREDENTIAL_LABELS | const CREDENTIAL_LABELS
-src/restricted-data.js#RESTRICTED_CATEGORY | Gesundheitsdaten (PHI) werden NICHT erkannt
-src/restricted-data.js#RESTRICTED_CATEGORY | IBAN/Bankkonto ist KEINE Kategorie der Richtlinie
+src/restricted-data.ts#maskRestrictedText | export function maskRestrictedText(text)
+src/restricted-data.ts#luhnValid | function luhnValid(digits)
+src/restricted-data.ts#GOVERNMENT_ID_LABELS | const GOVERNMENT_ID_LABELS
+src/restricted-data.ts#TOKEN_PATTERNS | const TOKEN_PATTERNS
+src/restricted-data.ts#CREDENTIAL_LABELS | const CREDENTIAL_LABELS
+src/restricted-data.ts#RESTRICTED_CATEGORY | Gesundheitsdaten (PHI) werden NICHT erkannt
+src/restricted-data.ts#RESTRICTED_CATEGORY | IBAN/Bankkonto ist KEINE Kategorie der Richtlinie
 src/telephony/outbound-gates.js#gate "outbound_frozen" | name: "outbound_frozen"
 src/telephony/outbound-gates.js#gate "kyc" | name: "kyc"
 src/telephony/outbound-gates.js#allowlistError | function allowlistError(

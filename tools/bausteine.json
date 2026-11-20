@@ -138,8 +138,8 @@
     {
       "baustein": "sperrdaten",
       "zweck": "Erkennen und Maskieren eingeschränkter Daten.",
-      "quellen": ["src/restricted-data.js"],
-      "eingaenge": ["src/restricted-data.js"],
+      "quellen": ["src/restricted-data.ts"],
+      "eingaenge": ["src/restricted-data.ts"],
       "nutzt": []
     },
     {

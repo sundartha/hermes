@@ -1,5 +1,5 @@
 import { hashEmail, maskNumbersInText } from "./util.ts";
-import { maskRestrictedText } from "./restricted-data.js";
+import { maskRestrictedText } from "./restricted-data.ts";
 
 const VERBORGEN = "***";
 const GEHEIMNIS_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD)$/i;

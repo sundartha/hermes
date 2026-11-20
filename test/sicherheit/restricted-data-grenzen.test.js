@@ -9,7 +9,7 @@ import {
   RESTRICTED_TOKEN_NACH_KENNUNG,
   RESTRICTED_TOKEN_ZWISCHEN,
 } from "../gemeinsam/erfundene-geheimnisse.js";
-import { findRestrictedData, firstRestrictedField, maskRestrictedText } from "../../src/restricted-data.js";
+import { findRestrictedData, firstRestrictedField, maskRestrictedText } from "../../src/restricted-data.ts";
 
 const KARTE = "4111 1111 1111 1111";
 const TOKEN_ZWISCHEN = RESTRICTED_TOKEN_ZWISCHEN;

@@ -1,5 +1,5 @@
 import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
-import { RESTRICTED_CATEGORY, firstRestrictedField } from "../restricted-data.js";
+import { RESTRICTED_CATEGORY, firstRestrictedField } from "../restricted-data.ts";
 import { ToolError } from "./fehler.js";
 
 const RESTRICTED_CATEGORY_ERROR_CODE = Object.freeze({

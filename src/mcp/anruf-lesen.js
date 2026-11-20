@@ -1,7 +1,7 @@
 import { WIDGET_CONTENT_LOCALE_META_KEY } from "../ui/widget-i18n.js";
 import { WIDGET_CALLS } from "../ui/widget-catalog.js";
 import { localeFor } from "../i18n/locales.ts";
-import { maskRestrictedText } from "../restricted-data.js";
+import { maskRestrictedText } from "../restricted-data.ts";
 import { jsonText, errText } from "./ausgabe.js";
 import { requireFields } from "./gateway.js";
 import {
