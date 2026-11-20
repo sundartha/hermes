@@ -90,6 +90,7 @@ jobs:
         run: node tools/deploy-weg.mjs hoertest --anlass staginglauf --commit "$GITHUB_SHA" --teile ""
 
       - name: Anrufprobe (Kern in scripts/anruf-probe)
+        id: probe
         if: ${{ (success() || inputs.absichtlich_rot) && (github.event_name != 'workflow_dispatch' || !inputs.alarmprobe) }}
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
@@ -105,7 +106,7 @@ jobs:
         run: node scripts/anruf-probe/probe.mjs
 
       - name: Lebenszeichen Anrufprobe
-        if: success() && github.event_name == 'schedule'
+        if: success() && github.event_name == 'schedule' && steps.probe.outputs.gewaehlt == 'true'
         env:
           BETTER_STACK_HEARTBEAT_PROBE: ${{ secrets.BETTER_STACK_HEARTBEAT_PROBE }}
         run: node tools/deploy-weg.mjs heartbeat --name probe
