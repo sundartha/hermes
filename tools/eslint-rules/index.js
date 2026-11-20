@@ -551,8 +551,9 @@ function lokaleZahl(context, node, name) {
   return false;
 }
 
-function statusAlsZahl(context, knoten) {
-  if (istStatusZahl(knoten)) return true;
+function statusAlsZahl(context, huelle) {
+  const knoten = ohneTypHuelle(huelle);
+  if (istZahl(knoten)) return true;
   if (knoten.type === "Identifier") return !STATUS_NAME.test(knoten.name) && lokaleZahl(context, knoten, knoten.name);
   return (STATUS_ZWEIGE[knoten.type] ?? []).some((zweig) => statusAlsZahl(context, knoten[zweig]));
 }
