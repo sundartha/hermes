@@ -16,12 +16,12 @@ interface Ergebnis {
 }
 
 type Zustand = Parameters<typeof tenantGeo>[0] & {
-  provisioningJobs: { id: string; numberId: string; status: string }[];
+  provisioningJobs: { id: string; numberId: string; status: string; createdAt?: string | null }[];
 };
 
 export function requestNumberForPaidTenant(
   state: Zustand,
-  { tenantId, maxNumbers, maxNumbersPerTenant }: { tenantId: string; maxNumbers?: number; maxNumbersPerTenant?: number },
+  { tenantId, maxNumbers, maxNumbersPerTenant }: { tenantId: string; maxNumbers: number; maxNumbersPerTenant: number },
 ): Ergebnis {
   if (tenantHasLiveNumber(state, tenantId))
     return { ok: false, reason: "already_provisioned" };
@@ -39,7 +39,7 @@ export function requestNumberForPaidTenant(
 
 export function resolveProvisionRetry(
   state: Zustand,
-  opts: { tenantId: string; nowMs: number; maxAgeMs: number; maxNumbers?: number; maxNumbersPerTenant?: number },
+  opts: { tenantId: string; nowMs: number; maxAgeMs: number; maxNumbers: number; maxNumbersPerTenant: number },
 ): Ergebnis {
   const stuck = findStuckRequestedProvision(state, opts.tenantId);
   if (!stuck) return requestNumberForPaidTenant(state, opts);

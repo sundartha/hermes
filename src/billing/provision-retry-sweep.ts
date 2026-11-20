@@ -34,7 +34,7 @@ interface SweepDeps {
   billing?: Billing | null;
 }
 
-const offenerAusfall: (state: unknown, code: string) => { lastSeenAt?: string | null } | null = ops.openOutageAlert;
+const offenerAusfall = ops.openOutageAlert;
 
 const stripeDatenOf = ops.tenantStripe;
 
@@ -78,7 +78,7 @@ function markerFaellig(marker: Marker, { nowMs, minIntervalMs }: Pick<Frist, "no
   return nowMs - letzteMs >= minIntervalMs;
 }
 
-export function provisionRetryDue(state: unknown, { tenantId, nowMs, minIntervalMs }: Frist): boolean {
+export function provisionRetryDue(state: Parameters<typeof ops.openOutageAlert>[0], { tenantId, nowMs, minIntervalMs }: Frist): boolean {
   return markerFaellig(offenerAusfall(state, provisionRetryBucket(tenantId)), { nowMs, minIntervalMs });
 }
 

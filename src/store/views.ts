@@ -7,7 +7,7 @@ import type { MandantZustand } from "./zustand/mandant.ts";
 interface Nummer {
   id: string;
   tenantId: string;
-  e164: string;
+  e164: string | null;
   status: string;
   provider?: string;
   language?: string | null;
@@ -87,7 +87,7 @@ export function countActiveNumbers(state: Zustand): number {
   return state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE).length;
 }
 
-export function activeNumberFor(state: Zustand, tenantId: string): string {
+export function activeNumberFor(state: Zustand, tenantId: string): string | null {
   const hit = findActiveNumber(state, tenantId);
   return hit ? hit.e164 : "";
 }
