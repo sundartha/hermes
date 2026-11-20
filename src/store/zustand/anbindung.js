@@ -1,5 +1,5 @@
 import * as anrufpause from "./anrufpause.js";
-import * as nummern from "./nummern.js";
+import * as nummern from "./nummern.ts";
 
 export function zustandsFunktionen(speicher) {
   const lesend = (funktion) => (...argumente) => funktion(speicher.load(), ...argumente);

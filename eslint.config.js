@@ -91,7 +91,7 @@ const UHR_QUELLEN_BESTAND = [
   "src/store/zustand/einstellungen.ts",
   "src/store/zustand/grundlagen.js",
   "src/store/zustand/listen.js",
-  "src/store/zustand/nummern.js",
+  "src/store/zustand/nummern.ts",
   "src/store/zustand/nutzung.js",
   "src/worker/provisioning-orchestrator.js",
 ];
@@ -136,7 +136,7 @@ const WORT_NUR_IN_EINTRAEGE = [
   {
     name: "trunk-beleg-felder",
     nurIn: [
-      "src/store/zustand/nummern.js",
+      "src/store/zustand/nummern.ts",
       "src/store/pg.js",
       "src/elevenlabs/inbound-path-decision.js",
     ],
