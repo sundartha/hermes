@@ -365,7 +365,7 @@ async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de
     elevenlabsConversationId: CONVERSATION_DONE_WITH_ANALYSIS.conversation_id,
     answeredAt: new Date().toISOString(),
   });
-  Object.assign(call, { direction: richtung, from: "+15005550006", to: "+4915112345678", language: sprache });
+  Object.assign(call, { direction: richtung, from: "+15005550006", to: "+4915112345678", language: sprache, ...(richtung === "outbound" ? { bridgedAt: new Date().toISOString() } : {}) });
   const nummernAbfragen = [];
   store.numberRecordByE164 = (e164) => {
     nummernAbfragen.push(e164);
