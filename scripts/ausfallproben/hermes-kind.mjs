@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { AUSFALLPROBE_SCHLUESSEL, PLATFORM_ALERT_SMS_TO_BEISPIEL } from "../../test/gemeinsam/erfundene-geheimnisse.js";
-import { ANFRAGE_FRIST_MS, BEREIT_FRIST_MS } from "./schwellen.mjs";
+import { ANFRAGE_FRIST_MS, BEREIT_FRIST_MS, STOPP_FRIST_MS } from "./schwellen.mjs";
 import { LOOPBACK } from "./ziel.mjs";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -14,7 +14,6 @@ const NUR_LOOPBACK = pathToFileURL(path.join(HIER, "nur-loopback.mjs")).href;
 const BEREIT_TAKT_MS = 200;
 const HTTP_OK = 200;
 const WIEDERHOLUNG = 2;
-const STOPP_FRIST_MS = 10_000;
 const REGISTRIERUNG = "phnum_ausfallprobe";
 
 function speicher(datenbankUrl) {
