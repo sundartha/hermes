@@ -26,7 +26,6 @@ const META_SCHLUESSEL = "hermes/stimmen_anzahl";
 const TENANT = "t_stimmen";
 const SUB = "sub-stimmen";
 const CALL_ID = "call_stimmen_5004";
-const DEUTSCHE_STIMME = "cqPdIo76zSHFDcSZpFov";
 const FREMDE_STIMME = "stimme_des_agenten_beim_anbieter";
 const EINS = 1;
 const ZWEI = 2;
@@ -60,7 +59,7 @@ async function starteAnbieter(agentAntwort) {
 }
 
 function anrufDerRichtung(richtung, vorspannGespielt) {
-  const jetzt = new Date().toISOString();
+  const { startedAt: jetzt } = seedCall({});
   const eingehend = richtung === "inbound";
   return seedCall({
     id: CALL_ID,
