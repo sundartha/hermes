@@ -1,5 +1,6 @@
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "../consult/delivery.js";
-import { resolveGatewayUrl } from "../config.js";
+import { resolveGatewayUrl, config } from "../config.js";
+import { placeCallHopFristMs } from "../telephony/anruf-fristen.ts";
 import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
 import { ToolError } from "./fehler.js";
 import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./eingabe.js";
@@ -48,7 +49,7 @@ export function requireFields(obj, specs) {
 const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
 const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
 
-export const PLACE_CALL_HOP_TIMEOUT_MS = MS_PER_MINUTE;
+export const PLACE_CALL_HOP_TIMEOUT_MS = placeCallHopFristMs(config.llm.briefingTimeoutMs);
 
 export const MCP_HOP_TIMEOUT_MS = MS_PER_MINUTE;
 
