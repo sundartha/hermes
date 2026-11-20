@@ -1,45 +1,88 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { config } from "../../src/config.js";
-import { consultAllowedFor, consultToreFor } from "../../src/consult/gate.js";
-import { makeConfigOverrides } from "../helpers.js";
+import { planProfileFor } from "../../src/plans.ts";
+import {
+  EL_OUTBOUND_BOOT_ENV,
+  mcpPost,
+  readRpcMessage,
+  seedState,
+  startIdp,
+  startServer,
+  toolCall,
+} from "../helpers.js";
+import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 
-const { withConfigOverrides } = makeConfigOverrides(config);
+const TENANT = "t_tore";
+const SUB = "sub-tore";
+const SENDER = "+4915110000092";
+const TARGET = "+4915112340098";
 
 const FAELLE = [
-  { name: "alles offen", master: true, kontext: true, mandant: true, inCall: true },
-  { name: "Master zu", master: false, kontext: true, mandant: true, inCall: false },
-  { name: "Kontext zu", master: true, kontext: false, mandant: true, inCall: true },
-  { name: "Mandant zu", master: true, kontext: true, mandant: false, inCall: false },
-  { name: "alles zu", master: false, kontext: false, mandant: false, inCall: false },
+  { name: "alles offen", master: "true", kontext: "true", mandant: true, inCall: "true", zu: [] },
+  { name: "Master zu", master: "false", kontext: "true", mandant: true, inCall: "true", zu: ["master"] },
+  { name: "Kontext zu", master: "true", kontext: "false", mandant: true, inCall: "true", zu: ["kontext"] },
+  { name: "Mandant zu", master: "true", kontext: "true", mandant: false, inCall: "true", zu: ["mandant"] },
+  { name: "In-Call zu", master: "true", kontext: "true", mandant: true, inCall: "false", zu: ["in_call"] },
+  {
+    name: "alles zu",
+    master: "false",
+    kontext: "false",
+    mandant: false,
+    inCall: "false",
+    zu: ["master", "kontext", "mandant", "in_call"],
+  },
 ];
 
-for (const f of FAELLE) {
-  test(`consult-tore: ${f.name} - Tore und Freigabe stammen aus einer Quelle`, () => {
-    withConfigOverrides(
-      {
-        consultEnabled: f.master,
-        assistantContextEnabled: f.kontext,
-        inCallConsultEnabled: f.inCall,
-      },
-      () => {
-        const profile = { allowConsult: f.mandant };
-        assert.deepEqual(consultToreFor(profile), {
-          master: f.master,
-          kontext: f.kontext,
-          mandant: f.mandant,
-          in_call: f.inCall,
-        });
-        assert.equal(consultAllowedFor(profile), f.master && f.kontext && f.mandant);
-      },
-    );
+async function placeCall(f) {
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ...vorspannMandantenUmgebung([TENANT]),
+      MCP_UI_ENABLED: "true",
+      CONSULT_ENABLED: f.master,
+      ASSISTANT_CONTEXT_ENABLED: f.kontext,
+      IN_CALL_CONSULT_ENABLED: f.inCall,
+    },
+    seed: seedState({
+      tenants: [{ id: TENANT, idpSubject: SUB, status: "active", ownerName: "Kunde", kycLevel: "card" }],
+      profiles: { [TENANT]: { ...planProfileFor("business"), allowConsult: f.mandant } },
+      numbers: [
+        {
+          id: `num_${TENANT}`,
+          e164: SENDER,
+          tenantId: TENANT,
+          provider: "telnyx",
+          status: "active",
+          providerNumberId: null,
+          providerAgentPhoneNumberId: "phnum_tore_1",
+        },
+      ],
+    }),
   });
+  try {
+    const token = await idp.sign({ sub: SUB });
+    const message = await readRpcMessage(
+      await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", { to: TARGET, objective: "Termin" })),
+    );
+    return message.result.content[0].text;
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
 }
 
-test("consult-tore: ohne Profil ist das Mandanten-Tor zu", () => {
-  withConfigOverrides({ consultEnabled: true, assistantContextEnabled: true }, () => {
-    assert.equal(consultToreFor(null).mandant, false);
-    assert.equal(consultAllowedFor(undefined), false);
+for (const f of FAELLE) {
+  test(`consult-tore: ${f.name} - place_call nennt genau die geschlossenen Tore`, async () => {
+    const text = await placeCall(f);
+    for (const tor of ["master", "kontext", "mandant", "in_call"]) {
+      assert.equal(text.includes(`[${tor}]`), f.zu.includes(tor), `${tor}: ${text}`);
+    }
+    const allesOffenDreiTore = !["master", "kontext", "mandant"].some((t) => f.zu.includes(t));
+    assert.equal(text.includes("Werkzeug-Berechtigung") || text.includes("tool permission"), allesOffenDreiTore, text);
   });
-});
+}
