@@ -176,10 +176,14 @@ export function makeBillingRoutes({
     legeKartenSitzungAn(req, res).catch(next);
   });
 
-  operator.post("/api/billing/cost-truing/sweep", async (req: Request, res: Response) => {
+  const zeigeSweep = async (req: Request, res: Response): Promise<void> => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     audit("cost_truing_sweep", req, `skipped=${String(result.skipped)} deckung=${String(result.coveragePercent ?? "-")}%`);
     res.json(result);
+  };
+
+  operator.post("/api/billing/cost-truing/sweep", (req: Request, res: Response, next: Weiter) => {
+    zeigeSweep(req, res).catch(next);
   });
 
   const zeigeDrift = async (res: Response): Promise<void> => {
