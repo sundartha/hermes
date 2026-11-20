@@ -10,7 +10,7 @@ const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
 const SENTENCE_END = /[.!?]$/;
 const GRUSS_AM_SATZANFANG =
-  /(?:^|[.!?:]\s+)(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening))\b/i;
+  /[.!?:]\s+(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening))\b/i;
 const VORSTELLUNG = /\b(?:hier spricht|mein name ist|my name is|je m'appelle)\b/i;
 const HIER_IST_NAME = /\b[Hh]ier ist\s+\p{Lu}/u;
 const VORSTELLUNG_MIT_NAMEN = /\b(?:[Ii]ch bin|I am|I['\u2019]m|[Jj]e suis|[Tt]his is|[Cc]['\u2019]est|[Ii]ci) \p{Lu}\p{L}/u;
