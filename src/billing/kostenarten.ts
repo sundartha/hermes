@@ -353,7 +353,7 @@ export function pflichttypenFuerProfil(profil: unknown, envPflichttypen: string[
   return Array.isArray(eintrag) ? eintrag : PFLICHTTYPEN_UNGEMESSEN;
 }
 
-export function legacyKostenprofil({ sipCallId, direction }: { sipCallId?: unknown; direction?: unknown }) {
+export function legacyKostenprofil({ sipCallId, direction }: { sipCallId?: unknown; direction?: unknown }): string {
   if (sipCallId) return KOSTENPROFIL.EL_CONVAI_SIP;
   return direction === RICHTUNG_INBOUND ? KOSTENPROFIL.TELNYX_INBOUND_BUDGET : KOSTENPROFIL.TELNYX_BUDGET;
 }
@@ -364,14 +364,14 @@ interface AnrufKostenprofil {
   readonly direction?: unknown;
 }
 
-export function kostenprofilFuerAnruf(call: AnrufKostenprofil | null | undefined) {
+export function kostenprofilFuerAnruf(call: AnrufKostenprofil | null | undefined): string {
   const costProfile = call?.costProfile;
   return bekanntesKostenprofil(costProfile) ?? costProfile ?? legacyKostenprofil(call ?? {});
 }
 
 export function pflichtTraegerFuerProfil(profil: unknown): string[] {
   const bekannt = bekanntesKostenprofil(profil);
-  const traegerEintraege = Object.entries(bekannt ? KOSTENPROFILE[bekannt].traeger : {});
+  const traegerEintraege = Object.entries<{ readonly einsammler: string }>(bekannt ? KOSTENPROFILE[bekannt].traeger : {});
   const pflichtEintraege = traegerEintraege.filter(([, eintrag]) => eintrag.einsammler !== EINSAMMLER.NICHT_BELEGPFLICHTIG);
   return pflichtEintraege.map(([traeger]) => traeger);
 }
