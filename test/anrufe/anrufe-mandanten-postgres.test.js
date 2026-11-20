@@ -83,6 +83,7 @@ async function eigenerAnrufIstSichtbar(mandant, anruf) {
 
 async function beendeGespraechVonA({ anbieter, sql, a }) {
   const anruf = await startet(sql, a, EIGENE_NUMMER_A);
+  await transkriptSql(sql, anruf, VORSPANN_ZEILEN);
   anbieter.beendeGespraech(anruf.konversation, GESPRAECH);
   const fertig = await anrufAnBis(sql, { ziel: EIGENE_NUMMER_A, genug: beendet });
   assert.equal(fertig.status, "completed");
