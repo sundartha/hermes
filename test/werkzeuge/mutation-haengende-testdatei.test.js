@@ -44,34 +44,22 @@ function lebt(pid) {
 function haengenderLauf(ordner) {
   mkdirSync(join(ordner, "test"));
   writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF);
-  const plan = { frist: Date.now() + 1500, tests: ["test/haengt.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+  const plan = { frist: Date.now() + 15_000, testdateiFrist: 300, tests: ["test/haengt.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
   writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
   spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, timeout: OBERGRENZE_MS, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: "1", MUTATION_PLAN: join(ordner, "plan.json") } });
   const protokoll = join(ordner, "protokoll.jsonl");
-  assert.equal(existsSync(protokoll), true, "der Aufruf endet nicht von selbst an der Frist");
+  assert.equal(existsSync(protokoll), true, "der Aufruf endet nicht von selbst an der eigenen Testdatei-Frist");
   return readFileSync(protokoll, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
 }
 
-test("Hängt unter dem Mutanten eine Testdatei, endet der Aufruf an der Frist mit genau einer Zeile „nicht geprüft (Frist)“, die die Datei mit ihrer Laufzeit als liefNoch nennt", () => {
+test("Hängt unter dem Mutanten eine Testdatei, aber läuft sie ohne Mutant grün, gilt der Mutant als von genau dieser Datei getötet, nicht als „nicht geprüft (Frist)“", () => {
   mitOrdner((ordner) => {
     const zeilen = haengenderLauf(ordner);
     assert.equal(zeilen.length, 1);
     assert.equal(zeilen[0].id, "1");
-    assert.equal(zeilen[0].ergebnis, "nicht geprüft (Frist)");
-    const { liefNoch } = zeilen[0];
-    assert.equal(liefNoch.length, 1);
-    const [{ datei, sekunden }] = liefNoch;
-    assert.equal(datei, "test/haengt.test.js");
-    assert.equal(Number.isInteger(sekunden), true);
-    assert.ok(sekunden >= 0 && sekunden <= 5);
-  });
-});
-
-test("Die Zeile des hängenden Mutanten hat kein Feld test, obwohl dieselbe Testdatei ohne Mutant grün ist", () => {
-  mitOrdner((ordner) => {
-    const [zeile] = haengenderLauf(ordner);
-    assert.equal(Object.hasOwn(zeile, "test"), false);
-    assert.notEqual(zeile.ergebnis, "getötet");
+    assert.equal(zeilen[0].ergebnis, "getötet");
+    assert.equal(zeilen[0].test, "test/haengt.test.js");
+    assert.equal(Object.hasOwn(zeilen[0], "liefNoch"), false);
   });
 });
 
@@ -80,6 +68,39 @@ test("Nach dem Aufruf läuft der hängende Testlauf nicht mehr", () => {
     haengenderLauf(ordner);
     const pid = Number(readFileSync(join(ordner, "haengender-prozess.txt"), "utf8"));
     assert.equal(lebt(pid), false);
+  });
+});
+
+const BASIS_HAENGT_TESTLAUF = [
+  'import { writeFileSync } from "node:fs";',
+  "const datei = process.argv[3];",
+  'if (datei === "test/haengt-auch-ohne-mutant.test.js") {',
+  '  writeFileSync("haengender-prozess.txt", String(process.pid));',
+  "  setInterval(() => {}, 1000);",
+  "} else {",
+  "  process.exitCode = 0;",
+  "}",
+  "",
+].join("\n");
+
+function basisHaengtLauf(ordner) {
+  mkdirSync(join(ordner, "test"));
+  writeFileSync(join(ordner, "test/testbaenke-run.mjs"), BASIS_HAENGT_TESTLAUF);
+  const plan = { frist: Date.now() + 3000, testdateiFrist: 300, tests: ["test/haengt-auch-ohne-mutant.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+  writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
+  spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, timeout: OBERGRENZE_MS, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: "1", MUTATION_PLAN: join(ordner, "plan.json") } });
+  const protokoll = join(ordner, "protokoll.jsonl");
+  assert.equal(existsSync(protokoll), true, "der Aufruf endet nicht von selbst an der Gesamtfrist");
+  return readFileSync(protokoll, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
+}
+
+test("Hängt eine Testdatei auch ohne Mutant (Basis), bleibt das sichtbar „nicht geprüft (Frist)“ und gilt nicht als getötet", () => {
+  mitOrdner((ordner) => {
+    const zeilen = basisHaengtLauf(ordner);
+    assert.equal(zeilen.length, 1);
+    assert.equal(zeilen[0].ergebnis, "nicht geprüft (Frist)");
+    assert.notEqual(zeilen[0].ergebnis, "getötet");
+    assert.equal(Object.hasOwn(zeilen[0], "test"), false);
   });
 });
 
