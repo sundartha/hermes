@@ -43,6 +43,7 @@ export const PFLICHTTYPEN_UNGEMESSEN = Object.freeze([]);
 function pruefeNichtLeererString(name, feld, wert) {
   if (typeof wert !== "string" || !wert.trim())
     throw new Error(`kostenarten: '${name}'.${feld} fehlt oder ist leer`);
+  return wert;
 }
 
 function pruefeBelegtypen(name, belegtypen) {
@@ -56,11 +57,11 @@ function pruefeBelegtypen(name, belegtypen) {
 
 export function pruefeKostenart(name, zeile) {
   pruefeNichtLeererString(name, "quelle", zeile.quelle);
-  pruefeNichtLeererString(name, "waehrung", zeile.waehrung);
+  const waehrung = pruefeNichtLeererString(name, "waehrung", zeile.waehrung);
   pruefeNichtLeererString(name, "preisquelle", zeile.preisquelle);
   if (typeof zeile.pflicht !== "boolean")
     throw new Error(`kostenarten: '${name}'.pflicht fehlt oder ist kein Boolean`);
-  if (zeile.pflicht === true && !WAEHRUNG_HART.includes(zeile.waehrung))
+  if (zeile.pflicht && !WAEHRUNG_HART.includes(waehrung))
     throw new Error(
       `kostenarten: '${name}' ist belegpflichtig, traegt aber keine harte Waehrung (USD|EUR)`,
     );
@@ -70,8 +71,9 @@ export function pruefeKostenart(name, zeile) {
 function pruefeTraegerEinsammler(profilName, traeger, eintrag) {
   if (!Object.hasOwn(KOSTENARTEN, traeger))
     throw new Error(`kostenarten: Profil '${profilName}' fuehrt Traeger '${traeger}' ohne Katalogzeile`);
-  const einsammler = eintrag?.einsammler;
-  if (typeof einsammler !== "string" || !Object.values(EINSAMMLER).includes(einsammler))
+  const einsammler = typeof eintrag === "object" && eintrag !== null && "einsammler" in eintrag ? eintrag.einsammler : undefined;
+  const erlaubteEinsammler = Object.values(EINSAMMLER);
+  if (typeof einsammler !== "string" || !erlaubteEinsammler.includes(einsammler))
     throw new Error(
       `kostenarten: Profil '${profilName}', Traeger '${traeger}' - einsammler fehlt, ist leer oder ` +
         "ein freier dritter Wert (erlaubt: eine Phasenkennung dieser Kette oder 'nicht_belegpflichtig')",
@@ -94,12 +96,13 @@ function pruefePflichttypen(name, pflichttypen) {
 }
 
 export function pruefeProfil(name, profil) {
-  if (typeof profil?.traeger !== "object" || profil.traeger === null || Array.isArray(profil.traeger))
+  const traeger = profil?.traeger;
+  if (typeof traeger !== "object" || traeger === null || Array.isArray(traeger))
     throw new Error(`kostenarten: Profil '${name}'.traeger ist kein Objekt`);
-  const traegerNamen = Object.keys(profil.traeger);
-  if (traegerNamen.length === 0) throw new Error(`kostenarten: Profil '${name}'.traeger ist leer`);
-  for (const traeger of traegerNamen) pruefeTraegerEinsammler(name, traeger, profil.traeger[traeger]);
-  pruefePflichttypen(name, profil.pflichttypen);
+  const traegerEintraege = Object.entries(traeger);
+  if (traegerEintraege.length === 0) throw new Error(`kostenarten: Profil '${name}'.traeger ist leer`);
+  for (const [traegerName, eintrag] of traegerEintraege) pruefeTraegerEinsammler(name, traegerName, eintrag);
+  pruefePflichttypen(name, profil?.pflichttypen);
 }
 
 const SIP_TRUNKING_BELEGTYP = "sip-trunking";
@@ -322,12 +325,17 @@ export const KOSTENPROFILE = Object.freeze({
   },
 });
 
+function bekanntesKostenprofil(wert) {
+  return Object.values(KOSTENPROFIL).find((profil) => profil === String(wert));
+}
+
 export function istBekanntesKostenprofil(wert) {
-  return Object.hasOwn(KOSTENPROFILE, wert);
+  return bekanntesKostenprofil(wert) !== undefined;
 }
 
 export function pflichttypenFuerProfil(profil, envPflichttypen) {
-  const eintrag = KOSTENPROFILE[profil]?.pflichttypen;
+  const bekannt = bekanntesKostenprofil(profil);
+  const eintrag = bekannt && KOSTENPROFILE[bekannt].pflichttypen;
   if (eintrag === PFLICHTTYPEN_AUS_ENV) return envPflichttypen;
   return Array.isArray(eintrag) ? eintrag : PFLICHTTYPEN_UNGEMESSEN;
 }
@@ -338,12 +346,13 @@ export function legacyKostenprofil({ sipCallId, direction }) {
 }
 
 export function kostenprofilFuerAnruf(call) {
-  if (istBekanntesKostenprofil(call?.costProfile)) return call.costProfile;
-  return call?.costProfile == null ? legacyKostenprofil(call ?? {}) : call.costProfile;
+  const costProfile = call?.costProfile;
+  return bekanntesKostenprofil(costProfile) ?? costProfile ?? legacyKostenprofil(call ?? {});
 }
 
 export function pflichtTraegerFuerProfil(profil) {
-  const traegerEintraege = Object.entries(KOSTENPROFILE[profil]?.traeger ?? {});
+  const bekannt = bekanntesKostenprofil(profil);
+  const traegerEintraege = Object.entries(bekannt ? KOSTENPROFILE[bekannt].traeger : {});
   const pflichtEintraege = traegerEintraege.filter(([, eintrag]) => eintrag.einsammler !== EINSAMMLER.NICHT_BELEGPFLICHTIG);
   return pflichtEintraege.map(([traeger]) => traeger);
 }
