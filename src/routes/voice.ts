@@ -16,7 +16,7 @@ import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmes
 import { logInboundPath, INBOUND_PATH } from "../telephony/inbound-path.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import type { billThunk, terminateAndBillCall } from "../telephony/call-termination.ts";
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.ts";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.ts";

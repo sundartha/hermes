@@ -1,6 +1,6 @@
 import { REIFE } from "../begriffe/abrechnung.ts";
 import { isBelegRef } from "../store/cost-evidence.ts";
-import { KOSTENART, KOSTENARTEN, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "../billing/kostenarten.js";
+import { KOSTENART, KOSTENARTEN, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "../billing/kostenarten.ts";
 import { parseDecimalToMicroCents } from "../telephony/adapters/telnyx/cost-parse.ts";
 
 export const EL_BELEG_QUELLE = "elevenlabs_conversation";

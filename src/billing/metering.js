@@ -3,7 +3,7 @@ import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 import { callStartAnchorMs, carrierEndMsOf, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
-import { KOSTENPROFIL } from "./kostenarten.js";
+import { KOSTENPROFIL } from "./kostenarten.ts";
 
 export function voiceMinutesOf(call) {
   if (!call.answeredAt || !call.endedAt) return 0;

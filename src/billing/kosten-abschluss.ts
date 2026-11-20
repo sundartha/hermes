@@ -1,6 +1,6 @@
 import { REIFE } from "../begriffe/abrechnung.ts";
 import { MS_PER_HOUR } from "../utils/timer.ts";
-import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
+import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.ts";
 import { sweepTraegerFuerProfil } from "./sweep-kostenbeleg.ts";
 
 export interface AbschlussAnruf {
