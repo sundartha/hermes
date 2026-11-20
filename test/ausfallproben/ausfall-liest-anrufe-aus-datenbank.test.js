@@ -18,6 +18,11 @@ async function legeAnrufAnderenInstanzAn(db, id) {
   await db.query(ANRUF_SQL, [id, BOOTSTRAP_TENANT_ID, `tok_${id}`, jetzt, jetzt, `${BUCKET}-D51`]);
 }
 
+async function offeneCodes(db) {
+  const { rows } = await db.query("SELECT code FROM outage_alert WHERE closed_at IS NULL ORDER BY code");
+  return rows.map(({ code }) => code);
+}
+
 async function mitZweiteInstanz(lauf) {
   const { store, db, runner } = await makePgTestStore();
   let an = false;
@@ -62,10 +67,10 @@ test("AUSFALL-SQL-URTEIL: das Urteil sieht Anrufe einer anderen Instanz, bei Les
     lesefehler(true);
     await assert.rejects(ausfall.urteilClaimen(eingabe), /ausfall-lesen-ausgefallen/);
     assert.deepEqual(gesehen, []);
-    assert.deepEqual(store.load().outageAlerts, []);
+    assert.deepEqual(await offeneCodes(db), []);
     lesefehler(false);
     assert.equal(await ausfall.urteilClaimen(eingabe), "alarm");
     assert.deepEqual(gesehen, ["call_ausfall_urteil"]);
-    assert.deepEqual(store.load().outageAlerts.map((marker) => marker.code), [BUCKET]);
+    assert.deepEqual(await offeneCodes(db), [BUCKET]);
   });
 });

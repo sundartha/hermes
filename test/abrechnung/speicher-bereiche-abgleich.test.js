@@ -2,40 +2,30 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { speicherBereiche } from "../../src/store.js";
-import { makePgTestStore } from "../pg-helpers.js";
+import { makePgStoreMitSperre, makePgTestStore } from "../pg-helpers.js";
 
 const JETZT_MS = Date.parse("2026-11-14T12:00:00.000Z");
 
-function marker(code, felder = {}) {
-  return {
-    id: `otg_${code}`, code, firstSeenAt: "2026-11-14T08:00:00.000Z", lastSeenAt: "2026-11-14T08:00:00.000Z",
-    lastAttemptAt: null, reportedAt: null, deliveredChannels: null, closedAt: null, ...felder,
-  };
-}
+const { store: echterSpeicher, db, runner } = await makePgTestStore();
 
-const { store: echterSpeicher } = await makePgTestStore();
-
-function speicherMit(markerListe, protokoll = []) {
-  const zustand = echterSpeicher.load();
-  zustand.outageAlerts = markerListe;
-  echterSpeicher.save = () => protokoll.push("save");
+async function speicherMit(markerListe) {
+  await db.query("DELETE FROM outage_alert");
+  for (const { code, closedAt } of markerListe) {
+    await db.query(
+      `INSERT INTO outage_alert (id, code, first_seen_at, last_seen_at, closed_at)
+       VALUES ($1, $2, $3, $3, $4)`,
+      [`otg_${code}`, code, "2026-11-14T08:00:00.000Z", closedAt ?? null],
+    );
+  }
   return echterSpeicher;
 }
 
-function festhalten(speicher) {
-  let freigeben;
-  const gehalten = new Promise((aufloesen) => {
-    freigeben = aufloesen;
-  });
-  const sperre = speicher.withStoreLock(() => gehalten);
-  return { freigeben, sperre };
-}
+const marker = (code, felder = {}) => ({ code, ...felder });
 
-async function mikroaufgaben() {
-  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+async function schliessZeiten() {
+  const { rows } = await db.query("SELECT closed_at FROM outage_alert ORDER BY id");
+  return rows.map(({ closed_at: closedAt }) => (closedAt ? closedAt.toISOString() : null));
 }
-
-const schliessZeiten = (liste) => liste.map(({ closedAt }) => closedAt);
 
 const iso = (ms) => new Date(ms).toISOString();
 
@@ -64,11 +54,11 @@ test("abgleich: die drei Kandidatenlisten liefern je ihre Mandanten als Promise 
 });
 
 test("ausfall: offeneMarkerSchliessen schliesst nur offene Marker, die das Urteil trifft, und zaehlt sie", async () => {
-  const protokoll = [];
-  const speicher = speicherMit(
-    [marker("treffer:offen"), marker("andere:offen"), marker("treffer:zu", { closedAt: "2026-11-14T09:00:00.000Z" })],
-    protokoll,
-  );
+  const speicher = await speicherMit([
+    marker("treffer:offen"),
+    marker("andere:offen"),
+    marker("treffer:zu", { closedAt: "2026-11-14T09:00:00.000Z" }),
+  ]);
   const gefragt = [];
   const antwort = speicherBereiche(speicher).ausfall.offeneMarkerSchliessen({
     istZuSchliessen: (code) => {
@@ -79,54 +69,38 @@ test("ausfall: offeneMarkerSchliessen schliesst nur offene Marker, die das Urtei
   });
   assert.ok(antwort instanceof Promise);
   assert.equal(await antwort, 1);
-  assert.deepEqual(schliessZeiten(speicher.load().outageAlerts), [iso(JETZT_MS), null, "2026-11-14T09:00:00.000Z"]);
-  assert.deepEqual(gefragt, ["treffer:offen", "andere:offen"]);
-  assert.deepEqual(protokoll, ["save"]);
+  assert.deepEqual(await schliessZeiten(), [null, iso(JETZT_MS), "2026-11-14T09:00:00.000Z"]);
+  assert.deepEqual(gefragt.sort(), ["andere:offen", "treffer:offen"]);
 });
 
-test("ausfall: offeneMarkerSchliessen ohne Treffer liefert 0, laesst alles offen und speichert trotzdem", async () => {
-  const protokoll = [];
-  const speicher = speicherMit([marker("a"), marker("b")], protokoll);
+test("ausfall: offeneMarkerSchliessen ohne Treffer liefert 0 und laesst alles offen", async () => {
+  const speicher = await speicherMit([marker("a"), marker("b")]);
   const anzahl = await speicherBereiche(speicher).ausfall.offeneMarkerSchliessen({
     istZuSchliessen: () => false,
     nowMs: JETZT_MS,
   });
   assert.equal(anzahl, 0);
-  assert.deepEqual(schliessZeiten(speicher.load().outageAlerts), [null, null]);
-  assert.deepEqual(protokoll, ["save"]);
+  assert.deepEqual(await schliessZeiten(), [null, null]);
 });
 
-test("ausfall: offeneMarkerSchliessen wartet auf die Speicher-Sperre, bevor es liest, schliesst und speichert", async () => {
-  const protokoll = [];
-  const speicher = speicherMit([marker("treffer")], protokoll);
-  const { freigeben, sperre } = festhalten(speicher);
-  let antwort;
-  try {
-    antwort = speicherBereiche(speicher).ausfall.offeneMarkerSchliessen({
-      istZuSchliessen: () => true,
-      nowMs: JETZT_MS,
-    });
-    await mikroaufgaben();
-    assert.deepEqual(schliessZeiten(speicher.load().outageAlerts), [null]);
-    assert.deepEqual(protokoll, []);
-  } finally {
-    freigeben();
-    await sperre;
-  }
-  assert.equal(await antwort, 1);
-  assert.deepEqual(schliessZeiten(speicher.load().outageAlerts), [iso(JETZT_MS)]);
-  assert.deepEqual(protokoll, ["save"]);
-});
-
-test("ausfall: offeneMarkerSchliessen wirft den Fehler des Speichers weiter und speichert dann nicht", async () => {
-  const protokoll = [];
-  const speicher = { ...speicherMit([], protokoll) };
-  speicher.load = () => {
-    throw new Error("kaputt");
+test("ausfall: offeneMarkerSchliessen wirft den Fehler der Datenbank weiter und schliesst dann nichts", async (t) => {
+  t.mock.method(console, "error", () => {});
+  await speicherMit([marker("treffer")]);
+  const kaputtesRunner = {
+    withClient: (fn) =>
+      runner.withClient((client) =>
+        fn({
+          query: async () => {
+            throw new Error("kaputt");
+          },
+          exec: client.exec,
+        }),
+      ),
   };
+  const speicher = makePgStoreMitSperre(kaputtesRunner);
   await assert.rejects(
     speicherBereiche(speicher).ausfall.offeneMarkerSchliessen({ istZuSchliessen: () => true, nowMs: JETZT_MS }),
     /kaputt/,
   );
-  assert.deepEqual(protokoll, []);
+  assert.deepEqual(await schliessZeiten(), [null]);
 });

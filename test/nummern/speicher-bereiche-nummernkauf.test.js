@@ -13,7 +13,7 @@ const CODE = "provision-retry:t_nk";
 const TENANT = "t_nk";
 
 async function aufbau() {
-  const { store } = await makePgTestStore();
+  const { store, db } = await makePgTestStore();
   store.load().tenants.push({ id: TENANT, status: "active", firstName: "Kunde", ownerName: "Kunde Nk" });
   const speicherungen = [];
   const echtesSave = store.save;
@@ -21,15 +21,22 @@ async function aufbau() {
     speicherungen.push("save");
     return echtesSave.apply(store, args);
   };
-  return { store, speicherungen, bereiche: speicherBereiche(store) };
+  return { store, db, speicherungen, bereiche: speicherBereiche(store) };
 }
 
 async function mikroaufgaben() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
-function markerVon(store) {
-  return store.load().outageAlerts.filter(({ code }) => code === CODE);
+async function markerVon(db) {
+  const { rows } = await db.query(
+    `SELECT last_seen_at, closed_at FROM outage_alert WHERE code = $1 ORDER BY first_seen_at`,
+    [CODE],
+  );
+  return rows.map((zeile) => ({
+    lastSeenAt: zeile.last_seen_at.toISOString(),
+    closedAt: zeile.closed_at ? zeile.closed_at.toISOString() : null,
+  }));
 }
 
 function festhalten(store) {
@@ -82,8 +89,8 @@ test("nummernkauf: markTenantNeedsManualReconcile wartet auf die Speicher-Sperre
   assert.equal(mandant.numberProvisionSkipReason, GRUND);
 });
 
-test("ausfall: beanspruchMarker legt den Marker an, wenn faellig, und speichert danach", async () => {
-  const { store, bereiche, speicherungen } = await aufbau();
+test("ausfall: beanspruchMarker legt den Marker an, wenn faellig, und schreibt ihn in die Tabelle", async () => {
+  const { db, bereiche } = await aufbau();
   const gesehen = [];
   const antwort = bereiche.ausfall.beanspruchMarker({
     code: CODE,
@@ -96,18 +103,16 @@ test("ausfall: beanspruchMarker legt den Marker an, wenn faellig, und speichert 
   assert.ok(antwort instanceof Promise);
   assert.equal(await antwort, true);
   assert.deepEqual(gesehen, [undefined]);
-  const marker = markerVon(store);
+  const marker = await markerVon(db);
   assert.equal(marker.length, 1);
   assert.equal(marker[0].lastSeenAt, JETZT_ISO);
   assert.equal(marker[0].closedAt, null);
-  assert.deepEqual(speicherungen, ["save"]);
 });
 
-test("ausfall: beanspruchMarker laesst den offenen Marker unveraendert, wenn nicht faellig, und speichert trotzdem", async () => {
-  const { store, bereiche, speicherungen } = await aufbau();
+test("ausfall: beanspruchMarker laesst den offenen Marker unveraendert, wenn nicht faellig", async () => {
+  const { db, bereiche } = await aufbau();
   await bereiche.ausfall.beanspruchMarker({ code: CODE, nowMs: JETZT_MS - 60_000, istFaellig: () => true });
-  speicherungen.length = 0;
-  const [offen] = markerVon(store);
+  const offen = await bereiche.ausfall.offenerMarker({ code: CODE });
   const gesehen = [];
   const ergebnis = await bereiche.ausfall.beanspruchMarker({
     code: CODE,
@@ -120,24 +125,22 @@ test("ausfall: beanspruchMarker laesst den offenen Marker unveraendert, wenn nic
   assert.equal(ergebnis, false);
   assert.deepEqual(gesehen, [offen]);
   assert.notEqual(offen.lastSeenAt, JETZT_ISO);
-  assert.equal(markerVon(store).length, 1);
-  assert.deepEqual(speicherungen, ["save"]);
+  assert.deepEqual(await markerVon(db), [{ lastSeenAt: offen.lastSeenAt, closedAt: null }]);
 });
 
 test("ausfall: beanspruchMarker aktualisiert einen offenen Marker, wenn faellig, statt einen zweiten anzulegen", async () => {
-  const { store, bereiche } = await aufbau();
+  const { db, bereiche } = await aufbau();
   await bereiche.ausfall.beanspruchMarker({ code: CODE, nowMs: JETZT_MS - 60_000, istFaellig: () => true });
   await bereiche.ausfall.beanspruchMarker({ code: CODE, nowMs: JETZT_MS, istFaellig: () => true });
-  const marker = markerVon(store);
+  const marker = await markerVon(db);
   assert.equal(marker.length, 1);
   assert.equal(marker[0].lastSeenAt, JETZT_ISO);
 });
 
 test("ausfall: beanspruchMarker uebergibt keinen geschlossenen Marker als offen", async () => {
-  const { store, bereiche } = await aufbau();
+  const { db, bereiche } = await aufbau();
   await bereiche.ausfall.beanspruchMarker({ code: CODE, nowMs: JETZT_MS - 60_000, istFaellig: () => true });
-  const [offen] = markerVon(store);
-  offen.closedAt = "2026-11-14T07:30:00.000Z";
+  await db.query(`UPDATE outage_alert SET closed_at = $2 WHERE code = $1`, [CODE, "2026-11-14T07:30:00.000Z"]);
   const gesehen = [];
   await bereiche.ausfall.beanspruchMarker({
     code: CODE,
@@ -150,28 +153,9 @@ test("ausfall: beanspruchMarker uebergibt keinen geschlossenen Marker als offen"
   assert.deepEqual(gesehen, [undefined]);
 });
 
-test("ausfall: beanspruchMarker prueft und beansprucht erst, wenn die Speicher-Sperre frei ist", async () => {
-  const { store, bereiche } = await aufbau();
-  const { freigeben, sperre } = festhalten(store);
-  const gesehen = [];
-  const antwort = bereiche.ausfall.beanspruchMarker({
-    code: CODE,
-    nowMs: JETZT_MS,
-    istFaellig: (marker) => {
-      gesehen.push(marker);
-      return true;
-    },
-  });
-  await mikroaufgaben();
-  assert.deepEqual(gesehen, []);
-  freigeben();
-  await sperre;
-  assert.equal(await antwort, true);
-  assert.equal(gesehen.length, 1);
-});
-
-test("ausfall: ein Wurf in der Pruefung wird zur Ablehnung, ohne zu speichern", async () => {
-  const { bereiche, speicherungen } = await aufbau();
+test("ausfall: ein Wurf in der Pruefung wird zur Ablehnung, ohne eine Zeile zu schreiben", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const { db, bereiche } = await aufbau();
   await assert.rejects(
     bereiche.ausfall.beanspruchMarker({
       code: CODE,
@@ -182,7 +166,7 @@ test("ausfall: ein Wurf in der Pruefung wird zur Ablehnung, ohne zu speichern", 
     }),
     /kaputt/,
   );
-  assert.deepEqual(speicherungen, []);
+  assert.deepEqual(await markerVon(db), []);
 });
 
 test("Aufrufer: triggerTenantProvisioning legt den Mandanten ueber den Speicher-Bereich an", async () => {

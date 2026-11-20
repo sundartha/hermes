@@ -292,6 +292,7 @@ export const {
   mandantSperreGelesen,
   stammdatenSchreiben,
   rueckfrageGelesen,
+  ausfallSql,
   load,
   save,
   drainFlushes,
