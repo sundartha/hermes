@@ -94,7 +94,7 @@ test("Probe-Heartbeat: Grenze der 2xx, Exit bleibt 0, bei Fehlern nur der Status
 test("Workflow: ein Schritt nach der Anrufprobe, nur bei Erfolg des Zeitplans, Secret nur dort", () => {
   assert.match(
     WORKFLOW,
-    /- name: Lebenszeichen Anrufprobe\n {8}if: success\(\) && github\.event_name == 'schedule'\n {8}env:\n {10}BETTER_STACK_HEARTBEAT_PROBE: \$\{\{ secrets\.BETTER_STACK_HEARTBEAT_PROBE \}\}\n {8}run: node tools\/deploy-weg\.mjs heartbeat --name probe\n/,
+    /- name: Lebenszeichen Anrufprobe\n {8}if: success\(\) && github\.event_name == 'schedule' && steps\.probe\.outputs\.gewaehlt == 'true'\n {8}env:\n {10}BETTER_STACK_HEARTBEAT_PROBE: \$\{\{ secrets\.BETTER_STACK_HEARTBEAT_PROBE \}\}\n {8}run: node tools\/deploy-weg\.mjs heartbeat --name probe\n/,
   );
   assert.equal(WORKFLOW.match(/BETTER_STACK_HEARTBEAT_PROBE/g).length, 2);
   const schritt = WORKFLOW.indexOf("- name: Lebenszeichen Anrufprobe");

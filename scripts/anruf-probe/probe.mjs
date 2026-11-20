@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { env } from "node:process";
 import { pathToFileURL } from "node:url";
 
@@ -102,9 +103,17 @@ function messenAufruf(anrufer) {
   };
 }
 
+function gewaehltMerken() {
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, "gewaehlt=true\n");
+}
+
 async function ausgangMelden(ergebnis) {
-  if (ergebnis.ausgang === "gruen") return zeile("Probe grün");
+  if (ergebnis.ausgang === "gruen") {
+    gewaehltMerken();
+    return zeile("Probe grün");
+  }
   if (ergebnis.ausgang === "wiederholung_gruen") {
+    gewaehltMerken();
     return zeile("Erstversuch rot, Wiederholung grün");
   }
   zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}`);
