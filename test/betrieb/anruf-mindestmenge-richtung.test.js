@@ -14,15 +14,11 @@ const SEITEN = path.join("docs", "betrieb", "alarme");
 function kopiere(aendere = (regeln) => regeln) {
   const wurzel = fs.mkdtempSync(path.join(os.tmpdir(), "anruf-menge-"));
   fs.mkdirSync(path.join(wurzel, GRAFANA), { recursive: true });
-  fs.copyFileSync(
-    path.join(ROOT, GRAFANA, "alarmregeln.json"),
-    path.join(wurzel, GRAFANA, "alarmregeln.json"),
-  );
-  const regeln = JSON.parse(fs.readFileSync(path.join(ROOT, GRAFANA, "anrufregeln.json"), "utf8"));
-  fs.writeFileSync(
-    path.join(wurzel, GRAFANA, "anrufregeln.json"),
-    JSON.stringify(aendere(regeln)),
-  );
+  for (const name of ["alarmregeln.json", "anrufregeln.json"]) {
+    fs.copyFileSync(path.join(ROOT, GRAFANA, name), path.join(wurzel, GRAFANA, name));
+  }
+  const ziel = path.join(wurzel, GRAFANA, "anrufregeln.json");
+  fs.writeFileSync(ziel, JSON.stringify(aendere(JSON.parse(fs.readFileSync(ziel, "utf8")))));
   fs.cpSync(path.join(ROOT, SEITEN), path.join(wurzel, SEITEN), { recursive: true });
   return wurzel;
 }
