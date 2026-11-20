@@ -8,8 +8,8 @@ import { ELEVENLABS_TOOL_TOKEN_ERSTE_RUECKFRAGE } from "../gemeinsam/erfundene-g
 const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
-const MAX_DURATION_S = 100_000_000;
-const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
+const MAX_DURATION_S = 3600;
+const ANSWERED_AGO_MS = 5000;
 const ERSTE_RUECKFRAGE = 1;
 const PARALLELE_SERVER = 2;
 
@@ -36,7 +36,7 @@ const outboundSeed = (n) =>
         direction: "outbound",
         status: "active",
         maxDurationS: MAX_DURATION_S,
-        answeredAt: ANSWERED_AT,
+        answeredAt: new Date(Date.now() - ANSWERED_AGO_MS).toISOString(),
         elevenlabsConversationId: conversationId(n),
       }),
     ],
