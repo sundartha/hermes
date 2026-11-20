@@ -32,7 +32,7 @@ const CONFIG = Object.freeze({
 
 function seed({ suspendedAt, holdReason = NUMBER_HOLD_REASON.PLATFORM_IN_USE, numberReleasePending = true } = {}) {
   const foreignBindingPurpose =
-    holdReason === NUMBER_HOLD_REASON.PLATFORM_IN_USE ? PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI : null;
+    holdReason === NUMBER_HOLD_REASON.PLATFORM_IN_USE ? "outbound_ani" : null;
   return {
     tenants: [{ id: "t1", numberReleasePending, workosDeletePending: false, suspendedAt }],
     numbers: [
@@ -79,7 +79,7 @@ function seedMehrere(nummern) {
         boundAt: NOW_ISO, releasedAt: null, note: null,
       },
       ...nummern.map((nummer) => ({
-        id: `pnu_hold_${nummer.id}`, e164: nummer.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+        id: `pnu_hold_${nummer.id}`, e164: nummer.e164, purpose: "outbound_ani",
         provider: "telnyx", tenantId: null, providerNumberId: null,
         boundAt: ALT_SUSPENDED_AT, releasedAt: null, note: null,
       })),

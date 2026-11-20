@@ -7,7 +7,6 @@ export function resolveSeedProvider(providerRaw) {
 }
 
 export const PLATFORM_NUMBER_PURPOSE = Object.freeze({
-  OUTBOUND_ANI: "outbound_ani",
   ALERT_SMS_SENDER: "alert_sms_sender",
 });
 

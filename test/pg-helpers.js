@@ -65,3 +65,6 @@ export function makePgStoreMitSperre(runner, optionen) {
   store.withStoreLock = macheSpeicherSperre();
   return store;
 }
+
+export const schemaErneutAnwenden = (db) =>
+  applySchema({ query: (text, werte) => db.query(text, werte), exec: (sql) => db.exec(sql) });
