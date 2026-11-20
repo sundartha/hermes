@@ -18,11 +18,10 @@ function bedingung(name) {
 function laeuft({ ereignis, pruefung, probe, monat }) {
   const ausgang = { pruefung, probe };
   const vorher = [pruefung, probe, monat];
-  const ausdruck = bedingung("Heartbeat Nachtlauf")
-    .replace(/always\(\)/g, "true")
-    .replace(/success\(\)/g, String(!vorher.includes("failure")))
-    .replace(/github\.event_name/g, JSON.stringify(ereignis))
-    .replace(/steps\.(\w+)\.outcome/g, (_, id) => JSON.stringify(ausgang[id] ?? "skipped"));
+  const ohneAlways = bedingung("Heartbeat Nachtlauf").replace(/always\(\)/g, "true");
+  const ohneSuccess = ohneAlways.replace(/success\(\)/g, String(!vorher.includes("failure")));
+  const mitEreignis = ohneSuccess.replace(/github\.event_name/g, JSON.stringify(ereignis));
+  const ausdruck = mitEreignis.replace(/steps\.(\w+)\.outcome/g, (_, id) => JSON.stringify(ausgang[id] ?? "skipped"));
   return Function(`return (${ausdruck});`)();
 }
 
