@@ -20,15 +20,18 @@ const HEALTHZ_SCHWELLEN = Object.freeze({
 
 const MONOTONE_UHR = () => performance.now();
 
-function fruehwarnungsFelder({ webhooksAbgewiesen, anrufeUeberHoechstdauer }, zuletztGeloggt) {
-  if (webhooksAbgewiesen === 0 && anrufeUeberHoechstdauer === 0) return {};
-  const zeile = `[fruehwarnung] webhooksAbgewiesen=${webhooksAbgewiesen} anrufeUeberHoechstdauer=${anrufeUeberHoechstdauer}`;
-  if (zeile !== zuletztGeloggt.zeile) console.error(zeile);
-  zuletztGeloggt.zeile = zeile;
-  const felder = {};
-  if (webhooksAbgewiesen > 0) felder.webhooksAbgewiesen = webhooksAbgewiesen;
-  if (anrufeUeberHoechstdauer > 0) felder.anrufeUeberHoechstdauer = anrufeUeberHoechstdauer;
-  return felder;
+function macheFruehwarnungsFelder() {
+  let zuletztGeloggt = null;
+  return ({ webhooksAbgewiesen, anrufeUeberHoechstdauer }) => {
+    if (webhooksAbgewiesen === 0 && anrufeUeberHoechstdauer === 0) return {};
+    const zeile = `[fruehwarnung] webhooksAbgewiesen=${webhooksAbgewiesen} anrufeUeberHoechstdauer=${anrufeUeberHoechstdauer}`;
+    if (zeile !== zuletztGeloggt) console.error(zeile);
+    zuletztGeloggt = zeile;
+    const felder = {};
+    if (webhooksAbgewiesen > 0) felder.webhooksAbgewiesen = webhooksAbgewiesen;
+    if (anrufeUeberHoechstdauer > 0) felder.anrufeUeberHoechstdauer = anrufeUeberHoechstdauer;
+    return felder;
+  };
 }
 
 export function makeHealthzRoutes({
@@ -40,7 +43,7 @@ export function makeHealthzRoutes({
   fruehwarnung = () => ({ webhooksAbgewiesen: 0, anrufeUeberHoechstdauer: 0 }),
 }) {
   const router = Router();
-  const zuletztGeloggt = { zeile: null };
+  const fruehwarnungsFelder = macheFruehwarnungsFelder();
   const loopFestgefahren = starteLoopWache({
     taktMs: schwellen.taktMs,
     taktJeFenster: schwellen.taktJeFenster,
@@ -62,7 +65,7 @@ export function makeHealthzRoutes({
     const grund = schaden();
     if (grund) return res.status(HTTP_SERVICE_UNAVAILABLE).json({ ok: false, schaden: grund, commit });
     const ueberfaellig = await zeitplaene();
-    const warnung = fruehwarnungsFelder(fruehwarnung(), zuletztGeloggt);
+    const warnung = fruehwarnungsFelder(fruehwarnung());
     if (ueberfaellig.length > 0) console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
     const felder = ueberfaellig.length > 0 ? { zeitplaeneUeberfaellig: ueberfaellig.length } : {};
     return res.json({ ok: true, commit, ...felder, ...warnung });
