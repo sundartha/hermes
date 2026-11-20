@@ -110,6 +110,42 @@ test("Hängt eine Testdatei auch ohne Mutant (Basis), bleibt das sichtbar „nic
   });
 });
 
+const LAST_TIMEOUT_TESTLAUF = [
+  'import { existsSync, readFileSync, writeFileSync } from "node:fs";',
+  "const datei = process.argv[3];",
+  'const zaehlerDatei = "aufrufe.json";',
+  'const aufrufe = existsSync(zaehlerDatei) ? JSON.parse(readFileSync(zaehlerDatei, "utf8")) : {};',
+  "aufrufe[datei] = (aufrufe[datei] ?? 0) + 1;",
+  "writeFileSync(zaehlerDatei, JSON.stringify(aufrufe));",
+  'if (datei === "test/haengt.test.js" && process.env.__STRYKER_ACTIVE_MUTANT__ === "1" && aufrufe[datei] === 1) {',
+  '  writeFileSync("haengender-prozess.txt", String(process.pid));',
+  "  setInterval(() => {}, 1000);",
+  "} else {",
+  "  process.exitCode = 0;",
+  "}",
+  "",
+].join("\n");
+
+function lastTimeoutLauf(ordner) {
+  mkdirSync(join(ordner, "test"));
+  writeFileSync(join(ordner, "test/testbaenke-run.mjs"), LAST_TIMEOUT_TESTLAUF);
+  const plan = { frist: Date.now() + 15_000, testdateiFrist: 300, tests: ["test/haengt.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+  writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
+  spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, timeout: OBERGRENZE_MS, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: "1", MUTATION_PLAN: join(ordner, "plan.json") } });
+  const protokoll = join(ordner, "protokoll.jsonl");
+  assert.equal(existsSync(protokoll), true, "der Aufruf endet nicht von selbst an der Gesamtfrist");
+  return readFileSync(protokoll, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
+}
+
+test("Hängt eine Testdatei beim ersten Mutant-Lauf nur wegen Last, läuft derselbe Lauf bei der Bestätigung grün, gilt der Mutant nicht als von dieser Datei getötet", () => {
+  mitOrdner((ordner) => {
+    const zeilen = lastTimeoutLauf(ordner);
+    assert.equal(zeilen.length, 1);
+    assert.notEqual(zeilen[0].ergebnis, "getötet");
+    assert.equal(Object.hasOwn(zeilen[0], "test"), false);
+  });
+});
+
 test("Die Zusammenfassung nennt jede Testdatei aus liefNoch mit Laufzeit in der Zeile des Mutanten, und eine Begründung im PR-Text macht sie nicht grün", () => {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-haengt-urteil-"));
   const zusammenfassung = join(ordner, "zusammenfassung.md");
