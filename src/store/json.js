@@ -29,6 +29,10 @@ const JSON_INDENT = 2;
 
 let state = null;
 
+export function ausfallSql() {
+  return null;
+}
+
 export function load() {
   if (state) return state;
   let raw;

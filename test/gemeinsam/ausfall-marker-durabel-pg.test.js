@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { makePgStore } from "../../src/store/pg.js";
 import { beurteileAusfall, OUTAGE_VERDICT } from "../../src/telephony/outage-detection.ts";
 import * as ops from "../../src/store/state-ops.js";
+import { speicherBereiche } from "../../src/store.js";
 import { makePgTestStore } from "../pg-helpers.js";
 
 const BUCKET = "not-placed:invite-403";
@@ -30,12 +31,10 @@ async function reopen(db) {
 
 test("N1: NEUSTART-ROUND-TRIP - claimen, speichern, Spiegel verwerfen, neu hydrieren, lesen", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  ops.claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS, sent: true, channels: ["mail"] });
-  await store.save();
+  await speicherBereiche(store).ausfall.alarmVersendet({ code: BUCKET, nowMs: T0_MS, channels: ["mail"] });
 
   const reopened = await reopen(db);
-  const marker = ops.openOutageAlert(reopened.load(), BUCKET);
+  const marker = await speicherBereiche(reopened).ausfall.offenerMarker({ code: BUCKET });
   assert.ok(marker, "Marker ueberlebt den Neustart");
   assert.equal(marker.firstSeenAt, new Date(T0_MS).toISOString());
   assert.ok(marker.reportedAt, "reportedAt ueberlebt byte-identisch");
@@ -44,12 +43,10 @@ test("N1: NEUSTART-ROUND-TRIP - claimen, speichern, Spiegel verwerfen, neu hydri
 
 test("N2: KEIN ZWEITER ALARM NACH DEM AUFWACHEN (die eigentliche PM-23-Aussage)", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  ops.claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS, sent: true, channels: ["mail"] });
-  await store.save();
+  await speicherBereiche(store).ausfall.alarmVersendet({ code: BUCKET, nowMs: T0_MS, channels: ["mail"] });
 
   const reopened = await reopen(db);
-  const marker = ops.openOutageAlert(reopened.load(), BUCKET);
+  const marker = await speicherBereiche(reopened).ausfall.offenerMarker({ code: BUCKET });
   const fenster = { fehler: 3, versuche: 3, erfolge: 0, tenants: 1 };
   const kurzDanach = beurteileAusfall({ fenster, marker, schwellen: SCHWELLEN, nowMs: EINE_MINUTE_SPAETER_MS });
   assert.equal(kurzDanach.urteil, OUTAGE_VERDICT.NONE, "Entprellung hat den Neustart ueberlebt");
@@ -67,17 +64,15 @@ test("N3: NEGATIV-KONTROLLE der Mechanik - ohne save()/reopen() gibt es keinen M
   assert.equal(urteil.urteil, OUTAGE_VERDICT.FIRST, "ohne Marker ist es K0, nicht K1/K2");
 });
 
-test("N4: Flush-Prune - leere keep-Liste raeumt die Tabelle (Parity zu deleteMissingPlatformNumberUse)", async () => {
+test("N4: Flush ohne Marker in der Kopie loescht die offene Zeile nicht", async () => {
   const { store, db } = await makePgTestStore();
-  const state = store.load();
-  ops.claimOutageAlert(state, { code: BUCKET, nowMs: T0_MS });
-  await store.save();
+  await speicherBereiche(store).ausfall.notizClaimen({ code: BUCKET, nowMs: T0_MS });
 
   const vorher = (await db.query(`SELECT id FROM outage_alert`)).rows;
   assert.equal(vorher.length, 1);
 
-  state.outageAlerts = [];
+  store.load().outageAlerts = [];
   await store.save();
   const nachher = (await db.query(`SELECT id FROM outage_alert`)).rows;
-  assert.equal(nachher.length, 0, "leere keep-Liste raeumt die Tabelle");
+  assert.equal(nachher.length, 1, "der Flush der Kopie raeumt die Tabelle nicht");
 });

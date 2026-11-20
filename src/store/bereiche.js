@@ -65,7 +65,7 @@ function mandantProfilBereich(speicher) {
   };
 }
 
-function ausfallBereich(speicher) {
+function ausfallJsonBereich(speicher) {
   return {
     sendeplatzReserviert: async (eingabe) => ausfall.sendeplatzReserviert(speicher.load(), eingabe),
     sendeplatzReservieren: async (eingabe) =>
@@ -109,6 +109,22 @@ function ausfallBereich(speicher) {
       return beansprucht;
     },
   };
+}
+
+const AUSFALL_MIT_ANRUFEN = new Set(["urteilClaimen", "offeneAusfallZustand"]);
+
+function ausfallBereich(speicher) {
+  const json = ausfallJsonBereich(speicher);
+  const wahl = (name) => async (...eingabe) => {
+    const sql = speicher.ausfallSql?.();
+    if (!sql?.[name]) return json[name](...eingabe);
+    if (!AUSFALL_MIT_ANRUFEN.has(name)) return sql[name](...eingabe);
+    const calls = await anrufeFuerBericht(speicher);
+    return name === "urteilClaimen" ? sql[name](eingabe[0], calls) : sql[name](calls);
+  };
+  const bereich = { ...json };
+  for (const name of Object.keys(json)) Object.assign(bereich, { [name]: wahl(name) });
+  return bereich;
 }
 
 function abgleichBereich(speicher) {

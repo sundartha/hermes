@@ -25,6 +25,7 @@ import {
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 import { mitZeitgrenze } from "./webhook-zustellung.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
+import { macheAusfallSql } from "./ausfall-sql.js";
 import { macheProfilSql } from "./profil-sql.js";
 import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
@@ -189,6 +190,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const einstellungen = macheEinstellungenSchreiber(optionen);
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
   const profil = macheProfilSql({ ...optionen, innerhalbFrist });
+  const ausfallSql = macheAusfallSql(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -206,6 +208,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   return {
     init,
+    ausfallSql: () => ausfallSql,
     load: () => requireState(),
     save,
     drainFlushes,
@@ -1612,7 +1615,6 @@ async function flush(client, state, { preFlush, gebunden }) {
     const abdruecke = [];
     await flushTenants(client, state.tenants);
     await flushPlatformNumberUse(client, state.platformNumberUse);
-    await flushOutageAlerts(client, state.outageAlerts);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke, gebunden });
@@ -1977,32 +1979,6 @@ async function deleteMissingPlatformNumberUse(client, keepIds) {
     return;
   }
   await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
-}
-
-async function flushOutageAlerts(client, alerts) {
-  await deleteMissingOutageAlerts(client, alerts.map((alert) => alert.id));
-  for (const alert of alerts) {
-    await client.query(
-      `INSERT INTO outage_alert
-         (id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at,
-          delivered_channels, closed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (id) DO UPDATE SET
-         last_seen_at=EXCLUDED.last_seen_at, last_attempt_at=EXCLUDED.last_attempt_at,
-         reported_at=EXCLUDED.reported_at, delivered_channels=EXCLUDED.delivered_channels,
-         closed_at=EXCLUDED.closed_at`,
-      [alert.id, alert.code, alert.firstSeenAt, alert.lastSeenAt, alert.lastAttemptAt ?? null,
-       alert.reportedAt ?? null, alert.deliveredChannels ?? null, alert.closedAt ?? null],
-    );
-  }
-}
-
-async function deleteMissingOutageAlerts(client, keepIds) {
-  if (keepIds.length === 0) {
-    await client.query(`DELETE FROM outage_alert`);
-    return;
-  }
-  await client.query(`DELETE FROM outage_alert WHERE id <> ALL($1::text[])`, [keepIds]);
 }
 
 async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
