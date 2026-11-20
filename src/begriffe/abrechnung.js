@@ -58,7 +58,9 @@ export const MICRO_CENTS_PER_CENT = 1_000_000;
 export const USAGE_CORRUPT_REASON = "usage_korrupt";
 
 export function isBookableCents(cents) {
-  return Number.isFinite(cents) && Number.isInteger(cents) && cents >= 0;
+  return (
+    typeof cents === "number" && Number.isFinite(cents) && Number.isInteger(cents) && cents >= 0
+  );
 }
 
 export const PROVIDER_RATE_SCALE = 1_000_000;
@@ -68,7 +70,7 @@ export function isCorrectionCents(cents) {
 }
 
 export function isProviderMicroCents(wert) {
-  return Number.isSafeInteger(wert) && wert >= 0;
+  return typeof wert === "number" && Number.isSafeInteger(wert) && wert >= 0;
 }
 
 export const TOKENS_PER_M_TOK = 1_000_000;
