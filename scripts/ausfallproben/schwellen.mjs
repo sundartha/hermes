@@ -35,11 +35,14 @@ const KINDER = {
 };
 
 const LAUFZEIT_NACH_BEREIT_MS = {
-  "elevenlabs-aus": (s) => s.messungen * (s.messTaktMs + s.anbieterAufrufFristMs),
-  "elevenlabs-langsam": (s) => s.messungen * (s.messTaktMs + s.anbieterAufrufFristMs),
-  "postgres-neustart": (s) => s.abweisenMs + s.wiederBereitMs,
-  "instanz-tod": (s) => s.haltenMs + s.healthzMs,
-  "deploy-bei-anruf": (s) => s.beendetMs + s.anfrageFristMs + s.anbieterHaltenMs,
+  "elevenlabs-aus": (schwelle) =>
+    schwelle.messungen * (schwelle.messTaktMs + schwelle.anbieterAufrufFristMs),
+  "elevenlabs-langsam": (schwelle) =>
+    schwelle.messungen * (schwelle.messTaktMs + schwelle.anbieterAufrufFristMs),
+  "postgres-neustart": (schwelle) => schwelle.abweisenMs + schwelle.wiederBereitMs,
+  "instanz-tod": (schwelle) => schwelle.haltenMs + schwelle.healthzMs,
+  "deploy-bei-anruf": (schwelle) =>
+    schwelle.beendetMs + schwelle.anfrageFristMs + schwelle.anbieterHaltenMs,
 };
 
 export function gesamtFristMs(probe) {
