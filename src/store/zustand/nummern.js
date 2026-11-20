@@ -370,7 +370,8 @@ export function markNumberElInboundTrunkBelegt(state, numberId, { nowIso, zugang
 export function clearNumberElInboundTrunkBeleg(state, numberId) {
   const number = findNumber(state, numberId);
   if (!number || !hatInboundTrunkBeleg(number)) return { number, changed: false };
-  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
+  delete number.elInboundTrunkBelegtAt;
+  delete number.elInboundTrunkZugangFp;
   return { number, changed: true };
 }
 
@@ -412,7 +413,8 @@ export function releaseNumber(state, numberId) {
   const number = transitionNumber(state, numberId, NUMBER_STATUS.RELEASED);
   number.e164 = null;
   number.providerAgentPhoneNumberId = null;
-  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
+  delete number.elInboundTrunkBelegtAt;
+  delete number.elInboundTrunkZugangFp;
   const asg = state.numberAssignments.find(
     (assignment) => assignment.numberId === numberId && !assignment.releasedAt,
   );
@@ -544,7 +546,7 @@ export function contractEndCleanupPending(state, tenantId) {
 
 export function tenantsPendingContractEndCleanup(state) {
   return tenantsOf(state).filter(
-    (tenant) => tenant.numberReleasePending || tenant.workosDeletePending,
+    (tenant) => Boolean(tenant.numberReleasePending) || Boolean(tenant.workosDeletePending),
   );
 }
 
