@@ -33,7 +33,7 @@ async function reopen(runner) {
   return reopened;
 }
 
-test("Call-Spalten (fromActualE164/fromSource/fromRegistrationSource) ueberleben einen echten Reopen", async () => {
+test("Call-Spalten (fromActualE164/fromSource) ueberleben einen echten Reopen", async () => {
   const { store, runner } = await makePgTestStore();
   const call = store.createCall({
     direction: "outbound",
@@ -42,14 +42,13 @@ test("Call-Spalten (fromActualE164/fromSource/fromRegistrationSource) ueberleben
     tenantId: BOOTSTRAP,
   });
   store.recordActualSender(call.id, { e164: "+18643028341", source: FROM_SOURCE.TENANT_DID });
-  store.recordFromRegistrationSource(call.id, "tenant_did");
   await store.save();
 
   const reopened = await reopen(runner);
   const gespeichert = await reopened.leseCall(call.id);
   assert.equal(gespeichert.fromActualE164, "+18643028341");
   assert.equal(gespeichert.fromSource, FROM_SOURCE.TENANT_DID);
-  assert.equal(gespeichert.fromRegistrationSource, "tenant_did");
+  assert.equal(gespeichert.fromRegistrationSource, undefined);
 });
 
 test("number.providerAgentPhoneNumberId ueberlebt einen echten Reopen", async () => {
@@ -94,7 +93,7 @@ test("Bestandszeile ohne gesetzte Werte hydriert als null (kein Backfill, kein u
   const gespeicherterCall = await reopened.leseCall(call.id);
   assert.equal(gespeicherterCall.fromActualE164, null);
   assert.equal(gespeicherterCall.fromSource, null);
-  assert.equal(gespeicherterCall.fromRegistrationSource, null);
+  assert.equal(gespeicherterCall.fromRegistrationSource, undefined);
   const gespeicherteNummer = reopened.load().numbers.find((eintrag) => eintrag.id === number.id);
   assert.equal(gespeicherteNummer.providerAgentPhoneNumberId, null, "NULL, kein undefined-Drift nach der Hydrierung");
 });

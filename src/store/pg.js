@@ -1329,11 +1329,10 @@ function absenderWahrheitFelder(r) {
   return {
     fromActualE164: r.from_actual_e164 ?? null,
     fromSource: r.from_source ?? null,
-    fromRegistrationSource: r.from_registration_source ?? null,
   };
 }
 function absenderWahrheitWerte(call) {
-  return [call.fromActualE164 ?? null, call.fromSource ?? null, call.fromRegistrationSource ?? null];
+  return [call.fromActualE164 ?? null, call.fromSource ?? null];
 }
 
 function elDetektorFelder(zeile) {
@@ -1345,11 +1344,6 @@ function elDetektorWerte(call) {
 
 function absenderWahrheitMutatoren({ requireState, save }) {
   return {
-    recordFromRegistrationSource(callId, quelle) {
-      const { call, changed } = ops.recordFromRegistrationSource(requireState(), callId, quelle);
-      if (changed) save();
-      return call;
-    },
     recordActualSender(callId, herkunft) {
       const { call, changed } = ops.recordActualSender(requireState(), callId, herkunft);
       if (changed) save();
@@ -1825,11 +1819,11 @@ async function schreibeAnrufZeile(client, tenantId, call) {
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
-          from_actual_e164, from_source, from_registration_source, cost_profile,
+          from_actual_e164, from_source, cost_profile,
           el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at,
           caller_is_owner, not_placed_mail_sent_at, bridged_at, el_call_control_id, instanz,
           no_speech_streak, lookups, consult_polled_at_ms)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid,
          status=CASE WHEN call.status = 'active' THEN EXCLUDED.status ELSE call.status END,
@@ -1862,7 +1856,6 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          not_placed_mail_sent_at=COALESCE(call.not_placed_mail_sent_at, EXCLUDED.not_placed_mail_sent_at),
          inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
-         from_registration_source=EXCLUDED.from_registration_source,
          cost_profile=EXCLUDED.cost_profile,
          el_detector_counts=EXCLUDED.el_detector_counts,
          webhook_anchors=EXCLUDED.webhook_anchors,

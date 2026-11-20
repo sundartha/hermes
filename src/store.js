@@ -334,7 +334,6 @@ export const {
   recordCallCostEvidence,
   callCostEvidence,
   recordActualSender,
-  recordFromRegistrationSource,
   recordElDetectorCounts,
   recordProviderCallResult,
   recordProviderCollectedFields,

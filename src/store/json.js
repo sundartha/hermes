@@ -460,11 +460,6 @@ export function clearNumberElInboundTrunkBeleg(numberId) {
   return speichereBeiAenderung(ops.clearNumberElInboundTrunkBeleg(load(), numberId));
 }
 
-export function recordFromRegistrationSource(callId, quelle) {
-  const { call, changed } = ops.recordFromRegistrationSource(load(), callId, quelle);
-  if (changed) save();
-  return call;
-}
 export function recordActualSender(callId, herkunft) {
   const { call, changed } = ops.recordActualSender(load(), callId, herkunft);
   if (changed) save();

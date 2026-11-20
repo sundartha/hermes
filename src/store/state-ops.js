@@ -353,7 +353,6 @@ export function createCall(
     inboxSeenAt: null,
     fromActualE164: null,
     fromSource: null,
-    fromRegistrationSource: null,
     webhookAnchors: [],
     actionItemIds: [],
   };
@@ -651,8 +650,6 @@ export function recordCostProfile(state, callId, profil) {
 }
 
 export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnclearReason");
-
-export const recordFromRegistrationSource = recordProviderHandleOnce("fromRegistrationSource");
 
 export const recordElDetectorCounts = recordProviderHandleOnce("elDetectorCounts");
 
