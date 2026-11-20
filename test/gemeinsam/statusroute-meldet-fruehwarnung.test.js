@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { startServer, seedCall } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { logBis } from "./log-bis.mjs";
 import { bearer, SCHLUESSEL, STATUS_PATH } from "./statusroute-hilfe.mjs";
 
 const HTTP_OK = 200;
@@ -86,7 +87,7 @@ test("Healthz nennt abgewiesene Webhooks und loggt die Fruehwarnung", () =>
     const koerper = await healthz(server);
     assert.equal(koerper.webhooksAbgewiesen, 1);
     assert.equal("anrufeUeberHoechstdauer" in koerper, false);
-    assert.match(server.stdout, /\[fruehwarnung\] webhooksAbgewiesen=1 anrufeUeberHoechstdauer=0/);
+    await logBis(server, "[fruehwarnung] webhooksAbgewiesen=1 anrufeUeberHoechstdauer=0");
   }));
 
 test("Healthz nennt Anrufe ueber der Hoechstdauer und loggt die Fruehwarnung", () =>
@@ -94,5 +95,5 @@ test("Healthz nennt Anrufe ueber der Hoechstdauer und loggt die Fruehwarnung", (
     const koerper = await healthz(server);
     assert.equal(koerper.anrufeUeberHoechstdauer, 1);
     assert.equal("webhooksAbgewiesen" in koerper, false);
-    assert.match(server.stdout, /\[fruehwarnung\] webhooksAbgewiesen=0 anrufeUeberHoechstdauer=1/);
+    await logBis(server, "[fruehwarnung] webhooksAbgewiesen=0 anrufeUeberHoechstdauer=1");
   }));
