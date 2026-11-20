@@ -77,6 +77,7 @@ function anrufDerRichtung(richtung) {
     startedAt: jetzt,
     elevenlabsConversationId: CONVERSATION_DONE_WITH_ANALYSIS.conversation_id,
     elBoundAt: jetzt,
+    ...(eingehend ? {} : { bridgedAt: jetzt }),
     fristAbfrageAt: jetzt,
     ...(eingehend ? { elNachlaufStartedAt: jetzt } : {}),
   });
@@ -115,7 +116,7 @@ async function mitAnruf({ richtung, agentAntwort }, lauf) {
 
 const FAELLE = [
   { name: "Agent hat dieselbe Stimme wie der Vorspann: eine Stimme", agentAntwort: agent({ eigene: DEUTSCHE_STIMME, ueberschreibbar: false }), erwartet: EINS },
-  { name: "Agent gibt tts.voice_id nicht frei und spricht mit eigener Stimme (Fall 5183): zwei Stimmen", agentAntwort: agent({ eigene: FREMDE_STIMME, ueberschreibbar: false }), erwartet: ZWEI },
+  { name: "Agent gibt tts.voice_id nicht frei und spricht mit eigener Stimme (Fall 5183): ausgehend zwei Stimmen, eingehend eine Stimme", agentAntwort: agent({ eigene: FREMDE_STIMME, ueberschreibbar: false }), erwartet: ZWEI, erwartetEingehend: EINS },
   { name: "Agent gibt tts.voice_id frei: die angeforderte Stimme gilt, eine Stimme", agentAntwort: agent({ eigene: FREMDE_STIMME, ueberschreibbar: true }), erwartet: EINS },
 ];
 
@@ -124,11 +125,12 @@ for (const richtung of ["outbound", "inbound"]) {
     test(`get_call_status und get_call_result (${richtung}): ${fall.name}`, async () => {
       await mitAnruf({ richtung, agentAntwort: fall.agentAntwort }, async ({ werkzeug, anbieter }) => {
         assert.ok(anbieter.agentGets >= EINS, "der Agent wird beim Anbieter gelesen");
+        const erwartet = richtung === "inbound" ? (fall.erwartetEingehend ?? fall.erwartet) : fall.erwartet;
         const status = await werkzeug("get_call_status");
         const ergebnis = await werkzeug("get_call_result");
         assert.equal(status.structuredContent.status, "completed");
-        assert.equal(status._meta[META_SCHLUESSEL], fall.erwartet);
-        assert.equal(ergebnis._meta[META_SCHLUESSEL], fall.erwartet);
+        assert.equal(status._meta[META_SCHLUESSEL], erwartet);
+        assert.equal(ergebnis._meta[META_SCHLUESSEL], erwartet);
         assert.equal("stimmen_anzahl" in status.structuredContent, false);
         assert.equal("stimmen_anzahl" in ergebnis.structuredContent, false);
       });
