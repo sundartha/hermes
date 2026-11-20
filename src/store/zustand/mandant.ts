@@ -9,7 +9,7 @@ import { settingsFor, calendarFor, type EinstellungenZustand } from "./einstellu
 import { seedTenantDefaultBudget } from "./budget.js";
 import type { MandantRef } from "./grundzugriffe.ts";
 
-interface Mandant extends MandantRef {
+export interface Mandant extends MandantRef {
   status: string;
   ownerName?: string;
   firstName?: string;
@@ -27,13 +27,16 @@ interface Mandant extends MandantRef {
   stripeSubscriptionId?: string | null;
   stripeActivationPending?: boolean;
   numberProvisionSkipReason?: string | null;
+  numberProvisionSkipAt?: string | null;
+  numberReleasePending?: boolean;
+  workosDeletePending?: boolean;
   [feld: string]: unknown;
 }
 
-interface Nummer {
+export interface Nummer {
   id: string;
   tenantId: string;
-  e164: string;
+  e164: string | null;
   status: string;
 }
 
@@ -42,7 +45,7 @@ export interface MandantZustand extends EinstellungenZustand {
   numbers: Nummer[];
 }
 
-type KycStufe = (typeof KYC_ORDER)[number];
+export type KycStufe = (typeof KYC_ORDER)[number];
 type Kennung = string | null | undefined;
 
 export function numberRecordByE164(state: MandantZustand, e164: Kennung): Nummer | null {
@@ -69,7 +72,7 @@ export function canTransitionNumber(from: string, to: string): boolean {
   return (NUMBER_TRANSITION_MAP.get(from) ?? []).includes(to);
 }
 
-export function findNumber(state: MandantZustand, id: string): Nummer | null {
+export function findNumber<N extends Nummer>(state: { numbers: N[] }, id: string): N | null {
   return state.numbers.find((number) => number.id === id) ?? null;
 }
 
@@ -180,6 +183,12 @@ export function tenantStripe(
   };
 }
 
+interface AboLesung {
+  currentPeriodStart?: number | null;
+  currentPeriodEnd?: number | null;
+  [feld: string]: unknown;
+}
+
 interface AboPatch {
   planSlug?: string | null;
   [feld: string]: unknown;
@@ -227,9 +236,9 @@ export function setTenantSubscription(state: MandantZustand, tenantId: string, p
   return tenant;
 }
 
-export function tenantSubscription(state: MandantZustand, tenantId: string): Record<string, unknown> {
+export function tenantSubscription(state: MandantZustand, tenantId: string): AboLesung {
   const tenant = findTenant(state, tenantId);
-  const result: Record<string, unknown> = {};
+  const result: AboLesung = {};
   for (const [key, field] of Object.entries(SUBSCRIPTION_PATCH_FIELDS)) {
     result[key] = tenant?.[field] ?? SUBSCRIPTION_READ_DEFAULTS[key];
   }
