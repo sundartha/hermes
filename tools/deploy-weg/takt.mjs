@@ -74,8 +74,9 @@ export async function abwarten({ uhr, taktMs, schutzgrenzeMs, start = uhr.jetzt(
 export async function wiederholenBisFrist({ uhr, taktMs, fristMs }, versuch) {
   let gewartet = 0;
   for (;;) {
-    const ergebnis = await versuch();
-    if (ergebnis.fertig || gewartet >= fristMs) return ergebnis;
+    const letzter = gewartet >= fristMs;
+    const ergebnis = await versuch({ letzter });
+    if (ergebnis.fertig || letzter) return ergebnis;
     const pause = Math.min(taktMs, fristMs - gewartet);
     await uhr.warten(pause);
     gewartet += pause;

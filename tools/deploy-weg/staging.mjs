@@ -148,20 +148,26 @@ function pinBeobachter(ausgabe) {
   return beobachter;
 }
 
+function pinWartetMelden({ ausgabe, commit, gemeldet, letzter }) {
+  if (!letzter) ausgabe.melde("pin_wartet", { commit });
+  else if (COMMIT_MUSTER.test(gemeldet ?? "")) ausgabe.melde("pin_fristende", { commit, gemeldet });
+  else ausgabe.melde("pin_fristende_ohne_stand", { commit });
+}
+
 function authProbieren({ probeAuth, url, commit, ausgabe, uhr, pinTakte }) {
-  return wiederholenBisFrist({ uhr, ...pinTakte }, async () => {
+  return wiederholenBisFrist({ uhr, ...pinTakte }, async ({ letzter }) => {
     const beobachter = pinBeobachter(ausgabe);
     const exit = await probeAuth({ url, commit, ausgabe: beobachter.ausgabe });
-    if (beobachter.verletzt) ausgabe.melde("pin_wartet", { commit });
+    if (beobachter.verletzt) pinWartetMelden({ ausgabe, commit, letzter });
     return { fertig: !beobachter.verletzt, exit };
   });
 }
 
 function stagingStandLesen({ hermes, einstellungen, commit, ausgabe, uhr, pinTakte }) {
-  return wiederholenBisFrist({ uhr, ...pinTakte }, async () => {
+  return wiederholenBisFrist({ uhr, ...pinTakte }, async ({ letzter }) => {
     const stand = await hermes.betriebsstatus(einstellungen.statusToken);
     const wartet = stand.gesund && stand.commit !== commit;
-    if (wartet) ausgabe.melde("pin_wartet", { commit });
+    if (wartet) pinWartetMelden({ ausgabe, commit, gemeldet: stand.commit, letzter });
     return { fertig: !wartet, stand };
   });
 }

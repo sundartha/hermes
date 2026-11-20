@@ -122,6 +122,8 @@ const KATALOG = new Map([
   ["staging_erreicht", "Staging fährt den erwarteten Commit {commit}"],
   ["staging_ueberholt", "Rot: Staging ist überholt und fährt schon den neueren Commit {commit}"],
   ["pin_wartet", "Staging meldet noch nicht den Commit {commit}, neuer Versuch nach dem Takt"],
+  ["pin_fristende", "Frist abgelaufen: Staging meldet Commit {gemeldet}, erwartet war {commit}"],
+  ["pin_fristende_ohne_stand", "Frist abgelaufen: Staging meldet nicht den erwarteten Commit {commit}"],
   ["probe_auth", "Negativproben ohne Zugangsdaten gegen Staging: Exit {exit}"],
   ["probe_auth_zeile", "Probe: {zeile}"],
   ["telnyx_schluessel", "Telnyx-Signaturschlüssel laut /intern/status: HTTP {http}, ok: {ok}"],
@@ -290,6 +292,7 @@ function istWahrheit(wert) {
 
 const PRUEFER = new Map([
   ["commit", istText(COMMIT_MUSTER)],
+  ["gemeldet", istText(COMMIT_MUSTER)],
   ["teil", istText(TEIL_MUSTER)],
   ["zeile", istText(FREMDE_ZEILE)],
   ["id", istText(DEPLOY_ID)],
