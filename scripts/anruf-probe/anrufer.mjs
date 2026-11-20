@@ -182,10 +182,9 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     },
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
     stimmenAnzahl: async () => {
-      const beginn = uhr.jetzt();
-      for (;;) {
+      for (let gewartetMs = 0; ; gewartetMs += TAKT_MS) {
         const wert = await gegenStimmenAnzahl(ruf, probeStartMs);
-        if (wert !== undefined || uhr.jetzt() - beginn >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
+        if (wert !== undefined || gewartetMs >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
         await uhr.warte(TAKT_MS);
       }
     },
