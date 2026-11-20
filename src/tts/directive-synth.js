@@ -83,8 +83,8 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     const stimme = {
       ...config.voice.elevenLabsPlayTts,
       voiceId,
-      model: AGENT_STIMME.model,
-      voiceSettings: AGENT_STIMME.voiceSettings,
+      ...(AGENT_STIMME.model ? { model: AGENT_STIMME.model } : {}),
+      ...(AGENT_STIMME.voiceSettings ? { voiceSettings: AGENT_STIMME.voiceSettings } : {}),
     };
     const result = await synthesizeSpeechStream(text, synthOptionen(stimme));
     if (!result.ok) return result;
