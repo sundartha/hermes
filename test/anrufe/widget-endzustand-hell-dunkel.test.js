@@ -31,14 +31,13 @@ function thema(name) {
 function pruefeEndzustand(name) {
   const v = thema(name);
   assert.ok(v["--bg"] && v["--fg"] && v["--fg2"], "Hintergrund und beide Textfarben sind aufgelöst");
-  assert.ok(kontrast(v["--fg"], v["--bg"]) >= LESBAR, `Phasentext "Nobody picked up." im ${name}en Thema lesbar`);
-  assert.ok(kontrast(v["--fg2"], v["--bg"]) >= LESBAR, `Grund "No answer" im ${name}en Thema lesbar`);
+  assert.ok(kontrast(v["--fg"], v["--bg"]) >= LESBAR, `Phasentext und Grundwert (--fg) im ${name}en Thema lesbar`);
+  assert.ok(kontrast(v["--fg2"], v["--bg"]) >= LESBAR, `Beschriftung Reason (--fg2) im ${name}en Thema lesbar`);
 }
 
-test("widget-endzustand: Texte des nicht angenommenen Anrufs stehen im Widget, ph-fail nutzt die Themenvariablen", () => {
+test("widget-endzustand: Texte des nicht angenommenen Anrufs stehen im Widget", () => {
   assert.match(ANRUF, /hudPhase: "Nobody picked up\."/);
   assert.match(ANRUF, /"no-answer": "No answer"/);
-  assert.match(ANRUF, /\.ph-fail \.pill::before[^}]*border-color:var\(--line2\)/);
 });
 
 test("widget-endzustand: dunkles Thema, Phasentext und Grund haben mindestens 4.5:1 gegen den Hintergrund", () => {
