@@ -15,7 +15,7 @@ const HTTP_SERVICE_UNAVAILABLE = 503;
 const HTTP_TOO_MANY = 429;
 const FREMD = "fremd";
 const MAX_DAUER_S = 300;
-const WARTE_ABLAUF_S = 600;
+const WARTE_ABLAUF_S = 150;
 const MS_JE_S = 1000;
 
 let makeCallRoutes;

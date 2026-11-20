@@ -1,3 +1,4 @@
+import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.js";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 
@@ -110,9 +111,9 @@ function ausgehend(
       max: 120000,
     }),
     anrufstartWartefristMs: numEnv("ANRUFSTART_WARTEFRIST_MS", env.ANRUFSTART_WARTEFRIST_MS, {
-      fallback: 120000,
+      fallback: ANRUFSTART_WARTEFRIST_MAX_MS,
       min: 100,
-      max: 120000,
+      max: ANRUFSTART_WARTEFRIST_MAX_MS,
     }),
     bridgeStartDeadlineMs: numEnv("EL_BRIDGE_START_DEADLINE_MS", env.EL_BRIDGE_START_DEADLINE_MS, {
       fallback: 30000,
