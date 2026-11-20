@@ -5,7 +5,7 @@ import {
   REIFE_SUMMIERBAR,
   isProviderMicroCents,
 } from "../begriffe/abrechnung.ts";
-import { KOSTENARTEN } from "../billing/kostenarten.js";
+import { KOSTENARTEN } from "../billing/kostenarten.ts";
 
 interface Wertfelder {
   betragMikroCents?: number | null;

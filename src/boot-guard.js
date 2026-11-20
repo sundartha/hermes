@@ -432,7 +432,7 @@ export function latentCostPathFindings({
       fatal: true,
       message:
         "Das Kostenprofil telnyx_inbound_el_convai " +
-        "fuehrt keinen Kostentraeger mit Beleg-Einsammler (src/billing/kostenarten.js) - " +
+        "fuehrt keinen Kostentraeger mit Beleg-Einsammler (src/billing/kostenarten.ts) - " +
         "jeder eingehende Anruf auf diesem Weg erzeugt Anbieterkosten (das " +
         "ElevenLabs-Gespraech UND unser Telnyx-Bein), die in keinem Buch und auf keiner " +
         "Gate-Achse landen. Handlung: erst " +

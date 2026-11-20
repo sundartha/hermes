@@ -2,7 +2,7 @@ import { HTTP_NOT_FOUND } from "../utils/http.ts";
 import { speicherBereiche } from "../store.js";
 import { REIFE } from "../begriffe/abrechnung.ts";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
-import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
+import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.ts";
 import { EL_BELEG_QUELLE, elBelegBetrag } from "../elevenlabs/kosten-beleg.js";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
 import { fehlerText } from "../utils/fehler-text.ts";

@@ -1,6 +1,6 @@
 import { costEvidenceSumMicroCents, summierbareBelegzeilen } from "../store/cost-evidence.ts";
 import { isProviderMicroCents } from "../begriffe/abrechnung.ts";
-import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
+import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.ts";
 import { offeneTraeger } from "./kosten-abschluss.ts";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
 

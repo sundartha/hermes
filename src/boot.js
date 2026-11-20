@@ -38,7 +38,7 @@ import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.ts";
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
-import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
+import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.ts";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.ts";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
 import { normNum } from "./begriffe/rufnummern.js";

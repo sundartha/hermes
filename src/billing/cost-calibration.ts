@@ -6,7 +6,7 @@ import {
 } from "../begriffe/abrechnung.ts";
 import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
-import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
+import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.ts";
 import { settlementProjektion } from "./kosten-projektion.ts";
 import { LEERE_LISTE } from "./kosten-abschluss.ts";
 import type { AbschlussAnruf, AbschlussBeleg } from "./kosten-abschluss.ts";
