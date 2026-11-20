@@ -103,6 +103,8 @@ const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
 const ZEITSTEMPEL = /^\S+Z /;
 const DATEI_ZEILE = /^# Subtest: (.+\.test\.[cm]?[jt]s)$/;
 const TEST_ZEILE = /^\s+not ok \d+ - (.+?)(?: # .*)?$/;
+const SPEC_ZEILE = /^\s*✗ (.+) \((\S+\.test\.[cm]?[jt]s):\d+:\d+\)$/;
+const BASIS_ROT_ZEILE = /^Basis rot: (\S+) war bei /;
 const TESTORDNER = /^.*?\/((?:apps\/web\/)?test\/)/;
 
 function rotTests(log, jobName) {
@@ -112,6 +114,10 @@ function rotTests(log, jobName) {
     const zeile = roh.replace(ZEITSTEMPEL, "").replace(/\r$/, "");
     const neueDatei = DATEI_ZEILE.exec(zeile)?.[1];
     if (neueDatei !== undefined) datei = neueDatei.replace(TESTORDNER, "$1");
+    const spec = SPEC_ZEILE.exec(zeile);
+    if (spec !== null) namen.push(`${spec[2].replace(TESTORDNER, "$1")} › ${spec[1]}`);
+    const basisRot = BASIS_ROT_ZEILE.exec(zeile)?.[1];
+    if (basisRot !== undefined) namen.push(`${basisRot} (Mutation)`);
     const name = TEST_ZEILE.exec(zeile)?.[1];
     if (name !== undefined) namen.push(datei === undefined ? `${jobName} › ${name}` : `${datei} › ${name}`);
   }

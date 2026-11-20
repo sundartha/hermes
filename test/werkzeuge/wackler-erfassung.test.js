@@ -153,3 +153,35 @@ test("Beim ersten Versuch wird nichts gelesen und nichts gesendet", async () => 
   await wacklerErfassen(github, { ...UMGEBUNG, GITHUB_RUN_ATTEMPT: "1" });
   assert.equal(github.gesendet.length, 0);
 });
+
+const SPEC_LOG = [
+  "2026-11-20T10:00:00.1234567Z   ✔ laeuft (1.2ms)",
+  "2026-11-20T10:00:00.1234567Z   ✗ Sitzung verfaellt (nach Ablauf) (/home/runner/work/hermes/hermes/test/anmeldung/sitzung.test.js:336:1)",
+  "2026-11-20T10:00:00.1234567Z   ✗ rendert (/home/runner/work/hermes/hermes/apps/web/test/seite.test.js:12:5)",
+].join("\n");
+
+test("Spec-Zeile mit Zeitstempel ergibt Titel mit Testdatei ab test/ und Testname", () => {
+  const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB])], logs: { 11: SPEC_LOG } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), [
+    "Wackelig: test/anmeldung/sitzung.test.js › Sitzung verfaellt (nach Ablauf)",
+    "Wackelig: apps/web/test/seite.test.js › rendert",
+  ]);
+});
+
+test("Derselbe Test in zwei Shards ergibt genau ein Anlegen", () => {
+  const zweiter = { id: 12, name: "Tests 4/12", conclusion: "failure" };
+  const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB, zweiter])], logs: { 11: SPEC_LOG, 12: SPEC_LOG } });
+  assert.equal(ergebnis.length, 2);
+});
+
+test("Offenes Issue zum Spec-Titel wird hochgezaehlt", () => {
+  const titel = "Wackelig: apps/web/test/seite.test.js › rendert";
+  const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB])], logs: { 11: SPEC_LOG }, offeneIssues: [{ number: 7, title: titel, laeufe: 1 }] });
+  assert.deepEqual(ergebnis[1], { kommentieren: { nummer: 7, body: `Neulauf-Wackler Nr. 3: ${LAUF_LINK}` } });
+});
+
+test("Basis-rot-Zeile im Mutationsjob ergibt Titel mit Mutation und keinen Jobnamen", () => {
+  const log = "2026-11-20T10:00:00.1Z Basis rot: test/anmeldung/sitzung.test.js war bei 14/14 zweimal ohne Mutant rot und ist fuer den Rest des Jobs ausgeschlossen\n";
+  const ergebnis = auswerten({ versuche: [versuch([{ id: 14, name: "Mutation 14/14", conclusion: "failure" }])], logs: { 14: log } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: test/anmeldung/sitzung.test.js (Mutation)"]);
+});
