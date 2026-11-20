@@ -53,7 +53,7 @@ interface Mandant {
   tenantOwnsCall: (call: unknown, tenantId: string) => boolean;
 }
 
-const aktiveNummerVon: (state: Zustand, tenantId: string) => string = activeNumberFor;
+const aktiveNummerVon: (state: Zustand, tenantId: string) => string | null = activeNumberFor;
 const kalenderAb: (store: Speicher, tenantId: string) => unknown[] = upcomingCalendar;
 
 export const STATE_CALLS = 30,
