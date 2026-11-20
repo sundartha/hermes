@@ -82,7 +82,9 @@ test("vorstellung-mit-namen: Ziel mit Selbstvorstellung samt Namen wird nicht ge
       const { gesprochen } = await ruf(ziel, sprache);
       assert.ok(gesprochen.toLowerCase().includes(fallback.replace(/\.$/, "").toLowerCase()), `${ziel} -> ${gesprochen}`);
       assert.ok(!gesprochen.includes("Anna"), `${ziel} -> ${gesprochen}`);
-      if (sprache === "de") assert.equal(gesprochen.split("Hermes").length - 1, EINMAL, `${ziel} -> ${gesprochen}`);
+      const hermes = gesprochen.split("Hermes").length - 1;
+      if (sprache === "de") assert.equal(hermes, EINMAL, `${ziel} -> ${gesprochen}`);
+      else assert.ok(hermes <= EINMAL, `${ziel} -> ${gesprochen}`);
     }
   });
 });
