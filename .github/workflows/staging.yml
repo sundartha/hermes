@@ -90,8 +90,8 @@ jobs:
         run: node tools/deploy-weg.mjs hoertest --anlass staginglauf --commit "$GITHUB_SHA" --teile ""
 
       - name: Anrufprobe (Kern in scripts/anruf-probe)
-        id: probe
         if: ${{ (success() || inputs.absichtlich_rot) && (github.event_name != 'workflow_dispatch' || !inputs.alarmprobe) }}
+        id: probe
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           PROBE_ANRUFER_MODUL: ${{ github.workspace }}/scripts/anruf-probe/anrufer.mjs
