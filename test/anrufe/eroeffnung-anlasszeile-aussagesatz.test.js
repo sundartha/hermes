@@ -190,3 +190,10 @@ test("E4 fr: Anlasszeile mit typografischem Apostroph wird übernommen", async (
   const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "fr", modellZeile: zeile });
   assert.ok(beginntBisAufErstenBuchstaben(openingLine, zeile), openingLine);
 });
+
+test("E4 de: Modellzeile mit hier ist, doppeltem Leerzeichen und Namen fällt auf den festen Rückfall", async () => {
+  const zeile = "Ich rufe an, um zu sagen, dass hier ist  Anna Müller dran.";
+  const { openingLine } = await anruf({ goal: GOAL_AUSSAGE, language: "de", modellZeile: zeile });
+  assert.ok(beginntBisAufErstenBuchstaben(openingLine, FALLBACK.de), openingLine);
+  assert.ok(!openingLine.includes("Anna Müller"), openingLine);
+});
