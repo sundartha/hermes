@@ -58,6 +58,7 @@ jobs:
           node-version: 22
 
       - name: Staging abwarten und prüfen (Proben in tools/deploy-weg/staging.mjs)
+        id: pruefung
         if: github.event_name != 'workflow_dispatch' || !inputs.alarmprobe
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
@@ -112,13 +113,14 @@ jobs:
         run: node tools/deploy-weg.mjs heartbeat --name probe
 
       - name: Prüfung der Prüfung (monatlich)
+        id: monatspruefung
         if: success() && github.event_name == 'schedule'
         env:
           SLACK_ALERT_URL: ${{ secrets.SLACK_ALERT_URL }}
         run: node tools/deploy-weg.mjs pruefung
 
       - name: Heartbeat Nachtlauf
-        if: success() && github.event_name == 'schedule'
+        if: always() && github.event_name == 'schedule' && steps.pruefung.outcome == 'success' && steps.monatspruefung.outcome != 'failure'
         env:
           BETTER_STACK_HEARTBEAT_NACHTLAUF: ${{ secrets.BETTER_STACK_HEARTBEAT_NACHTLAUF }}
         run: node tools/deploy-weg.mjs heartbeat --name nachtlauf

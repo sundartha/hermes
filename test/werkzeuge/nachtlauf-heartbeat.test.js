@@ -115,7 +115,7 @@ test("Heartbeat: unbekannter oder fehlender oder doppelter Name bricht mit Exit 
 test("Workflow: genau ein Schritt Heartbeat Nachtlauf hinter der Prüfung, nur bei Erfolg des Zeitplans, Secret nur dort", () => {
   assert.match(
     WORKFLOW,
-    /- name: Heartbeat Nachtlauf\n {8}if: success\(\) && github\.event_name == 'schedule'\n {8}env:\n {10}BETTER_STACK_HEARTBEAT_NACHTLAUF: \$\{\{ secrets\.BETTER_STACK_HEARTBEAT_NACHTLAUF \}\}\n {8}run: node tools\/deploy-weg\.mjs heartbeat --name nachtlauf\n/,
+    /- name: Heartbeat Nachtlauf\n {8}if: always\(\) && github\.event_name == 'schedule' && steps\.pruefung\.outcome == 'success' && steps\.monatspruefung\.outcome != 'failure'\n {8}env:\n {10}BETTER_STACK_HEARTBEAT_NACHTLAUF: \$\{\{ secrets\.BETTER_STACK_HEARTBEAT_NACHTLAUF \}\}\n {8}run: node tools\/deploy-weg\.mjs heartbeat --name nachtlauf\n/,
   );
   assert.equal(WORKFLOW.match(/BETTER_STACK_HEARTBEAT_NACHTLAUF/g).length, 2);
   assert.equal(WORKFLOW.match(/- name: Heartbeat/g).length, 1);
