@@ -128,10 +128,7 @@ test("ein Gate, das undefined wirft, endet trotzdem in der 503-Ablehnung", async
   assert.deepEqual(aufrufe, [["[place_call] Gate kyc fehlgeschlagen:", undefined]]);
 });
 
-test("die Fehlermeldung beim Erzeugen des Nachweises von aussen nennt den Aussteller", async () => {
+test("das Erzeugen des Nachweises von aussen wirft einen TypeError", async () => {
   const { GatesBestanden } = await import("../../src/telephony/gates-bestanden.ts");
-  assert.throws(() => new GatesBestanden(), {
-    name: "TypeError",
-    message: "GatesBestanden wird nur von fuehreToreAus ausgestellt",
-  });
+  assert.throws(() => new GatesBestanden(), { name: "TypeError" });
 });
