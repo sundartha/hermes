@@ -526,17 +526,27 @@ const STATUS_MELDUNG =
   "Der Statuscode in res.status() kommt aus {{quelle}}: einen Namen wie HTTP_NOT_FOUND importieren oder antworteFehler nutzen, keine Zahl und keine eigene Zahlen-Konstante.";
 const STATUS_KONSTANTE_MELDUNG =
   "Statuscodes wie {{name}} kommen aus {{quelle}}: den Namen von dort importieren, keine eigene HTTP_*-Zahlen-Konstante.";
-const STATUS_NAME = /^HTTP_[A-Z_]+$/;
+const STATUS_NAME = /^HTTP_[A-Z0-9_]+$/;
 const STATUS_ZWEIGE = { ConditionalExpression: ["consequent", "alternate"], LogicalExpression: ["left", "right"] };
 
 function istZahl(knoten) {
   return knoten?.type === "Literal" && typeof knoten.value === "number";
 }
 
+function ohneTypHuelle(knoten) {
+  let inhalt = knoten;
+  while (inhalt?.type === "TSAsExpression" || inhalt?.type === "TSSatisfiesExpression") inhalt = inhalt.expression;
+  return inhalt;
+}
+
+function istStatusZahl(knoten) {
+  return istZahl(ohneTypHuelle(knoten));
+}
+
 function lokaleZahl(context, node, name) {
   for (let bereich = context.sourceCode.getScope(node); bereich; bereich = bereich.upper) {
     const variable = bereich.set.get(name);
-    if (variable) return variable.defs.some((def) => def.type === "Variable" && istZahl(def.node.init));
+    if (variable) return variable.defs.some((def) => def.type === "Variable" && istStatusZahl(def.node.init));
   }
   return false;
 }
@@ -565,7 +575,7 @@ const statusAusHttp = {
     if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
     return {
       VariableDeclarator(node) {
-        if (node.id.type === "Identifier" && STATUS_NAME.test(node.id.name) && istZahl(node.init))
+        if (node.id.type === "Identifier" && STATUS_NAME.test(node.id.name) && istStatusZahl(node.init))
           context.report({ node, messageId: "konstante", data: { quelle, name: node.id.name } });
       },
       CallExpression(node) {
