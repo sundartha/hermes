@@ -18,7 +18,7 @@ export function newId(prefix) {
     vergebeneIds = new Set();
   }
   let id = basis;
-  for (let zaehler = 0; vergebeneIds.has(id); zaehler++) id = basis + zaehler.toString(ID_RADIX);
+  for (let zaehler = 0; vergebeneIds.has(id); zaehler++) id = `${basis}${zaehler.toString(ID_RADIX)}`;
   vergebeneIds.add(id);
   return id;
 }
