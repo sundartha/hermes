@@ -4,7 +4,8 @@ import { test } from "node:test";
 
 const KARTE = JSON.parse(readFileSync("elevenlabs/test_configs/a6-offenlegung-erster-satz.json", "utf8"));
 const VORLAGE = JSON.parse(readFileSync("elevenlabs/agent_configs/outbound-agent.template.json", "utf8"));
-const ERSTE_NACHRICHT = VORLAGE.agent.conversation_config.agent.first_message;
+const AGENT = VORLAGE.agent.conversation_config.agent;
+const ERSTE_NACHRICHT = AGENT.first_message;
 const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
 
 test("A6-Karte: Erfolgsbeispiel ist die Vorlage-first_message mit eingesetzter Variable", () => {
