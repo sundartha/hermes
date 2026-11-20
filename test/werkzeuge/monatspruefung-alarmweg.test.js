@@ -181,7 +181,7 @@ test("Der Befehl pruefung an einem anderen Tag: übersprungen, Exit 0, keine Nac
 
 test("Workflow: der Schritt Prüfung der Prüfung steht direkt vor dem Heartbeat Nachtlauf, nur im Zeitplan und nur mit SLACK_ALERT_URL", () => {
   const treffer = WORKFLOW.match(
-    /^ {6}- name: Prüfung der Prüfung \(monatlich\)\n {8}if: success\(\) && github\.event_name == 'schedule'\n {8}env:\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs pruefung\n\n {6}- name: Heartbeat Nachtlauf\n/m,
+    /^ {6}- name: Prüfung der Prüfung \(monatlich\)\n {8}id: monatspruefung\n {8}if: success\(\) && github\.event_name == 'schedule'\n {8}env:\n {10}SLACK_ALERT_URL: \$\{\{ secrets\.SLACK_ALERT_URL \}\}\n {8}run: node tools\/deploy-weg\.mjs pruefung\n\n {6}- name: Heartbeat Nachtlauf\n/m,
   );
   assert.ok(treffer, "Schritt fehlt oder steht an der falschen Stelle");
   assert.ok(WORKFLOW.indexOf("Lebenszeichen Anrufprobe") < WORKFLOW.indexOf("Prüfung der Prüfung (monatlich)"));
