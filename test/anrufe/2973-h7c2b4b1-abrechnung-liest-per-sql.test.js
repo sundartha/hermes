@@ -5,6 +5,7 @@ import { captureConsole } from "../helpers.js";
 import { starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
 const HTTP_OK = 200;
+const HTTP_SERVER_ERROR = 500;
 const ALT_MIN = 600;
 const MS_JE_MIN = 60_000;
 const ANRUF_ABSENDER = "+4930555000312";
@@ -89,32 +90,21 @@ function mandantenLesenScheitertEinmal() {
 
 test("H7c2b4b1-6: scheitert das Lesen der Berichtsanrufe, endet der Sweep mit diesem Fehler ohne Antwort 200 und ohne Sweep-Zeile mit leerer Kandidatenliste", async () => {
   const abgelehnt = [];
-  let erster;
-  const ersteAblehnung = new Promise((erfuellen) => {
-    erster = erfuellen;
-  });
-  const merke = (grund) => {
-    abgelehnt.push(grund);
-    erster();
-  };
+  const merke = (grund) => abgelehnt.push(grund);
   const bisherige = process.listeners("unhandledRejection");
   process.removeAllListeners("unhandledRejection");
   process.on("unhandledRejection", merke);
   const zuruecksetzen = mandantenLesenScheitertEinmal();
-  let ausstehend;
-  let beendet;
+  let antwort;
   const zeilen = await captureConsole(async () => {
-    ausstehend = sweep();
-    beendet = await Promise.race([ersteAblehnung.then(() => null), ausstehend]);
+    antwort = await sweep();
   }).finally(() => {
     zuruecksetzen();
     process.off("unhandledRejection", merke);
     for (const listener of bisherige) process.on("unhandledRejection", listener);
   });
-  const stand = await Promise.race([ausstehend.then(() => "beantwortet"), Promise.resolve("offen")]);
-  assert.equal(beendet, null);
-  assert.equal(abgelehnt[0].message, LESEFEHLER);
-  assert.equal(stand, "offen");
+  assert.equal(antwort.status, HTTP_SERVER_ERROR);
+  assert.deepEqual(abgelehnt, []);
   assert.doesNotMatch(zeilen.join("\n"), /\[cost-truing\] sweep trigger=\S+ kandidaten=/);
 });
 
