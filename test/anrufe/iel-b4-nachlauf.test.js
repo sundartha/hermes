@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { liveVoiceSpendCents, voiceMinutesOf } from "../../src/billing/metering.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { INBOUND_NACHLAUF_FRIST_MS, PERMANENT_ERROR_STREAK_LIMIT } from "../../src/elevenlabs/outbound.js";
 import { nachlaufPolitikFuer, pollDarfWirken } from "../../src/elevenlabs/nachlauf-politik.ts";
 import * as ops from "../../src/store/state-ops.js";

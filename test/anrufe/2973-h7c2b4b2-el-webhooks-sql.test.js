@@ -8,7 +8,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.IN_CALL_CONSULT_ENABLED = "true";
 
 const { config } = await import("../../src/config.js");
-const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.js");
+const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.ts");
 const { EL_CALL_BINDING_SIP_HEADER } = await import("../../src/elevenlabs/inbound-sip-uri.ts");
 const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.ts");
 const { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } = await import(

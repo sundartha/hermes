@@ -13,7 +13,7 @@ import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts"
 import { makeDefaultState, createCall, recordCallCostEvidence, callCostEvidence } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
-import { KOSTENART, KOSTENPROFIL, pflichttypenFuerProfil } from "../../src/billing/kostenarten.js";
+import { KOSTENART, KOSTENPROFIL, pflichttypenFuerProfil } from "../../src/billing/kostenarten.ts";
 import { SIP_TRUNKING_RECORD_TYPE } from "../../src/billing/sweep-kostenbeleg.ts";
 import { makeStubStore, fakeConfig, fakeVoiceControl, isoMinutesAgo } from "../cost-truing-harness.js";
 import { captureConsole } from "../helpers.js";

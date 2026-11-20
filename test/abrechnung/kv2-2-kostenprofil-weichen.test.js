@@ -8,7 +8,7 @@ import {
 } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import * as ops from "../../src/store/state-ops.js";
-import { KOSTENPROFIL, KOSTENPROFILE } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL, KOSTENPROFILE } from "../../src/billing/kostenarten.ts";
 import { startInboundHarness, ownerNumberSeed } from "../helpers/inbound-router-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteErfolgreicheAttrappe } from "../gemeinsam/vorspann-fahrzeug.js";

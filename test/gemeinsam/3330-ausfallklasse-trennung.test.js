@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_OUTBOUND_BOOT_ENV, seedCall, seedState, startServer, startTelnyxProvisioningMock, waitForStoreState, waitUntil } from "../helpers.js";
 import { isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
 import { PLATFORM_ALERT_SMS_TO_BEISPIEL } from "./erfundene-geheimnisse.js";

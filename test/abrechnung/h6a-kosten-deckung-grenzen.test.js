@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { kostenBuchBericht, KOSTEN_BEFUND } from "../../src/billing/kosten-deckung.ts";
-import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL, KOSTENART } from "../../src/billing/kostenarten.ts";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
 
 const MS_PER_MINUTE = 60 * 1000;

@@ -5,7 +5,7 @@ import { startServer, seedState, seedCall } from "../helpers.js";
 import { abrufMitFrist, mitAntwortfrist } from "../gemeinsam/antwortfrist.mjs";
 import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 
 const ANRUF = "call_zusammenfassung_bei_done";
 const ERFOLG = 200;

@@ -7,7 +7,7 @@ import {
   makeTelnyxSigner,
   nowSeconds,
 } from "../helpers.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

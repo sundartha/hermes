@@ -10,7 +10,7 @@ import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephon
 import { blockingBudgetAxis, BUDGET_AXIS } from "../../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { KOSTENPROFIL } from "../../src/billing/kostenarten.js";
+import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 
 const TAKT_MS = 15000;
 const TAKT_AUS = 0;

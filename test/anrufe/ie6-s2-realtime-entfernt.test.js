@@ -157,7 +157,7 @@ test("IE6-S2-7: Altzeile telnyx_inbound_realtime bleibt unaufgeloest (fail-close
     PFLICHTTYPEN_UNGEMESSEN,
     KOSTENART,
     KOSTENARTEN,
-  } = await import("../../src/billing/kostenarten.js");
+  } = await import("../../src/billing/kostenarten.ts");
   const { sweepTraegerFuerProfil } = await import("../../src/billing/sweep-kostenbeleg.ts");
   const { LATENT_COST_PATH_FINDING } = await import("../../src/boot-guard.js");
 
