@@ -221,6 +221,27 @@ test("5137: Ende vor Bruecke mit ID speichert die Zeilen", async () => {
   assert.equal(anrufIn(callId).summary, CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary);
 });
 
+test("5137: Ende nach der Bruecke ruft das Ergebnis genau einmal ab", async () => {
+  const callId = await gebrueckterAnruf();
+  await sende(callId, "call.hangup");
+  await wartenAufAbrechnung(callId);
+  await sende(callId, "call.hangup", { bein: elVon(callId) });
+  assert.equal(abrufe().length, EINMAL);
+});
+
+test("5137: Ergebnis nach Ende vor der Bruecke nicht speicherbar -> Logzeile nennt den Anruf, trotzdem abgerechnet", async () => {
+  umgebung.attrappe.steuerung.ergebnis = "kaputt";
+  try {
+    const callId = await gebundenerAnruf();
+    await sende(callId, "call.hangup");
+    await waitUntil(() => anrufIn(callId).billedAt);
+    assert.equal(anrufIn(callId).status, "completed");
+    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] nachlauf fehlgeschlagen call=${callId}`));
+  } finally {
+    umgebung.attrappe.steuerung.ergebnis = "fertig";
+  }
+});
+
 test("3603-K6: Speichern des EL-Ergebnisses scheitert -> Logzeile nennt den Anruf, trotzdem abgerechnet", async () => {
   umgebung.attrappe.steuerung.ergebnis = "kaputt";
   try {
