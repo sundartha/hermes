@@ -17,7 +17,7 @@ const SPRACHE = "de";
 const RICHTUNG = "eingehend";
 const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
 const TAG_LAENGE = 10;
-const LISTE_OBERGRENZE = 30;
+export const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
 const EL_TERMINATION_RESULT_ATTEMPTS = 3;
