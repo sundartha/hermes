@@ -1,5 +1,5 @@
 import { CONSULT_EVENT } from "../consult/delivery.js";
-import { maskRestrictedText } from "../restricted-data.js";
+import { maskRestrictedText } from "../restricted-data.ts";
 import { jsonText, notAccepted } from "./ausgabe.js";
 import { rejectRestrictedData } from "./eingabe.js";
 import {

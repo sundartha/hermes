@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { RESTRICTED_TOKEN_ZWISCHEN } from "../gemeinsam/erfundene-geheimnisse.js";
 
-const QUELLE = new URL("../../src/restricted-data.js", import.meta.url).href;
+const QUELLE = new URL("../../src/restricted-data.ts", import.meta.url).href;
 const KIND_FRIST_MS = 5000;
 const KARTE = "4111 1111 1111 1111";
 const KIND = `import { findRestrictedData } from ${JSON.stringify(QUELLE)};

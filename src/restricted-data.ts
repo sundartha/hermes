@@ -4,14 +4,44 @@ export const RESTRICTED_CATEGORY = Object.freeze({
   CREDENTIAL_SECRET: "credential_secret",
 });
 
+export type RestrictedCategory = (typeof RESTRICTED_CATEGORY)[keyof typeof RESTRICTED_CATEGORY];
+
+interface Span {
+  start: number;
+  end: number;
+}
+
+export interface RestrictedHit extends Span {
+  category: RestrictedCategory;
+}
+
+export interface RestrictedField {
+  category: RestrictedCategory;
+  field: string;
+}
+
+interface CardCandidate extends Span {
+  raw: string;
+}
+
+interface LabeledValueRule {
+  pattern: RegExp;
+  acceptsValue: (value: string) => boolean;
+}
+
+interface WalkLocation {
+  path: string | null;
+  isTopLevel: boolean;
+}
+
 const WORD_START = "(?<![\\p{L}\\p{N}])";
 const WORD_END = "(?![\\p{L}\\p{N}])";
 
-function wordAlternationSource(sources) {
+function wordAlternationSource(sources: readonly string[]): string {
   return `${WORD_START}(?:${sources.join("|")})${WORD_END}`;
 }
 
-function digitCount(raw) {
+function digitCount(raw: string): number {
   return raw.replace(/\D/g, "").length;
 }
 
@@ -72,7 +102,7 @@ const PHONE_CONTEXT_PATTERN = new RegExp(wordAlternationSource(PHONE_CONTEXT_WOR
 const REFERENCE_CONTEXT_PATTERN = new RegExp(wordAlternationSource(REFERENCE_CONTEXT_WORDS), "iu");
 const PHONE_MAX_DIGITS = 15;
 
-const CARD_BRAND_PREFIX_RANGES = Object.freeze({
+const CARD_BRAND_PREFIX_RANGES: Readonly<Record<string, (readonly [string, string])[]>> = Object.freeze({
   visa: [["4", "4"]],
   mastercard: [["51", "55"], ["2221", "2720"]],
   amex: [["34", "34"], ["37", "37"]],
@@ -83,7 +113,7 @@ const CARD_BRAND_PREFIX_RANGES = Object.freeze({
   maestro: [["50", "50"], ["56", "69"]],
 });
 
-function hasCardBrandPrefix(digits) {
+function hasCardBrandPrefix(digits: string): boolean {
   return Object.values(CARD_BRAND_PREFIX_RANGES)
     .flat()
     .some(([low, high]) => {
@@ -94,14 +124,14 @@ function hasCardBrandPrefix(digits) {
 
 const CARD_CONTEXT_STEMS = Object.freeze(["card", "carte", "karte"]);
 
-function isExemptByContext(candidate, before) {
+function isExemptByContext(candidate: CardCandidate, before: string): boolean {
   if (/\D/.test(candidate.raw)) return false;
   const isPhone = PHONE_CONTEXT_PATTERN.test(before) && candidate.raw.length <= PHONE_MAX_DIGITS;
   const isReference = REFERENCE_CONTEXT_PATTERN.test(before) && !hasCardBrandPrefix(candidate.raw);
   return isPhone || isReference;
 }
 
-function requiredCardDigits(text, candidate) {
+function requiredCardDigits(text: string, candidate: CardCandidate): number | null {
   const before = text.slice(Math.max(0, candidate.start - CONTEXT_WINDOW_CHARS), candidate.start);
   const after = text.slice(candidate.end, candidate.end + CONTEXT_WINDOW_CHARS);
   const surrounding = `${before} ${after}`.toLowerCase();
@@ -109,15 +139,15 @@ function requiredCardDigits(text, candidate) {
   return isExemptByContext(candidate, before) ? null : CARD_MIN_DIGITS_WITHOUT_CARD_WORD;
 }
 
-function hasUniformSeparator(raw) {
+function hasUniformSeparator(raw: string): boolean {
   return new Set(raw.match(/\D+/g) ?? []).size <= 1;
 }
 
-function groupSizesMatch(groups, sizes) {
+function groupSizesMatch(groups: readonly string[], sizes: readonly number[]): boolean {
   return groups.length === sizes.length && groups.every((group, index) => group.length === sizes[index]);
 }
 
-function hasCardGroupShape(raw) {
+function hasCardGroupShape(raw: string): boolean {
   const groups = raw.split(/\D+/);
   if (groups.length === 1) return true;
   if (groupSizesMatch(groups, AMEX_GROUP_SIZES) || groupSizesMatch(groups, DINERS_GROUP_SIZES)) return true;
@@ -127,7 +157,7 @@ function hasCardGroupShape(raw) {
   return leadingGroupsFull && lastGroupLength <= CARD_GROUP_SIZE;
 }
 
-function luhnValid(digits) {
+function luhnValid(digits: string): boolean {
   let sum = 0;
   let doubled = false;
   for (let index = digits.length - 1; index >= 0; index--) {
@@ -140,7 +170,7 @@ function luhnValid(digits) {
   return sum % LUHN_MOD_BASE === 0;
 }
 
-function isCardNumber(raw, minDigits) {
+function isCardNumber(raw: string, minDigits: number): boolean {
   if (!hasUniformSeparator(raw) || !hasCardGroupShape(raw)) return false;
   const digits = raw.replace(/\D/g, "");
   const lengthOk = digits.length >= minDigits && digits.length <= CARD_MAX_DIGITS;
@@ -149,7 +179,7 @@ function isCardNumber(raw, minDigits) {
   return lengthOk && iinOk && luhnValid(digits);
 }
 
-function bestCardWindow(raw, minDigits) {
+function bestCardWindow(raw: string, minDigits: number): Span | null {
   if (isCardNumber(raw, minDigits)) return { start: 0, end: raw.length };
   const groups = [...raw.matchAll(/\d+/g)].map((group) => ({ start: group.index, end: group.index + group[0].length }));
   for (let size = groups.length - 1; size >= 1; size--) {
@@ -163,7 +193,7 @@ function bestCardWindow(raw, minDigits) {
   return null;
 }
 
-const IBAN_COUNTRY_LENGTHS = Object.freeze({
+const IBAN_COUNTRY_LENGTHS: Readonly<Record<string, number>> = Object.freeze({
   AD: 24, AE: 23, AL: 28, AT: 20, AZ: 28, BA: 20, BE: 16, BG: 22, BH: 22, BI: 27,
   BR: 29, BY: 28, CH: 21, CR: 22, CY: 28, CZ: 24, DE: 22, DK: 18, DO: 28, EE: 20,
   EG: 29, ES: 24, FI: 18, FO: 18, FR: 27, GB: 22, GE: 22, GI: 23, GL: 18, GR: 27,
@@ -181,13 +211,13 @@ const IBAN_MOD97_VALID_REMAINDER = 1n;
 const IBAN_LETTER_VALUE_OFFSET = 55;
 const CARD_SEARCH_BLANK = "#";
 
-function ibanChecksumValid(compact) {
+function ibanChecksumValid(compact: string): boolean {
   const rearranged = compact.slice(IBAN_HEADER_LENGTH) + compact.slice(0, IBAN_HEADER_LENGTH);
   const numeric = rearranged.replace(/[A-Z]/g, (letter) => String(letter.charCodeAt(0) - IBAN_LETTER_VALUE_OFFSET));
   return BigInt(numeric) % IBAN_MOD97_BASE === IBAN_MOD97_VALID_REMAINDER;
 }
 
-function validIbanLength(raw) {
+function validIbanLength(raw: string): number {
   const expectedLength = IBAN_COUNTRY_LENGTHS[raw.slice(0, IBAN_COUNTRY_CODE_LENGTH).toUpperCase()];
   if (!expectedLength) return 0;
   let compactLength = 0;
@@ -201,7 +231,7 @@ function validIbanLength(raw) {
   return 0;
 }
 
-function findIbanSpans(text) {
+function findIbanSpans(text: string): Span[] {
   const spans = [];
   const candidatePattern = new RegExp(IBAN_CANDIDATE.source, IBAN_CANDIDATE.flags);
   let match = candidatePattern.exec(text);
@@ -214,7 +244,7 @@ function findIbanSpans(text) {
   return spans;
 }
 
-function withoutIbans(text) {
+function withoutIbans(text: string): string {
   let blanked = text;
   for (const span of findIbanSpans(text)) {
     blanked = blanked.slice(0, span.start) + CARD_SEARCH_BLANK.repeat(span.end - span.start) + blanked.slice(span.end);
@@ -222,7 +252,7 @@ function withoutIbans(text) {
   return blanked;
 }
 
-function findCardSpans(originalText) {
+function findCardSpans(originalText: string): Span[] {
   const text = withoutIbans(originalText);
   const spans = [];
   for (const match of text.matchAll(CARD_CANDIDATE)) {
@@ -234,7 +264,7 @@ function findCardSpans(originalText) {
   return spans;
 }
 
-function findLabeledValueSpans(text, { pattern, acceptsValue }) {
+function findLabeledValueSpans(text: string, { pattern, acceptsValue }: LabeledValueRule): Span[] {
   const spans = [];
   for (const match of text.matchAll(pattern)) {
     const group = match.indices?.[1];
@@ -272,13 +302,13 @@ const GOVERNMENT_ID_PATTERN = new RegExp(
 
 const GOVERNMENT_ID_RULE = Object.freeze({
   pattern: GOVERNMENT_ID_PATTERN,
-  acceptsValue: (value) => digitCount(value) >= GOVERNMENT_ID_MIN_DIGITS,
+  acceptsValue: (value: string) => digitCount(value) >= GOVERNMENT_ID_MIN_DIGITS,
 });
 
 const PEM_PRIVATE_KEY_HEADER = /-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----/g;
 const PEM_PRIVATE_KEY_FOOTER = /-----END [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----/g;
 
-function findPrivateKeyBlockSpans(text) {
+function findPrivateKeyBlockSpans(text: string): Span[] {
   const spans = [];
   const header = new RegExp(PEM_PRIVATE_KEY_HEADER.source, "g");
   const footer = new RegExp(PEM_PRIVATE_KEY_FOOTER.source, "g");
@@ -308,13 +338,13 @@ const TOKEN_PATTERNS = Object.freeze(
   ].map((source) => new RegExp(`${TOKEN_START}${source}`, "g")),
 );
 
-function tokenEnd(text, index) {
+function tokenEnd(text: string, index: number): number {
   let end = index;
   while (end < text.length && TOKEN_CHARS.includes(text.charAt(end))) end++;
   return end;
 }
 
-function findTokenSpans(text) {
+function findTokenSpans(text: string): Span[] {
   return TOKEN_PATTERNS.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({
       start: match.index,
@@ -342,7 +372,7 @@ const CREDENTIAL_LABEL_PATTERN = new RegExp(
 const CREDENTIAL_VALUE_MIN_CHARS = 4;
 const TRAILING_SENTENCE_PUNCTUATION = /[.,;:!?)]+$/u;
 
-function hasSecretShape(value) {
+function hasSecretShape(value: string): boolean {
   const core = value.replace(TRAILING_SENTENCE_PUNCTUATION, "");
   return core.length >= CREDENTIAL_VALUE_MIN_CHARS && /[^\p{L}]/u.test(core);
 }
@@ -352,19 +382,19 @@ const CREDENTIAL_LABEL_RULE = Object.freeze({
   acceptsValue: hasSecretShape,
 });
 
-function findStructuredCredentialSpans(text) {
+function findStructuredCredentialSpans(text: string): Span[] {
   return [...findPrivateKeyBlockSpans(text), ...findTokenSpans(text)];
 }
 
-function byStart(left, right) {
+function byStart(left: Span, right: Span): number {
   return left.start - right.start;
 }
 
-function withCategory(category) {
+function withCategory(category: RestrictedCategory): (span: Span) => RestrictedHit {
   return (span) => ({ category, ...span });
 }
 
-function addNonOverlapping(accepted, candidates) {
+function addNonOverlapping<T extends Span>(accepted: readonly T[], candidates: readonly T[]): T[] {
   const kept = [];
   let cursor = 0;
   for (const candidate of [...candidates].sort(byStart)) {
@@ -381,7 +411,7 @@ function addNonOverlapping(accepted, candidates) {
   return [...accepted, ...kept].sort(byStart);
 }
 
-function collectHits(text) {
+function collectHits(text: string): RestrictedHit[] {
   const cards = findCardSpans(text).map(withCategory(RESTRICTED_CATEGORY.PAYMENT_CARD));
   const governmentIds = findLabeledValueSpans(text, GOVERNMENT_ID_RULE).map(
     withCategory(RESTRICTED_CATEGORY.GOVERNMENT_ID),
@@ -394,22 +424,22 @@ function collectHits(text) {
   return addNonOverlapping(withGovernmentIds, credentials);
 }
 
-export function findRestrictedData(text) {
+export function findRestrictedData(text: unknown): RestrictedHit[] {
   if (typeof text !== "string" || !text) return [];
   return collectHits(text);
 }
 
-function maskCard(raw) {
+function maskCard(raw: string): string {
   return "****" + raw.replace(/\D/g, "").slice(-CARD_LAST_DIGITS_SHOWN);
 }
 
-const MASK_FN = Object.freeze({
+const MASK_FN: Readonly<Record<RestrictedCategory, (raw: string) => string>> = Object.freeze({
   [RESTRICTED_CATEGORY.PAYMENT_CARD]: maskCard,
   [RESTRICTED_CATEGORY.GOVERNMENT_ID]: () => "[restricted-government-id]",
   [RESTRICTED_CATEGORY.CREDENTIAL_SECRET]: () => "[restricted-credential]",
 });
 
-export function maskRestrictedText(text) {
+export function maskRestrictedText(text: string): string {
   const hits = findRestrictedData(text);
   if (!hits.length) return text;
   let out = "";
@@ -421,16 +451,16 @@ export function maskRestrictedText(text) {
   return out + text.slice(cursor);
 }
 
-export function firstRestrictedField(value, exemptKeys) {
+export function firstRestrictedField(value: unknown, exemptKeys: readonly string[]): RestrictedField | null {
   return walkForRestrictedField(value, exemptKeys, { path: null, isTopLevel: true });
 }
 
-function restrictedFieldInString(value, path) {
+function restrictedFieldInString(value: string, path: string | null): RestrictedField | null {
   const [first] = findRestrictedData(value);
   return first ? { category: first.category, field: path ?? "(root)" } : null;
 }
 
-function restrictedFieldInArray(value, exemptKeys, path) {
+function restrictedFieldInArray(value: readonly unknown[], exemptKeys: readonly string[], path: string | null): RestrictedField | null {
   for (const entry of value) {
     const found = walkForRestrictedField(entry, exemptKeys, { path, isTopLevel: false });
     if (found) return found;
@@ -438,7 +468,7 @@ function restrictedFieldInArray(value, exemptKeys, path) {
   return null;
 }
 
-function restrictedFieldInObject(value, exemptKeys, { path, isTopLevel }) {
+function restrictedFieldInObject(value: object, exemptKeys: readonly string[], { path, isTopLevel }: WalkLocation): RestrictedField | null {
   for (const [key, entry] of Object.entries(value)) {
     if (isTopLevel && exemptKeys.includes(key)) continue;
     const childPath = path ? `${path}.${key}` : key;
@@ -448,7 +478,7 @@ function restrictedFieldInObject(value, exemptKeys, { path, isTopLevel }) {
   return null;
 }
 
-function walkForRestrictedField(value, exemptKeys, location) {
+function walkForRestrictedField(value: unknown, exemptKeys: readonly string[], location: WalkLocation): RestrictedField | null {
   if (typeof value === "string") return restrictedFieldInString(value, location.path);
   if (Array.isArray(value)) return restrictedFieldInArray(value, exemptKeys, location.path);
   if (value != null && typeof value === "object") return restrictedFieldInObject(value, exemptKeys, location);

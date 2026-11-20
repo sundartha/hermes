@@ -1,4 +1,4 @@
-import { maskRestrictedText } from "../restricted-data.js";
+import { maskRestrictedText } from "../restricted-data.ts";
 import { text } from "./ausgabe.js";
 import { requireFields } from "./gateway.js";
 import { INBOX_OUTPUT, INCLUDE_SEEN_FIELD } from "./schemata.js";
