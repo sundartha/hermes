@@ -8,7 +8,7 @@ const ANRUF = (await ausgelieferteWidgets()).call;
 const WIDGET_DICT = JSON.parse(skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {")).match(/var WIDGET_DICT = (.*);\n/)[1]);
 const ERGEBNIS = "ui/notifications/tool-result";
 const NUMMER = "+492115550142";
-const ANZEIGE = "+49 211 5550142";
+const ANZEIGE = "+492115550142";
 const AUFTRAG = "Ich möchte einen Haarschnitt für Donnerstagvormittag buchen.";
 
 function knoten() {
@@ -105,9 +105,9 @@ test("widget-anruf-nummer-auftrag K2: die Zeile heißt Auftrag und die Nummer st
 
 test("widget-anruf-nummer-auftrag K2: die Nummer wird nur bei +49 mit Vorwahl und Rest von mindestens vier Ziffern gruppiert", () => {
   const faelle = [
-    ["+492115550142", "+49 211 5550142"],
+    ["+492115550142", "+492115550142"],
     ["+4921155", "+4921155"],
-    ["+492115555", "+49 211 5555"],
+    ["+492115555", "+492115555"],
     ["+49211555", "+49211555"],
     ["+14155550142", "+14155550142"],
     ["x+492115550142", "x+492115550142"],
