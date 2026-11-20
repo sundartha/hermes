@@ -74,7 +74,6 @@ test("5271-4: der Consult-Webhook antwortet 200, wenn der Anruf zwischen den bei
     status: "active",
     elevenlabsConversationId: KONVERSATION,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: "2026-01-01T00:00:00.000Z",
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   await a.drainFlushes();
