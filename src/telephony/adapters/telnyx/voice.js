@@ -66,7 +66,7 @@ const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
 
 const ATTACH_STATUS = { attachStatus: true };
 
-const ANRUF_STEUERN_FRIST_MS = 8_000;
+export const ANRUF_STEUERN_FRIST_MS = 8_000;
 const KOSTENABRUF_FRIST_MS = 15_000;
 
 function headers(contentType = FORM_HEADERS_TYPE) {

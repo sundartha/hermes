@@ -333,6 +333,7 @@
         "src/telephony/adapters/telnyx/cost-parse.ts",
         "src/telephony/adapters/telnyx/errors.ts",
         "src/telephony/adapters/telnyx/http.ts",
+        "src/telephony/anruf-fristen.ts",
         "src/telephony/alert-sms.ts",
         "src/telephony/failure-reason.ts",
         "src/telephony/fristen-lauf.ts",
