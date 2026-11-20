@@ -109,3 +109,4 @@ export const RESTRICTED_PEM_BLOCK = "-----BEGIN PRIVATE KEY-----\nabc\n-----END 
 export const RESTRICTED_TOKEN_IN_KARTE = "sk-4111111111111111abcd";
 export const RESTRICTED_TOKEN_MIT_KENNWORT = "sk_live_abcdefghijklmnop1234";
 export const RESTRICTED_TOKEN_MIT_ANHANG = "AKIAABCDEFGHIJKLMNOPQRS";
+export const ELEVENLABS_TOOL_TOKEN_ERSTE_RUECKFRAGE = "el-tool-token-erste-rueckfrage";
