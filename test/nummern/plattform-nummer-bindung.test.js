@@ -67,7 +67,7 @@ function seedTenantWithNumber({
   if (bound)
     bindPlatformNumber(state, {
       e164,
-      purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+      purpose: "outbound_ani",
       provider: PROVIDER.TELNYX,
       tenantId: bindingTenantId,
     });
@@ -312,19 +312,19 @@ test("T12: Boot leitet ZWEI Bindungen ab (Alarm-Absender, Bootstrap-Halt), idemp
 
 test("T13: ANI-Wechsel schliesst die alte Bindung - der Rueckbau-Hebel funktioniert wirklich", () => {
   const state = makeDefaultState();
-  syncPlatformBindings(state, [{ purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, e164: ANI, provider: PROVIDER.TELNYX }]);
+  syncPlatformBindings(state, [{ purpose: "outbound_ani", e164: ANI, provider: PROVIDER.TELNYX }]);
   const firstOpen = state.platformNumberUse.find(
-    (binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI && binding.releasedAt === null,
+    (binding) => binding.purpose === "outbound_ani" && binding.releasedAt === null,
   );
   assert.equal(firstOpen.e164, ANI);
 
   syncPlatformBindings(state, [
-    { purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, e164: CUSTOMER_DID, provider: PROVIDER.TELNYX },
+    { purpose: "outbound_ani", e164: CUSTOMER_DID, provider: PROVIDER.TELNYX },
   ]);
   const oldBinding = state.platformNumberUse.find((binding) => binding.id === firstOpen.id);
   assert.notEqual(oldBinding.releasedAt, null, "alte Bindung ist geschlossen");
   const openOnes = state.platformNumberUse.filter(
-    (binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI && binding.releasedAt === null,
+    (binding) => binding.purpose === "outbound_ani" && binding.releasedAt === null,
   );
   assert.equal(openOnes.length, 1);
   assert.equal(openOnes[0].e164, CUSTOMER_DID);
@@ -427,7 +427,7 @@ test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyRe
   assert.equal(closedOwn.length, 1, "unbindOwnPlatformBindings schliesst dieselbe Bindung als eigene");
 
   const state = makeDefaultState();
-  bindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  bindPlatformNumber(state, { e164: ANI, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   const hypotheticalNumber = { e164: ANI, tenantId: null };
   assert.equal(
     numberBusyReason(state, hypotheticalNumber, { forTenantId: null }),
@@ -445,7 +445,7 @@ test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyRe
 const SECOND_DID = "+4915198765432";
 const UNRELATED_DID = "+4915155500000";
 const OUTBOUND_ANI_BINDING = {
-  purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+  purpose: "outbound_ani",
   provider: PROVIDER.TELNYX,
 };
 const ALERT_SENDER_BINDING = {
@@ -459,7 +459,7 @@ test("bindPlatformNumber gibt die neue Bindung mit Kennung pnu_ zurueck und legt
   assert.ok(binding.id.startsWith("pnu_"));
   assert.equal(binding, state.platformNumberUse[0]);
   assert.equal(binding.e164, ANI);
-  assert.equal(binding.purpose, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI);
+  assert.equal(binding.purpose, "outbound_ani");
   assert.equal(binding.releasedAt, null);
 });
 
@@ -487,9 +487,9 @@ test("unbindPlatformNumber schliesst nur die Bindung der genannten Nummer und gi
 test("openPlatformBindingByPurpose findet nur die offene Bindung genau dieses Zwecks", () => {
   const state = makeDefaultState();
   bindPlatformNumber(state, { e164: ANI, ...OUTBOUND_ANI_BINDING });
-  unbindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI });
+  unbindPlatformNumber(state, { e164: ANI, purpose: "outbound_ani" });
   const alertBinding = bindPlatformNumber(state, { e164: ALERT_SENDER, ...ALERT_SENDER_BINDING });
-  assert.equal(openPlatformBindingByPurpose(state, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI), undefined);
+  assert.equal(openPlatformBindingByPurpose(state, "outbound_ani"), undefined);
   assert.equal(openPlatformBindingByPurpose(state, PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER), alertBinding);
 });
 

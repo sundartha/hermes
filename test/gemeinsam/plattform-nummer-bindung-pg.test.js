@@ -10,7 +10,7 @@ import { makePgTestStore } from "../pg-helpers.js";
 
 const CUSTOMER_DID = "+4915112345678";
 const ANI = "+15005550006";
-const ANI_SCHLUESSEL = { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI };
+const ANI_SCHLUESSEL = { e164: ANI, purpose: "outbound_ani" };
 
 function bindeAni(state) {
   ops.bindPlatformNumber(state, { ...ANI_SCHLUESSEL, provider: PROVIDER.TELNYX, tenantId: null });
@@ -27,7 +27,7 @@ async function speichereGebundeneAktiveNummer(store, { id, tenantId }) {
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: `ext_${id}`,
   });
-  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   await store.save();
 }
 
@@ -46,7 +46,7 @@ test("P1: NEUSTART-Round-Trip - binden, save(), Spiegel verwerfen, neu hydrieren
   ops.registerTenant(state, "t1");
   ops.bindPlatformNumber(state, {
     e164: ANI,
-    purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+    purpose: "outbound_ani",
     provider: PROVIDER.TELNYX,
     tenantId: null,
     note: "test",
@@ -56,7 +56,7 @@ test("P1: NEUSTART-Round-Trip - binden, save(), Spiegel verwerfen, neu hydrieren
   const reopened = await reopen(db);
   const [binding] = ops.platformNumberBindings(reopened.load(), ANI);
   assert.ok(binding, "Bindung ueberlebt Neustart");
-  assert.equal(binding.purpose, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI);
+  assert.equal(binding.purpose, "outbound_ani");
   assert.equal(binding.tenantId, null);
   assert.ok(binding.boundAt, "boundAt ist gesetzt");
   assert.equal(binding.releasedAt, null);
@@ -108,7 +108,7 @@ test("P4 (Flush-Regression, PM-11): gebundene, BEREITS released-e Zeile zweimal 
     status: NUMBER_STATUS.RELEASED,
     providerNumberId: "ext_n3",
   });
-  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   const zweiFlushes = async () => {
     await store.save();
     await store.save();
@@ -129,7 +129,7 @@ test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundene
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: "ext_n4",
   });
-  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   await store.save();
 
   state.numbers = state.numbers.filter((number) => number.id !== "n4");
@@ -155,7 +155,7 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
   });
   ops.bindPlatformNumber(state, {
     e164: CUSTOMER_DID,
-    purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+    purpose: "outbound_ani",
     provider: PROVIDER.TELNYX,
     tenantId: "t1",
   });
@@ -163,7 +163,7 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
 
   const fresh = store.load();
   const number = ops.findNumber(fresh, "n5");
-  ops.unbindPlatformNumber(fresh, { e164: number.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI });
+  ops.unbindPlatformNumber(fresh, { e164: number.e164, purpose: "outbound_ani" });
   ops.releaseNumber(fresh, "n5");
   await store.save();
 
@@ -184,7 +184,7 @@ test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen
   await assert.rejects(() =>
     db.query(
       `INSERT INTO platform_number_use (id, e164, purpose, provider) VALUES ('pnu_dup', $1, $2, 'telnyx')`,
-      [ANI, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI],
+      [ANI, "outbound_ani"],
     ),
   );
 

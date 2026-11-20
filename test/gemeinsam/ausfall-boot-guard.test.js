@@ -133,7 +133,7 @@ test("PM-17: eine offene alert_sms_sender-Bindung -> []", () => {
 
 test("PM-17: nur eine outbound_ani-Bindung (falsche Rolle) -> WARN", () => {
   const findings = platformAlertSenderFindings({
-    openBindings: [{ purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, e164: "+15005550006" }],
+    openBindings: [{ purpose: "outbound_ani", e164: "+15005550006" }],
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, PLATFORM_ALERT_SENDER_FINDING.UNBOUND);
