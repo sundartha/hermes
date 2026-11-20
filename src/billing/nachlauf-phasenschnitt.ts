@@ -1,4 +1,4 @@
-import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
+import { KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.ts";
 import { REIFE, isBookableCents } from "../begriffe/abrechnung.ts";
 import { convertProviderMicroToBucketCents } from "../store/state-ops.js";
 import { ENDZUSTAND, abschlussFuerAnruf } from "./kosten-abschluss.ts";

@@ -1,5 +1,5 @@
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
 import { localeFor } from "../i18n/locales.ts";
 import { planSummaryMail } from "../mail-summary.ts";

@@ -1,4 +1,4 @@
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 
 export const BRIDGE_STATE = Object.freeze({
   KEIN_EL_INBOUND: "kein_el_inbound",

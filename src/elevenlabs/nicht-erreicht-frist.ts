@@ -1,4 +1,4 @@
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const NICHT_ERREICHT_FRIST_S = 75;

@@ -46,7 +46,7 @@ import {
   kanonischeAudience,
 } from "./boot-guard.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.ts";
-import { KOSTENPROFIL } from "./billing/kostenarten.js";
+import { KOSTENPROFIL } from "./billing/kostenarten.ts";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.ts";
 import { LLM_PROVIDER } from "./llm/provider.ts";
 import { MS_PER_MINUTE } from "./utils/timer.ts";

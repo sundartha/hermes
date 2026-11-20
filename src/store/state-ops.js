@@ -13,7 +13,7 @@ import { E164 } from "../begriffe/rufnummern.js";
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.js";
 import { isBookableCents } from "../begriffe/abrechnung.ts";
-import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
+import { istBekanntesKostenprofil } from "../billing/kostenarten.ts";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.ts";
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.ts";
 import { stripResultEvidence, resultCardView } from "../call-result.ts";

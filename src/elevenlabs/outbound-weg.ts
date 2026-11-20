@@ -1,4 +1,4 @@
-import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { inboundElPathFor } from "./inbound-path-decision.ts";
 
 export const OUTBOUND_WEG = Object.freeze({ TELNYX_VORSPANN: "telnyx_vorspann" });
