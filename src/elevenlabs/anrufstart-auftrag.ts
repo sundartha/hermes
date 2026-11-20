@@ -29,6 +29,16 @@ export const ANRUFSTART_SPERRE = Object.freeze({
   PAUSE: "anrufpause",
 });
 
+interface Sperren<A> {
+  eingefroren: () => boolean | Promise<boolean>;
+  pausiert: (call: A) => boolean | Promise<boolean>;
+}
+
+export const ANRUFSTART_SPERR_TORE = Object.freeze([
+  { name: "eingefroren", grund: ANRUFSTART_SPERRE.EINGEFROREN, gesperrt: <A>(sperren: Sperren<A>) => sperren.eingefroren() },
+  { name: "pausiert", grund: ANRUFSTART_SPERRE.PAUSE, gesperrt: <A>(sperren: Sperren<A>, call: A) => sperren.pausiert(call) },
+]);
+
 export type AnrufstartAusgang = (typeof ANRUFSTART_AUSGANG)[keyof typeof ANRUFSTART_AUSGANG];
 
 interface Anruf {
@@ -72,9 +82,7 @@ interface Abhaengigkeiten<A extends Anruf> {
   anbieterGespraeche: AnbieterGespraeche;
   haltAnrufStartFest: (call: A, conversationId: string) => unknown;
   beendeStartUnklar: (callId: string) => Promise<void>;
-  sperren: {
-    eingefroren: () => boolean | Promise<boolean>;
-    pausiert: (call: A) => boolean | Promise<boolean>;
+  sperren: Sperren<A> & {
     abgebrochen: (call: A) => boolean;
     abschaltend?: (() => boolean) | undefined;
   };
@@ -84,6 +92,13 @@ interface Abhaengigkeiten<A extends Anruf> {
   armeTimer: (call: A) => void;
   mandantenToken: (tenantId: string) => string;
   jetztMs: () => number;
+}
+
+async function ersterSperrGrund<A>(sperren: Sperren<A>, call: A): Promise<string | null> {
+  for (const tor of ANRUFSTART_SPERR_TORE) {
+    if (await tor.gesperrt(sperren, call)) return tor.grund;
+  }
+  return null;
 }
 
 const variablenVon = (gespraech: Gespraech | null) => gespraech?.conversation_initiation_client_data?.dynamic_variables;
@@ -156,8 +171,8 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
   }
 
   async function sperrGrund(call: A): Promise<string | null> {
-    if (await sperren.eingefroren()) return ANRUFSTART_SPERRE.EINGEFROREN;
-    if (await sperren.pausiert(call)) return ANRUFSTART_SPERRE.PAUSE;
+    const grund = await ersterSperrGrund(sperren, call);
+    if (grund) return grund;
     if (sperren.abschaltend?.()) return ANRUFSTART_GRUND_ABSCHALTEN;
     return null;
   }

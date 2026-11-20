@@ -38,7 +38,7 @@ import { localeFor, supportedLanguageOf } from "../i18n/locales.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
-import { ANRUFSTART_SPERRE, makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
+import { ANRUFSTART_SPERR_TORE, makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
@@ -754,10 +754,10 @@ export function makeCallRoutes({
     return { status: HTTP_CONFLICT, body: { error: grund }, audit: { event: "anrufstart_gesperrt", grund, detail: call.id } };
   }
 
-  const wartendeTore: Tor<Anruf>[] = [
-    { name: "eingefroren", run: (call) => (sperren.eingefroren() ? sperrAblehnung(call, ANRUFSTART_SPERRE.EINGEFROREN) : null) },
-    { name: "pausiert", run: async (call) => ((await sperren.pausiert()) ? sperrAblehnung(call, ANRUFSTART_SPERRE.PAUSE) : null) },
-  ];
+  const wartendeTore: Tor<Anruf>[] = ANRUFSTART_SPERR_TORE.map((tor) => ({
+    name: tor.name,
+    run: async (call) => ((await tor.gesperrt(sperren, call)) ? sperrAblehnung(call, tor.grund) : null),
+  }));
 
   async function starteWartendenAnruf(call: Anruf) {
     const bestanden = await fuehreToreAus(wartendeTore, call, (tor, betroffen, fehler) => {
