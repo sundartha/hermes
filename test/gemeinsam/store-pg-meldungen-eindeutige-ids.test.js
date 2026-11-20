@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makePgStore } from "../../src/store/pg.js";
-import { makePgTestStore } from "../pg-helpers.js";
+import { makePgStore, makePgTestStore } from "../pg-helpers.js";
 
 const FESTER_ZUFALL = 0.123456789;
 const FESTE_UHRZEIT_MS = 1_700_000_000_000;
