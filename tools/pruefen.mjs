@@ -519,13 +519,14 @@ function ohneWerkzeugSteuerung(quelle) {
   return Object.fromEntries(Object.entries(quelle).filter(([name]) => !WERKZEUG_STEUERUNG.includes(name)));
 }
 
-function testdateiGruen(datei, { mitMutant, fristMs } = {}, lauf) {
+async function testdateiGruen(datei, { mitMutant, fristMs } = {}, lauf) {
   const { laeufe, abdeckung, gestartet, aktiv } = lauf;
   gestartet.push(datei);
   const eintrag = { datei, start: Date.now() };
   aktiv.add(eintrag);
   const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
-  return starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", fristMs }, laeufe).finally(() => aktiv.delete(eintrag));
+  const gruen = await starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", fristMs }, laeufe).finally(() => aktiv.delete(eintrag));
+  return { gruen, zeitueberschritten: !gruen && fristMs !== undefined && Date.now() - eintrag.start >= fristMs };
 }
 
 export function schutzOrte(dateien) {
@@ -556,7 +557,7 @@ async function abdeckungMessen(plan) {
   const messen = async () => {
     for (let datei = offen.shift(); datei !== undefined && !stand.frist; datei = offen.shift()) {
       const ordner = join(mkdtempSync(join(tmpdir(), "abdeckung-")), "v8");
-      const gruen = await testdateiGruen(datei, { mitMutant: false }, { ...lauf, abdeckung: ordner });
+      const { gruen } = await testdateiGruen(datei, { mitMutant: false }, { ...lauf, abdeckung: ordner });
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
       abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
       rmSync(dirname(ordner), { recursive: true, force: true });
@@ -600,18 +601,29 @@ async function mutantGegenTests(plan) {
     stand.liefNoch = [...lauf.aktiv].map(({ datei, start }) => ({ datei, sekunden: Math.round((Date.now() - start) / SEKUNDE_MS) }));
     beendeRestlaeufe(lauf.laeufe);
   };
+  const mitMutantEinTimeoutUnterLastBestaetigen = async (datei) => {
+    if (beendet() || (await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf)).gruen || beendet()) return;
+    stand.test = datei;
+    beendeRestlaeufe(lauf.laeufe);
+  };
   const pruefe = async (datei) => {
-    if (beendet() || (await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf)) || beendet()) return;
+    if (beendet()) return;
+    const ersterLauf = await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf);
+    if (ersterLauf.gruen || beendet()) return;
     let basisGruen = false;
-    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = await testdateiGruen(datei, { mitMutant: false }, lauf);
+    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = (await testdateiGruen(datei, { mitMutant: false }, lauf)).gruen;
     if (beendet()) return;
     if (!basisGruen) {
       basisRot.add(datei);
       ausgeschlossen.push(datei);
       return;
     }
-    stand.test = datei;
-    beendeRestlaeufe(lauf.laeufe);
+    if (!ersterLauf.zeitueberschritten) {
+      stand.test = datei;
+      beendeRestlaeufe(lauf.laeufe);
+      return;
+    }
+    return mitMutantEinTimeoutUnterLastBestaetigen(datei);
   };
   const arbeiter = async () => {
     while (stand.test === null && offen.length > 0 && !stand.frist) {
