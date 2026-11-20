@@ -27,17 +27,17 @@ export function rohwerteServer(
   }: Pick<ReturnType<typeof umgebungMit>, "numEnv" | "stripTrailingSlash" | "detectProduction" | "textEnv">,
   quellOrdner: string,
 ): {
-  port: number | undefined;
+  port: number;
   publicUrl: string;
   publicUrlExplicit: boolean;
   isProduction: boolean;
   deployedCommit: string;
   openaiAppsChallengeToken: string;
-  shutdownDrainTimeoutMs: number | undefined;
+  shutdownDrainTimeoutMs: number;
   herzschlagUrl: string;
-  herzschlagTaktMs: number | undefined;
-  herzschlagVerzugGrenzeMs: number | undefined;
-  herzschlagFristMs: number | undefined;
+  herzschlagTaktMs: number;
+  herzschlagVerzugGrenzeMs: number;
+  herzschlagFristMs: number;
   dataDir: string;
   publicDir: string;
   webDistDir: string;
