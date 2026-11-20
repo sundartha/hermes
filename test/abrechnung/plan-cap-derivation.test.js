@@ -30,7 +30,7 @@ before(async () => {
     () => import("../../src/billing/backfill-profiles.ts"),
     () => import("../../src/billing/plan-caps.ts"),
     () => import("../../src/plans.ts"),
-    () => import("../../src/begriffe/abrechnung.js"),
+    () => import("../../src/begriffe/abrechnung.ts"),
     () => import("../../src/begriffe/mandant.js"),
   );
   config.billing.stripeStarterPriceId = "price_starter_test";

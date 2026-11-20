@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.js";
+import { MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.ts";
 
 const OWNER = "Jonas Beispiel";
 const CALL_ID = "call_p8_breaker";

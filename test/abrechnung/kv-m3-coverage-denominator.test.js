@@ -7,7 +7,7 @@ import {
   SWEEP_TRIGGER,
 } from "../../src/billing/cost-truing.ts";
 import { makeDefaultState } from "../../src/store/state-ops.js";
-import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import {
   makeDueOutboundCall, makeDueInboundCall, isoMinutesAgo, makeStubStore, fakeConfig, fakeVoiceControl,
 } from "../cost-truing-harness.js";

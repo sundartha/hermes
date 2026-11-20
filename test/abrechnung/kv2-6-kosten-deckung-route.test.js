@@ -7,7 +7,7 @@ import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.js";
+import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const SECRET = "kv2-6-route-web-secret-0123456789";

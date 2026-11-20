@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { REIFE } from "../../src/begriffe/abrechnung.js";
+import { REIFE } from "../../src/begriffe/abrechnung.ts";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.js";
 import {
   ABSCHLUSS_GRUND,

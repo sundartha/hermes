@@ -24,7 +24,7 @@ import {
 } from "../../src/billing/webhook.ts";
 import { PLAN_CATALOG } from "../../src/plans.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
-import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const SECRET = SMOKE_SITZUNGS_GEHEIMNIS;

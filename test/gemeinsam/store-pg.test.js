@@ -7,7 +7,7 @@ import { config } from "../../src/config.js";
 import { defaultSettings, demoCalendar } from "../../src/store.js";
 import { PROVIDER, GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
-import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { TENANT_STATUS } from "../../src/begriffe/mandant.js";
 import {
   transitionNumber,

@@ -5,7 +5,7 @@ import { activeLlmErrors, createLlmProvider } from "../../src/llm/registry.js";
 import { anthropicErrors } from "../../src/llm/adapters/anthropic.ts";
 import { deepseekErrors } from "../../src/llm/adapters/deepseek.ts";
 import { LLM_PROVIDER } from "../../src/llm/provider.ts";
-import { MODEL_PRICE_RATE_FIELDS } from "../../src/begriffe/abrechnung.js";
+import { MODEL_PRICE_RATE_FIELDS } from "../../src/begriffe/abrechnung.ts";
 import { makeConfigOverrides, startServer, startServerExpectExit } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

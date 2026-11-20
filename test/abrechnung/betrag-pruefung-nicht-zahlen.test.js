@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isBookableCents, isProviderMicroCents } from "../../src/begriffe/abrechnung.js";
+import { isBookableCents, isProviderMicroCents } from "../../src/begriffe/abrechnung.ts";
 
 const EINGABEN = [
   [null, false],

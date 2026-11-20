@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { config } from "../../src/config.js";
 import { makeOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { callTariffCentsPerMin, makeMetering } from "../../src/billing/metering.js";
-import { RESERVE_LEAD_MINUTES, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { RESERVE_LEAD_MINUTES, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { emptyUsage } from "../../src/store.js";
 
 const TENANT_A = "t_origin";

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.js";
+import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { findPlan } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
