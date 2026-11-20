@@ -40,7 +40,7 @@
     },
     "get_call_status": {
       "title": "Get call status",
-      "description": "Returns the live state of a call: status (dialing|queued|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.",
+      "description": "Returns the live state of a call: status (queued|dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.",
       "inputSchema.properties.call_id.description": "The call_id from place_call",
       "annotations.title": "Get call status",
       "_meta.openai/toolInvocation/invoking": "Checking the call status",

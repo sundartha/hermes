@@ -8,6 +8,6 @@ test("get_call_status nennt queued in der Statusliste der Werkzeugbeschreibung",
   const tool = tools.find((entry) => entry.name === "get_call_status");
   assert.match(
     tool.description,
-    /status \(dialing\|queued\|in_progress\|completed\|failed\|cancelled\), duration/,
+    /status \(queued\|dialing\|in_progress\|completed\|failed\|cancelled\), duration/,
   );
 });
