@@ -13,7 +13,7 @@
         "datasourceUid": "prometheus",
         "model": {
           "refId": "A",
-          "expr": "(sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[1h])) / sum(increase(hermes_call_ended_total[1h])) > 0.144 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[5m])) / sum(increase(hermes_call_ended_total[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or (sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[6h])) / sum(increase(hermes_call_ended_total[6h])) > 0.06 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\"}[30m])) / sum(increase(hermes_call_ended_total[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+          "expr": "(sum(increase(hermes_call_ended_total{ergebnis=\"failed\",grund!~\"no-answer|busy|keiner\"}[1h])) / sum(increase(hermes_call_ended_total[1h])) > 0.144 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\",grund!~\"no-answer|busy|keiner\"}[5m])) / sum(increase(hermes_call_ended_total[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or (sum(increase(hermes_call_ended_total{ergebnis=\"failed\",grund!~\"no-answer|busy|keiner\"}[6h])) / sum(increase(hermes_call_ended_total[6h])) > 0.06 and sum(increase(hermes_call_ended_total{ergebnis=\"failed\",grund!~\"no-answer|busy|keiner\"}[30m])) / sum(increase(hermes_call_ended_total[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
         }
       },
       {
@@ -27,9 +27,7 @@
             {
               "evaluator": {
                 "type": "gt",
-                "params": [
-                  0
-                ]
+                "params": [0]
               }
             }
           ]
@@ -39,21 +37,14 @@
     "burnrate": {
       "slo": 0.99,
       "fenster": [
-        [
-          "1h",
-          "5m",
-          14.4
-        ],
-        [
-          "6h",
-          "30m",
-          6
-        ]
+        ["1h", "5m", 14.4],
+        ["6h", "30m", 6]
       ],
       "mindestAnrufe": 20,
       "gesamt": "hermes_call_ended_total",
-      "fehler": "hermes_call_ended_total{ergebnis=\"failed\"}"
+      "fehler": "hermes_call_ended_total{ergebnis=\"failed\",grund!~\"no-answer|busy|keiner\"}"
     },
+    "noDataState": "OK",
     "for": "2m",
     "labels": {
       "bereich": "anrufe"
@@ -80,7 +71,7 @@
         "datasourceUid": "prometheus",
         "model": {
           "refId": "A",
-          "expr": "((sum(increase(hermes_call_answer_time_count[1h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[1h]))) / sum(increase(hermes_call_answer_time_count[1h])) > 0.144 and (sum(increase(hermes_call_answer_time_count[5m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[5m]))) / sum(increase(hermes_call_answer_time_count[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or ((sum(increase(hermes_call_answer_time_count[6h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[6h]))) / sum(increase(hermes_call_answer_time_count[6h])) > 0.06 and (sum(increase(hermes_call_answer_time_count[30m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\"}[30m]))) / sum(increase(hermes_call_answer_time_count[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+          "expr": "((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[1h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) > 0.144 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[5m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or ((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[6h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) > 0.06 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[30m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
         }
       },
       {
@@ -94,9 +85,7 @@
             {
               "evaluator": {
                 "type": "gt",
-                "params": [
-                  0
-                ]
+                "params": [0]
               }
             }
           ]
@@ -106,21 +95,14 @@
     "burnrate": {
       "slo": 0.99,
       "fenster": [
-        [
-          "1h",
-          "5m",
-          14.4
-        ],
-        [
-          "6h",
-          "30m",
-          6
-        ]
+        ["1h", "5m", 14.4],
+        ["6h", "30m", 6]
       ],
       "mindestAnrufe": 20,
-      "gesamt": "hermes_call_answer_time_count",
-      "gut": "hermes_call_answer_time_bucket{le=\"5\"}"
+      "gesamt": "hermes_call_answer_time_count{direction=\"inbound\"}",
+      "gut": "hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}"
     },
+    "noDataState": "OK",
     "for": "2m",
     "labels": {
       "bereich": "anrufe"
@@ -161,9 +143,7 @@
             {
               "evaluator": {
                 "type": "gt",
-                "params": [
-                  0
-                ]
+                "params": [0]
               }
             }
           ]
@@ -173,21 +153,14 @@
     "burnrate": {
       "slo": 0.99,
       "fenster": [
-        [
-          "1h",
-          "5m",
-          14.4
-        ],
-        [
-          "6h",
-          "30m",
-          6
-        ]
+        ["1h", "5m", 14.4],
+        ["6h", "30m", 6]
       ],
       "mindestAnrufe": 20,
       "gesamt": "hermes_call_ended_total",
       "fehler": "hermes_call_ended_total{grund=~\"canceled|result-unknown\"}"
     },
+    "noDataState": "OK",
     "for": "2m",
     "labels": {
       "bereich": "anrufe"

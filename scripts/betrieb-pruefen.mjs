@@ -62,8 +62,12 @@ export function burnrateAusdruck(burnrate) {
 
 function ausdruckBefund(regel) {
   const modell = regel.data.find((zeile) => zeile.refId === "A").model;
-  if (modell.expr === burnrateAusdruck(regel.burnrate)) return [];
-  return [`${regel.uid}: expr weicht von burnrate ab`];
+  const befunde = [];
+  if (modell.expr !== burnrateAusdruck(regel.burnrate)) {
+    befunde.push(`${regel.uid}: expr weicht von burnrate ab`);
+  }
+  if (regel.noDataState !== "OK") befunde.push(`${regel.uid}: noDataState muss OK sein`);
+  return befunde;
 }
 
 export function pruefeAlarme(wurzel) {

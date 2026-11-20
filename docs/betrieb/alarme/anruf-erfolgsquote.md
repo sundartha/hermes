@@ -2,7 +2,7 @@
 
 Regel: `docs/betrieb/grafana/anrufregeln.json`, Eintrag `anruf-erfolgsquote` (Ziel, Fenster, Faktoren und Mindestmenge stehen nur dort, im Feld `burnrate`). Messgröße: `hermes.call.ended` mit Attribut `ergebnis`.
 
-Das Ziel und die Schwellen sind ein Vorschlag, durch Messung zu bestätigen. Das Ziel gilt für den Anteil erfolgreich beendeter Anrufe.
+Das Ziel und die Schwellen sind ein Vorschlag, durch Messung zu bestätigen. Das Ziel gilt für den Anteil erfolgreich beendeter Anrufe; Nichtannahme und Besetzt (`no-answer`, `busy`, `keiner`) zählen nicht als Fehler (Quelle: `burnrate.fehler` in `anrufregeln.json`).
 
 ## Symptom
 
