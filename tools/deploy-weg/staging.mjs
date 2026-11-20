@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { fremderSigner } from "../../scripts/last/webhooks.mjs";
 import { COMMIT_MUSTER, fremdeZeilenMelden } from "./ausgabe.mjs";
 import { githubZugang, hermesZugang } from "./netz.mjs";
-import { abwarten, ECHTE_UHR, STAGING_TAKTE } from "./takt.mjs";
+import { abwarten, ECHTE_UHR, STAGING_PIN_TAKTE, STAGING_TAKTE, wiederholenBisFrist } from "./takt.mjs";
 
 const PROBE_AUTH = fileURLToPath(new URL("../../scripts/probe-auth.sh", import.meta.url));
 const HTTP_OK = 200;
@@ -17,6 +17,7 @@ const SIGNATUR_KOPF = "telnyx-signature-ed25519";
 const ZEIT_KOPF = "telnyx-timestamp";
 const EXIT_OK = 0;
 const EXIT_NICHT_GESTARTET = 127;
+const PIN_VERLETZT = "Ziel-Pin verletzt";
 const ERREICHT = "erreicht";
 const UEBERHOLT = "ueberholt";
 
@@ -133,8 +134,40 @@ export function absichtlichRotMelden({ einstellungen, ausgabe }) {
   return true;
 }
 
-async function standProbieren({ hermes, einstellungen, commit, ausgabe, basis }) {
-  const stand = await hermes.betriebsstatus(einstellungen.statusToken);
+function pinBeobachter(ausgabe) {
+  const beobachter = {
+    verletzt: false,
+    ausgabe: Object.freeze({
+      ...ausgabe,
+      melde(schluessel, werte) {
+        if (schluessel === "probe_auth_zeile" && werte.zeile.includes(PIN_VERLETZT)) beobachter.verletzt = true;
+        ausgabe.melde(schluessel, werte);
+      },
+    }),
+  };
+  return beobachter;
+}
+
+function authProbieren({ probeAuth, url, commit, ausgabe, uhr, pinTakte }) {
+  return wiederholenBisFrist({ uhr, ...pinTakte }, async () => {
+    const beobachter = pinBeobachter(ausgabe);
+    const exit = await probeAuth({ url, commit, ausgabe: beobachter.ausgabe });
+    if (beobachter.verletzt) ausgabe.melde("pin_wartet", { commit });
+    return { fertig: !beobachter.verletzt, exit };
+  });
+}
+
+function stagingStandLesen({ hermes, einstellungen, commit, ausgabe, uhr, pinTakte }) {
+  return wiederholenBisFrist({ uhr, ...pinTakte }, async () => {
+    const stand = await hermes.betriebsstatus(einstellungen.statusToken);
+    const wartet = stand.gesund && stand.commit !== commit;
+    if (wartet) ausgabe.melde("pin_wartet", { commit });
+    return { fertig: !wartet, stand };
+  });
+}
+
+async function standProbieren({ hermes, einstellungen, commit, ausgabe, basis, uhr, pinTakte }) {
+  const { stand } = await stagingStandLesen({ hermes, einstellungen, commit, ausgabe, uhr, pinTakte });
   const { status, gesund, commit: gemeldet, telnyxSchluessel } = stand;
   const ok = gesund && gemeldet === commit;
   ausgabe.melde("probe_stand", { http: status, ok });
@@ -149,17 +182,18 @@ export async function staging({
   ausgabe,
   uhr = ECHTE_UHR,
   takte = STAGING_TAKTE,
+  pinTakte = STAGING_PIN_TAKTE,
   probeAuth = probeAuthStarten,
 }) {
   if (!(await stagingAbwarten({ einstellungen, commit, ausgabe, uhr, takte }))) return false;
-  const exit = await probeAuth({ url: einstellungen.stagingUrl, commit, ausgabe });
+  const { exit } = await authProbieren({ probeAuth, url: einstellungen.stagingUrl, commit, ausgabe, uhr, pinTakte });
   ausgabe.melde("probe_auth", { exit });
   const http = await hermesZugang(einstellungen.stagingUrl).mcpOhneAnmeldung();
   ausgabe.melde("mcp_ohne_anmeldung", { http });
   const hermes = hermesZugang(einstellungen.stagingUrl);
   const basis = await hermes.abgewieseneWebhooks();
   const webhooks = await webhooksProbieren({ hermes, commit, ausgabe, uhr });
-  const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe, basis });
+  const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe, basis, uhr, pinTakte });
   if (absichtlichRotMelden({ einstellungen, ausgabe })) return false;
   return exit === EXIT_OK && http === HTTP_NICHT_ANGEMELDET && webhooks && stand;
 }

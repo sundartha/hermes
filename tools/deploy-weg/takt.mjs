@@ -12,6 +12,8 @@ const HEALTHZ_SCHUTZGRENZE_MINUTEN = 10;
 const NACHKONTROLLE_TAKT_SEKUNDEN = 60;
 const NACHKONTROLLE_FRIST_MINUTEN = 30;
 
+const STAGING_PIN_FRIST_MINUTEN = 3;
+
 export const AUFWACHEN_FRIST_MS = 90_000;
 export const AUFWACHEN_TAKT_MS = 20_000;
 export const AUFWACHEN_SCHUTZGRENZE_MS = 300_000;
@@ -20,6 +22,11 @@ export const FRISCH_GEWECKT_AB_MS = 15_000;
 export const STAGING_TAKTE = Object.freeze({
   taktMs: STAGING_TAKT_SEKUNDEN * SEKUNDE_MS,
   schutzgrenzeMs: STAGING_SCHUTZGRENZE_MINUTEN * MINUTE_MS,
+});
+
+export const STAGING_PIN_TAKTE = Object.freeze({
+  taktMs: STAGING_TAKT_SEKUNDEN * SEKUNDE_MS,
+  fristMs: STAGING_PIN_FRIST_MINUTEN * MINUTE_MS,
 });
 
 export const AUFWACHEN_TAKTE = Object.freeze({
@@ -61,5 +68,16 @@ export async function abwarten({ uhr, taktMs, schutzgrenzeMs, start = uhr.jetzt(
     const vergangen = uhr.jetzt() - start;
     if (vergangen >= schutzgrenzeMs) return { schutzgrenze: true, minuten: minuten(vergangen) };
     await uhr.warten(Math.min(taktMs, schutzgrenzeMs - vergangen));
+  }
+}
+
+export async function wiederholenBisFrist({ uhr, taktMs, fristMs }, versuch) {
+  let gewartet = 0;
+  for (;;) {
+    const ergebnis = await versuch();
+    if (ergebnis.fertig || gewartet >= fristMs) return ergebnis;
+    const pause = Math.min(taktMs, fristMs - gewartet);
+    await uhr.warten(pause);
+    gewartet += pause;
   }
 }
