@@ -621,7 +621,7 @@
     }
 
     function groupNumber(raw) {
-      var match = /^\+49(\d{3})(\d{4,})$/.exec(raw);
+      var match = /^\+49(30|40|69|89|1[567]\d)(\d{4,})$/.exec(raw);
       return match ? "+49 " + match[1] + " " + match[2] : raw;
     }
 
