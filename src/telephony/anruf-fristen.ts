@@ -3,7 +3,8 @@ import { VORSPANN_TTS_FRIST_MS } from "../elevenlabs/vorspann-pruefung.js";
 import { ANRUF_STEUERN_FRIST_MS } from "./adapters/telnyx/voice.js";
 
 const BRIEFING_SCHRITTE = 2;
-const HOP_PUFFER_MS = 5 * MS_PER_SECOND;
+const HOP_PUFFER_SEKUNDEN = 5;
+const HOP_PUFFER_MS = HOP_PUFFER_SEKUNDEN * MS_PER_SECOND;
 
 export function placeCallHopFristMs(briefingFristMs: number): number {
   const schritte = BRIEFING_SCHRITTE * briefingFristMs + VORSPANN_TTS_FRIST_MS + ANRUF_STEUERN_FRIST_MS;

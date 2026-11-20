@@ -24,7 +24,8 @@ function hopFristMitBriefing(briefingMs) {
     env: { ...process.env, PRECALL_BRIEFING_TIMEOUT_MS: String(briefingMs) },
   });
   assert.equal(lauf.status, 0, lauf.stderr);
-  return JSON.parse(lauf.stdout.trim().split("\n").pop());
+  const zeilen = lauf.stdout.trim().split("\n");
+  return JSON.parse(zeilen.pop());
 }
 
 test("Hop-Frist liegt ueber Briefing-Schritten, Vorspann-Frist und Dial-Frist", () => {
