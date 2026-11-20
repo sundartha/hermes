@@ -130,7 +130,7 @@ import {
   bootstrapNummerAnlegen,
   bootstrapNummerAusKonfigAnlegen,
   provisioningJobMarkieren,
-} from "./zustand/nummern.js";
+} from "./zustand/nummern.ts";
 export {
   settingsFor,
   calendarFor,
@@ -182,7 +182,7 @@ export {
   paidWithoutNumberCandidates,
   ersatzZuAlterNummer,
   numbersDueForMonthMeter,
-} from "./zustand/nummern.js";
+} from "./zustand/nummern.ts";
 export {
   allTenantIds,
   tenantIdpSubject,
