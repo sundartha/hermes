@@ -20,13 +20,21 @@ const OVERRIDE_FREIGEGEBEN = z.object({
   }),
 });
 
-export function stimmenAnzahlVon({ angefordert, agent }: { angefordert: string; agent: unknown }): number | null {
+export function stimmenAnzahlVon({
+  angefordert,
+  agent,
+  vorspannGespielt,
+}: {
+  angefordert: string;
+  agent: unknown;
+  vorspannGespielt: boolean;
+}): number | null {
   const gelesen = EIGENE_STIMME.safeParse(agent).data;
   const eigene = gelesen?.conversation_config.tts.voice_id;
   if (eigene === undefined) return null;
   const freigegeben = OVERRIDE_FREIGEGEBEN.safeParse(agent).success;
   const wirksam = freigegeben ? angefordert : eigene;
-  return new Set([angefordert, wirksam]).size;
+  return new Set(vorspannGespielt ? [angefordert, wirksam] : [wirksam]).size;
 }
 
 interface Anruf {
@@ -35,6 +43,7 @@ interface Anruf {
   from?: string;
   to: string;
   language?: string;
+  bridgedAt?: string | null;
 }
 
 type MandantZustand = Parameters<typeof callLocaleFor>[0];
@@ -81,7 +90,7 @@ export async function ermittleStimmenAnzahl({
     const angefordert = angeforderteStimme({ store, config, call });
     const { agentId, ...konto } = config.voice.elevenLabsOutbound;
     const agent = await fetchAgent({ fetchImpl, account: konto, agentId, timeoutMs: STIMMEN_FRIST_MS });
-    return stimmenAnzahlVon({ angefordert, agent });
+    return stimmenAnzahlVon({ angefordert, agent, vorspannGespielt: Boolean(call.bridgedAt) });
   } catch (fehler) {
     console.warn(`[el-stimmen] nicht ermittelt (call=${callId}): ${fehler instanceof Error ? fehler.message : "unbekannt"}`);
     return null;
