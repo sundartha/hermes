@@ -94,13 +94,19 @@ function basisHaengtLauf(ordner) {
   return readFileSync(protokoll, "utf8").trim().split("\n").map((zeile) => JSON.parse(zeile));
 }
 
-test("Hängt eine Testdatei auch ohne Mutant (Basis), bleibt das sichtbar „nicht geprüft (Frist)“ und gilt nicht als getötet", () => {
+test("Hängt eine Testdatei auch ohne Mutant (Basis), bleibt das sichtbar „nicht geprüft (Frist)“, nennt die Datei mit ihrer Laufzeit als liefNoch und gilt nicht als getötet", () => {
   mitOrdner((ordner) => {
     const zeilen = basisHaengtLauf(ordner);
     assert.equal(zeilen.length, 1);
     assert.equal(zeilen[0].ergebnis, "nicht geprüft (Frist)");
     assert.notEqual(zeilen[0].ergebnis, "getötet");
     assert.equal(Object.hasOwn(zeilen[0], "test"), false);
+    const { liefNoch } = zeilen[0];
+    assert.equal(liefNoch.length, 1);
+    const [{ datei, sekunden }] = liefNoch;
+    assert.equal(datei, "test/haengt-auch-ohne-mutant.test.js");
+    assert.equal(Number.isInteger(sekunden), true);
+    assert.ok(sekunden >= 0 && sekunden <= 5);
   });
 });
 
