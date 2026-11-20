@@ -76,3 +76,27 @@ test("Aendert sich nur anrufeUeberHoechstdauer, erscheint eine neue Zeile", asyn
     [ZEILE_EINS, "[fruehwarnung] webhooksAbgewiesen=1 anrufeUeberHoechstdauer=1"],
   );
 });
+
+test("Haengender Anruf, Rueckgang auf null und neuer haengender Anruf loggen zwei Zeilen", async (t) => {
+  const zustand = { webhooksAbgewiesen: 0, anrufeUeberHoechstdauer: 1 };
+  const fehlerlog = t.mock.method(console, "error", () => {});
+  const router = express.Router();
+  registerPublicRoutes({
+    app: router,
+    config: { server: { deployedCommit: "b8c0ffee", webDistDir: "kein-web" } },
+    store: {},
+    healthzOptionen: { fruehwarnung: () => zustand },
+  });
+  await mitRoutenServer(router, async (basis) => {
+    await abrufMitFrist(`${basis}/healthz`);
+    zustand.anrufeUeberHoechstdauer = 0;
+    await abrufMitFrist(`${basis}/healthz`);
+    zustand.anrufeUeberHoechstdauer = 1;
+    await abrufMitFrist(`${basis}/healthz`);
+  });
+  const zeilen = fehlerlog.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
+  assert.deepEqual(
+    zeilen.filter((zeile) => zeile.startsWith("[fruehwarnung]")),
+    Array(2).fill("[fruehwarnung] webhooksAbgewiesen=0 anrufeUeberHoechstdauer=1"),
+  );
+});

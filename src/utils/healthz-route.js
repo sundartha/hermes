@@ -23,7 +23,10 @@ const MONOTONE_UHR = () => performance.now();
 function macheFruehwarnungsFelder() {
   let zuletztGeloggt = null;
   return ({ webhooksAbgewiesen, anrufeUeberHoechstdauer }) => {
-    if (webhooksAbgewiesen === 0 && anrufeUeberHoechstdauer === 0) return {};
+    if (webhooksAbgewiesen === 0 && anrufeUeberHoechstdauer === 0) {
+      zuletztGeloggt = null;
+      return {};
+    }
     const zeile = `[fruehwarnung] webhooksAbgewiesen=${webhooksAbgewiesen} anrufeUeberHoechstdauer=${anrufeUeberHoechstdauer}`;
     if (zeile !== zuletztGeloggt) console.error(zeile);
     zuletztGeloggt = zeile;
