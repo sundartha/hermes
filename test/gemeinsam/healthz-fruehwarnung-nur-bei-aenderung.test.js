@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import express from "express";
 
-import { makeHealthzRoutes } from "../../src/utils/healthz-route.js";
+import { registerPublicRoutes } from "../../src/app.js";
+import { mitRoutenServer } from "../anrufe/routen-server.js";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { logBis } from "./log-bis.mjs";
@@ -54,29 +55,24 @@ test("Zwei Healthz nach einem 403 loggen die Fruehwarnung genau einmal, ein weit
 
 test("Aendert sich nur anrufeUeberHoechstdauer, erscheint eine neue Zeile", async (t) => {
   const zustand = { webhooksAbgewiesen: 1, anrufeUeberHoechstdauer: 0 };
-  const geloggt = [];
-  t.mock.method(console, "error", (zeile) => geloggt.push(zeile));
-  const app = express();
-  app.use(
-    makeHealthzRoutes({
-      config: { server: { deployedCommit: "abc" } },
-      poolZustand: () => ({ wartend: 0, ältesteWartezeitMs: 0 }),
-      fruehwarnung: () => zustand,
-    }),
-  );
-  const http = app.listen(0);
-  try {
-    const url = `http://127.0.0.1:${http.address().port}/healthz`;
-    await abrufMitFrist(url);
-    await abrufMitFrist(url);
+  const fehlerlog = t.mock.method(console, "error", () => {});
+  const router = express.Router();
+  registerPublicRoutes({
+    app: router,
+    config: { server: { deployedCommit: "b8c0ffee", webDistDir: "kein-web" } },
+    store: {},
+    healthzOptionen: { fruehwarnung: () => zustand },
+  });
+  await mitRoutenServer(router, async (basis) => {
+    await abrufMitFrist(`${basis}/healthz`);
+    await abrufMitFrist(`${basis}/healthz`);
     zustand.anrufeUeberHoechstdauer = 1;
-    await abrufMitFrist(url);
-    await abrufMitFrist(url);
-    assert.deepEqual(
-      geloggt.filter((zeile) => zeile.startsWith("[fruehwarnung]")),
-      [ZEILE_EINS, "[fruehwarnung] webhooksAbgewiesen=1 anrufeUeberHoechstdauer=1"],
-    );
-  } finally {
-    http.close();
-  }
+    await abrufMitFrist(`${basis}/healthz`);
+    await abrufMitFrist(`${basis}/healthz`);
+  });
+  const zeilen = fehlerlog.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
+  assert.deepEqual(
+    zeilen.filter((zeile) => zeile.startsWith("[fruehwarnung]")),
+    [ZEILE_EINS, "[fruehwarnung] webhooksAbgewiesen=1 anrufeUeberHoechstdauer=1"],
+  );
 });
