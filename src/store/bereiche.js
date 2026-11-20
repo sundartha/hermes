@@ -17,7 +17,7 @@ import {
   markTenantNeedsManualReconcile,
   openOutageAlert,
   paidWithoutNumberCandidates,
-} from "./zustand/nummern.js";
+} from "./zustand/nummern.ts";
 
 const TRANSKRIPT_FRIST_MS = 500;
 

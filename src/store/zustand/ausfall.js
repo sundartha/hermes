@@ -3,7 +3,7 @@ import {
   closeOutageAlert,
   openOutageAlert,
   platformHoldEscalationCandidates,
-} from "./nummern.js";
+} from "./nummern.ts";
 
 export function sendeplatzReserviert(state, { bucket, nowMs }) {
   const reserviertAm = new Date(nowMs).toISOString();
