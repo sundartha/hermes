@@ -20,7 +20,12 @@ const TAG_LAENGE = 10;
 const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
-const STIMMEN_NACHLAUF_WARTEN = 3;
+const EL_TERMINATION_RESULT_ATTEMPTS = 3;
+const RESULT_POLL_MS = 5000;
+const CONVAI_REQUEST_TIMEOUT_MS = 120_000;
+const STIMMEN_FRIST_MS = 10_000;
+const STIMMEN_NACHLAUF_FRIST_MS =
+  (EL_TERMINATION_RESULT_ATTEMPTS - 1) * RESULT_POLL_MS + CONVAI_REQUEST_TIMEOUT_MS + STIMMEN_FRIST_MS;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
@@ -177,9 +182,10 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     },
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
     stimmenAnzahl: async () => {
-      for (let versuch = 1; ; versuch += 1) {
+      const beginn = uhr.jetzt();
+      for (;;) {
         const wert = await gegenStimmenAnzahl(ruf, probeStartMs);
-        if (wert !== undefined || versuch > STIMMEN_NACHLAUF_WARTEN) return wert;
+        if (wert !== undefined || uhr.jetzt() - beginn >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
         await uhr.warte(TAKT_MS);
       }
     },
