@@ -9,8 +9,6 @@ const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
 const MAX_DURATION_S = 3600;
-const ANSWERED_AGO_MS = 5000;
-const JETZT_MS = Date.parse("2026-01-01T00:00:00.000Z");
 const ERSTE_RUECKFRAGE = 1;
 const PARALLELE_SERVER = 2;
 
@@ -37,7 +35,6 @@ const outboundSeed = (n) =>
         direction: "outbound",
         status: "active",
         maxDurationS: MAX_DURATION_S,
-        answeredAt: new Date(JETZT_MS - ANSWERED_AGO_MS).toISOString(),
         elevenlabsConversationId: conversationId(n),
       }),
     ],
@@ -67,8 +64,7 @@ async function ersteRueckfrage(srv, n) {
 const beschreibung = (antwort, srv, n) =>
   `Status ${antwort.status}, Koerper ${antwort.koerper}, consultCount ${consultCount(srv, n)}`;
 
-test("erste-rueckfrage-zuverlaessig: die erste Rueckfrage eines laufenden Outbound-Anrufs wird angenommen und angelegt", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: JETZT_MS });
+test("erste-rueckfrage-zuverlaessig: die erste Rueckfrage eines laufenden Outbound-Anrufs wird angenommen und angelegt", async () => {
   const srv = await startServer({ env: WEBHOOK_ENV, seed: outboundSeed(0) });
   try {
     const antwort = await ersteRueckfrage(srv, 0);
@@ -79,8 +75,7 @@ test("erste-rueckfrage-zuverlaessig: die erste Rueckfrage eines laufenden Outbou
   }
 });
 
-test("erste-rueckfrage-zuverlaessig: zwei gleichzeitig gestartete Server nehmen je ihre erste Rueckfrage an", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: JETZT_MS });
+test("erste-rueckfrage-zuverlaessig: zwei gleichzeitig gestartete Server nehmen je ihre erste Rueckfrage an", async () => {
   const nummern = Array.from({ length: PARALLELE_SERVER }, (_, n) => n);
   const server = await Promise.all(
     nummern.map((n) => startServer({ env: WEBHOOK_ENV, seed: outboundSeed(n) })),
