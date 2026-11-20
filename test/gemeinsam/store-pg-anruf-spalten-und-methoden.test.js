@@ -30,7 +30,7 @@ const EINDEUTIGE_ANRUFWERTE = {
   result: { schluessel: "ergebnis-eindeutig-50" }, consults: [{ schluessel: "rueckfrage-eindeutig-51" }],
   lookupLog: [{ schluessel: "recherche-eindeutig-52" }],
   webhookAnchors: [{ schluessel: "anker-eindeutig-53" }], fromActualE164: "+4915100000054",
-  fromSource: "absender-quelle-eindeutig-55", fromRegistrationSource: "absender-anmeldung-eindeutig-56",
+  fromSource: "absender-quelle-eindeutig-55",
   elDetectorCounts: { schluessel: 57 }, elBoundAt: "2026-03-01T08:20:07.000Z",
   elFallbackAt: "2026-03-01T08:20:08.000Z", elNachlaufStartedAt: "2026-03-01T08:20:09.000Z",
   notPlacedMailSentAt: "2026-03-01T08:20:10.000Z",
@@ -115,7 +115,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "recordAnsweredUnclearReason", "recordCallCostEvidence", "recordCallCostTruingResult",
   "recordCallEstimatedCostCents", "recordCallLookup", "recordCalleeConfirmedTimezone", "recordCostProfile",
   "recordElDetectorCounts", "recordElevenlabsConversationId", "recordFailureReason",
-  "recordFromRegistrationSource", "recordProviderCallResult", "recordProviderCollectedFields",
+  "recordProviderCallResult", "recordProviderCollectedFields",
   "recordRelayTtsCharacters", "recordSipCallId", "recordTenantTtsCharacters", "recordTtsCharacters",
   "recordUsageEvent", "recordWebhookAnchors", "registrierungAnhaengen", "releaseOutboundReserve",
   "releaseOutboundReserveCents", "removeNewsletterRecipient", "reservationOf", "reserveExceedsBudget",
@@ -164,4 +164,23 @@ test("Anruf-Spalten: diagnostic, calleeIsOwner und callerIsOwner kommen mit umge
   assert.strictEqual(geladen.diagnostic, true);
   assert.strictEqual(geladen.calleeIsOwner, false);
   assert.strictEqual(geladen.callerIsOwner, true);
+});
+
+test("Anruf-Spalten: eine Altzeile mit from_registration_source bleibt beim erneuten Speichern unveraendert und wird nicht ins Feld gelesen", async () => {
+  const { store, db } = await makePgTestStore();
+  const angelegt = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  await store.save();
+  await store.drainFlushes();
+  await db.query("UPDATE call SET from_registration_source = $1 WHERE id = $2", ["altwert-tenant-did", angelegt.id]);
+  store.getCall(angelegt.id).summary = "neu-gespeichert";
+  store.getCall(angelegt.id).fromSource = "neu-quelle";
+  await store.save();
+  await store.drainFlushes();
+
+  const { rows } = await db.query("SELECT from_registration_source, from_source, summary FROM call WHERE id = $1", [angelegt.id]);
+  assert.equal(rows[0].from_registration_source, "altwert-tenant-did");
+  assert.equal(rows[0].summary, "neu-gespeichert");
+  assert.equal(rows[0].from_source, "neu-quelle");
+  await store.init();
+  assert.equal((await store.leseCall(angelegt.id)).fromRegistrationSource, undefined);
 });
