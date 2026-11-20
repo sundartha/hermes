@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { findRestrictedData, maskRestrictedText } from "../../src/restricted-data.js";
+import { findRestrictedData, maskRestrictedText } from "../../src/restricted-data.ts";
 
 const DREIZEHN_GRUPPEN = "1 2 3 4 5 6 7 8 9 1 2 3 4";
 
