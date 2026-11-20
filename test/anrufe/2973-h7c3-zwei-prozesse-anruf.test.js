@@ -106,6 +106,7 @@ async function legeAnrufInAAn({ a, sql, anbieter }) {
   const antwort = await mandantenAbruf(a, MANDANT_A.sub).rufeAn(ZIEL);
   assert.equal(antwort.status, HTTP_OK);
   const angelegt = await anrufAnBis(sql, { ziel: ZIEL, genug: gestartet });
+  await transkriptSql(sql, angelegt, VORSPANN_ZEILEN);
   anbieter.beendeGespraech(angelegt.konversation, GESPRAECH_ANBIETER);
   const fertig = await anrufAnBis(sql, { ziel: ZIEL, genug: beendet });
   await transkriptSql(sql, fertig, GESPRAECH_ANBIETER.length + VORSPANN_ZEILEN);
