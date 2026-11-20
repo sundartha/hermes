@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { newId } from "../../src/store/state-ops.js";
+import { newId } from "../../src/store.js";
 
 const FESTER_ZUFALL = 0.123456789;
 const UHR_MS = 1_900_000_000_000;
