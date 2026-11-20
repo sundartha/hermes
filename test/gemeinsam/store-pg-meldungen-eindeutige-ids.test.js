@@ -8,6 +8,11 @@ const ANDERE_UHRZEIT_MS = 1_800_000_000_000;
 const ANZAHL_MELDUNGEN = 55;
 const ERWARTET_BEHALTEN = 50;
 
+function letzteNotificationId(store) {
+  const { notifications } = store.load();
+  return notifications[0].id;
+}
+
 async function reopen(db) {
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -20,7 +25,14 @@ async function reopen(db) {
 function meldungenInGleicherMillisekunde(t, store, uhrzeit) {
   t.mock.method(Math, "random", () => FESTER_ZUFALL);
   t.mock.method(Date, "now", () => uhrzeit);
-  for (let i = 0; i < ANZAHL_MELDUNGEN; i++) store.addNotification(`t${i}`, `b${i}`, null);
+  const vergebeneIds = new Set();
+  for (let i = 0; i < ANZAHL_MELDUNGEN; i++) {
+    store.addNotification(`t${i}`, `b${i}`, null);
+    const id = letzteNotificationId(store);
+    assert.ok(id, `Meldung ${i}: newId lieferte eine leere ID`);
+    assert.ok(!vergebeneIds.has(id), `Meldung ${i}: ID "${id}" wurde schon vergeben`);
+    vergebeneIds.add(id);
+  }
   t.mock.restoreAll();
 }
 
@@ -43,8 +55,14 @@ test("nach einer Millisekunde ist die ID wieder die ohne Zähler", async (t) => 
   t.mock.method(Math, "random", () => FESTER_ZUFALL);
   t.mock.method(Date, "now", () => uhrzeit);
   store.addNotification("a", "a", null);
+  const aId = letzteNotificationId(store);
+  assert.ok(aId, "a: newId lieferte eine leere ID");
   store.addNotification("b", "b", null);
+  const bId = letzteNotificationId(store);
+  assert.equal(bId, `${aId}0`, "b: Zähler-ID nach der ersten Kollision stimmt nicht");
   store.addNotification("b2", "b2", null);
+  const b2Id = letzteNotificationId(store);
+  assert.equal(b2Id, `${aId}1`, "b2: Zähler-ID nach der zweiten Kollision stimmt nicht");
   uhrzeit += 1;
   store.addNotification("c", "c", null);
   uhrzeit = ANDERE_UHRZEIT_MS;
