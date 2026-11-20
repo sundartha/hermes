@@ -27,18 +27,16 @@ const WEBHOOK_ENV = Object.freeze({
 const callId = (n) => `call_erste_${n}`;
 const conversationId = (n) => `conv_erste_${n}`;
 
-const outboundSeed = (n) =>
-  seedState({
-    calls: [
-      seedCall({
-        id: callId(n),
-        direction: "outbound",
-        status: "active",
-        maxDurationS: MAX_DURATION_S,
-        elevenlabsConversationId: conversationId(n),
-      }),
-    ],
+const outboundSeed = (n) => {
+  const call = seedCall({
+    id: callId(n),
+    direction: "outbound",
+    status: "active",
+    maxDurationS: MAX_DURATION_S,
+    elevenlabsConversationId: conversationId(n),
   });
+  return seedState({ calls: [{ ...call, answeredAt: call.startedAt }] });
+};
 
 const consultCount = (srv, n) => {
   const call = srv.readStore().calls.find((c) => c.id === callId(n));
