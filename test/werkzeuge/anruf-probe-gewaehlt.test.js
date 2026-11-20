@@ -81,7 +81,7 @@ test("Rote Probe, übersprungene Probe und lokaler Lauf ohne GITHUB_OUTPUT: kein
 });
 
 test("Workflow: Probe-Schritt hat die Kennung probe, Lebenszeichen nur bei gewaehlt == 'true'", () => {
-  assert.match(WORKFLOW, /- name: Anrufprobe \(Kern in scripts\/anruf-probe\)\n {8}id: probe\n/);
+  assert.match(WORKFLOW, /- name: Anrufprobe \(Kern in scripts\/anruf-probe\)\n {8}if: [^\n]+\n {8}id: probe\n/);
   assert.match(
     WORKFLOW,
     /- name: Lebenszeichen Anrufprobe\n {8}if: success\(\) && github\.event_name == 'schedule' && steps\.probe\.outputs\.gewaehlt == 'true'\n/,
