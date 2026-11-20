@@ -393,6 +393,7 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       relais.fortsetzen();
       await relais.abwarten();
       const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
+      await mitschnitt.bisBedingung(() => beanspruchend.every((nr) => anweisungenSeit(mitschnitt, nr, vorher).includes(ZURUECK)));
       assert.ok(beanspruchend.length >= EINMAL);
       for (const nr of beanspruchend) {
         const spaeter = anweisungenSeit(mitschnitt, nr, vorher);
