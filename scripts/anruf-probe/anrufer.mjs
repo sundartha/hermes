@@ -104,6 +104,16 @@ function wiederholungen(starts) {
   }).length;
 }
 
+async function gegenStimmenAnzahl(ruf, probeStartMs) {
+  const { calls } = await ruf("list_calls", {});
+  for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
+    const gegen = await ruf("get_call_status", { call_id: anruf.id });
+    const nach = Date.parse(gegen.started_at) - probeStartMs;
+    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+  }
+  return undefined;
+}
+
 export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
   const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
   const abbrechen = (callId) =>
@@ -139,16 +149,6 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     }
   }
 
-  async function gegenStimmenAnzahl() {
-    const { calls } = await ruf("list_calls", {});
-    for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
-      const gegen = await ruf("get_call_status", { call_id: anruf.id });
-      const nach = Date.parse(gegen.started_at) - probeStartMs;
-      if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
-    }
-    return undefined;
-  }
-
   return {
     eigeneNummer: async () => (await ruf("get_agent_number", {})).number,
     tagesstand: async () => {
@@ -178,7 +178,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
     stimmenAnzahl: async () => {
       for (let versuch = 1; ; versuch += 1) {
-        const wert = await gegenStimmenAnzahl();
+        const wert = await gegenStimmenAnzahl(ruf, probeStartMs);
         if (wert !== undefined || versuch > STIMMEN_NACHLAUF_WARTEN) return wert;
         await uhr.warte(TAKT_MS);
       }
