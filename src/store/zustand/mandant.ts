@@ -194,7 +194,7 @@ interface AboPatch {
   [feld: string]: unknown;
 }
 
-const SUBSCRIPTION_PATCH_FIELDS: Readonly<Record<string, string>> = Object.freeze({
+export const SUBSCRIPTION_PATCH_FIELDS: Readonly<Record<string, string>> = Object.freeze({
   subscriptionId: "stripeSubscriptionId",
   planSlug: "stripePlanSlug",
   currentPeriodEnd: "stripeCurrentPeriodEnd",

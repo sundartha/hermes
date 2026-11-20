@@ -483,7 +483,7 @@ export function setzeAnrufpause(an) {
   return backend.anrufpauseSetzen(an);
 }
 
-export { classifyCallTime } from "./store/state-ops.js";
+export { classifyCallTime, SUBSCRIPTION_PATCH_FIELDS } from "./store/state-ops.js";
 export { KEINE_DB_RESERVIERUNG, RESERVIERUNG_GRUND } from "./store/budget-reserve.js";
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, WARTENDE_GESAMT, WARTENDE_JE_KUNDE, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
