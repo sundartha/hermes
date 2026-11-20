@@ -1,4 +1,4 @@
-export const WAEHRUNG_HART = Object.freeze(["USD", "EUR"]);
+export const WAEHRUNG_HART: readonly string[] = Object.freeze(["USD", "EUR"]);
 
 export const KOSTENART = Object.freeze({
   ELEVENLABS_CONVAI: "elevenlabs_convai",
@@ -40,13 +40,13 @@ export const PFLICHTTYPEN_AUS_ENV = "aus_env_pflichtmenge";
 
 export const PFLICHTTYPEN_UNGEMESSEN = Object.freeze([]);
 
-function pruefeNichtLeererString(name, feld, wert) {
+function pruefeNichtLeererString(name: string, feld: string, wert: unknown): string {
   if (typeof wert !== "string" || !wert.trim())
     throw new Error(`kostenarten: '${name}'.${feld} fehlt oder ist leer`);
   return wert;
 }
 
-function pruefeBelegtypen(name, belegtypen) {
+function pruefeBelegtypen(name: string, belegtypen: unknown): void {
   if (belegtypen === undefined) return;
   const gueltig =
     Array.isArray(belegtypen) &&
@@ -55,7 +55,15 @@ function pruefeBelegtypen(name, belegtypen) {
   if (!gueltig) throw new Error(`kostenarten: '${name}'.belegtypen ist kein nicht-leeres String-Array`);
 }
 
-export function pruefeKostenart(name, zeile) {
+interface KostenartZeile {
+  readonly quelle?: unknown;
+  readonly waehrung?: unknown;
+  readonly preisquelle?: unknown;
+  readonly pflicht?: unknown;
+  readonly belegtypen?: unknown;
+}
+
+export function pruefeKostenart(name: string, zeile: KostenartZeile): void {
   pruefeNichtLeererString(name, "quelle", zeile.quelle);
   const waehrung = pruefeNichtLeererString(name, "waehrung", zeile.waehrung);
   pruefeNichtLeererString(name, "preisquelle", zeile.preisquelle);
@@ -68,11 +76,11 @@ export function pruefeKostenart(name, zeile) {
   pruefeBelegtypen(name, zeile.belegtypen);
 }
 
-function pruefeTraegerEinsammler(profilName, traeger, eintrag) {
+function pruefeTraegerEinsammler(profilName: string, traeger: string, eintrag: unknown): void {
   if (!Object.hasOwn(KOSTENARTEN, traeger))
     throw new Error(`kostenarten: Profil '${profilName}' fuehrt Traeger '${traeger}' ohne Katalogzeile`);
   const einsammler = typeof eintrag === "object" && eintrag !== null && "einsammler" in eintrag ? eintrag.einsammler : undefined;
-  const erlaubteEinsammler = Object.values(EINSAMMLER);
+  const erlaubteEinsammler: readonly string[] = Object.values(EINSAMMLER);
   if (typeof einsammler !== "string" || !erlaubteEinsammler.includes(einsammler))
     throw new Error(
       `kostenarten: Profil '${profilName}', Traeger '${traeger}' - einsammler fehlt, ist leer oder ` +
@@ -80,7 +88,7 @@ function pruefeTraegerEinsammler(profilName, traeger, eintrag) {
     );
 }
 
-function pruefePflichttypen(name, pflichttypen) {
+function pruefePflichttypen(name: string, pflichttypen: unknown): void {
   if (pflichttypen === PFLICHTTYPEN_AUS_ENV) return;
   if (pflichttypen === PFLICHTTYPEN_UNGEMESSEN) return;
   const gueltig =
@@ -95,7 +103,12 @@ function pruefePflichttypen(name, pflichttypen) {
     );
 }
 
-export function pruefeProfil(name, profil) {
+interface KostenprofilZeile {
+  readonly traeger?: unknown;
+  readonly pflichttypen?: unknown;
+}
+
+export function pruefeProfil(name: string, profil: KostenprofilZeile | null | undefined): void {
   const traeger = profil?.traeger;
   if (typeof traeger !== "object" || traeger === null || Array.isArray(traeger))
     throw new Error(`kostenarten: Profil '${name}'.traeger ist kein Objekt`);
@@ -325,32 +338,38 @@ export const KOSTENPROFILE = Object.freeze({
   },
 });
 
-function bekanntesKostenprofil(wert) {
+function bekanntesKostenprofil(wert: unknown) {
   return Object.values(KOSTENPROFIL).find((profil) => profil === String(wert));
 }
 
-export function istBekanntesKostenprofil(wert) {
+export function istBekanntesKostenprofil(wert: unknown): boolean {
   return bekanntesKostenprofil(wert) !== undefined;
 }
 
-export function pflichttypenFuerProfil(profil, envPflichttypen) {
+export function pflichttypenFuerProfil(profil: unknown, envPflichttypen: string[]): readonly string[] {
   const bekannt = bekanntesKostenprofil(profil);
   const eintrag = bekannt && KOSTENPROFILE[bekannt].pflichttypen;
   if (eintrag === PFLICHTTYPEN_AUS_ENV) return envPflichttypen;
   return Array.isArray(eintrag) ? eintrag : PFLICHTTYPEN_UNGEMESSEN;
 }
 
-export function legacyKostenprofil({ sipCallId, direction }) {
+export function legacyKostenprofil({ sipCallId, direction }: { sipCallId?: unknown; direction?: unknown }) {
   if (sipCallId) return KOSTENPROFIL.EL_CONVAI_SIP;
   return direction === RICHTUNG_INBOUND ? KOSTENPROFIL.TELNYX_INBOUND_BUDGET : KOSTENPROFIL.TELNYX_BUDGET;
 }
 
-export function kostenprofilFuerAnruf(call) {
+interface AnrufKostenprofil {
+  readonly costProfile?: string | null | undefined;
+  readonly sipCallId?: unknown;
+  readonly direction?: unknown;
+}
+
+export function kostenprofilFuerAnruf(call: AnrufKostenprofil | null | undefined) {
   const costProfile = call?.costProfile;
   return bekanntesKostenprofil(costProfile) ?? costProfile ?? legacyKostenprofil(call ?? {});
 }
 
-export function pflichtTraegerFuerProfil(profil) {
+export function pflichtTraegerFuerProfil(profil: unknown): string[] {
   const bekannt = bekanntesKostenprofil(profil);
   const traegerEintraege = Object.entries(bekannt ? KOSTENPROFILE[bekannt].traeger : {});
   const pflichtEintraege = traegerEintraege.filter(([, eintrag]) => eintrag.einsammler !== EINSAMMLER.NICHT_BELEGPFLICHTIG);
@@ -360,7 +379,7 @@ export function pflichtTraegerFuerProfil(profil) {
 for (const [name, zeile] of Object.entries(KOSTENARTEN)) pruefeKostenart(name, zeile);
 for (const [name, profil] of Object.entries(KOSTENPROFILE)) pruefeProfil(name, profil);
 
-function pruefeSchluesselmenge(bezeichner, tabelle, enumWerte) {
+function pruefeSchluesselmenge(bezeichner: string, tabelle: object, enumWerte: readonly string[]): void {
   const tabellenKeys = new Set(Object.keys(tabelle));
   const enumSet = new Set(enumWerte);
   if (tabellenKeys.size !== enumSet.size || [...enumSet].some((wert) => !tabellenKeys.has(wert)))
