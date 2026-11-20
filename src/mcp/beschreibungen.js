@@ -65,7 +65,7 @@ export function answerConsultDescription(keyFactsLimits) {
 }
 
 export const GET_CALL_STATUS_DESCRIPTION =
-  "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.";
+  "Returns the live state of a call: status (dialing|queued|in_progress|completed|failed|cancelled), duration and the last transcript lines. Some clients also show a live card that updates itself; call this tool regardless whenever the current state is needed, it always reflects it.";
 
 export const GET_AGENT_NUMBER_DESCRIPTION = "Returns the phone number of the phone agent.";
 
