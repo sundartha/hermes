@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { PLACE_CALL_HOP_TIMEOUT_MS } from "../../src/mcp-tools.js";
 import { config } from "../../src/config.js";
+import { VORSPANN_TTS_FRIST_MS } from "../../src/elevenlabs/vorspann-pruefung.js";
+import { ANRUF_STEUERN_FRIST_MS } from "../../src/telephony/anruf-fristen.ts";
 import { DEDUP_WINDOW_MS } from "../../src/telephony/call-dedup.ts";
 
 const BRIEFING_STEPS = 2;
 const LONG_BRIEFING_MS = 30000;
-const VORSPANN_TTS_FRIST_MS = 5000;
-const ANRUF_STEUERN_FRIST_MS = 8000;
 const HOP_PUFFER_MS = 5000;
 const DEFAULT_HOP_MS = 60000;
 

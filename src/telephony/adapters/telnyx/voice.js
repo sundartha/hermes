@@ -4,6 +4,7 @@ import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.
 import { createMinuteWindowThrottle } from "./rate-limit.ts";
 import { MS_PER_SECOND } from "../../../utils/timer.ts";
 import { anfrage } from "../../../utils/anfrage.js";
+import { ANRUF_STEUERN_FRIST_MS } from "../../anruf-fristen.ts";
 
 const TEXML_BASE = "/v2/texml";
 const CALL_CONTROL_BASE = "/v2/calls";
@@ -66,7 +67,6 @@ const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
 
 const ATTACH_STATUS = { attachStatus: true };
 
-export const ANRUF_STEUERN_FRIST_MS = 8_000;
 const KOSTENABRUF_FRIST_MS = 15_000;
 
 function headers(contentType = FORM_HEADERS_TYPE) {
