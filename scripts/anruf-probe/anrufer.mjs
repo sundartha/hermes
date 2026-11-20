@@ -20,6 +20,7 @@ const TAG_LAENGE = 10;
 const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
+const STIMMEN_NACHLAUF_WARTEN = 3;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
@@ -138,6 +139,16 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     }
   }
 
+  async function gegenStimmenAnzahl() {
+    const { calls } = await ruf("list_calls", {});
+    for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
+      const gegen = await ruf("get_call_status", { call_id: anruf.id });
+      const nach = Date.parse(gegen.started_at) - probeStartMs;
+      if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+    }
+    return undefined;
+  }
+
   return {
     eigeneNummer: async () => (await ruf("get_agent_number", {})).number,
     tagesstand: async () => {
@@ -166,13 +177,11 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     },
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
     stimmenAnzahl: async () => {
-      const { calls } = await ruf("list_calls", {});
-      for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
-        const gegen = await ruf("get_call_status", { call_id: anruf.id });
-        const nach = Date.parse(gegen.started_at) - probeStartMs;
-        if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+      for (let versuch = 1; ; versuch += 1) {
+        const wert = await gegenStimmenAnzahl();
+        if (wert !== undefined || versuch > STIMMEN_NACHLAUF_WARTEN) return wert;
+        await uhr.warte(TAKT_MS);
       }
-      return undefined;
     },
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
