@@ -60,10 +60,14 @@ export function burnrateAusdruck(burnrate) {
   return paare.join(" or ");
 }
 
+function regelAusdruck(regel) {
+  const { model } = regel.data.find((zeile) => zeile.refId === "A");
+  return model.expr;
+}
+
 function ausdruckBefund(regel) {
-  const modell = regel.data.find((zeile) => zeile.refId === "A").model;
   const befunde = [];
-  if (modell.expr !== burnrateAusdruck(regel.burnrate)) {
+  if (regelAusdruck(regel) !== burnrateAusdruck(regel.burnrate)) {
     befunde.push(`${regel.uid}: expr weicht von burnrate ab`);
   }
   if (regel.noDataState !== "OK") befunde.push(`${regel.uid}: noDataState muss OK sein`);
@@ -147,6 +151,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const probe = argv.indexOf("--probe");
   if (probe !== -1) {
     console.log(JSON.stringify(probeAnrufregeln(wurzel, JSON.parse(argv[probe + 1]))));
+    process.exit(0);
+  }
+  if (argv.includes("--regeln")) {
+    const ausgabe = anrufRegeln(wurzel).map((regel) => ({
+      uid: regel.uid,
+      noDataState: regel.noDataState,
+      expr: regelAusdruck(regel),
+    }));
+    console.log(JSON.stringify(ausgabe));
     process.exit(0);
   }
   const befunde = [
