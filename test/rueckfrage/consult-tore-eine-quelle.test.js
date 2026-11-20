@@ -69,7 +69,8 @@ async function placeCall(f) {
     const message = await readRpcMessage(
       await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", { to: TARGET, objective: "Termin" })),
     );
-    return message.result.content[0].text;
+    const [inhalt] = message.result.content;
+    return inhalt.text;
   } finally {
     await srv.stop();
     await idp.close();
