@@ -12,6 +12,8 @@ const SENTENCE_END = /[.!?]$/;
 const EIGENER_GRUSS_ODER_NAME =
   /\b(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening)|hier (?:ist|spricht)|mein name ist|my name is|je m'appelle)\b/i;
 
+const VORSTELLUNG_MIT_NAMEN = /\b(?:[Ii]ch bin|[Tt]his is|[Cc]['\u2019]est|[Ii]ci) \p{Lu}\p{L}/u;
+
 interface Sprachtexte {
   bridgePhrase: (ziel: string) => string;
   openingQuestion: string;
@@ -58,6 +60,7 @@ export function validOpeningLine(candidate: unknown): string | null {
   if (!fragtHoechstensAmEnde(line)) return null;
   if (PRICE_PATTERNS.some((pattern) => pattern.test(line))) return null;
   if (EIGENER_GRUSS_ODER_NAME.test(line)) return null;
+  if (VORSTELLUNG_MIT_NAMEN.test(line)) return null;
   const lower = line.toLowerCase();
   if (DISCLOSURE_CORES.some((core) => lower.includes(core))) return null;
   return line;
