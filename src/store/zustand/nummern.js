@@ -73,7 +73,7 @@ export function requestNumber(
   },
 ) {
   const tenant = findTenant(state, tenantId);
-  if (!tenantMayRequestNumber(state, tenantId))
+  if (!tenant || !tenantMayRequestNumber(state, tenantId))
     return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
   if (liveNumbers(state).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
@@ -171,8 +171,7 @@ function kaufBestaetigt(number) {
   return number.status === NUMBER_STATUS.PROVISIONING && Boolean(number.e164);
 }
 
-function resumeReplacement(state, oldNumberId, maxNumbers) {
-  const trace = findSwapTrace(state, oldNumberId);
+function resumeReplacement(state, trace, maxNumbers) {
   const number = findNumber(state, trace.numberId);
   if (number && IN_SERVICE.has(number.status)) return { ergebnis: { ok: true, number, purchase: false } };
   if (!number || number.status === NUMBER_STATUS.RELEASED || trace.attempts >= SWAP_ATTEMPTS_MAX || kaufBestaetigt(number))
@@ -187,9 +186,8 @@ function resumeReplacement(state, oldNumberId, maxNumbers) {
 export function ersatzNummerAnfordern(state, { oldNumberId, maxNumbers }) {
   const old = findNumber(state, oldNumberId);
   if (!old) throw new Error(`ersatzNummerAnfordern: Nummer ${oldNumberId} nicht gefunden`);
-  return findSwapTrace(state, oldNumberId)
-    ? resumeReplacement(state, oldNumberId, maxNumbers)
-    : openReplacement(state, old, maxNumbers);
+  const trace = findSwapTrace(state, oldNumberId);
+  return trace ? resumeReplacement(state, trace, maxNumbers) : openReplacement(state, old, maxNumbers);
 }
 
 const CALL_STATUS_ACTIVE = "active";
