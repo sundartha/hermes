@@ -456,6 +456,10 @@ jobs:
     if: always() && github.event_name != 'push'
     needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation, lastlauf]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
     steps:
       - name: Alle Pflicht-Jobs erfolgreich
         env:
@@ -467,3 +471,24 @@ jobs:
             echo "Nicht erfolgreich: $rot"
             exit 1
           fi
+
+      - name: Checkout
+        if: ${{ success() && fromJSON(github.run_attempt) > 1 }}
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        if: ${{ success() && fromJSON(github.run_attempt) > 1 }}
+        continue-on-error: true
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Wackler erfassen
+        if: ${{ success() && fromJSON(github.run_attempt) > 1 }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/testschutz.mjs --wackler
