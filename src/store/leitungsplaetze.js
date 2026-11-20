@@ -1,3 +1,4 @@
+import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 export const ANBIETER = Object.freeze({ TELNYX: "telnyx", ELEVENLABS: "elevenlabs" });
@@ -14,7 +15,8 @@ export const AUSGEHEND_JE_KUNDE = 2;
 export const WARTENDE_JE_KUNDE = 2;
 export const WARTENDE_GESAMT = 10;
 export const WARTE_ANBIETER = "warteschlange";
-export const WARTE_ABLAUF_S = 600;
+const WARTE_PUFFER_S = 30;
+export const WARTE_ABLAUF_S = ANRUFSTART_WARTEFRIST_MAX_MS / MS_PER_SECOND + WARTE_PUFFER_S;
 
 const KAPAZITAET = Object.freeze({ [ANBIETER.TELNYX]: 100, [ANBIETER.ELEVENLABS]: 6 });
 const RESERVE = Object.freeze({ [ANBIETER.TELNYX]: 10, [ANBIETER.ELEVENLABS]: 2 });
