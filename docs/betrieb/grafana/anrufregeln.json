@@ -71,7 +71,7 @@
         "datasourceUid": "prometheus",
         "model": {
           "refId": "A",
-          "expr": "((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[1h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) > 0.144 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[5m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) > 0.144 and sum(increase(hermes_call_started_total[1h])) >= 20) or ((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[6h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) > 0.06 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[30m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) > 0.06 and sum(increase(hermes_call_started_total[6h])) >= 20)"
+          "expr": "((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[1h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[1h])) > 0.144 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[5m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[5m])) > 0.144 and sum(increase(hermes_call_started_total{direction=\"inbound\"}[1h])) >= 20) or ((sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[6h]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[6h])) > 0.06 and (sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) - sum(increase(hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}[30m]))) / sum(increase(hermes_call_answer_time_count{direction=\"inbound\"}[30m])) > 0.06 and sum(increase(hermes_call_started_total{direction=\"inbound\"}[6h])) >= 20)"
         }
       },
       {
@@ -99,6 +99,7 @@
         ["6h", "30m", 6]
       ],
       "mindestAnrufe": 20,
+      "menge": "hermes_call_started_total{direction=\"inbound\"}",
       "gesamt": "hermes_call_answer_time_count{direction=\"inbound\"}",
       "gut": "hermes_call_answer_time_bucket{le=\"5\",direction=\"inbound\"}"
     },

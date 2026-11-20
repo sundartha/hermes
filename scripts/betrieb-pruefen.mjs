@@ -54,7 +54,7 @@ function schwelle(burnrate, faktor) {
 export function burnrateAusdruck(burnrate) {
   const paare = burnrate.fenster.map(([lang, kurz, faktor]) => {
     const grenze = schwelle(burnrate, faktor);
-    const menge = `sum(increase(${GESTARTET}[${lang}])) >= ${burnrate.mindestAnrufe}`;
+    const menge = `sum(increase(${burnrate.menge ?? GESTARTET}[${lang}])) >= ${burnrate.mindestAnrufe}`;
     return `(${fehlerquote(burnrate, lang)} > ${grenze} and ${fehlerquote(burnrate, kurz)} > ${grenze} and ${menge})`;
   });
   return paare.join(" or ");
