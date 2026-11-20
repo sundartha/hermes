@@ -256,3 +256,14 @@ test("D2 disclosureSentence fr fester Wortlaut", () => {
 test("D3 disclosureSentence en fester Wortlaut", () => {
   assert.equal(disclosureSentence(call({ language: "en" })), DISCLOSURE_EN);
 });
+
+test("5543-K4 Prompt-Stellen: de, en und fr tragen die Rausch-Zeilen-Regel", () => {
+  const erwartet = {
+    de: "Eine Nutzerzeile ohne Wörter, nur Punkte oder Satzzeichen, vor der ersten echten Äußerung ist Rauschen: bleibe still, keine Begrüßung und keine Frage.",
+    en: "A user line without any words, only dots or punctuation marks, before the first real utterance is noise: stay silent, no greeting and no question.",
+    fr: "Une ligne sans aucun mot, uniquement des points ou des signes de ponctuation, avant la première vraie parole est du bruit : reste silencieux, ni salutation ni question.",
+  };
+  for (const [sprache, satz] of Object.entries(erwartet)) {
+    assert.ok(systemPrompt(call({ direction: "outbound", language: sprache })).includes(satz), sprache);
+  }
+});
