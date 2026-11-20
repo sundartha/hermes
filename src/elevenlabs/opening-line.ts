@@ -9,11 +9,13 @@ export const OPENING_QUESTION_MAX_CHARS = 40;
 const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
 const SENTENCE_END = /[.!?]$/;
-const EIGENER_GRUSS_ODER_NAME =
-  /\b(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening)|hier (?:ist|spricht)|mein name ist|my name is|je m'appelle)\b/i;
-
+const GRUSS_AM_SATZANFANG =
+  /(?:^|[.!?:]\s+)(?:hallo|hi|hey|hello|bonjour|bonsoir|salut|guten (?:tag|morgen|abend)|good (?:morning|afternoon|evening))\b/i;
+const VORSTELLUNG = /\b(?:hier spricht|mein name ist|my name is|je m'appelle)\b/i;
+const HIER_IST_NAME = /\b[Hh]ier ist\s+\p{Lu}/u;
 const VORSTELLUNG_MIT_NAMEN = /\b(?:[Ii]ch bin|I am|I['\u2019]m|[Jj]e suis|[Tt]his is|[Cc]['\u2019]est|[Ii]ci) \p{Lu}\p{L}/u;
-const EIGENE_VORSTELLUNGEN = [EIGENER_GRUSS_ODER_NAME, VORSTELLUNG_MIT_NAMEN];
+const EIGENE_VORSTELLUNGEN = [GRUSS_AM_SATZANFANG, VORSTELLUNG, HIER_IST_NAME, VORSTELLUNG_MIT_NAMEN];
+const eigenerGrussOderName = (zeile: string): boolean => EIGENE_VORSTELLUNGEN.some((muster) => muster.test(zeile));
 
 interface Sprachtexte {
   bridgePhrase: (ziel: string) => string;
@@ -60,7 +62,7 @@ export function validOpeningLine(candidate: unknown): string | null {
   if (!SENTENCE_END.test(line)) return null;
   if (!fragtHoechstensAmEnde(line)) return null;
   if (PRICE_PATTERNS.some((pattern) => pattern.test(line))) return null;
-  if (EIGENE_VORSTELLUNGEN.some((muster) => muster.test(line))) return null;
+  if (eigenerGrussOderName(line)) return null;
   const lower = line.toLowerCase();
   if (DISCLOSURE_CORES.some((core) => lower.includes(core))) return null;
   return line;
