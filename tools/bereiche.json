@@ -79,7 +79,7 @@
     "fachlogik": [
       "^src/(call-duration|call-memory|call-result|callee-is-owner|diagnostic-retention|turn-budget|mail-summary|mail-not-placed)\\.[jt]s$",
       "^src/conversation/agent-stimme\\.[jt]s$",
-      "^src/telephony/(absender-registrierung|answered-by|call-dedup|directives|failure-reason|gates-bestanden|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
+      "^src/telephony/(answered-by|call-dedup|directives|failure-reason|gates-bestanden|number-denylist|outage-classes|outage-detection|sip-call-id|sprechpfad|stt-profile|voice-locale)\\.[jt]s$",
       "^src/elevenlabs/(b1-doppelankaendigung|inbound-bridge-state|inbound-path-decision|inbound-sip-uri|medienweg|nachlauf-politik|nanp-area-codes|nicht-erreicht-frist|time-context|vorspann-pruefung|vorspann-erzeugen|anrufstart-auftrag)\\.[jt]s$",
       "^src/llm/(messages|provider|tool-choice|transient-errors)\\.[jt]s$",
       "^src/research/(lookup-guard|sanitize)\\.[jt]s$"
