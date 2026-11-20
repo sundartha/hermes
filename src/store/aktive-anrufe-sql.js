@@ -2,7 +2,7 @@ import * as ops from "./state-ops.js";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const AKTIVE_SQL = `SELECT * FROM call WHERE tenant_id = $1 AND status = 'active' ORDER BY seq ASC`;
-const VORHANDEN_SQL = `SELECT id FROM call WHERE tenant_id = $1 AND id = ANY($2)`;
+const VORHANDEN_SQL = `SELECT id FROM call WHERE tenant_id = $1 AND id = ANY($2) AND status <> 'active'`;
 const MANDANTEN_SQL = `SELECT id FROM tenant ORDER BY id`;
 const FEHLER = "[pg] aktive anrufe lesen fehlgeschlagen:";
 
