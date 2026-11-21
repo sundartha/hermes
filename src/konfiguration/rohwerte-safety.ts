@@ -1,5 +1,5 @@
 import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.ts";
-import type { umgebungMit } from "./umgebung.ts";
+import { umgebungMit } from "./umgebung.ts";
 
 type NumEnv = ReturnType<typeof umgebungMit>["numEnv"];
 
@@ -24,7 +24,10 @@ export function rohwerteFristen(
     min: 1,
     max: 15000,
   });
-  const geldWacheMs = geldWacheIntervallMs(env.BUDGET_WATCHDOG_INTERVAL_MS, numEnv);
+  const geldWacheMs = geldWacheIntervallMs(
+    env.BUDGET_WATCHDOG_INTERVAL_MS,
+    umgebungMit([], {}).numEnv,
+  );
   return {
     fristenTaktMs: geldWacheMs > 0 ? Math.min(takt, geldWacheMs) : takt,
     fristenLimitJeMandant: numEnv("FRISTEN_LIMIT_JE_MANDANT", env.FRISTEN_LIMIT_JE_MANDANT, {
