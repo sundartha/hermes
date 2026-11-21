@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { LOG_PREFIX } from "./utils/messzeilen-marke.ts";
 
 export { LOG_PREFIX };

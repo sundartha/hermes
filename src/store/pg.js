@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { flushAnfang, startFrist } from "../utils/pg-pool.js";
 import { messeSpeichern } from "../utils/betriebsmessung.js";
 import * as ops from "./state-ops.js";

@@ -1,6 +1,6 @@
 import { createHistogram, performance } from "node:perf_hooks";
 import pg from "pg";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { fehlerart, verzugUeberGrenze } from "./lebenszeichen-regeln.js";
 import { anfrage } from "./utils/anfrage.js";
 

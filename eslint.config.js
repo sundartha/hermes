@@ -23,7 +23,7 @@ const PROCESS_ENV_REGEL = {
   object: "process",
   property: "env",
   message:
-    "process.env nur in src/config.js verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
+    "process.env nur in src/config.ts verwenden (G35, CLAUDE.md). Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.ts anlegen, die Variable in .env.example eintragen und render.yaml prüfen.",
 };
 const KALIBRIERUNG_IMPORTE = {
   paths: ENDUNGEN_LISTE.map((endung) => ({
@@ -180,11 +180,11 @@ const WORT_NUR_IN_EINTRAEGE = [
     nurIn: [
       "src/billing/cost-calibration.ts",
       "src/billing/metering.js",
-      "src/config.js",
+      "src/config.ts",
       "src/konfiguration/rohwerte-billing.ts",
     ],
     meldung:
-      "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.ts (Wächter) gelesen und nur in src/config.js gesetzt (KV-P2-5).",
+      "Der Inbound-Tarif wird nur in src/billing/metering.js (Buchung) und src/billing/cost-calibration.ts (Wächter) gelesen und nur in src/config.ts gesetzt (KV-P2-5).",
   },
   {
     name: "begriffe-sammeldatei",
@@ -260,7 +260,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
   `scripts/smoke-stripe-payment.${ENDUNGEN_OHNE_JS}`,
   `scripts/el-nummern-registrierung.${ENDUNGEN_OHNE_JS}`,
 ];
-const KONFIG_TABELLE = { datei: "src/config.js", tabelle: "CONFIG_NAMESPACES" };
+const KONFIG_TABELLE = { datei: "src/config.ts", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.ts";
 const ZEIT_MODUL = "src/utils/timer.ts";
 const MONAT_MODUL = "src/utils/month.js";
@@ -1074,7 +1074,7 @@ export default [
     languageOptions: { globals: { ...globals.browser } },
   },
   {
-    files: ["src/config.js"],
+    files: ["src/config.ts"],
     rules: {
       "no-restricted-properties": "off",
     },

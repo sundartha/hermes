@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { EXIT, LOG_PREFIX, makeAusgabeWaechter } from "./iel-geheimnisse-ausgabe.mjs";
 import { laufeBelegInit, laufeStimmenBeleg } from "./iel-geheimnisse-belege.mjs";
 import { RICHTUNGEN, laufeConversationBeleg } from "./iel-geheimnisse-conversation.mjs";

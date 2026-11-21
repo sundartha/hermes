@@ -1,4 +1,4 @@
-import { config as defaultConfig } from "../config.js";
+import { config as defaultConfig } from "../config.ts";
 import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 import { callStartAnchorMs, carrierEndMsOf, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";

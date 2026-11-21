@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import {
   LEBENSZEICHEN_FRIST_S,
   LEBENSZEICHEN_LOESCHALTER_MIN,

@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import * as store from "../store.js";
 import { speicherBereiche } from "../store.js";
 import { localeFor } from "../i18n/locales.ts";

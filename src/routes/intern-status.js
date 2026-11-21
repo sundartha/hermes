@@ -44,7 +44,7 @@ function eigeneAdresse(adresse, standard) {
 }
 
 async function anrufLage(config) {
-  const { ELEVENLABS_API_BASE_STANDARD, TELNYX_API_BASE_STANDARD } = await import("../config.js");
+  const { ELEVENLABS_API_BASE_STANDARD, TELNYX_API_BASE_STANDARD } = await import("../config.ts");
   if (config.safety?.outboundFrozen === true) return "gesperrt";
   const elevenLabs = config.voice?.elevenLabsOutbound?.apiBase;
   const telnyx = config.telephony?.telnyxApiBase;

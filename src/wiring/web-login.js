@@ -24,7 +24,7 @@ import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.ts";
 import { stripeBilling } from "../billing/stripe.ts";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.ts";
-import { config as globaleConfig, isSelfServiceLive } from "../config.js";
+import { config as globaleConfig, isSelfServiceLive } from "../config.ts";
 import { anteiligesLimit } from "../utils/rate-limit-anteil.ts";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.ts";

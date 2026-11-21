@@ -52,13 +52,26 @@ import { MS_PER_MINUTE } from "./utils/timer.ts";
 import { merkeLogGeheimnisse } from "./log-maske.ts";
 
 const __dirname = QUELLORDNER;
-const env = process.env;
+const env: {
+  NODE_ENV?: string | undefined;
+  MAX_BUDGET_EUR?: string | undefined;
+  METRIKEN_OTLP_URL?: string | undefined;
+  METRIKEN_OTLP_BENUTZER?: string | undefined;
+  METRIKEN_OTLP_TOKEN?: string | undefined;
+  RENDER_INSTANCE_ID?: string | undefined;
+  METRIKEN_INTERVALL_MS?: string | undefined;
+  ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED?: string | undefined;
+  ELEVENLABS_INBOUND_SIP_USER?: string | undefined;
+  ELEVENLABS_INBOUND_SIP_PASSWORD?: string | undefined;
+  ELEVENLABS_INIT_WEBHOOK_TOKEN?: string | undefined;
+  PROVIDER_TO_BUCKET_RATE_MICRO?: string | undefined;
+} = process.env;
 if (env.NODE_ENV !== "test") {
   dotenv.config({ path: path.join(__dirname, "..", ".env") });
 }
 merkeLogGeheimnisse(process.env);
 
-const fatalConfigErrors = [];
+const fatalConfigErrors: string[] = [];
 
 const umgebung = umgebungMit(fatalConfigErrors, process.env);
 export const {
@@ -78,12 +91,12 @@ export { DEPLOYED_COMMIT_UNKNOWN } from "./konfiguration/rohwerte-server.ts";
 export { TELNYX_API_BASE_STANDARD } from "./konfiguration/rohwerte-telephony.ts";
 export { ELEVENLABS_API_BASE_STANDARD } from "./konfiguration/rohwerte-voice.ts";
 
-export function configFatalErrors() {
+export function configFatalErrors(): string[] {
   return fatalConfigErrors.slice();
 }
 
 
-export function eurToCents(eur) {
+export function eurToCents(eur: number): number {
   return Math.round(eur * CENTS_PER_EUR);
 }
 

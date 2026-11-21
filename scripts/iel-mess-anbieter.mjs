@@ -1,4 +1,4 @@
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { registrierungsKoerper } from "../src/elevenlabs/nummern-registrierung.js";
 
 const TEXML_APP_ID = "3048315229369796444";

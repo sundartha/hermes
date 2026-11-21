@@ -14,8 +14,8 @@ kann das nicht: es schreibt das Briefing direkt in den Anruf-Datensatz und liest
 - Fuehrt **nie** ein Werkzeug aus, spricht nie mit einem Hermes-Server, waehlt nie, sendet keine
   SMS und liest keine Produktionsdaten. Alle Nummern in den Szenarien sind erfunden.
 - Echter Modus: nur die Messages-API von Anthropic mit `ANTHROPIC_API_KEY` (gelesen ueber
-  `src/config.js`). Den Lauf mit `NODE_ENV=test` starten und den Schluessel NUR als
-  Umgebungsvariable uebergeben: dann laedt `src/config.js` keine `.env` (dort liegen
+  `src/config.ts`). Den Lauf mit `NODE_ENV=test` starten und den Schluessel NUR als
+  Umgebungsvariable uebergeben: dann laedt `src/config.ts` keine `.env` (dort liegen
   Produktionswerte). Kosten: 9 Szenarien x Laeufe x 2 Staende; Werkzeuge und Instructions
   werden gecacht, der Bericht nennt den Token-Verbrauch (`verbrauch`).
 

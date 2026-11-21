@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.ts";
 import { kauflandFuer } from "../store.js";
 import { z } from "zod";

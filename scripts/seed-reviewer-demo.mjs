@@ -114,7 +114,7 @@ async function main() {
   const options = readOptions();
   if (!options.apply) return printDryRun();
   if (!options.tenant) return abort(`--apply verlangt --tenant <ID>.\n${USAGE}`);
-  const { config } = await import("../src/config.js");
+  const { config } = await import("../src/config.ts");
   if (config.store.storeBackend === PG_BACKEND && !options["dienst-gestoppt"])
     return abort(PG_ABORT);
   const { store, close } = await orAbort(() => openStore(config.store));

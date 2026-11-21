@@ -1,4 +1,4 @@
-`src/konfiguration/` (Teile von `config.js`; Eingang bleibt `src/config.js`, hier nichts direkt importieren)
+`src/konfiguration/` (Teile von `config.ts`; Eingang bleibt `src/config.ts`, hier nichts direkt importieren)
 
 ## Baustein konfiguration (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck: Liest Umgebungsvariablen, prüft sie beim Start und liefert config nach Namensräumen.

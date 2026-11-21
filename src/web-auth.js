@@ -6,7 +6,7 @@ import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.ts";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { anfrage } from "./utils/anfrage.js";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { createRateLimiter } from "./middleware.ts";
 import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
 import { HTTP_BAD_REQUEST,HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_NO_CONTENT, HTTP_OK, HTTP_SERVER_ERROR, HTTP_UNAUTHORIZED } from "./utils/http.ts";

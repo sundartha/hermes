@@ -65,7 +65,7 @@ async function quietly(work) {
 }
 
 async function productionApp(root, scratch) {
-  const { config } = await import(moduleUrl(root, "src/config.js"));
+  const { config } = await import(moduleUrl(root, "src/config.ts"));
   const webDistDir = join(scratch, "web");
   Object.assign(config.server, { dataDir: scratch, webDistDir, publicUrl: PROBE_PUBLIC_URL });
   Object.assign(config.auth, { sessionSecret: PROBE_SESSION_SECRET });

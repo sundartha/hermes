@@ -1,5 +1,5 @@
 import pg from "pg";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { poolFehlerZeile, portalPoolOptionen, ueberwacheClients } from "./utils/pg-pool.js";
 
 const IS_SUPERUSER_ON = "on";
