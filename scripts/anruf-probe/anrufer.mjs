@@ -1,5 +1,8 @@
 import { env } from "node:process";
 
+import { EL_ABORT_PROVIDER_TIMEOUT_MS, EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js";
+import { STIMMEN_FRIST_MS } from "../../src/elevenlabs/wirksame-stimme.ts";
+import { ELEVENLABS_RESULT_POLL_STANDARD_MS } from "../../src/konfiguration/rohwerte-voice.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { DAUER_GRENZE_S } from "./urteil.mjs";
@@ -20,12 +23,10 @@ const TAG_LAENGE = 10;
 export const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
-const EL_TERMINATION_RESULT_ATTEMPTS = 3;
-const RESULT_POLL_MS = 5000;
-const CONVAI_REQUEST_TIMEOUT_MS = 120_000;
-const STIMMEN_FRIST_MS = 10_000;
 const STIMMEN_NACHLAUF_FRIST_MS =
-  (EL_TERMINATION_RESULT_ATTEMPTS - 1) * RESULT_POLL_MS + CONVAI_REQUEST_TIMEOUT_MS + STIMMEN_FRIST_MS;
+  EL_TERMINATION_RESULT_ATTEMPTS * EL_ABORT_PROVIDER_TIMEOUT_MS +
+  (EL_TERMINATION_RESULT_ATTEMPTS - 1) * ELEVENLABS_RESULT_POLL_STANDARD_MS +
+  STIMMEN_FRIST_MS;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({

@@ -8,7 +8,7 @@ const JETZT = Date.parse("2026-11-17T10:00:00.000Z");
 const ZIEL = "+12722205602";
 const SCHLUESSEL = "hermes/stimmen_anzahl";
 const TAKT_MS = 2000;
-const FRIST_MS = 140_000;
+const FRIST_MS = 50_000;
 
 function antwort(strukturiert, meta) {
   const ergebnis = { isError: false, structuredContent: strukturiert, ...(meta === undefined ? {} : { _meta: meta }) };
@@ -81,7 +81,7 @@ test("Frist: Zahl erst nach 20 s eingespeister Zeit wird gelesen", async () => {
   assert.equal(summe(wartezeiten), 10 * TAKT_MS);
 });
 
-test("Frist: Zahl nie geliefert gibt nach genau 140000 ms undefined", async () => {
+test("Frist: Zahl nie geliefert gibt nach genau 50000 ms undefined", async () => {
   const { wert, wartezeiten } = await gelesen(Number.POSITIVE_INFINITY);
   assert.equal(wert, undefined);
   assert.equal(summe(wartezeiten), FRIST_MS);

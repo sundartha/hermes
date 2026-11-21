@@ -2,6 +2,7 @@ import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.js";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 
+export const ELEVENLABS_RESULT_POLL_STANDARD_MS = 5000;
 export const ELEVENLABS_API_BASE_STANDARD = "https://api.elevenlabs.io";
 
 type Helfer = ReturnType<typeof umgebungMit>;
@@ -101,7 +102,7 @@ function ausgehend(
   return {
     agentId: (env.ELEVENLABS_AGENT_ID ?? "").trim(),
     resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", env.ELEVENLABS_RESULT_POLL_MS, {
-      fallback: 5000,
+      fallback: ELEVENLABS_RESULT_POLL_STANDARD_MS,
       min: 100,
       max: MS_PER_MINUTE,
     }),
