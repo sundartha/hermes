@@ -192,6 +192,8 @@ function nummernkaufBereich(speicher) {
   return {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
     alleMandantenIds: async () => allTenantIds(speicher.load()),
+    legeNummerAn: async (eingabe) => speicher.nummernSql?.()?.nummerAnlegen(eingabe) ?? null,
+    legeAuftragAn: async (eingabe) => speicher.nummernSql?.()?.auftragAnlegen(eingabe) ?? null,
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {
         if (!markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) return;

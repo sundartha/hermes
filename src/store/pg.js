@@ -36,6 +36,7 @@ import { macheAnrufePosteingangSql } from "./posteingang-anrufe-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
+import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
   innerhalbFrist,
@@ -191,6 +192,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
   const profil = macheProfilSql({ ...optionen, innerhalbFrist });
   const ausfallSql = macheAusfallSql(optionen);
+  const nummernSql = macheNummernSql(optionen);
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -209,6 +211,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   return {
     init,
     ausfallSql: () => ausfallSql,
+    nummernSql: () => nummernSql,
     load: () => requireState(),
     save,
     drainFlushes,

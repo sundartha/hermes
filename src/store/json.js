@@ -33,6 +33,10 @@ export function ausfallSql() {
   return null;
 }
 
+export function nummernSql() {
+  return null;
+}
+
 export function load() {
   if (state) return state;
   let raw;

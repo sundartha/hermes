@@ -9,6 +9,7 @@ Neue Kommentare nur, wo eine Invariante sonst unsichtbar waere.
 **Regel:** Bei asynchroner/gebuendelter Persistenz muss der Test den
 **Zeitpunkt** nachstellen, nicht nur die Reihenfolge der Aufrufe.
 Ein `await store.save()` an der Stelle, an der live ein Flush laege, ist Teil des Aufbaus — nicht Kosmetik.
+**Der Nummernkauf laeuft im pg-Store unter einer Zeilensperre auf `tenant`:** `nummern-sql.js` legt Nummer und Auftrag in einer Transaktion an, zaehlt dort die lebenden Nummern des Mandanten und liest bei gleichem Schluessel `(tenant_id, idempotency_key)` den bestehenden Auftrag; ein Fehler dabei heisst kein Kauf. Mit dem JSON-Speicher liefert `nummernSql()` null und der Weg im Spiegel bleibt.
 **Ausgehende Anrufe sind vor dem Waehlen in der Datenbank:** `persistCall` schreibt die Zeile bestaetigt (wirft bei Fehler,
 der Anruf entfaellt), `countOutboundCallsSince` zaehlt im pg-Store per SQL (`anrufe.js`, mit eigenem Mandanten-Kontext).
 `addTranscript` und `purgeTranscript` schreiben im pg-Store bestaetigt per SQL in `transcript_segment` (ebenfalls `anrufe.js`, in der Flush-Reihe);
