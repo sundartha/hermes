@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { makeKeyedChainMutex } from "../chain-mutex.js";
+import { makeChainMutex } from "../chain-mutex.js";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
@@ -693,7 +693,7 @@ export function makeCallRoutes({
   OWNER_ID,
 }: Abhaengigkeiten): Router {
   const router = Router();
-  const jeMandant: <T>(schluessel: string, arbeit: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
+  const einAnspruchJeProzess: <T>(arbeit: () => Promise<T>) => Promise<T> = makeChainMutex() as never;
   const bereiche: Bereiche = speicherBereiche(store);
   const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
@@ -930,7 +930,7 @@ export function makeCallRoutes({
         diagnostic,
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
-      const claim = await jeMandant(String(ctx.tenantId), () =>
+      const claim = await einAnspruchJeProzess(() =>
         mitAnrufSperre(ctx.tenantId, () =>
           claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
         ),
