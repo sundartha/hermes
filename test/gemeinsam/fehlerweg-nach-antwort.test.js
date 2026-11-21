@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import anfrageMitFrist from "./anfrage-mit-frist.mjs";
 import { test } from "node:test";
 import { errorHandler } from "../../src/middleware.ts";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
@@ -66,9 +67,14 @@ for (const zustand of ZUSTAENDE) {
   });
 }
 
+const urlOptionen = (url) => {
+  const ziel = new URL(url);
+  return { hostname: ziel.hostname, port: ziel.port, path: ziel.pathname + ziel.search };
+};
+
 function anfrage(agent, url) {
   return new Promise((resolve, reject) => {
-    const req = http.request(url, { method: "POST", agent }, (res) => {
+    const req = anfrageMitFrist({ ...urlOptionen(url), method: "POST", agent }, (res) => {
       const socket = res.socket;
       res.resume();
       res.on("end", () => resolve({ status: res.statusCode, socket }));
