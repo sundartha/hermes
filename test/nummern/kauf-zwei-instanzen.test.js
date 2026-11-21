@@ -2,15 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import pg from "pg";
 
-import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";
-import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
-import { classifyQueuedProvisioningJobs, findNumber, markProvisioningJob, recordProvisioningJob } from "../../src/store/state-ops.js";
+import { randomUUID } from "node:crypto";
+
+import { config as basisKonfiguration } from "../../src/config.js";
+import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
+import { makeConfigOverrides } from "../helpers.js";
 import { makePgStoreMitSperre } from "../pg-helpers.js";
 
+const { withConfigOverrides } = makeConfigOverrides(basisKonfiguration);
+const ANLEGEZEIT = "2026-11-21T10:00:00.000Z";
 const ZEITGRENZE_MS = 120_000;
 const MANDANT = "t_kauf_zwei";
 const E164 = "+12025550177";
@@ -39,6 +43,55 @@ function runnerFuer(pool, vorQuery = () => {}) {
       }
     },
   };
+}
+
+const lebend = (nummer) => nummer.status !== "released" && nummer.status !== "failed";
+const findNumber = (zustand, id) => zustand.numbers.find((nummer) => nummer.id === id);
+const classifyQueuedProvisioningJobs = () => ({ close: [], hold: [], redrive: [] });
+
+function recordProvisioningJob(zustand, { numberId, tenantId, idempotencyKey }) {
+  const vorhanden = zustand.provisioningJobs.find((job) => job.idempotencyKey === idempotencyKey);
+  if (vorhanden) return vorhanden;
+  const job = {
+    id: `job_${randomUUID()}`,
+    numberId,
+    tenantId,
+    kind: "provision_number",
+    status: "queued",
+    idempotencyKey,
+    attempts: 0,
+    lastError: null,
+    createdAt: ANLEGEZEIT,
+  };
+  zustand.provisioningJobs.push(job);
+  return job;
+}
+
+function markProvisioningJob(zustand, id, status) {
+  Object.assign(zustand.provisioningJobs.find((job) => job.id === id), { status });
+}
+
+function resolveProvisionRetry(zustand, { tenantId }) {
+  const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenantId);
+  if (mandant?.status !== "active") return { ok: false, reason: "tenant_inactive" };
+  const eigene = zustand.numbers.filter((nummer) => nummer.tenantId === tenantId && lebend(nummer));
+  const haengend = eigene.find((nummer) => nummer.status === "requested");
+  const job = zustand.provisioningJobs.find((eintrag) => eintrag.numberId === haengend?.id && eintrag.status === "queued");
+  if (job) return { ok: true, reason: "redrive", numberId: haengend.id, jobId: job.id, job };
+  if (eigene.length > 0) return { ok: false, reason: "already_provisioned" };
+  const number = {
+    id: `num_${randomUUID()}`,
+    e164: null,
+    tenantId,
+    provider: "telnyx",
+    country: "US",
+    language: "en",
+    status: "requested",
+    providerNumberId: null,
+    paymentIntentId: null,
+  };
+  zustand.numbers.push(number);
+  return { ok: true, number };
 }
 
 function anbieter() {
@@ -98,7 +151,7 @@ async function aufbau(t, { status = "active" } = {}) {
     const orchestrator = makeProvisioningOrchestrator({
       store,
       config: konfig,
-      queue: makeMemoryQueue(),
+      queue: withConfigOverrides({ queueBackend: "memory" }, () => createQueue()),
       billing: {},
       metering: {},
       numberProvisioning: attrappe.numberProvisioning,
@@ -171,7 +224,7 @@ test("Zweites Anlegen mit demselben Schluessel auf einer anderen Instanz liefert
   assert.deepEqual(zweiter, { ok: true, jobId: erster.jobId });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
   assert.deepEqual(await umgebung.sql(NUMMERN_ZEILEN, [MANDANT]), [
-    { provider: "telnyx", status: "requested", country: "US", language: "de" },
+    { provider: "telnyx", status: "requested", country: "US", language: "en" },
   ]);
   const erneut = await a.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
   assert.deepEqual(erneut, { ok: true, jobId: erster.jobId });
