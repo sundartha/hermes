@@ -204,3 +204,20 @@ test("die Verbindung ist nach der Sperre wieder frei und der Pool nimmt neue Arb
   const { rows } = await db.query("SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory'");
   assert.equal(rows[0].anzahl, 0);
 });
+
+test("mitAnrufSperre: Abfrage innerhalb einer Abfrage der Arbeit stellt sich nicht hinter die aeussere", async () => {
+  zuruecksetzen();
+  const tor = Promise.withResolvers();
+  verhalten.haelt = () => tor.promise;
+  await store.mitAnrufSperre(MANDANT, async () => {
+    await store.mitStartSperre(4711, async () => {
+      const innen = store.pruefeVerbindung();
+      for (let runde = 0; runde < 50; runde += 1) await Promise.resolve();
+      assert.ok(protokoll.includes("start SELECT 1"), "die innere Abfrage hat begonnen");
+      verhalten.haelt = null;
+      tor.resolve();
+      await innen;
+    });
+  });
+  assert.equal(verbindungen, 1);
+});
