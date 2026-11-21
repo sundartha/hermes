@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { makeChainMutex } from "../chain-mutex.js";
+import { makeKeyedChainMutex } from "../chain-mutex.js";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
@@ -505,6 +505,7 @@ const vorWahlAbgebrochenBody = (callId: string) => ({
   callId,
 });
 
+const ANSPRUCH_SCHLUESSEL = "anspruch";
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
@@ -693,7 +694,8 @@ export function makeCallRoutes({
   OWNER_ID,
 }: Abhaengigkeiten): Router {
   const router = Router();
-  const einAnspruchJeProzess: <T>(arbeit: () => Promise<T>) => Promise<T> = makeChainMutex() as never;
+  const jeSchluessel: <T>(schluessel: string, arbeit: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
+  const einAnspruchJeProzess = <T>(arbeit: () => Promise<T>): Promise<T> => jeSchluessel(ANSPRUCH_SCHLUESSEL, arbeit);
   const bereiche: Bereiche = speicherBereiche(store);
   const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
