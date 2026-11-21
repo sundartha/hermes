@@ -44,7 +44,7 @@ import {
   alertChannelInputs,
   fuerAudienceVergleich,
   kanonischeAudience,
-} from "./boot-guard.js";
+} from "./boot-guard.ts";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.ts";
 import { KOSTENPROFIL } from "./billing/kostenarten.ts";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "./elevenlabs/inbound-rueckfall.ts";

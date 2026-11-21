@@ -31,7 +31,7 @@ import {
   llmFallbackFindings,
   elInboundAccessFindings,
   angekuendigterOriginFindings,
-} from "./boot-guard.js";
+} from "./boot-guard.ts";
 import { sleep } from "./utils/uhr-warten.ts";
 import { hasActiveNumber } from "./store/views.ts";
 import { arbeitGehoertLebenderFremder, speicherBereiche } from "./store.js";

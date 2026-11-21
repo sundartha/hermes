@@ -31,12 +31,12 @@
         "src/lebenszeichen.js",
         "src/lebenszeichen-regeln.js",
         "src/app.js",
-        "src/boot-guard.js",
+        "src/boot-guard.ts",
         "src/mcp-server.js",
         "src/process-guards.js",
         "src/mail-boot-probe.js"
       ],
-      "eingaenge": ["src/boot-guard.js"],
+      "eingaenge": ["src/boot-guard.ts"],
       "nutzt": [],
       "importiertJedeDatei": true
     },
