@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { telnyxMessaging } from "../../src/telephony/adapters/telnyx/messaging.js";
 
 function withMockFetch(impl, fn) {

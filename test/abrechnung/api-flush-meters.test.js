@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { stripeBilling } from "../../src/billing/stripe.ts";
 import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { seedState } from "../helpers.js";

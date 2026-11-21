@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as konfig from "../../src/config.js";
+import * as konfig from "../../src/config.ts";
 
 test("isSelfServiceLive: braucht Self-Service und Multi-Tenant zugleich", () => {
   const tabelle = [

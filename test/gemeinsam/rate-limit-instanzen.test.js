@@ -12,7 +12,7 @@ const HTTP_TOO_MANY = 429;
 const IP = "203.0.113.77";
 const SUB = "sub-anteil";
 const TENANT = "t_anteil";
-const SKRIPT = 'import("./src/config.js").then(({ config }) => process.stdout.write(JSON.stringify({ safety: config.safety, auth: config.auth })));';
+const SKRIPT = 'import("./src/config.ts").then(({ config }) => process.stdout.write(JSON.stringify({ safety: config.safety, auth: config.auth })));';
 
 function loadConfig(umgebung) {
   const env = kindUmgebung({ NODE_ENV: "test", ...umgebung });

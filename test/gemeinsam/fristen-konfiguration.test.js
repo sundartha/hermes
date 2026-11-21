@@ -5,7 +5,7 @@ import { kindUmgebung } from "./kind-umgebung.mjs";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
 const SKRIPT = [
-  'import("./src/config.js").then(({ fristenEinstellungen }) =>',
+  'import("./src/config.ts").then(({ fristenEinstellungen }) =>',
   "  process.stdout.write(JSON.stringify(fristenEinstellungen)));",
 ].join("\n");
 

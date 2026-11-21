@@ -33,7 +33,7 @@ async function silently(work) {
 }
 
 async function configured(dataDir) {
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   Object.assign(config.server, {
     dataDir,
     webDistDir: join(dataDir, "web"),

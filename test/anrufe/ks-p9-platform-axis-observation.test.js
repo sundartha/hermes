@@ -20,7 +20,7 @@ let storeFacade;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-ks-p9-"));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   storeFacade = await import("../../src/store.js");
 });
 

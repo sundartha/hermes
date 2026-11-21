@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { importNachKonfiguration, importNachUmgebung } from "./umgebung-import.js";
 
-test("importNachUmgebung wirft, wenn src/config.js schon auf ein anderes DATA_DIR zeigt", async (t) => {
+test("importNachUmgebung wirft, wenn src/config.ts schon auf ein anderes DATA_DIR zeigt", async (t) => {
   await import("../config-namespaces-helper.js");
   const gewollt = fs.mkdtempSync(path.join(os.tmpdir(), "umgebung-import-"));
   t.after(() => {

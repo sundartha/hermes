@@ -8,7 +8,7 @@ const ERSTES_VERZEICHNIS = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-pfad-a-
 const SPAETERES_VERZEICHNIS = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-pfad-b-"));
 process.env.DATA_DIR = ERSTES_VERZEICHNIS;
 
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const jsonStore = await import("../../src/store.js");
 
 test("store.json entsteht im Ordner, der beim ersten load() gilt, nicht beim Import", () => {

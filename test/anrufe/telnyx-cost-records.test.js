@@ -63,7 +63,7 @@ const {
   DETAIL_RECORDS_RESERVE_PER_MINUTE,
   DETAIL_RECORDS_BUDGET_PER_MINUTE,
 } = await import("../../src/telephony/adapters/telnyx/voice.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 const { withBlankedConfig } = makeConfigOverrides(config);
 

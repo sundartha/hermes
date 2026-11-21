@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { providerConfigRead } from "../../src/telephony/registry.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { TELNYX_MESSZEILE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 import { withFetch } from "../helpers.js";
 

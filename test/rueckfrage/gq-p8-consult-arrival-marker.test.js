@@ -48,7 +48,7 @@ before(async () => {
       calls,
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");

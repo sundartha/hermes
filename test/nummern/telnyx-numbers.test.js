@@ -11,7 +11,7 @@ const { telnyxNumberProvisioning: prov } =
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
 const { PROVIDER } = await import("../../src/begriffe/nummern-vergabe.js");
 const { CENTS_PER_EUR, MICRO_CENTS_PER_CENT } = await import("../../src/begriffe/abrechnung.ts");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 function stubFetch(response) {
   const calls = [];

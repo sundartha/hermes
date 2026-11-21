@@ -39,7 +39,7 @@ before(async () => {
   process.env.CONSULT_ENABLED = "true";
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   process.env.EXA_API_KEY = "test-wwp3-exa-key";
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ systemPrompt } = await import("../../src/claude.js"));
   ({ withConfigOverrides } = makeConfigOverrides(config));
 });

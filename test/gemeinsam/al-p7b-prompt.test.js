@@ -17,7 +17,7 @@ before(async () => {
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }],
     }),
   );
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ systemPrompt } = await import("../../src/claude.js"));
   ({ withConfigOverrides } = makeConfigOverrides(config));
 });

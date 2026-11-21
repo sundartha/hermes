@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createLlmProvider } from "../../src/llm/registry.js";
 import { inCallSearchProvider } from "../../src/research/registry.js";
 import { LLM_PROVIDER } from "../../src/llm/provider.ts";

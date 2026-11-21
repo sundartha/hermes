@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerTools } from "../../src/mcp-tools.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";

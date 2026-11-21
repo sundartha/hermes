@@ -12,7 +12,7 @@ process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const registry = await import("../../src/telephony/registry.js");
 
 const { withConfig } = makeConfigOverrides(config);

@@ -14,7 +14,7 @@ let jsonStore, BOOTSTRAP, FROM_SOURCE;
 before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-absender-wahrheit-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   jsonStore = await import("../../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ FROM_SOURCE } = await import("../../src/store/state-ops.js"));

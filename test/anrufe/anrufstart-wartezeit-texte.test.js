@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ANRUFSTART_AUSGANG, makeAnrufstartAuftrag } from "../../src/elevenlabs/anrufstart-auftrag.ts";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { PLACE_CALL_HOP_TIMEOUT_MS } from "../../src/mcp-tools.js";
 import { LEITUNGSPLATZ_ENTSCHEIDUNG, WARTENDE_JE_KUNDE, makeAnrufstartMarker, makeLeitungsplaetze } from "../../src/store.js";
 import { legacySnapshot } from "../mcp-draht-pfade.js";

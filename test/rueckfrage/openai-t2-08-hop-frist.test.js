@@ -5,7 +5,7 @@ import { MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS } from "../../src/mcp-too
 import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
 import { CONSULT_POLL_ABORT_MS } from "../../src/consult/delivery.js";
 import { CONSULT_EVENT } from "../../src/consult/delivery.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { captureToolHandlers } from "../gemeinsam/werkzeug-registrierung.js";
 import {
   EL_TERMINATION_RESULT_ATTEMPTS,

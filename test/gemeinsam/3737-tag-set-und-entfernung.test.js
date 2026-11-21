@@ -8,7 +8,7 @@ let store;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-3737-"));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
 });
 

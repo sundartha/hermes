@@ -56,7 +56,7 @@ before(async () => {
   );
   process.env.IN_CALL_CONSULT_ENABLED = "true";
   process.env.CONSULT_ENABLED = "true";
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ systemPrompt } = await import("../../src/claude.js"));
 });
 

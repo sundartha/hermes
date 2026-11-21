@@ -12,7 +12,7 @@ before(async () => {
       calls: [],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   inCall = await import("../../src/consult/in-call.js");
 });
 

@@ -8,7 +8,7 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telepho
 import { reattachActiveCall as reattachActiveCallCore } from "../../src/telephony/reattach.ts";
 import { blockingBudgetAxis } from "../../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { VOICE_ENGINE } from "../../src/config.js";
+import { VOICE_ENGINE } from "../../src/config.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const MAX_DURATION_S = 180;

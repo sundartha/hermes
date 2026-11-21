@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung, wackeligeWarteschlange } from "../gemeinsam/pgboss-umgebung.js";
 import { fakeProvisioner } from "../helpers.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";

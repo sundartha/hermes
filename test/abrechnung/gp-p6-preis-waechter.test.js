@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { stripeBilling } from "../../src/billing/stripe.ts";
 import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../../src/billing/price-drift-watch.ts";
 import { beurteilePreis, PREIS_URTEIL } from "../../src/billing/price-drift-watch.ts";

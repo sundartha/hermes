@@ -5,7 +5,7 @@ import path from "node:path";
 
 export async function jsonSpeicherImDatenordner(praefix) {
   const datenordner = fs.mkdtempSync(path.join(os.tmpdir(), praefix));
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   Object.assign(config.server, { dataDir: datenordner, webDistDir: path.join(datenordner, "web") });
   const speicher = await import("../../src/store.js");
   after(() => fs.rmSync(datenordner, { recursive: true, force: true }));

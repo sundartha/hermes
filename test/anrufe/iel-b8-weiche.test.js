@@ -149,7 +149,7 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.ts und im Inbound-Trunk-S
     .filter(([, anzahl]) => anzahl > 0);
   const dateien = Object.fromEntries(vorkommen);
   assert.deepEqual(Object.keys(dateien).sort(), [
-    "src/config.js",
+    "src/config.ts",
     "src/elevenlabs/inbound-path-decision.ts",
     "src/elevenlabs/inbound-trunk-beleg.ts",
     "src/elevenlabs/nummern-registrierung.js",

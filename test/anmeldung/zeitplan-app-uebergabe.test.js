@@ -14,7 +14,7 @@ const [{ config }, { buildApp }] = await importNachKonfiguration(
     tenancy: { multiTenant: true, selfServiceEnabled: true },
     server: { webDistDir: path.join(TEMP_DATA_DIR, "web-dist"), publicUrl: "https://zeitplan.test" },
   },
-  () => import("../../src/config.js"),
+  () => import("../../src/config.ts"),
   () => import("../../src/app.js"),
 );
 

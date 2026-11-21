@@ -5,7 +5,7 @@ import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { createQueue } from "../../src/queue/registry.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeConfigOverrides } from "../helpers.js";
 import { mitDatenbankVorDemStart } from "../anrufe/zwei-instanzen-postgres.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

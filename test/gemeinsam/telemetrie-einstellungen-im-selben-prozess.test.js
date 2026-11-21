@@ -5,16 +5,16 @@ import { tempDataDir, seedState } from "../helpers.js";
 
 const NAMEN = ["METRIKEN_OTLP_URL", "METRIKEN_OTLP_BENUTZER", "METRIKEN_OTLP_TOKEN", "RENDER_INSTANCE_ID", "METRIKEN_INTERVALL_MS"];
 const LADER = [
-  () => import("../../src/config.js?telemetrie=1"),
-  () => import("../../src/config.js?telemetrie=2"),
-  () => import("../../src/config.js?telemetrie=3"),
-  () => import("../../src/config.js?telemetrie=4"),
-  () => import("../../src/config.js?telemetrie=5"),
-  () => import("../../src/config.js?telemetrie=6"),
-  () => import("../../src/config.js?telemetrie=7"),
-  () => import("../../src/config.js?telemetrie=8"),
-  () => import("../../src/config.js?telemetrie=9"),
-  () => import("../../src/config.js?telemetrie=10"),
+  () => import("../../src/config.ts?telemetrie=1"),
+  () => import("../../src/config.ts?telemetrie=2"),
+  () => import("../../src/config.ts?telemetrie=3"),
+  () => import("../../src/config.ts?telemetrie=4"),
+  () => import("../../src/config.ts?telemetrie=5"),
+  () => import("../../src/config.ts?telemetrie=6"),
+  () => import("../../src/config.ts?telemetrie=7"),
+  () => import("../../src/config.ts?telemetrie=8"),
+  () => import("../../src/config.ts?telemetrie=9"),
+  () => import("../../src/config.ts?telemetrie=10"),
 ];
 let zaehler = 0;
 

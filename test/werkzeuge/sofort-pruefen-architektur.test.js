@@ -148,11 +148,11 @@ test("Architektur und Katalog bleiben ausserhalb ihrer Bereiche still", () => {
 test("der Bedrohungskatalog meldet bei einer doppelten Zeile, bei Aenderung am Katalog wie an src, und bleibt sonst still", () => {
   const ordner = echterBaum();
   const beginn = Date.now();
-  still(hook(ordner, "src/config.js"), "sauber");
+  still(hook(ordner, "src/config.ts"), "sauber");
   assert.ok(Date.now() - beginn < FRIST_MS);
   const zeile = readFileSync(join(ordner, KATALOG), "utf8").split("\n").find((text) => text.startsWith("| SG-01 |"));
   appendFileSync(join(ordner, KATALOG), `${zeile}\n`);
-  for (const pfad of [KATALOG, "src/config.js"]) {
+  for (const pfad of [KATALOG, "src/config.ts"]) {
     const lauf = hook(ordner, pfad);
     assert.equal(lauf.status, VERSTOSS_EXIT, pfad);
     assert.match(lauf.stderr, new RegExp(`^${pfad.replace(".", "\\.")}:1 {2}bedrohungskatalog {2}[^\\n]*SG-01 steht mehrfach[^\\n]*So geht es richtig: [^\\n]*SG-<nr>`, "m"), pfad);

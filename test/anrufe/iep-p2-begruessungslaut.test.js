@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { leseWav } from "../../scripts/iel-mess-audio.mjs";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "../../src/elevenlabs/inbound-rueckfall.ts";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { BASE_ENV, ROOT, startServer } from "../helpers.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

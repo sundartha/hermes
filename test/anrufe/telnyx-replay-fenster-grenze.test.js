@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test } from "node:test";
 import express from "express";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { inboundSignatureVerifier } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";

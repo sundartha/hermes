@@ -69,7 +69,7 @@ before(async () => {
       ],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   ({ summarizeCall } = await import("../../src/claude.js"));
   ({ fetchPrecallBriefing } = await import("../../src/precall-briefing.js"));

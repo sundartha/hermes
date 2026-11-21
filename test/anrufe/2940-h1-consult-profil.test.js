@@ -75,7 +75,7 @@ let speicher;
 before(async () => {
   schalteNebenkanaeleAb();
   process.env.DATA_DIR = tempDataDir(seedState({}));
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   config.tenancy.consultEnabled = true;
   config.tenancy.assistantContextEnabled = true;
   speicher = await import("../../src/store.js");

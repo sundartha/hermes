@@ -222,7 +222,7 @@ test("SG-13 Werte eigener Schlüssel aus der Umgebung werden im Log maskiert", a
   const geheimnis = "geheim".repeat(GEHEIMNIS_TEILE);
   process.env.LOGMASKE_PROBE_API_KEY = geheimnis;
   process.env.LOGMASKE_PROBE_TOKEN = "kurzwert";
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   assert.equal(maskiereLogText(`schluessel=${geheimnis} ende`), "schluessel=*** ende");
   assert.equal(maskiereLogText("wert=kurzwert"), "wert=kurzwert");
 });
@@ -245,7 +245,7 @@ test("[NIE1] die Herzschlag-Adresse aus der Umgebung wird in jedem Logtext durch
   const gesichert = process.env.HERZSCHLAG_URL;
   process.env.HERZSCHLAG_URL = HERZSCHLAG_ADRESSE;
   try {
-    await import("../../src/config.js?log-maske-herzschlag-adresse");
+    await import("../../src/config.ts?log-maske-herzschlag-adresse");
   } finally {
     if (gesichert === undefined) delete process.env.HERZSCHLAG_URL;
     else process.env.HERZSCHLAG_URL = gesichert;

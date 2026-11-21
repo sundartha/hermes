@@ -189,7 +189,7 @@ test("Web-Login legt den Tenant mit country/defaultLanguage/timezone an (ex LANG
 });
 
 const { default: pg } = await import("pg");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const { poolAufPglite } = await import(".././abrechnung/server-mit-testdatenbank.js");
 const { pgliteAlsRolleOhneSuperuser } = await import(".././pg-helpers.js");
 const { appOhneAbhaengigkeiten } = await import(".././gemeinsam/app-ohne-abhaengigkeiten.js");

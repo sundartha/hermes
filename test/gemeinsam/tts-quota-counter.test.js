@@ -26,7 +26,7 @@ const OCT_ISO = "2026-10-15T00:00:00.000Z";
 let config;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
 });
 
 test("(a) Zaehlung bei Erfolg: drei Aufrufe im selben Zyklus akkumulieren", () => {

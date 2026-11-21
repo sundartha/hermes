@@ -6,7 +6,7 @@ import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orch
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { numberProvisioning } from "../../src/telephony/registry.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { withFetch } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

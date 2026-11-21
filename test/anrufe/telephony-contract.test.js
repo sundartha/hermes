@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { say, hangup } from "../../src/telephony/directives.ts";
 import { renderDirectives as telnyxRender } from "../../src/telephony/adapters/telnyx/render.ts";
 import { telnyxMessaging } from "../../src/telephony/adapters/telnyx/messaging.js";

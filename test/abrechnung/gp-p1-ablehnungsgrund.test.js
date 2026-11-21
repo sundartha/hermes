@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { stripeBilling } from "../../src/billing/stripe.ts";
 import { PaymentAuthenticationRequiredError } from "../../src/billing/errors.ts";
 import { makeStripeStub } from "../helpers.js";

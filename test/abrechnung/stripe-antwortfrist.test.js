@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
 import { makePgTestStore } from "../pg-helpers.js";

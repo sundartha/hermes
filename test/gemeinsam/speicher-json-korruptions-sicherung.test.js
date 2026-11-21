@@ -10,7 +10,7 @@ const KAPUTT = "{ this is not json";
 process.env.DATA_DIR = IMPORT_ORDNER;
 fs.writeFileSync(path.join(DATEN, "store.json"), KAPUTT);
 
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 config.server.dataDir = DATEN;
 

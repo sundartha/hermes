@@ -6,7 +6,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 let systemPrompt;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ systemPrompt } = await import("../../src/claude.js"));
 });
 

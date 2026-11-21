@@ -6,7 +6,7 @@ import { ROOT } from "../helpers.js";
 
 function ladeAusgehend(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, configFatalErrors }) => {',
     "process.stdout.write(JSON.stringify({ fehler: configFatalErrors(), ausgehend: config.voice.elevenLabsOutbound }));",
     "});",
   ].join("\n");

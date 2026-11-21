@@ -106,18 +106,18 @@ test("Anfrage-ID: maschinenlesbare [metrics]-Zeilen bleiben auch mit Schalter un
 });
 
 test("Anfrage-ID: LOG_REQUEST_ID ungesetzt ist aus, ohne dass der Start verweigert wird", async () => {
-  const frisch = await ladeKonfigurationMit(undefined, () => import("../../src/config.js?anfrage-kennung-ungesetzt"));
+  const frisch = await ladeKonfigurationMit(undefined, () => import("../../src/config.ts?anfrage-kennung-ungesetzt"));
   assert.strictEqual(frisch.config.metrics.logRequestId, false);
   assert.ok(!frisch.configFatalErrors().some((befund) => befund.includes("LOG_REQUEST_ID")));
 });
 
 test("Anfrage-ID: LOG_REQUEST_ID=true schaltet die ID in den Logzeilen an", async () => {
-  const frisch = await ladeKonfigurationMit("true", () => import("../../src/config.js?anfrage-kennung-an"));
+  const frisch = await ladeKonfigurationMit("true", () => import("../../src/config.ts?anfrage-kennung-an"));
   assert.strictEqual(frisch.config.metrics.logRequestId, true);
 });
 
 test("Anfrage-ID: ein ungueltiger LOG_REQUEST_ID-Wert bleibt aus und wird beim Start benannt", async () => {
-  const frisch = await ladeKonfigurationMit("vielleicht", () => import("../../src/config.js?anfrage-kennung-ungueltig"));
+  const frisch = await ladeKonfigurationMit("vielleicht", () => import("../../src/config.ts?anfrage-kennung-ungueltig"));
   assert.strictEqual(frisch.config.metrics.logRequestId, false);
   assert.ok(frisch.configFatalErrors().some((befund) => befund.includes("LOG_REQUEST_ID")));
 });

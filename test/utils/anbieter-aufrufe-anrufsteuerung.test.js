@@ -67,7 +67,7 @@ const { appOhneAbhaengigkeiten } = await import("../gemeinsam/app-ohne-abhaengig
 const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
 const { voiceControl, numberProvisioning } = await import("../../src/telephony/registry.js");
 const store = await import("../../src/store.js");
-const { config: hermesConfig } = await import("../../src/config.js");
+const { config: hermesConfig } = await import("../../src/config.ts");
 const telephonie = hermesConfig.telephony;
 const ANRUF_FUER = (nummer) => `anruf_${nummer}`;
 

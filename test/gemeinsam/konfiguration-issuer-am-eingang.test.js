@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as konfig from "../../src/config.js";
+import * as konfig from "../../src/config.ts";
 import { PASSWORT_BEISPIEL } from "./erfundene-geheimnisse.js";
 
 const ISSUER_FAELLE = [

@@ -121,7 +121,7 @@ before(async () => {
       ],
     }),
   );
-  configModule = await import("../../src/config.js");
+  configModule = await import("../../src/config.ts");
   store = await import("../../src/store.js");
   ({ summarizeCall } = await import("../../src/claude.js"));
 });

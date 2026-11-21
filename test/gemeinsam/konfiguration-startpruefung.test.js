@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { config, assertConfig, productionAuthHints, productionFootguns } from "../../src/config.js";
+import { config, assertConfig, productionAuthHints, productionFootguns } from "../../src/config.ts";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 
@@ -314,7 +314,7 @@ test("Gegenprobe: WEB_DIST_DIR mit index.html -> assertConfig true, kein WEB_DIS
   }
 });
 
-import { configFatalErrors } from "../../src/config.js";
+import { configFatalErrors } from "../../src/config.ts";
 
 const BASIS = {
   ...CONFIG_REQUIRED_OK,

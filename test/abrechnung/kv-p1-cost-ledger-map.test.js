@@ -53,7 +53,7 @@ before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
   );
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
   store = await import("../../src/store.js");
   ({ makeMetering } = await import("../../src/billing/metering.js"));
   ({ tariffCentsPerMin } = await import("../../src/telephony/outbound-gates.js"));

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { stripeBilling } from "../../src/billing/stripe.ts";
 import { provisionNumber } from "../../src/onboarding.ts";
 import { fakeProvisioner } from "../helpers.js";

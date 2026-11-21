@@ -1,5 +1,5 @@
 import { TestClock, fromPglite } from "pg-boss";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeConfigOverrides } from "../helpers.js";
 import { neuePglite } from "../pglite-helfer.js";

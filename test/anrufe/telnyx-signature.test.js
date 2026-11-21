@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { verifyInboundSignature } from "../../src/telephony/adapters/telnyx/signature.ts";
 import { makeTelnyxSigner, nowSeconds } from "../helpers.js";
 

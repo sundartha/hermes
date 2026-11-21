@@ -11,7 +11,7 @@ process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
 const { voiceControl } = await import("../../src/telephony/registry.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 function stubFetch() {
   const calls = [];

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { eurToCents } from "../../src/config.js";
+import { eurToCents } from "../../src/config.ts";
 import { spendCapCoherence } from "../../src/boot-guard.ts";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 
@@ -55,7 +55,7 @@ test("render.yaml: ausgelieferte Budget-Achsen sind kohaerent (kein fataler Boot
   );
 });
 
-test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein fataler Boot-Refusal)", () => {
+test("src/config.ts: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein fataler Boot-Refusal)", () => {
   const standard = gebauteStandardwerte({
     DEFAULT_TENANT_BUDGET_CENTS: "billing.defaultTenantBudgetCents",
     MAX_BUDGET_EUR: "billing.platformSpendCapCents",
@@ -69,7 +69,7 @@ test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein
   assert.equal(
     findings.some((f) => f.fatal),
     false,
-    `src/config.js liefert einen vom eigenen Boot-Guard verweigerten CODE-Fallback: ${JSON.stringify(findings)}`,
+    `src/config.ts liefert einen vom eigenen Boot-Guard verweigerten CODE-Fallback: ${JSON.stringify(findings)}`,
   );
 });
 
@@ -82,7 +82,7 @@ test("KS-P6: der ausgelieferte Worst-Case-Tarif ist 30 ct/min - dieselbe Zahl in
   assert.equal(
     standard.VOICE_TARIFF_DEFAULT_CENTS,
     WORST_CASE_TARIFF_CENTS_PER_MIN,
-    "src/config.js numEnv-Fallback",
+    "src/config.ts numEnv-Fallback",
   );
   assert.equal(
     Number(readEnvValue(envExample, "VOICE_TARIFF_DEFAULT_CENTS")),
@@ -99,7 +99,7 @@ test("KS-P6: der ausgelieferte Worst-Case-Tarif ist 30 ct/min - dieselbe Zahl in
 const RETENTION_DAYS_DEFAULT = 30;
 const DIAGNOSTIC_RETENTION_DAYS_DEFAULT = 7;
 
-test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/config.js und .env.example ueberein", () => {
+test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/config.ts und .env.example ueberein", () => {
   const standard = gebauteStandardwerte({
     RETENTION_DAYS: "privacy.retentionDays",
     DIAGNOSTIC_RETENTION_DAYS: "privacy.diagnosticRetentionDays",
@@ -115,20 +115,20 @@ test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/confi
   );
 });
 
-test("IE3-7: ELEVENLABS_INBOUND_ENABLED ist weder in src/config.js noch in .env.example oder render.yaml gefuehrt (Schalter gestrichen)", () => {
+test("IE3-7: ELEVENLABS_INBOUND_ENABLED ist weder in src/config.ts noch in .env.example oder render.yaml gefuehrt (Schalter gestrichen)", () => {
   const name = "ELEVENLABS_INBOUND_ENABLED";
   const standard = gebauteStandardwerte({ [name]: "voice.elevenLabsInbound" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   assert.equal(typeof standard[name], "object");
-  assert.equal("enabled" in standard[name], false, "src/config.js liest den Schalter nicht mehr");
+  assert.equal("enabled" in standard[name], false, "src/config.ts liest den Schalter nicht mehr");
   assert.ok(!envExample.includes(name), ".env.example");
   assert.ok(!renderYaml.includes(name), "render.yaml");
 });
 
 const BUDGET_WATCHDOG_SHIPPED_MS = 15000;
 
-test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.ts, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
   const name = "BUDGET_WATCHDOG_INTERVAL_MS";
   const standard = gebauteStandardwerte({ [name]: "safety.budgetWatchdogIntervalMs" });
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
@@ -136,7 +136,7 @@ test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.js, .env.example und r
   assert.equal(
     standard[name],
     BUDGET_WATCHDOG_SHIPPED_MS,
-    "src/config.js numEnv-Fallback",
+    "src/config.ts numEnv-Fallback",
   );
   assert.equal(Number(readEnvValue(envExample, name)), BUDGET_WATCHDOG_SHIPPED_MS, ".env.example");
   assert.equal(Number(readRenderValue(renderYaml, name)), BUDGET_WATCHDOG_SHIPPED_MS, "render.yaml");

@@ -22,7 +22,7 @@ let dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iex-a8-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   beleg = await import("../../src/elevenlabs/inbound-trunk-beleg.ts");
   pfad = await import("../../src/elevenlabs/inbound-path-decision.ts");
   ops = await import("../../src/store/state-ops.js");

@@ -260,7 +260,7 @@ test("KV-P0-9: config.js kanonisiert einen gueltigen Stichtag und verweigert ein
   const saved = process.env.BILLING_FLUSH_EPOCH;
   try {
     delete process.env.BILLING_FLUSH_EPOCH;
-    const leer = await import("../../src/config.js?kv-p0-9a");
+    const leer = await import("../../src/config.ts?kv-p0-9a");
     assert.equal(leer.config.billing.flushEpochIso, null);
     assert.ok(
       !leer.configFatalErrors().some((e) => e.includes("BILLING_FLUSH_EPOCH")),
@@ -268,16 +268,16 @@ test("KV-P0-9: config.js kanonisiert einen gueltigen Stichtag und verweigert ein
     );
 
     process.env.BILLING_FLUSH_EPOCH = "2026-08-04T02:00:00+02:00";
-    const offset = await import("../../src/config.js?kv-p0-9b");
+    const offset = await import("../../src/config.ts?kv-p0-9b");
     assert.equal(offset.config.billing.flushEpochIso, "2026-08-04T00:00:00.000Z");
 
     process.env.BILLING_FLUSH_EPOCH = "0";
-    const nullJahr = await import("../../src/config.js?kv-p0-9c1");
+    const nullJahr = await import("../../src/config.ts?kv-p0-9c1");
     assert.equal(nullJahr.config.billing.flushEpochIso, null);
     assert.ok(nullJahr.configFatalErrors().some((e) => e.includes("BILLING_FLUSH_EPOCH")));
 
     process.env.BILLING_FLUSH_EPOCH = "2026-08-04T00:00:00";
-    const ohneZone = await import("../../src/config.js?kv-p0-9c2");
+    const ohneZone = await import("../../src/config.ts?kv-p0-9c2");
     assert.equal(ohneZone.config.billing.flushEpochIso, null);
     assert.ok(ohneZone.configFatalErrors().some((e) => e.includes("BILLING_FLUSH_EPOCH")));
   } finally {

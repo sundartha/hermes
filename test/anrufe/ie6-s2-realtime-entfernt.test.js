@@ -173,7 +173,7 @@ test("IE6-S2-7: Altzeile telnyx_inbound_realtime bleibt unaufgeloest (fail-close
 });
 
 test("IE6-S2-8: Config/Registry kennen die Realtime-Felder nicht mehr", async () => {
-  const { config, VOICE_ENGINE, CONFIG_NAMESPACES } = await import("../../src/config.js");
+  const { config, VOICE_ENGINE, CONFIG_NAMESPACES } = await import("../../src/config.ts");
   assert.ok(!CONFIG_NAMESPACES.voice.includes("openaiApiKey"));
   assert.ok(!CONFIG_NAMESPACES.voice.includes("realtimeModel"));
   assert.ok(!CONFIG_NAMESPACES.voice.includes("realtimeVoice"));

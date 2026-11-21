@@ -10,7 +10,7 @@ import {
   resolveModelPrices,
   routeCentsEnv,
   todayIsoDate,
-} from "../../src/config.js";
+} from "../../src/config.ts";
 import { execFileSync } from "node:child_process";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { BASE_ENV, ROOT } from "../helpers.js";
@@ -79,7 +79,7 @@ test('Kill-Switch: OUTBOUND_FROZEN="TRUE" -> config.outboundFrozen===true (kein 
   const saved = process.env.OUTBOUND_FROZEN;
   try {
     process.env.OUTBOUND_FROZEN = "TRUE";
-    const fresh = await import("../../src/config.js?boolenv-frozen-true");
+    const fresh = await import("../../src/config.ts?boolenv-frozen-true");
     assert.equal(fresh.config.safety.outboundFrozen, true);
     assert.ok(
       !nennt(fresh.configFatalErrors(), "OUTBOUND_FROZEN"),
@@ -95,7 +95,7 @@ test('Kill-Switch: OUTBOUND_FROZEN="1" -> Fatal + Fallback false (Boot-Refusal s
   const saved = process.env.OUTBOUND_FROZEN;
   try {
     process.env.OUTBOUND_FROZEN = "1";
-    const fresh = await import("../../src/config.js?boolenv-frozen-bad");
+    const fresh = await import("../../src/config.ts?boolenv-frozen-bad");
     assert.equal(fresh.config.safety.outboundFrozen, false);
     assert.ok(nennt(fresh.configFatalErrors(), "OUTBOUND_FROZEN"));
   } finally {
@@ -183,17 +183,17 @@ test("S1-3: config klemmt PROVISIONING_REDRIVE_MAX_AGE_MS strikt unter das 24h-D
   const saved = process.env.PROVISIONING_REDRIVE_MAX_AGE_MS;
   try {
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = String(MS_JE_TAG);
-    const atDay = await import("../../src/config.js?s1-3-day");
+    const atDay = await import("../../src/config.ts?s1-3-day");
     assert.equal(atDay.config.provisioning.provisioningRedriveMaxAgeMs, MS_JE_TAG - 1, "24h -> auf 24h-1ms geklemmt");
     assert.ok(
       !nennt(atDay.configFatalErrors(), "PROVISIONING_REDRIVE_MAX_AGE_MS"),
       "Clamp ist KEIN Fatal",
     );
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = String(MS_JE_TAG - 1);
-    const atEdge = await import("../../src/config.js?s1-3-edge");
+    const atEdge = await import("../../src/config.ts?s1-3-edge");
     assert.equal(atEdge.config.provisioning.provisioningRedriveMaxAgeMs, MS_JE_TAG - 1, "24h-1ms bleibt unveraendert");
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = "0";
-    const atZero = await import("../../src/config.js?s1-3-zero");
+    const atZero = await import("../../src/config.ts?s1-3-zero");
     assert.equal(atZero.config.provisioning.provisioningRedriveMaxAgeMs, 0, "0 (Observe-Only) bleibt 0");
   } finally {
     if (saved === undefined) delete process.env.PROVISIONING_REDRIVE_MAX_AGE_MS;
@@ -254,7 +254,7 @@ test("T-P2-10: Trailing-Muell an einem Gate -> assertConfig verweigert Boot (nen
 });
 
 async function umgebungsparser() {
-  return import("../../src/config.js");
+  return import("../../src/config.ts");
 }
 
 async function frischMitUmgebung(werte, laden) {
@@ -453,7 +453,7 @@ test("Umgebungsparser Routenkarte: gueltige Profil:Cent-Paare landen in der Kart
       VOICE_TARIFF_GRUNDBETRAG_CENTS:
         " el_convai_sip:12 ,telnyx_budget:0,bogus:5,telnyx_inbound_budget,telnyx_inbound_budget:-1,telnyx_inbound_budget:x,telnyx_inbound_budget:1.5,:7",
     },
-    () => import("../../src/config.js?umgebung-routenkarte"),
+    () => import("../../src/config.ts?umgebung-routenkarte"),
   );
   assert.deepEqual(frisch.config.billing.voiceTariffGrundbetragCentsJeRoute, {
     el_convai_sip: 12,
@@ -478,11 +478,11 @@ test("Umgebungsparser Routenkarte: gueltige Profil:Cent-Paare landen in der Kart
 test("Umgebungsparser Produktion: RENDER_EXTERNAL_URL gesetzt heisst isProduction true, sonst false", async () => {
   const mit = await frischMitUmgebung(
     { RENDER_EXTERNAL_URL: "https://hermes.example" },
-    () => import("../../src/config.js?umgebung-produktion-ja"),
+    () => import("../../src/config.ts?umgebung-produktion-ja"),
   );
   assert.equal(mit.config.server.isProduction, true);
   const ohne = await frischMitUmgebung({ RENDER_EXTERNAL_URL: undefined },
-    () => import("../../src/config.js?umgebung-produktion-nein"),
+    () => import("../../src/config.ts?umgebung-produktion-nein"),
   );
   assert.equal(ohne.config.server.isProduction, false);
 });
@@ -536,7 +536,7 @@ test("Preise: ohne Kurs-Variable gilt 0,92, mit Variable der Wert in Mikro-Einhe
   const kurs = (overrides) => {
     const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
     const script =
-      'import("./src/config.js").then(({ config }) => process.stdout.write(String(config.llm.usdToEur)));';
+      'import("./src/config.ts").then(({ config }) => process.stdout.write(String(config.llm.usdToEur)));';
     return execFileSync(process.execPath, ["--input-type=module", "-e", script], {
       cwd: ROOT,
       env,
@@ -604,7 +604,7 @@ test("Preise: asOf und Quelle der Staffeln vor und nach dem Wechsel am 1. Septem
     const script = [
       "const Echt = Date;",
       `globalThis.Date = class extends Echt { constructor(...a) { super(...(a.length ? a : ["${tag}T12:00:00Z"])); } };`,
-      'import("./src/config.js").then(({ config }) => process.stdout.write(JSON.stringify(config.llm.modelPricesUsd)));',
+      'import("./src/config.ts").then(({ config }) => process.stdout.write(JSON.stringify(config.llm.modelPricesUsd)));',
     ].join("\n");
     const env = kindUmgebung({ ...BASE_ENV, NODE_ENV: "test" });
     return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { cwd: ROOT, env, encoding: "utf8" }));
@@ -646,7 +646,7 @@ async function mitGatewayUrl(wert, laden, pruefung) {
 }
 
 test("Gateway-URL: der gemerkte Port gilt ohne GATEWAY_URL, eine gesetzte GATEWAY_URL geht vor", async () => {
-  await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-gebunden"), (frisch) => {
+  await mitGatewayUrl(undefined, () => import("../../src/config.ts?gw-gebunden"), (frisch) => {
     assert.equal(frisch.resolveGatewayUrl(), `http://localhost:${frisch.config.server.port}`);
     frisch.setBoundGatewayPort(GEBUNDENER_PORT);
     assert.equal(frisch.resolveGatewayUrl(), "http://localhost:4321");
@@ -656,9 +656,9 @@ test("Gateway-URL: der gemerkte Port gilt ohne GATEWAY_URL, eine gesetzte GATEWA
 });
 
 test("Gateway-URL: der gemerkte Port gehoert zu seiner Konfiguration, eine frisch geladene kennt ihn nicht", async () => {
-  await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-getrennt-a"), async (erste) => {
+  await mitGatewayUrl(undefined, () => import("../../src/config.ts?gw-getrennt-a"), async (erste) => {
     erste.setBoundGatewayPort(GEBUNDENER_PORT);
-    await mitGatewayUrl(undefined, () => import("../../src/config.js?gw-getrennt-b"), (zweite) => {
+    await mitGatewayUrl(undefined, () => import("../../src/config.ts?gw-getrennt-b"), (zweite) => {
       assert.equal(zweite.resolveGatewayUrl(), `http://localhost:${zweite.config.server.port}`);
     });
     assert.equal(erste.resolveGatewayUrl(), "http://localhost:4321");
@@ -670,7 +670,7 @@ test("Oberflaeche: Fehlertexte des Wachters nennen Pfad und Schluessel", () => {
     () => config.safety.gibtEsNicht,
     new TypeError(
       "config.safety.gibtEsNicht existiert nicht (verschobener/entfernter Config-Key? " +
-        "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
+        "config.<namespace>.<key> nutzen - Gruppierung in src/config.ts pruefen).",
     ),
   );
   assert.throws(
@@ -696,7 +696,7 @@ test("Oberflaeche: Fehlertexte des Wachters nennen Pfad und Schluessel", () => {
 });
 
 test("Oberflaeche: angehaengte Namensraeume sind am Ziel nicht aufzaehlbar und schreiben in denselben Speicher", async () => {
-  const { attachNamespaces } = await import("../../src/config.js");
+  const { attachNamespaces } = await import("../../src/config.ts");
   const ziel = { a: 1, b: 2, c: 3 };
   attachNamespaces(ziel, { eins: ["a", "b"], zwei: ["c"] });
   assert.deepEqual(Object.keys(ziel), ["a", "b", "c"]);
@@ -712,7 +712,7 @@ const ROHWERT_NAMENSRAEUME = ["research", "metrics", "telnyx", "werkzeug", "stor
 
 function ladeRohwerte(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors, DEPLOYED_COMMIT_UNKNOWN }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors, DEPLOYED_COMMIT_UNKNOWN }) => {',
     `const ergebnis = { fehler: configFatalErrors(), unbekannt: DEPLOYED_COMMIT_UNKNOWN };`,
     `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME)}) {`,
     "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
@@ -977,7 +977,7 @@ const ROHWERT_NAMENSRAEUME_GROSS = ["telephony", "tenancy", "provisioning"];
 
 function ladeGrosseRohwerte(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
     "const ergebnis = { fehler: configFatalErrors() };",
     `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME_GROSS)}) {`,
     "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
@@ -1225,7 +1225,7 @@ const ROHWERT_NAMENSRAEUME_AUTH_LLM = ["auth", "llm"];
 
 function ladeAuthLlmRohwerte(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
     "const ergebnis = { fehler: configFatalErrors() };",
     `for (const raum of ${JSON.stringify(ROHWERT_NAMENSRAEUME_AUTH_LLM)}) {`,
     "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
@@ -1434,7 +1434,7 @@ test("Rohwerte Anmeldung und Sprachmodell: unbekannter Anbieter und ungueltiger 
 
 function ladeSicherheitStimmeRohwerte(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
     "const ergebnis = { fehler: configFatalErrors() };",
     'for (const raum of ["safety", "voice"]) {',
     "ergebnis[raum] = Object.fromEntries(CONFIG_NAMESPACES[raum].map((schluessel) => [schluessel, config[raum][schluessel]]));",
@@ -1732,7 +1732,7 @@ test("Rohwerte Sicherheit und Stimme: eine leere Landesliste fällt auf die Stan
 
 function ladeAbrechnungRohwerte(umgebung) {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
     "const ergebnis = { fehler: configFatalErrors() };",
     "ergebnis.billing = Object.fromEntries(CONFIG_NAMESPACES.billing.map((schluessel) => [schluessel, config.billing[schluessel]]));",
     "process.stdout.write(JSON.stringify(ergebnis));",

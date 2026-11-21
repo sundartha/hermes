@@ -76,7 +76,7 @@ before(async () => {
     }),
   );
   mock.timers.enable({ apis: ["Date"], now: FIXED_NOW });
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   claude = await import("../../src/claude.js");
   briefing = await import("../../src/precall-briefing.js");

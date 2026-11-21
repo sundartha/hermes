@@ -153,7 +153,7 @@ test("IEL-B1-3c/EL_INBOUND_ACCESS_FINDING: der Befund-Code ist der erwartete Kon
 function readBuiltInboundConfig(overrides = {}) {
   const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
   const script =
-    "import(\"./src/config.js\").then(({ config }) => " +
+    "import(\"./src/config.ts\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +
     "sipUserLength: config.voice.elevenLabsInbound.sipUser.length, " +
     "sipPasswordLength: config.voice.elevenLabsInbound.sipPassword.length, " +
