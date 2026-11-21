@@ -123,6 +123,7 @@ async function angenommenerAnruf() {
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
   await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
   await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await warteAuf(() => anrufIn(callId).elCallControlId === elVon(callId));
   return callId;
 }
 
