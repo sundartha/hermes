@@ -2,8 +2,9 @@ import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import fs from "node:fs";
+import { EventEmitter } from "node:events";
 
-import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
+import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, warteAufEreignis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -20,7 +21,7 @@ const FERTIG = "completed";
 const READ_ONLY_DIR = 0o500;
 const WRITABLE_DIR = 0o700;
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -48,6 +49,7 @@ function beantworte({ req, res }, anfrage, steuerung) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const steuerung = {};
   const server = http.createServer((req, res) => {
     let roh = "";
@@ -55,12 +57,14 @@ async function starteAttrappe() {
     req.on("end", () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       beantworte({ req, res }, anfrage, steuerung);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     steuerung,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
@@ -130,20 +134,20 @@ async function angenommenerAnruf() {
   });
   const { callId } = await antwort.json();
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
-  await waitUntil(() => wahlLogs() - vorher >= 2);
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => wahlLogs() - vorher >= 2);
   return callId;
 }
 
-const elAngenommenGemeldet = (callId) => waitUntil(() => new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout));
-const abgespielt = (callId) => waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
+const elAngenommenGemeldet = (callId) => warteAuf(() => new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout));
+const abgespielt = (callId) => warteAuf(() => umgebung.srv.stdout.includes(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
 const verarbeitet = () => abrufMitFrist(`${umgebung.srv.localUrl}/healthz`);
 async function beendet(callId) {
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status !== "active");
+  await warteAuf(() => anrufIn(callId).status !== "active");
 }
 
-const wartenAufBruecke = (callId) => waitUntil(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
+const wartenAufBruecke = (callId) => warteAuf(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
 
 test("3365-K13: Wiedergabe fertig, dann EL angenommen -> genau eine Bruecke zum EL-Bein, bridgedAt gesetzt", async () => {
   const callId = await angenommenerAnruf();
@@ -154,7 +158,7 @@ test("3365-K13: Wiedergabe fertig, dann EL angenommen -> genau eine Bruecke zum 
   await elAngenommen(callId);
   await wartenAufBruecke(callId);
   assert.deepEqual(koerper(bruecken(umgebung.attrappe, callId)[0]), { call_control_id: elVon(callId) });
-  await waitUntil(() => anrufIn(callId).bridgedAt);
+  await warteAuf(() => anrufIn(callId).bridgedAt);
   assert.deepEqual(aufleger(umgebung.attrappe, callId), [0, 0]);
 });
 
@@ -189,7 +193,7 @@ for (const [name, status, logStatus] of [
   test(`3365-K14: Wiedergabe-Ende mit ${name} -> keine Bruecke, beide Beine aufgelegt, auch nicht nach EL angenommen`, async () => {
     const callId = await angenommenerAnruf();
     await wiedergabeEnde(callId, status);
-    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+    await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
     await elAngenommen(callId);
     await elAngenommenGemeldet(callId);
     await verarbeitet();
@@ -211,7 +215,7 @@ test("3365-K14: HTTP-Fehler bei playback_start -> keine Bruecke, beide Beine auf
     });
     callId = (await antwort.json()).callId;
     await sende(callId, "call.answered");
-    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+    await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   } finally {
     delete umgebung.attrappe.steuerung.wiedergabeFehler;
   }
@@ -229,7 +233,7 @@ test("3365-K14: Bruecke scheitert -> beide Beine aufgelegt, kein bridgedAt", asy
   try {
     await wiedergabeEnde(callId, FERTIG);
     await elAngenommen(callId);
-    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+    await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   } finally {
     delete umgebung.attrappe.steuerung.bridgeFehler;
   }
@@ -240,7 +244,7 @@ test("3365-K14: Bruecke scheitert -> beide Beine aufgelegt, kein bridgedAt", asy
 test("3365-K13: nach cancel_call wird nicht mehr gebrueckt", async () => {
   const callId = await angenommenerAnruf();
   assert.equal((await abbrechen(callId)).status, HTTP_OK);
-  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+  await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   await wiedergabeEnde(callId, FERTIG);
   await elAngenommen(callId);
   await verarbeitet();
@@ -258,16 +262,16 @@ async function gebrueckterAnruf() {
 test("3365-K19: nach der Bruecke legt der Angerufene auf -> EL-Bein aufgelegt, Anruf completed und abgerechnet", async () => {
   const callId = await gebrueckterAnruf();
   await sende(callId, "call.hangup");
-  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "0,1");
-  await waitUntil(() => anrufIn(callId).status === "completed" && anrufIn(callId).billedAt);
+  await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "0,1");
+  await warteAuf(() => anrufIn(callId).status === "completed" && anrufIn(callId).billedAt);
   assert.ok(!anrufIn(callId).failureReason);
 });
 
 test("3365-K19: nach der Bruecke legt das EL-Bein auf -> Angerufener aufgelegt, Anruf completed und abgerechnet", async () => {
   const callId = await gebrueckterAnruf();
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,0");
-  await waitUntil(() => anrufIn(callId).status === "completed" && anrufIn(callId).billedAt);
+  await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,0");
+  await warteAuf(() => anrufIn(callId).status === "completed" && anrufIn(callId).billedAt);
   assert.ok(!anrufIn(callId).failureReason);
   await sende(callId, "call.hangup");
   await verarbeitet();
@@ -280,8 +284,8 @@ test("3523: scheitert der Vermerk des Transkripts nach vollstaendiger Wiedergabe
   fs.chmodSync(umgebung.srv.dataDir, READ_ONLY_DIR);
   try {
     await wiedergabeEnde(callId, FERTIG);
-    await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
-    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] transkript fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+    await warteAuf(() => umgebung.srv.stdout.includes(`[el-vorspann] transkript fehlgeschlagen call=${callId}:`));
   } finally {
     fs.chmodSync(umgebung.srv.dataDir, WRITABLE_DIR);
   }
