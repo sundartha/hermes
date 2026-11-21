@@ -6,6 +6,7 @@ import { usableFallbackProvider } from "./llm/provider.ts";
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.ts";
 import { normalisierterOrigin } from "./middleware.ts";
 import { MS_PER_DAY } from "./utils/timer.ts";
+import { fehlerText } from "./utils/fehler-text.ts";
 
 export async function guardedBoot(label, fn) {
   try {
@@ -14,7 +15,7 @@ export async function guardedBoot(label, fn) {
   } catch (e) {
     console.error(
       `[boot] ${label} deaktiviert (Portal-Pool-Fehler):`,
-      e && e.message ? e.message : String(e),
+      fehlerText(e),
     );
     return false;
   }
@@ -295,6 +296,10 @@ export function alertChannelInputs({ billing, mail }) {
   };
 }
 
+function istPositiv(wert) {
+  return (wert ?? 0) > 0;
+}
+
 export function alertChannelFindings({
   platformAlertSmsTo,
   betterstackAlertUrl,
@@ -305,7 +310,7 @@ export function alertChannelFindings({
   outageAlertWindowMs,
 } = {}) {
   if (platformAlertSmsTo || betterstackAlertUrl) return [];
-  if (!(platformAlertMailTo && mailerVorhanden) && outageAlertWindowMs > 0)
+  if (!(platformAlertMailTo && mailerVorhanden) && istPositiv(outageAlertWindowMs))
     return [
       {
         code: ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND,
@@ -318,7 +323,7 @@ export function alertChannelFindings({
           "vollstaendigen Kanal setzen ODER OUTAGE_ALERT_WINDOW_MS=0.",
       },
     ];
-  if (paymentEnabled && platformSpendWarnPercent > 0)
+  if (paymentEnabled && istPositiv(platformSpendWarnPercent))
     return [
       {
         code: ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING,
