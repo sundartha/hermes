@@ -1,0 +1,33 @@
+diff --git a/src/billing/stripe.js b/src/billing/stripe.js
+index 0c32f4f..865a146 100644
+--- a/src/billing/stripe.js
++++ b/src/billing/stripe.js
+@@ -312,7 +312,7 @@ export const stripeBilling = {
+     };
+   },
+ 
+-  async createSubscription({ tenantRef, planSlug, customerId, priceId, paymentMethodId, idempotencyKey }) {
++  async createSubscription({ tenantRef, customerId, priceId, paymentMethodId, idempotencyKey }) {
+     const headers = idempotentHeaders(idempotencyKey);
+     const body = new URLSearchParams({
+       customer: customerId,
+@@ -322,7 +322,6 @@ export const stripeBilling = {
+       payment_behavior: SUBSCRIPTION_FAILCLOSED_BEHAVIOR,
+     });
+     body.set("metadata[tenant_ref]", tenantRef);
+-    body.set("metadata[plan_slug]", planSlug);
+     const res = await fetch(url(SUBSCRIPTIONS_PATH), {
+       method: "POST",
+       headers,
+diff --git a/src/billing/subscribe.js b/src/billing/subscribe.js
+index 232b555..350162c 100644
+--- a/src/billing/subscribe.js
++++ b/src/billing/subscribe.js
+@@ -44,7 +44,6 @@ export async function createTenantSubscription({ store, billing, config, tenant,
+   if (!hasCardOnFile(stripe)) return { ok: false, reason: "no_card" };
+   const { subscriptionId, currentPeriodEnd, currentPeriodStart } = await billing.createSubscription({
+     tenantRef: tenant,
+-    planSlug,
+     customerId: stripe.customerId,
+     paymentMethodId: stripe.paymentMethodId,
+     priceId,

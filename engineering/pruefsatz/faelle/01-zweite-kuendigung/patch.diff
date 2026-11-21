@@ -1,0 +1,36 @@
+diff --git a/src/billing/subscription-cancellation.js b/src/billing/subscription-cancellation.js
+index add646f..e19c98d 100644
+--- a/src/billing/subscription-cancellation.js
++++ b/src/billing/subscription-cancellation.js
+@@ -1,13 +1,4 @@
+-import { randomUUID } from "node:crypto";
+-import { makeKeyedChainMutex } from "../chain-mutex.js";
+-
+-const kuendigungsSperre = makeKeyedChainMutex();
+-
+-function schluesselJeUebergang(cancel, subscriptionId) {
+-  return `${cancel ? "cancel_sched_" : "cancel_unsched_"}${subscriptionId}_${randomUUID()}`;
+-}
+-
+-async function wendeKuendigungAn({ store, billing, tenant, cancel }) {
++export async function setSubscriptionCancellation({ store, billing, tenant, cancel }) {
+   const before = store.tenantSubscription(tenant);
+   if (!before.subscriptionId) return { ok: false, reason: "no_subscription" };
+   if (before.cancelAtPeriodEnd === cancel) {
+@@ -18,7 +9,7 @@ async function wendeKuendigungAn({ store, billing, tenant, cancel }) {
+       alreadyApplied: true,
+     };
+   }
+-  const idempotencyKey = schluesselJeUebergang(cancel, before.subscriptionId);
++  const idempotencyKey = (cancel ? "cancel_sched_" : "cancel_unsched_") + before.subscriptionId;
+   const op = cancel ? billing.scheduleCancellation : billing.unscheduleCancellation;
+   const result = await op({ subscriptionId: before.subscriptionId, idempotencyKey });
+   const patch = { cancelAtPeriodEnd: result.cancelAtPeriodEnd };
+@@ -31,7 +22,3 @@ async function wendeKuendigungAn({ store, billing, tenant, cancel }) {
+     alreadyApplied: false,
+   };
+ }
+-
+-export function setSubscriptionCancellation(auftrag) {
+-  return kuendigungsSperre(auftrag.tenant, () => wendeKuendigungAn(auftrag));
+-}

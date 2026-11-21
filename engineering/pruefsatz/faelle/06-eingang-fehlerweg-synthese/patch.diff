@@ -1,0 +1,22 @@
+diff --git a/src/tts/directive-synth.js b/src/tts/directive-synth.js
+index f9501d7..67eea2d 100644
+--- a/src/tts/directive-synth.js
++++ b/src/tts/directive-synth.js
+@@ -19,14 +19,9 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning })
+     const beendetAnruf = directives.some((direktive) => direktive.kind === DIRECTIVE.HANGUP);
+     const abgabeMs = eingangMs + PROVIDER_WEBHOOK_HARDCUT_MS - TURN_NETWORK_RESERVE_MS;
+     const ablage = beendetAnruf ? (result) => ablegenVollstaendig(result, abgabeMs) : ablegenStreamend;
+-    try {
+-      const out = [];
+-      for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
+-      return out;
+-    } catch (err) {
+-      console.error(`[play-tts] Synthese geworfen (${err.message}) -> Azure-Fallback`);
+-      return directives;
+-    }
++    const out = [];
++    for (const direktive of directives) out.push(await withPlayAudio(direktive, cfg, ablage));
++    return out;
+   }
+ 
+   async function withPlayAudio(direktive, cfg, ablage) {

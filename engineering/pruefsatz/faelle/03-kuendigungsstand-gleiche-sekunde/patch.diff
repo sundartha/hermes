@@ -1,0 +1,28 @@
+diff --git a/src/billing/webhook.js b/src/billing/webhook.js
+index d769879..5a609f0 100644
+--- a/src/billing/webhook.js
++++ b/src/billing/webhook.js
+@@ -395,10 +395,6 @@ async function cancelAtPeriodEndAtStripe(billing, subscriptionId) {
+   }
+ }
+ 
+-function tenantHoldsSubscription(store, tenant, subscriptionId) {
+-  return store.tenantSubscription(tenant).subscriptionId === subscriptionId;
+-}
+-
+ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
+   const { action, tenantRef, subscriptionId } = interpreted;
+   if (!CANCEL_STATE_ACTIONS.has(action) || !subscriptionId) return;
+@@ -407,10 +403,9 @@ async function syncCancelStateFromStripe(interpreted, { store, billing }) {
+     tenantRef,
+     () => store.findTenantBySubscription(subscriptionId)?.id || null,
+   );
+-  if (!tenant || !tenantHoldsSubscription(store, tenant, subscriptionId)) return;
++  if (!tenant || store.tenantSubscription(tenant).subscriptionId !== subscriptionId) return;
+   const atStripe = await cancelAtPeriodEndAtStripe(billing, subscriptionId);
+-  if (atStripe === null || !tenantHoldsSubscription(store, tenant, subscriptionId)) return;
+-  if (store.tenantSubscription(tenant).cancelAtPeriodEnd === atStripe) return;
++  if (atStripe === null || store.tenantSubscription(tenant).cancelAtPeriodEnd === atStripe) return;
+   store.setTenantSubscription(tenant, { cancelAtPeriodEnd: atStripe });
+ }
+ 

@@ -1,0 +1,25 @@
+{
+  "basis": "d6c9779d96b7ac815bb33b856e2b512ad1650b9c",
+  "node": "v22.23.2",
+  "pruefungen": {
+    "lint": {
+      "rc": 0,
+      "sekunden": 78
+    },
+    "typen": {
+      "rc": 0,
+      "sekunden": 16
+    },
+    "betroffen": {
+      "rc": 0,
+      "sekunden": 2
+    },
+    "voll": {
+      "rc": 143,
+      "sekunden": 363
+    }
+  },
+  "rote_testdateien_voll": [],
+  "rote_testdateien_betroffen": [],
+  "erzeugt": "2026-11-06T23:43:14.653Z"
+}

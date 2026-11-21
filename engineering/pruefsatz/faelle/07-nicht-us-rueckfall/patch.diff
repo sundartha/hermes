@@ -1,0 +1,145 @@
+diff --git a/src/boot.js b/src/boot.js
+index 2acf474..95c4c76 100644
+--- a/src/boot.js
++++ b/src/boot.js
+@@ -293,16 +293,6 @@ function warnElRegistrationSipCredsMissing(config) {
+   );
+ }
+ 
+-function warnGlobaleAbsenderKennungFehlt(config) {
+-  const { enabled, agentPhoneNumberId } = config.voice.elevenLabsOutbound;
+-  if (!enabled || agentPhoneNumberId) return;
+-  console.warn(
+-    "[boot] Konfig-Warnung: ELEVENLABS_OUTBOUND_ENABLED=true ohne ELEVENLABS_AGENT_PHONE_NUMBER_ID - " +
+-      "Nummern ausserhalb von +1 telefonieren nur ueber die globale Registrierung, ihre ausgehenden " +
+-      "Anrufe brechen deshalb ab.",
+-  );
+-}
+-
+ function assertLatentCostPaths(config) {
+   const elInboundPflichtTraeger = pflichtTraegerFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
+   applyBootFindings(
+@@ -394,7 +384,6 @@ function assertBootGates(config, store, durableAudit) {
+   assertElInboundAccess(config);
+   assertElInboundScope(config);
+   warnElRegistrationSipCredsMissing(config);
+-  warnGlobaleAbsenderKennungFehlt(config);
+   meldeElNummernregistrierung(config);
+ }
+ 
+diff --git a/src/elevenlabs/outbound.js b/src/elevenlabs/outbound.js
+index b3d5934..97bb7cf 100644
+--- a/src/elevenlabs/outbound.js
++++ b/src/elevenlabs/outbound.js
+@@ -345,17 +345,7 @@ export function callLocaleOf({ store, config, call, ownerName }) {
+   });
+ }
+ 
+-const RUECKFALL_LOG_ENDZIFFERN = 4;
+-
+-function absenderAbbruchMeldung({ callId, grund, sipRegistrar }) {
+-  const einhaengungUrsache = !sipRegistrar && grund !== ABSENDER_GRUND.KEINE_GLOBALE_REGISTRIERUNG;
+-  return (
+-    `Anruf ohne eigene Absendernummer abgebrochen (call=${callId}): grund=${grund}` +
+-    (einhaengungUrsache ? " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)" : "")
+-  );
+-}
+-
+-function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
++function makeAbsenderBeschaffung({ store, sipRegistrar }) {
+   async function registriereUndSpeichere(numberRecord) {
+     try {
+       const { phoneNumberId } = await sipRegistrar.ensureRegistration({
+@@ -375,12 +365,7 @@ function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
+ 
+   return async function beschaffeAbsenderOderBrichAb(call) {
+     const eigeneNummer = () => findActiveNumber(store.load(), call.tenantId);
+-    const waehle = () =>
+-      waehleAbsenderRegistrierung({
+-        numberRecord: eigeneNummer(),
+-        fromE164: call.from,
+-        rueckfallId: settings().agentPhoneNumberId,
+-      });
++    const waehle = () => waehleAbsenderRegistrierung({ numberRecord: eigeneNummer(), fromE164: call.from });
+     let absender = waehle();
+     if (absender.grund === ABSENDER_GRUND.KEINE_REGISTRIERUNG && sipRegistrar) {
+       await holeRegistrierungNach(eigeneNummer());
+@@ -388,14 +373,12 @@ function makeAbsenderBeschaffung({ store, sipRegistrar, settings }) {
+     }
+     if (absender.quelle === ABSENDER_QUELLE.ABGEBROCHEN) {
+       store.recordFromRegistrationSource(call.id, `${ABSENDER_QUELLE.ABGEBROCHEN}:${absender.grund}`);
+-      throw new Error(absenderAbbruchMeldung({ callId: call.id, grund: absender.grund, sipRegistrar }));
+-    }
+-    store.recordFromRegistrationSource(call.id, absender.quelle);
+-    if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
+-      console.warn(
+-        `[el-outbound] Absender-Rueckfall global call=${call.id} endziffern=${call.from.slice(-RUECKFALL_LOG_ENDZIFFERN)}`,
++      throw new Error(
++        `Anruf ohne eigene Absendernummer abgebrochen (call=${call.id}): grund=${absender.grund}` +
++          (sipRegistrar ? "" : " (Nummernregistrierung nicht eingehaengt, s. Boot-Warnung)"),
+       );
+     }
++    store.recordFromRegistrationSource(call.id, absender.quelle);
+     return absender;
+   };
+ }
+@@ -703,7 +686,7 @@ export function makeElevenLabsOutbound({
+   endCarrierCall,
+ }) {
+   const settings = () => config.voice.elevenLabsOutbound;
+-  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar, settings });
++  const beschaffeAbsenderOderBrichAb = makeAbsenderBeschaffung({ store, sipRegistrar });
+ 
+   function scheduleResultPoll(callId, conversationId) {
+     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
+diff --git a/src/telephony/absender-registrierung.js b/src/telephony/absender-registrierung.js
+index b8047f1..bd0c5fa 100644
+--- a/src/telephony/absender-registrierung.js
++++ b/src/telephony/absender-registrierung.js
+@@ -1,6 +1,5 @@
+ export const ABSENDER_QUELLE = Object.freeze({
+   TENANT_DID: "tenant_did",
+-  RUECKFALL_GLOBAL: "rueckfall_global",
+   ABGEBROCHEN: "abgebrochen",
+ });
+ 
+@@ -8,36 +7,17 @@ export const ABSENDER_GRUND = Object.freeze({
+   KEINE_NUMMER: "keine_aktive_nummer",
+   NUMMER_WEICHT_AB: "nummer_weicht_von_from_ab",
+   KEINE_REGISTRIERUNG: "keine_eigene_registrierung",
+-  KEINE_GLOBALE_REGISTRIERUNG: "keine_globale_registrierung",
+ });
+ 
+-const US_VORWAHL = "+1";
+-
+-function abbruch(grund) {
+-  return {
++export function waehleAbsenderRegistrierung({ numberRecord, fromE164 }) {
++  const abbruch = (grund) => ({
+     agentPhoneNumberId: null,
+     e164: null,
+     quelle: ABSENDER_QUELLE.ABGEBROCHEN,
+     grund,
+-  };
+-}
+-
+-function voruebergehenderRueckfallBisNurUsNummern({ numberRecord, rueckfallId }) {
+-  if (numberRecord.e164.startsWith(US_VORWAHL)) return null;
+-  if (!rueckfallId) return abbruch(ABSENDER_GRUND.KEINE_GLOBALE_REGISTRIERUNG);
+-  return {
+-    agentPhoneNumberId: rueckfallId,
+-    e164: null,
+-    quelle: ABSENDER_QUELLE.RUECKFALL_GLOBAL,
+-    grund: null,
+-  };
+-}
+-
+-export function waehleAbsenderRegistrierung({ numberRecord, fromE164, rueckfallId }) {
++  });
+   if (!numberRecord) return abbruch(ABSENDER_GRUND.KEINE_NUMMER);
+   if (numberRecord.e164 !== fromE164) return abbruch(ABSENDER_GRUND.NUMMER_WEICHT_AB);
+-  const rueckfall = voruebergehenderRueckfallBisNurUsNummern({ numberRecord, rueckfallId });
+-  if (rueckfall) return rueckfall;
+   if (!numberRecord.providerAgentPhoneNumberId) return abbruch(ABSENDER_GRUND.KEINE_REGISTRIERUNG);
+   return {
+     agentPhoneNumberId: numberRecord.providerAgentPhoneNumberId,
