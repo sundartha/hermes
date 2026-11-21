@@ -15,6 +15,7 @@ import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 const BOUND_E164 = "+4915799990002";
+const OWN_E164 = "+4915799990003";
 
 function seedRequested() {
   const state = makeDefaultState();
@@ -75,4 +76,33 @@ test("Positiv-Kontrolle: Capture wirft + gekaufte e164 ist NICHT gebunden -> Pro
 
   assert.ok(prov.log.includes("release:num_ext_1"), "ungebundene Nummer wird normal freigegeben");
   assert.equal(findNumber(state, numberId).status, NUMBER_STATUS.RELEASED);
+});
+
+test("Capture wirft + Bindung gehoert dem eigenen Tenant -> Nummer wird beim Anbieter freigegeben", async () => {
+  const state = makeDefaultState();
+  registerTenant(state, "t_user1");
+  setTenantStripe(state, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
+  const { number } = requestNumber(state, { tenantId: "t_user1", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  bindPlatformNumber(state, { e164: OWN_E164, purpose: "outbound_ani", provider: "telnyx", tenantId: "t_user1" });
+  const prov = fakeProvisioner({
+    async orderNumber() {
+      return { e164: OWN_E164, providerNumberId: "num_ext_own" };
+    },
+  });
+  const billing = fakeBilling({
+    async captureHold() {
+      throw new Error("Stripe captureHold fehlgeschlagen: HTTP 500");
+    },
+  });
+  await assert.rejects(
+    () =>
+      provisionNumber(
+        state,
+        { provisioner: prov, billing },
+        { numberId: number.id, countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" },
+      ),
+    /HTTP 500/,
+  );
+  assert.ok(prov.log.includes("release:num_ext_own"));
+  assert.equal(findNumber(state, number.id).status, NUMBER_STATUS.RELEASED);
 });
