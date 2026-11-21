@@ -306,9 +306,8 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     const bekannt = ops.getCall(state, id);
     if (bekannt && eigene.has(bekannt.id)) return bekannt;
     try {
-      const gelesen = client
-        ? await anrufLesen(client, id)
-        : await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
+      const lesen = client ? { withClient: (fn) => fn(client) } : runner;
+      const gelesen = await mitZeitgrenze(lesen, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
       return gelesen ? uebernehmen(state, gelesen) : null;
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { ZUGRIFF_FRIST_MS } from "../../src/store/webhook-zustellung.js";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const KUNDE = "t_5509_kunde";
@@ -15,6 +16,7 @@ function zaehlenderRunner(db, fehler) {
   const zaehler = { clients: 0 };
   const client = {
     query: (text, params) => {
+      if (fehler.haengt && text.includes(GELESENE_ZEILE)) return new Promise(() => {});
       if (fehler.an && text.includes(GELESENE_ZEILE)) throw new Error("lesen-ausgefallen-5509");
       return db.query(text, params);
     },
@@ -82,4 +84,16 @@ test("NACHLESEN-4: ein Lesefehler wird weitergereicht und der Spiegel bleibt lee
   }
   fehler.an = false;
   assert.equal(b.getCall(call.id) ?? null, null);
+});
+
+test("NACHLESEN-5: eine haengende Nachlesung ueber den Client der Schlange bricht nach der Zugriffsfrist ab", async (t) => {
+  const { b, call, fehler } = await zweiInstanzen();
+  fehler.haengt = true;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const ergebnis = assert.rejects(b.markBilled(call.id), /Zugriffsfrist abgelaufen/);
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  t.mock.timers.tick(ZUGRIFF_FRIST_MS - 1);
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  t.mock.timers.tick(1);
+  await ergebnis;
 });
