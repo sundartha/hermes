@@ -8,7 +8,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.LOOKUP_ENABLED = "true";
 process.env.EXA_API_KEY = "exa-test-key-torzustand";
 const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.js");
-const { consultAllowedForCall } = await import("../../src/consult/gate.js");
+const { consultAllowedForCall } = await import("../../src/consult/gate.ts");
 const { elevenLabsLookupAvailableFor } = await import("../../src/research/registry.js");
 const { openingLineHash } = await import("../../src/store/state-ops.js");
 

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { config } from "../../src/config.ts";
-import { consultAllowedFor } from "../../src/consult/gate.js";
+import { consultAllowedFor } from "../../src/consult/gate.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const CONSULT_TOOL = "get_consult";

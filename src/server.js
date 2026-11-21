@@ -54,7 +54,7 @@ import {
   TENANT_REJECT,
 } from "./request-tenant.js";
 import { makeConsultDelivery } from "./consult/delivery.js";
-import { consultAllowedForCall } from "./consult/gate.js";
+import { consultAllowedForCall } from "./consult/gate.ts";
 import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { makeAbschaltweiche } from "./abschaltweiche.js";

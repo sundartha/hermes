@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { consultAllowedForCall } from "../../src/consult/gate.js";
+import { consultAllowedForCall } from "../../src/consult/gate.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { pinCall, pinStore, sendeAnrufstart } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 
