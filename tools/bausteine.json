@@ -227,7 +227,7 @@
       "baustein": "nummern",
       "zweck": "Nummern bestellen, binden und freigeben.",
       "quellen": [
-        "src/onboarding.js",
+        "src/onboarding.ts",
         "src/release-reconcile.ts",
         "src/worker/",
         "src/queue/",

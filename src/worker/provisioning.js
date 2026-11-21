@@ -1,5 +1,5 @@
 import { findNumber } from "../store/state-ops.js";
-import { provisionNumber } from "../onboarding.js";
+import { provisionNumber } from "../onboarding.ts";
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 
 export async function handleProvisionJob(s, job, deps, opts) {
