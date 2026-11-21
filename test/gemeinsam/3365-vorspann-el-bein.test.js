@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -11,7 +12,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil as wartebis,
+  warteAufEreignis,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -37,7 +38,7 @@ const FEHLER_DETAIL = "detail-el-geheimnis";
 const SIP_ZUGANG = EL_INBOUND_ACCESS_BOOT_ENV;
 const BINDUNG_HEADER = "X-Hermes-Call-Binding";
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -81,6 +82,7 @@ function beantworte({ req, res }, anfrage, steuerung) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const steuerung = { gehalten: [] };
   const server = http.createServer((req, res) => {
     let roh = "";
@@ -88,6 +90,7 @@ async function starteAttrappe() {
     req.on("end", async () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       const haltenBis = steuerung.haltenBis;
       const gehoertDazu = req.url.endsWith("/actions/playback_start") || (req.url === "/v2/calls" && roh.includes("-el"));
       if (haltenBis && gehoertDazu) await haltenBis(steuerung);
@@ -97,6 +100,7 @@ async function starteAttrappe() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     steuerung,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
@@ -183,8 +187,8 @@ const beideAnfragenAbwarten = (steuerung) =>
 
 async function hebeAb(callId) {
   assert.equal((await sendeEreignis(callId, "call.answered")).status, HTTP_OK);
-  await waitUntil(() => elWahlen(umgebung.attrappe, callId).length === EINMAL);
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => elWahlen(umgebung.attrappe, callId).length === EINMAL);
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
 }
 
 test("3365-D1: call.answered -> EL-Wahl und playback_start laufen gleichzeitig, EL-Wahl mit allen Feldern", async () => {
@@ -215,8 +219,8 @@ test("3365-D1: zweites call.answered -> keine zweite EL-Wahl", async () => {
   await hebeAb(callId);
   assert.equal((await sendeEreignis(callId, "call.answered")).status, HTTP_OK);
   await sendeEreignis(callId, "call.hangup");
-  await waitUntil(() => aktionen(umgebung.attrappe, elVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aktionen(umgebung.attrappe, elVon(callId), "hangup").length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "completed");
   assert.equal(elWahlen(umgebung.attrappe, callId).length, EINMAL);
   assert.equal(aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length, EINMAL);
 });
@@ -226,8 +230,8 @@ test("3365-D2: Angerufener legt nach dem Abheben auf -> EL-Bein wird aufgelegt, 
   const callId = await neuerAnruf();
   await hebeAb(callId);
   await sendeEreignis(callId, "call.hangup");
-  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "completed");
   assert.deepEqual(aufleger(attrappe, callId), [0, 1]);
 });
 
@@ -237,7 +241,7 @@ async function mitHaengenderElWahl(pruefe) {
   await mitSteuerung({ haltenBis: () => elWartet }, async () => {
     const callId = await neuerAnruf();
     await sendeEreignis(callId, "call.answered");
-    await waitUntil(() => elWahlen(umgebung.attrappe, callId).length === EINMAL);
+    await warteAuf(() => elWahlen(umgebung.attrappe, callId).length === EINMAL);
     await pruefe(callId, freigeben);
   });
 }
@@ -246,10 +250,10 @@ test("3365-D2: Auflegen waehrend der EL-Wahl -> das danach angelegte EL-Bein wir
   const { attrappe } = umgebung;
   await mitHaengenderElWahl(async (callId, freigeben) => {
     await sendeEreignis(callId, "call.hangup");
-    await waitUntil(() => anrufIn(callId).status === "completed");
+    await warteAuf(() => anrufIn(callId).status === "completed");
     assert.equal(aktionen(attrappe, elVon(callId), "hangup").length, 0);
     freigeben();
-    await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
   });
 });
 
@@ -258,7 +262,7 @@ test("3365-D2: scheitert die Wiedergabe -> beide Beine aufgelegt", async () => {
   await mitSteuerung({ wiedergabeFehler: true }, async () => {
     const callId = await neuerAnruf();
     await sendeEreignis(callId, "call.answered");
-    await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
+    await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
     assert.ok(srv.stdout.includes(`[el-vorspann] abheben fehlgeschlagen call=${callId}:`), srv.stdout);
   });
 });
@@ -269,8 +273,8 @@ test("3365-D2: scheitert die EL-Wahl -> Angerufener aufgelegt, Fehler ohne Anbie
     const callId = await neuerAnruf();
     const logVorher = srv.stdout.length;
     await sendeEreignis(callId, "call.answered");
-    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}:`));
     assert.equal(aktionen(attrappe, elVon(callId), "hangup").length, 0);
     assert.ok(!srv.stdout.includes(FEHLER_DETAIL), "Anbieter-Detail im Log");
     assert.ok(!srv.stdout.slice(logVorher).includes("auflegen fehlgeschlagen"), srv.stdout);
@@ -282,8 +286,8 @@ test("3365-D2: liefert der Anbieter fuer das EL-Bein keine Kennung -> Wahl gesch
   await mitSteuerung({ elOhneKennung: true }, async () => {
     const callId = await neuerAnruf();
     await sendeEreignis(callId, "call.answered");
-    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}: Der Anbieter hat keine Kennung fuer das EL-Bein geliefert`));
+    await warteAuf(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}: Der Anbieter hat keine Kennung fuer das EL-Bein geliefert`));
   });
 });
 
@@ -293,7 +297,7 @@ test("3365-D3: cancel_call nach dem Abheben legt beide Beine auf, auch wenn das 
   await hebeAb(callId);
   await mitSteuerung({ hangupFehlerAn: `${calleeVon(callId)}/actions/hangup` }, async () => {
     assert.equal((await abbrechen(callId)).status, HTTP_OK);
-    await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
+    await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
     assert.ok(srv.stdout.includes("[cancel]"), srv.stdout);
   });
 });
@@ -303,11 +307,11 @@ test("3365-D3: cancel_call waehrend der EL-Wahl -> EL-Bein wird nach dem Anlegen
   await mitHaengenderElWahl(async (callId, freigeben) => {
     const logVorher = srv.stdout.length;
     assert.equal((await abbrechen(callId)).status, HTTP_OK);
-    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
     assert.equal(aktionen(attrappe, elVon(callId), "hangup").length, 0);
     assert.ok(!srv.stdout.slice(logVorher).includes("[cancel]"), srv.stdout);
     freigeben();
-    await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
   });
 });
 
@@ -315,7 +319,7 @@ test("3365-D3: Max-Dauer legt beide Beine auf", async () => {
   const { attrappe } = umgebung;
   const callId = await neuerAnruf({ max_duration_s: MAX_DAUER_S });
   await hebeAb(callId);
-  await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
+  await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
 });
 
 test("3365-D4: Passwort und Bindungs-Token stehen nur im Dial-Koerper, nie in Pfad, webhook_url, to oder Log", async () => {
@@ -385,8 +389,8 @@ test("3365-K18: die Tenant-Kostendecke reisst nach dem Abheben -> beide Beine au
     assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
     assert.equal(anrufIn(callId).status, "active");
     await neuerAnruf();
-    await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
-    await waitUntil(() => anrufIn(callId).status === "completed");
+    await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
+    await warteAuf(() => anrufIn(callId).status === "completed");
     assert.equal(anrufIn(callId).failureReason, "budget-exhausted");
   });
 });
@@ -401,8 +405,8 @@ test("3365-K8: aktive Nummer ohne gueltige E.164 -> keine EL-Wahl, Angerufener a
     const callId = await neuerAnruf();
     assert.equal(anrufIn(callId).from, UNGUELTIGE_NUMMER);
     await sendeEreignis(callId, "call.answered");
-    await waitUntil(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => umgebung.srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}: elSipZiel: Absender ist keine E.164-Nummer`));
+    await warteAuf(() => aktionen(attrappe, calleeVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => umgebung.srv.stdout.includes(`[el-vorspann] el-wahl fehlgeschlagen call=${callId}: elSipZiel: Absender ist keine E.164-Nummer`));
     assert.equal(elWahlen(attrappe, callId).length, 0);
   });
 });
