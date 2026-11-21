@@ -20,8 +20,10 @@ function istGeheimnis([name, wert]: Eintrag): boolean {
   return GEHEIMNIS_NAME.test(name) && wert.length >= GEHEIMNIS_MINDESTLAENGE;
 }
 
-export function merkeLogGeheimnisse(umgebung: Readonly<Record<string, string>>): void {
-  const werte = Object.entries(umgebung).filter(istGeheimnis).map(([, wert]) => wert);
+export function merkeLogGeheimnisse(umgebung: Readonly<Record<string, string | undefined>>): void {
+  const werte = Object.entries(umgebung).flatMap(([name, wert]) =>
+    wert !== undefined && istGeheimnis([name, wert]) ? [wert] : [],
+  );
   for (const wert of werte.sort((links, rechts) => rechts.length - links.length)) geheimnisWerte.add(wert);
 }
 
