@@ -1,4 +1,9 @@
-import { releaseTenantNumbersOnErase } from "../release-reconcile.js";
+import { releaseTenantNumbersOnErase } from "../release-reconcile.ts";
+import type {
+  ReleaseProvisioner,
+  ReleaseSipRegistrar,
+  ReleaseStore,
+} from "../release-reconcile.ts";
 import { fehlerText } from "../utils/fehler-text.ts";
 
 const AUDIT_ACTION = Object.freeze({
@@ -10,14 +15,19 @@ const AUDIT_ACTION = Object.freeze({
 type Logger = Console;
 
 interface AuditStore {
-  record: (entry: { tenantId: string; action: string; detail: string | null }) => Promise<unknown>;
+  record: (entry: {
+    actorSub?: string;
+    tenantId: string | null;
+    action: string;
+    detail: string | null;
+  }) => Promise<unknown>;
 }
 
 interface Workos {
   deleteUser: (subject: string) => Promise<unknown>;
 }
 
-interface Store {
+interface Store extends ReleaseStore {
   tenantIdpSubject: (tenantId: string) => string | null | undefined;
   setContractEndCleanupPending: (
     tenantId: string,
@@ -26,13 +36,8 @@ interface Store {
   tenantsPendingContractEndCleanup: () => { id: string }[];
 }
 
-interface NumberProvisioner {
-  releaseNumber: (providerNumberId: string) => Promise<unknown>;
-}
-
-interface SipRegistrar {
-  removeRegistration: (providerAgentPhoneNumberId: string) => Promise<unknown>;
-}
+type NumberProvisioner = ReleaseProvisioner;
+type SipRegistrar = ReleaseSipRegistrar;
 
 interface CleanupDeps {
   store: Store;
@@ -60,7 +65,9 @@ async function attemptWorkosDelete({
     return false;
   }
   if (!workos) {
-    logger.warn(`[contract-end] WORKOS_MANAGEMENT_API_KEY nicht gesetzt - Loeschung offen tenant=${tenantId}`);
+    logger.warn(
+      `[contract-end] WORKOS_MANAGEMENT_API_KEY nicht gesetzt - Loeschung offen tenant=${tenantId}`,
+    );
     await auditStore.record({
       tenantId,
       action: AUDIT_ACTION.WORKOS_DELETE_SKIPPED,
@@ -73,7 +80,9 @@ async function attemptWorkosDelete({
     await auditStore.record({ tenantId, action: AUDIT_ACTION.WORKOS_DELETED, detail: null });
     return false;
   } catch (err) {
-    logger.warn(`[contract-end] WorkOS-Loeschung fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`);
+    logger.warn(
+      `[contract-end] WorkOS-Loeschung fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`,
+    );
     await auditStore.record({
       tenantId,
       action: AUDIT_ACTION.WORKOS_DELETE_FAILED,
@@ -109,17 +118,29 @@ export async function attemptContractEndCleanup({
       });
       numberReleasePending = aborted > 0;
     } else {
-      logger.warn(`[contract-end] kein Nummern-Provisioner injiziert - Freigabe offen tenant=${tenantId}`);
+      logger.warn(
+        `[contract-end] kein Nummern-Provisioner injiziert - Freigabe offen tenant=${tenantId}`,
+      );
     }
   } catch (err) {
-    logger.warn(`[contract-end] Nummern-Freigabe fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`);
+    logger.warn(
+      `[contract-end] Nummern-Freigabe fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`,
+    );
   }
 
   let workosDeletePending = true;
   try {
-    workosDeletePending = await attemptWorkosDelete({ store, workos, auditStore, logger, tenantId });
+    workosDeletePending = await attemptWorkosDelete({
+      store,
+      workos,
+      auditStore,
+      logger,
+      tenantId,
+    });
   } catch (err) {
-    logger.warn(`[contract-end] WorkOS-Schritt fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`);
+    logger.warn(
+      `[contract-end] WorkOS-Schritt fehlgeschlagen tenant=${tenantId}: ${fehlerText(err)}`,
+    );
   }
 
   await store.setContractEndCleanupPending(tenantId, { numberReleasePending, workosDeletePending });
