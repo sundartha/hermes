@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 
 import { abfragenZaehlendeHuelle, abwartenBisNichtsMehrLaeuft } from "./gemeinsam/pglite-instanz.js";
 import { testkostenZaehler } from "./testkosten.js";
@@ -115,3 +116,7 @@ export function neuePglite() {
 }
 
 after(() => Promise.all([...offene].map(aufraeumen)));
+
+export function pgliteSocketServer(db) {
+  return new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" });
+}

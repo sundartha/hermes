@@ -3,12 +3,11 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 
 import { BASE_ENV, tempDataDir } from "../helpers.js";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 import { BOOTSTRAP_TENANT_ID, makePgStoreMitSperre } from "../pg-helpers.js";
-import { neuePglite } from "../pglite-helfer.js";
+import { neuePglite, pgliteSocketServer } from "../pglite-helfer.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const FREMD = "fremd-a";
@@ -44,7 +43,7 @@ async function aufbau({ mitSpur }) {
 }
 
 async function rueckbau(db) {
-  const server = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" });
+  const server = pgliteSocketServer(db);
   await server.start();
   const adresse = server.getServerConn();
   const kind = spawn(process.execPath, ["scripts/seed-owner-number.js", NEU, "telnyx", "--rueckbau", ALT], {
