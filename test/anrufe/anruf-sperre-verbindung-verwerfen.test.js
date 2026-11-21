@@ -1,67 +1,93 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import pg from "pg";
 
-import { createPgPoolRunner } from "../../src/store/pg-runner.js";
-import { mitAnrufSperre } from "../../src/store/anruf-sperre-pg.js";
+import { BASE_ENV, tempDataDir } from "../helpers.js";
+import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
+import { poolAufPglite } from "../abrechnung/server-mit-testdatenbank.js";
 
 const MANDANT = "tenant_verwerfen";
+const freigaben = [];
+const verhalten = { scheitert: () => false };
+let store = null;
 
-function pruefPool(scheitert) {
-  const freigaben = [];
-  pg.Pool = class PruefPool extends EventEmitter {
-    waitingCount = 0;
-    totalCount = 0;
-    async connect() {
-      return {
-        query: async (text) => {
-          if (scheitert(text)) throw new Error(`fehler bei ${text}`);
-          return { rows: [] };
-        },
-        release: (fehler) => freigaben.push(fehler),
-        on() {},
-      };
-    }
+async function datenbankAnlegen() {
+  Object.assign(process.env, BASE_ENV, {
+    DATA_DIR: tempDataDir(),
+    STORE_BACKEND: "pg",
+    DATABASE_URL: "postgres://verwerfen-attrappe.invalid/hermes",
+    SESSION_SECRET: "verwerfen-signierwert",
+  });
+  const anlegen = aufraeumenVormerken(() => store);
+  const db = await anlegen(await vorlage("leer", async () => {}, []));
+  await db.exec(`CREATE ROLE verwerfen_app NOSUPERUSER NOBYPASSRLS;
+    GRANT CREATE, USAGE ON SCHEMA public TO verwerfen_app;
+    SET ROLE verwerfen_app;`);
+  const huelle = {
+    query: async (text, parameter) => {
+      if (verhalten.scheitert(text)) throw new Error(`fehler bei ${text}`);
+      return db.query(text, parameter);
+    },
+    exec: (text) => db.exec(text),
+    transaction: (arbeit) => db.transaction(arbeit),
   };
-  return freigaben;
+  poolAufPglite(huelle);
+  const verbinden = pg.Pool.prototype.connect;
+  pg.Pool.prototype.connect = async function beobachtend() {
+    const client = await verbinden.call(this);
+    const freigeben = client.release;
+    client.release = (fehler) => {
+      freigaben.push(fehler);
+      return freigeben();
+    };
+    return client;
+  };
+  return db;
 }
 
-async function sperreMit(scheitert, arbeit) {
-  const freigaben = pruefPool(scheitert);
-  const { runner } = await createPgPoolRunner("postgres://verwerfen.invalid/hermes");
-  const lauf = await mitAnrufSperre(runner, MANDANT, arbeit).then(
-    (wert) => ({ wert }),
-    (fehler) => ({ fehler }),
-  );
-  return { freigaben, ...lauf };
+await datenbankAnlegen();
+store = await import("../../src/store.js");
+await store.oeffneSpeicher();
+
+function zuruecksetzen() {
+  freigaben.length = 0;
+  verhalten.scheitert = () => false;
 }
 
 test("scheitern Aufheben und Aufheben-aller, wird die Verbindung verworfen und das Ergebnis bleibt", async (t) => {
+  zuruecksetzen();
   t.mock.method(console, "error", () => {});
-  const { freigaben, wert } = await sperreMit((text) => /pg_advisory_unlock/.test(text), async () => "bleibt");
-  assert.equal(wert, "bleibt");
+  verhalten.scheitert = (text) => /pg_advisory_unlock/.test(text);
+  assert.equal(await store.mitAnrufSperre(MANDANT, async () => "bleibt"), "bleibt");
   assert.equal(freigaben.length, 1);
   assert.match(freigaben[0].message, /pg_advisory_unlock_all/);
+  zuruecksetzen();
+  assert.equal(await store.mitAnrufSperre(MANDANT, async () => "danach"), "danach");
 });
 
 test("gelingt das Aufheben erst ueber unlock_all, geht die Verbindung in den Pool zurueck", async (t) => {
+  zuruecksetzen();
   t.mock.method(console, "error", () => {});
-  const { freigaben, wert } = await sperreMit((text) => /^SELECT pg_advisory_unlock\(/.test(text), async () => "bleibt");
-  assert.equal(wert, "bleibt");
+  verhalten.scheitert = (text) => /^SELECT pg_advisory_unlock\(/.test(text);
+  assert.equal(await store.mitAnrufSperre(MANDANT, async () => "bleibt"), "bleibt");
   assert.deepEqual(freigaben, [undefined]);
 });
 
 test("gelingt das Aufheben, geht die Verbindung in den Pool zurueck", async () => {
-  const { freigaben } = await sperreMit(() => false, async () => "ok");
+  zuruecksetzen();
+  await store.mitAnrufSperre(MANDANT, async () => "ok");
   assert.deepEqual(freigaben, [undefined]);
 });
 
 test("der Fehler der Arbeit bleibt, auch wenn die Verbindung verworfen wird", async (t) => {
+  zuruecksetzen();
   t.mock.method(console, "error", () => {});
-  const { freigaben, fehler } = await sperreMit((text) => /pg_advisory_unlock/.test(text), async () => {
-    throw new Error("arbeit kaputt");
-  });
-  assert.match(fehler.message, /arbeit kaputt/);
+  verhalten.scheitert = (text) => /pg_advisory_unlock/.test(text);
+  await assert.rejects(
+    store.mitAnrufSperre(MANDANT, async () => {
+      throw new Error("arbeit kaputt");
+    }),
+    /arbeit kaputt/,
+  );
   assert.match(freigaben[0].message, /pg_advisory_unlock_all/);
 });
