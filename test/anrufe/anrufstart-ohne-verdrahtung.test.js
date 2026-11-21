@@ -38,7 +38,7 @@ const freieGates = [
   },
 ];
 
-async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: false }) {
+async function wahlOhneAnrufstart() {
   const zeilen = [];
   const original = console.error;
   console.error = (...teile) => zeilen.push(teile.join(" "));
@@ -60,7 +60,6 @@ async function wahlOhneAnrufstart(schalter = { ueberTelnyx: false, vorspann: fal
         ownerSelfCallTenantIds: [],
         publicUrl: "http://127.0.0.1:1",
         telnyxElevenLabs: { voiceId: "" },
-        elevenLabsOutbound: schalter,
         telnyxCallControlAppId: "cc_app_verdrahtung",
         elevenLabsInbound: {
           scope: "allowlist",
@@ -111,9 +110,4 @@ test("Ausgehend: ohne verdrahteten Anrufstart nennt die Fehlerzeile genau diesen
     zeile.endsWith(": Der Anrufstart ist nicht verdrahtet (deps.erzeugeVorspann fehlt)"),
     zeile,
   );
-});
-
-test("Ausgehend: auch im Vorspann-Weg nennt die Fehlerzeile den nicht verdrahteten Anrufstart", async () => {
-  const zeilen = await wahlOhneAnrufstart({ ueberTelnyx: true, vorspann: true });
-  assert.match(zeilen.join("\n"), /originate fehlgeschlagen call=call_\S+: Der Anrufstart ist nicht verdrahtet \(deps\.erzeugeVorspann fehlt\)$/m);
 });

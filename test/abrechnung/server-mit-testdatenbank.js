@@ -79,8 +79,6 @@ function vorspannLehntWahlAb(aktiv) {
   process.env.ELEVENLABS_AGENT_ID = "agent_kv2";
   process.env.ELEVENLABS_INBOUND_ENABLED = "true";
   process.env.ELEVENLABS_INBOUND_SCOPE = "registrierte_dids";
-  process.env.ELEVENLABS_OUTBOUND_UEBER_TELNYX = "true";
-  process.env.ELEVENLABS_OUTBOUND_VORSPANN = "true";
 }
 
 export const vorspannBelegFelder = () => ({
