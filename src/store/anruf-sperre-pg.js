@@ -34,8 +34,7 @@ async function geben(client, schluessel) {
 }
 
 export function mitAnrufSperre(runner, tenantId, arbeit) {
-  const halten = runner.halten ?? runner.withClient;
-  return halten.call(runner, async (client) => {
+  return runner.halten(async (client) => {
     const schluessel = [ANRUF_SPERRE_NAMENSRAUM, String(tenantId)];
     await nehmen(client, schluessel);
     try {
