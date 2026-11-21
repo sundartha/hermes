@@ -190,3 +190,64 @@ test("Boot-Heilung (GAP-38): fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS (
 test("Boot-Heilung (GAP-38): frischer Store + brauchbare Parameter -> HEAL", () => {
   assert.equal(bootstrapHealDecision(FRESH_STORE), BOOTSTRAP_HEAL.HEAL);
 });
+
+async function logzeileZuWurf(wurf) {
+  let ergebnis;
+  const zeilen = await fehlerausgabeVonAsync(async () => {
+    ergebnis = await guardedBoot("Block", () => {
+      throw wurf;
+    });
+  });
+  assert.equal(ergebnis, false);
+  return zeilen;
+}
+
+test("guardedBoot: ein Error landet mit seiner Meldung in der Logzeile", async () => {
+  assert.deepEqual(await logzeileZuWurf(new Error("Pool kaputt")), [
+    "[boot] Block deaktiviert (Portal-Pool-Fehler): Pool kaputt",
+  ]);
+});
+
+test("guardedBoot: ein Text als Wurf landet unveraendert in der Logzeile", async () => {
+  assert.deepEqual(await logzeileZuWurf("nur Text"), ["[boot] Block deaktiviert (Portal-Pool-Fehler): nur Text"]);
+});
+
+test("guardedBoot: ein Wurf ohne Wert landet als null in der Logzeile", async () => {
+  assert.deepEqual(await logzeileZuWurf(null), ["[boot] Block deaktiviert (Portal-Pool-Fehler): null"]);
+});
+
+test("guardedBoot: ein Objekt mit message, das kein Error ist, landet als Objekttext in der Logzeile", async () => {
+  assert.deepEqual(await logzeileZuWurf({ message: "aus Objekt" }), [
+    "[boot] Block deaktiviert (Portal-Pool-Fehler): [object Object]",
+  ]);
+});
+
+const ohneKanal = { platformAlertSmsTo: "", betterstackAlertUrl: "", platformAlertMailTo: "", mailerVorhanden: false };
+
+test("alertChannelFindings: ohne Fenster-Angabe gilt das Ausfall-Fenster als aus, nur die Warnung fehlt", () => {
+  assert.deepEqual(
+    alertChannelFindings(ohneKanal).map(({ code, fatal }) => ({ code, fatal })),
+    [{ code: ALERT_CHANNEL_FINDING.UNSET, fatal: false }],
+  );
+});
+
+test("alertChannelFindings: mit Fenster ueber null und ohne Kanal ist der Start fatal", () => {
+  assert.deepEqual(
+    alertChannelFindings({ ...ohneKanal, outageAlertWindowMs: 1 }).map(({ code, fatal }) => ({ code, fatal })),
+    [{ code: ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND, fatal: true }],
+  );
+});
+
+test("alertChannelFindings: ohne Warnschwelle und ohne Kanal bleibt die Zahlung ohne fatalen Befund", () => {
+  assert.deepEqual(
+    alertChannelFindings({ ...ohneKanal, paymentEnabled: true }).map(({ code, fatal }) => ({ code, fatal })),
+    [{ code: ALERT_CHANNEL_FINDING.UNSET, fatal: false }],
+  );
+});
+
+test("alertChannelFindings: mit Warnschwelle ueber null, Zahlung und ohne Kanal ist der Start fatal", () => {
+  assert.deepEqual(
+    alertChannelFindings({ ...ohneKanal, paymentEnabled: true, platformSpendWarnPercent: 1 }).map(({ code, fatal }) => ({ code, fatal })),
+    [{ code: ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING, fatal: true }],
+  );
+});
