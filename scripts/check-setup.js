@@ -52,7 +52,6 @@ config.safety.maxCallsPerHour > 0
       `MAX_CALLS_PER_HOUR ist ${config.safety.maxCallsPerHour}`,
       "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)",
     );
-ok("Voice-Engine: budget (Telnyx TeXML STT/TTS + Claude Haiku)");
 if (config.auth.mcpAuth === "oauth") {
   config.auth.oauthIssuerUrl
     ? ok(`MCP-Auth: oauth (Issuer ${config.auth.oauthIssuerUrl})`)
