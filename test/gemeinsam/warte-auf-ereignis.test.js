@@ -5,6 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 
 import * as helfer from "../helpers.js";
+import { abrufMitFrist } from "./antwortfrist.mjs";
+import { starteBetterStackAttrappe } from "./better-stack-attrappe.mjs";
 
 const FRIST_MS = 30_000;
 const FEHLER_FRIST = "Bedingung nicht innerhalb der Testfrist erreicht";
@@ -56,15 +58,51 @@ test("warte-auf-ereignis: ohne Ereignis endet die Gesamtfrist mit derselben Meld
   assert.equal(quelle.listenerCount("aenderung"), 0);
 });
 
-test("warte-auf-ereignis: eine Aenderung der Speicherdatei des Testservers meldet das Ereignis", async () => {
+test("warte-auf-ereignis: eine Aenderung der Speicherdatei des Testservers meldet das Ereignis speicher", async () => {
   const srv = await helfer.startServer({});
   try {
+    const arten = [];
+    srv.ereignisse.on("aenderung", (art) => arten.push(art));
     const neu = path.join(srv.dataDir, "store.tmp-ereignis");
     fs.writeFileSync(neu, JSON.stringify({ ...srv.readStore(), ereignisMarke: "gesetzt" }));
-    const warten = helfer.warteAufEreignis([srv.ereignisse], () => srv.readStore().ereignisMarke === "gesetzt", { timeoutMs: FRIST_MS });
+    const warten = helfer.warteAufEreignis([srv.ereignisse], () => arten.includes("speicher"), {
+      timeoutMs: FRIST_MS,
+    });
     fs.renameSync(neu, path.join(srv.dataDir, "store.json"));
     await warten;
   } finally {
     await srv.stop();
+  }
+});
+
+test("warte-auf-ereignis: eine Logzeile des Testservers meldet das Ereignis log", async () => {
+  const srv = await helfer.startServer({});
+  try {
+    const arten = [];
+    srv.ereignisse.on("aenderung", (art) => arten.push(art));
+    srv.child.stdout.emit("data", "Zeile");
+    assert.deepEqual(arten, ["log"]);
+    assert.ok(srv.stdout.endsWith("Zeile"));
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("warte-auf-ereignis: die Better-Stack-Attrappe meldet jede eingegangene Meldung als Ereignis", async () => {
+  const eingang = await starteBetterStackAttrappe();
+  try {
+    const gesehen = [];
+    eingang.ereignisse.on("aenderung", () => gesehen.push(eingang.meldungen.length));
+    const antwort = await abrufMitFrist(eingang.url, {
+      method: "POST",
+      body: JSON.stringify({ incident: { id: "a", status: "alert" }, text: "t" }),
+    });
+    assert.equal(antwort.status, 200);
+    await helfer.warteAufEreignis([eingang.ereignisse], () => gesehen.length === 1, {
+      timeoutMs: FRIST_MS,
+    });
+    assert.deepEqual(gesehen, [1]);
+  } finally {
+    await eingang.close();
   }
 });

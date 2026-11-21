@@ -973,12 +973,12 @@ export async function startServer({
   const ereignisse = new EventEmitter();
   const anhaengen = (d) => {
     output.text += d.toString();
-    ereignisse.emit(EREIGNIS_AENDERUNG);
+    ereignisse.emit(EREIGNIS_AENDERUNG, "log");
   };
   child.stdout.on("data", anhaengen);
   child.stderr.on("data", anhaengen);
   const speicherWache = fs.watch(dataDir, (_art, name) => {
-    if (name === "store.json") ereignisse.emit(EREIGNIS_AENDERUNG);
+    if (name === "store.json") ereignisse.emit(EREIGNIS_AENDERUNG, "speicher");
   });
   child.once("exit", () => speicherWache.close());
 
