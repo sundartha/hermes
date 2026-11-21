@@ -7,7 +7,7 @@ import {
   platformAlertSenderFindings,
   PLATFORM_ALERT_SENDER_FINDING,
   mailerKonstruierbar,
-} from "../../src/boot-guard.js";
+} from "../../src/boot-guard.ts";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
 
 const WARN_PERCENT_AUS = 0;

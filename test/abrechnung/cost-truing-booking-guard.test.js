@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../../src/boot-guard.js";
+import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../../src/boot-guard.ts";
 import {
   ASSIGNABLE_COST_RECORD_TYPES,
   UNASSIGNABLE_COST_RECORD_TYPES,

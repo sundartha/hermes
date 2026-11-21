@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { neuePglite } from ".././pglite-helfer.js";
 import { applySchema } from "../../src/db/migrate.js";
-import { guardedBoot } from "../../src/boot-guard.js";
+import { guardedBoot } from "../../src/boot-guard.ts";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { SESSION_COOKIE_NAME } from "../../src/web-auth.js";
 import { tenantIdForSubject } from "../../src/begriffe/mandant.js";

@@ -16,7 +16,7 @@ import {
   originLogWert,
   mcpCorsOrigin,
 } from "../../src/middleware.ts";
-import { angekuendigterOriginFindings, kanonischeAudience } from "../../src/boot-guard.js";
+import { angekuendigterOriginFindings, kanonischeAudience } from "../../src/boot-guard.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const HTTP_OK = 200;

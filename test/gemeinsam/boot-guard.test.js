@@ -19,7 +19,7 @@ import {
   mailerKonstruierbar,
   ALERT_CHANNEL_FINDING,
   BOOTSTRAP_HEAL,
-} from "../../src/boot-guard.js";
+} from "../../src/boot-guard.ts";
 import { createPortalRunner } from "../../src/portal-pool.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";

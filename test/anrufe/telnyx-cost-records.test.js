@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { captureConsole, makeConfigOverrides } from "../helpers.js";
-import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../../src/boot-guard.js";
+import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../../src/boot-guard.ts";
 
 const ASSIGNED_RECORD_COUNT = 4;
 const CALL_A_SUM_MICRO_CENTS = 4210000;
