@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createMetrics } from "../../src/metrics.js";
+import { createMetrics } from "../../src/metrics.ts";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, placeCall, waitForLog } from "../helpers.js";
