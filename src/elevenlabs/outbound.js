@@ -611,6 +611,7 @@ async function billingAfterAnchor({ store, callId, anchor, billThunk, finishCall
   return billThunk(finishCall, store, callId);
 }
 
+const ERGEBNIS_SICHERN_FEHLER = "[el-nachlauf] Anbieter-Ergebnis nicht gesichert, Anruf wird trotzdem beendet und abgerechnet:";
 const abschluesseImGang = new Set();
 
 async function finishFromConversation(deps) {
@@ -625,7 +626,11 @@ async function finishFromConversation(deps) {
 
 async function finishFromConversationOnce({ store, terminateAndBillCall, billThunk, finishCall, stimmenAnzahlFuer, callId, nowMs, conversation }) {
   const politik = nachlaufPolitikFuer(await store.leseCall(callId));
-  await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik, stimmenAnzahlFuer });
+  try {
+    await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik, stimmenAnzahlFuer });
+  } catch (fehler) {
+    console.error(ERGEBNIS_SICHERN_FEHLER, callId, String(fehler));
+  }
   const vorlaeufig = ankerFuerPolitik(politik, answeredAnchorOutcome(new Date(nowMs).toISOString(), conversation));
   const status = endeGrundFuer(vorlaeufig, conversation) ? CALL_FAILED : endStatusOf(conversation);
   const endCall = endeSchreiberFuer({ store, callId, status, politik, nowMs });
