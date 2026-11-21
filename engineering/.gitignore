@@ -1,0 +1,33 @@
+/ketten/
+
+# Laufend erzeugte Messdaten (nicht die Werkzeuge erzeuge.mjs/vorlage.html selbst)
+/kennzahlen/zustand/
+
+# Logs
+*.log
+*.out
+kette.out
+
+# Geheimnisse
+.env
+.env.*
+*zugangsdaten*
+*credentials*
+
+# Sicherungskopien und Vor-Stände (Antonio entscheidet über Löschen, nicht Git)
+*.bak-*
+*.bak
+paket.sh.vor-*
+*.vor-*
+*vor-*
+
+# Nicht Gegenstand von #5766
+/belege/
+/pruefsatz/
+/kennzahlen/
+/wache/
+/ergebnisse/
+/ERGEBNIS_*
+/lage-*
+*.diff
+/.claude/
