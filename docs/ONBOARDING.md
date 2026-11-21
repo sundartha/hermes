@@ -15,8 +15,8 @@ Willkommen beim **Hermes** – ein autonomer Telefon-Assistent (Telnyx + Claude)
 ## Lokal entwickeln
 
 ```bash
-git clone https://github.com/jonas986/vodafone-agent.git
-cd vodafone-agent
+git clone https://github.com/sundartha/hermes.git
+cd hermes
 npm install
 cp .env.example .env   # Werte bekommst du PRIVAT von Jonas (Signal/persönlich - NIE per Git/Issue/Chat-Tool)
 npm start              # http://localhost:3000
