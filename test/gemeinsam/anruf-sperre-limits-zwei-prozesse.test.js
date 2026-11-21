@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
-import { mitZweiHermesAufPostgres, postgresVorhanden, rufeAnMit, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
+import { ANRUF_SPERREN_SQL, mitZweiHermesAufPostgres, postgresVorhanden, rufeAnMit, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
@@ -18,7 +18,6 @@ const SPERRE_ART = Object.freeze({
 });
 const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
 const EIGENE_DATENBANK_SQL = "database = (SELECT oid FROM pg_database WHERE datname = current_database())";
-const SPERREN_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory'";
 const EIGENE_SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND ${EIGENE_DATENBANK_SQL}`;
 const SPERRE_WARTET_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND ${EIGENE_DATENBANK_SQL}`;
 const ANRUF_SPERRE_NAMENSRAUM = 2667;
@@ -51,7 +50,7 @@ async function gleichzeitig(sql, auftraege, art = "schreiben") {
 }
 
 const rolleDerAnwendung = async (sql) => (await sql(ROLLE_SQL)).rows[0].usename;
-const keineSperre = async (sql) => assert.equal((await sql(SPERREN_SQL)).rows[0].anzahl, 0);
+const keineSperre = async (sql) => assert.equal((await sql(ANRUF_SPERREN_SQL)).rows[0].anzahl, 0);
 const keineEigeneSperre = async (sql) => assert.equal((await sql(EIGENE_SPERREN_SQL)).rows[0].anzahl, 0);
 
 test(
