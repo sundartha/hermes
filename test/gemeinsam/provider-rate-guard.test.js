@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { providerRateOutOfBand, PROVIDER_RATE_FINDING } from "../../src/boot-guard.js";
+import { providerRateOutOfBand, PROVIDER_RATE_FINDING } from "../../src/boot-guard.ts";
 import { startServer, startServerExpectExit } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

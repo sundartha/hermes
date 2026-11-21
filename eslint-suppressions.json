@@ -315,7 +315,7 @@
       "count": 1
     }
   },
-  "src/boot-guard.js": {
+  "src/boot-guard.ts": {
     "id-length": {
       "count": 2
     }

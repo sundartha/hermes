@@ -8,7 +8,7 @@ export function usableFallbackProvider({
   provider,
   fallback,
 }: {
-  provider: string;
+  provider: string | undefined;
   fallback: string | null | undefined;
 }): string {
   if (!fallback) return "";

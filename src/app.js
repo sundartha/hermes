@@ -41,7 +41,7 @@ import { makeInternStatusRoutes } from "./routes/intern-status.js";
 import { makeHealthzRoutes } from "./utils/healthz-route.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
-import { guardedBoot } from "./boot-guard.js";
+import { guardedBoot } from "./boot-guard.ts";
 import {
   isTrustedLocalCaller,
   internalIdentity,

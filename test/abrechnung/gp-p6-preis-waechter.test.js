@@ -4,7 +4,7 @@ import { config } from "../../src/config.js";
 import { stripeBilling } from "../../src/billing/stripe.ts";
 import { makePriceDriftWatch, runPriceDriftSweep, priceDriftBucket } from "../../src/billing/price-drift-watch.ts";
 import { beurteilePreis, PREIS_URTEIL } from "../../src/billing/price-drift-watch.ts";
-import { unpricedPlanSlugs } from "../../src/boot-guard.js";
+import { unpricedPlanSlugs } from "../../src/boot-guard.ts";
 import { CATALOG_SLUGS, PLAN_CATALOG } from "../../src/plans.ts";
 import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
 import { startServer, startServerExpectExit, makeStripeStub } from "../helpers.js";
