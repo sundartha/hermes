@@ -62,6 +62,10 @@ export async function antwortNachWartezeit(instanz, zustellung, wartezeitMs) {
   return { status: res.status, contentType: res.headers.get("content-type"), xml: await res.text() };
 }
 
+export function ablehnungsZeilen(text) {
+  return text.split("\n").filter((zeile) => zeile.includes("abgelehnt grund="));
+}
+
 async function seedeAnrufe(sql, ids) {
   const beginn = new Date().toISOString();
   for (const id of ids) {
@@ -143,6 +147,9 @@ export async function mitDatenbankVorDemStart(t, { anrufe = [], env = {} }, lauf
     await seedeAnrufe(sql, anrufe);
     return await lauf({ sql, signer, modell, starte });
   } finally {
+    for (const instanz of gestartet) {
+      for (const zeile of ablehnungsZeilen(instanz.stdout)) t.diagnostic(zeile);
+    }
     await Promise.all(gestartet.map((instanz) => instanz.stop()));
     await modell.close();
     await verwaltung.end();
