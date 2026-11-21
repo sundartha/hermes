@@ -221,6 +221,7 @@ test("Zweites Anlegen mit demselben Schluessel auf einer anderen Instanz liefert
   const erster = await a.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
   const zweiter = await b.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
   assert.equal(erster.ok, true);
+  assert.equal(erster.jobId, `job_${angelegt.numberId}`);
   assert.deepEqual(zweiter, { ok: true, jobId: erster.jobId });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
   assert.deepEqual(await umgebung.sql(NUMMERN_ZEILEN, [MANDANT]), [
@@ -318,5 +319,25 @@ test("Fehlt der Mandant in der Datenbank, wird nichts gekauft", { timeout: ZEITG
   const a = await umgebung.instanz();
   await umgebung.sql(SPERRE_ZEILE, [MANDANT]);
   assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "persist_error" });
+  assert.deepEqual(umgebung.attrappe.bestellungen, []);
+});
+
+test("Die Grenze je Mandant gilt genau: eine lebende Nummer bei Grenze 2 laesst den Kauf zu", { timeout: ZEITGRENZE_MS }, async (t) => {
+  const umgebung = await aufbau(t);
+  if (!umgebung) return;
+  const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 2 }));
+  await umgebung.sql(ALTE_NUMMER, ["num_alt_eins", MANDANT, "active"]);
+  assert.equal((await ausloesenUndAbarbeiten(a)).ok, true);
+  assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
+  await umgebung.zaehlen();
+});
+
+test("Die Grenze je Mandant gilt genau: zwei lebende Nummern bei Grenze 2 sperren den Kauf", { timeout: ZEITGRENZE_MS }, async (t) => {
+  const umgebung = await aufbau(t);
+  if (!umgebung) return;
+  const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 2 }));
+  await umgebung.sql(ALTE_NUMMER, ["num_alt_eins", MANDANT, "active"]);
+  await umgebung.sql(ALTE_NUMMER, ["num_alt_zwei", MANDANT, "requested"]);
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });

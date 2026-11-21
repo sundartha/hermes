@@ -69,9 +69,11 @@ export function makeProvisioningOrchestrator({
   }
 
   async function jobAnlegen(zustand, eingabe) {
+    const number = findNumber(zustand, eingabe.numberId);
+    if (!number) return recordProvisioningJob(zustand, eingabe);
     const inDatenbank = await bereiche.nummernkauf.legeAuftragAn({
       ...eingabe,
-      number: findNumber(zustand, eingabe.numberId),
+      number,
       jetztIso: new Date().toISOString(),
     });
     if (!inDatenbank) return recordProvisioningJob(zustand, eingabe);
@@ -86,7 +88,11 @@ export function makeProvisioningOrchestrator({
     const zurueck = () => zustand.numbers.splice(zustand.numbers.indexOf(ergebnis.number), 1);
     let gebucht;
     try {
-      gebucht = await bereiche.nummernkauf.legeNummerAn({ tenantId, number: ergebnis.number });
+      gebucht = await bereiche.nummernkauf.legeNummerAn({
+        tenantId,
+        number: ergebnis.number,
+        hoechstens: config.provisioning.maxNumbersPerTenant,
+      });
     } catch (fehler) {
       zurueck();
       throw fehler;

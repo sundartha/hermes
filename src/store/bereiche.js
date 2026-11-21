@@ -194,7 +194,13 @@ function nummernkaufBereich(speicher) {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
     alleMandantenIds: async () => allTenantIds(speicher.load()),
     legeNummerAn: async (eingabe) => speicher.nummernSql?.()?.nummerAnlegen(eingabe) ?? null,
-    legeAuftragAn: async (eingabe) => speicher.nummernSql?.()?.auftragAnlegen(eingabe) ?? null,
+    legeAuftragAn: async (eingabe) => {
+      const sql = speicher.nummernSql?.();
+      if (!sql) return null;
+      speicher.save();
+      await speicher.drainFlushes();
+      return sql.auftragAnlegen(eingabe);
+    },
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {
         if (!markTenantNeedsManualReconcile(speicher.load(), tenantId).changed) return;
