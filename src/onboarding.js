@@ -21,6 +21,7 @@ import { NummerGekauftIdOffen } from "./begriffe/nummern-vergabe.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.ts";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.ts";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "./store.js";
+import { fehlerText } from "./utils/fehler-text.ts";
 
 const PROVISION_SEARCH_LIMIT = 10;
 
@@ -33,7 +34,7 @@ export async function provisionNumber(
   const number = findNumber(state, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
-  const card = billing ? requireTenantCard(state, numberId, number.tenantId) : null;
+  if (billing) requireTenantCard(state, numberId, number.tenantId);
 
   beginProvisioning(state, numberId);
 
@@ -51,7 +52,6 @@ export async function provisionNumber(
     ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(state, numberId, {
       tenantId: number.tenantId,
       billing,
-      card,
       holdAmountCents: effectiveHoldCents,
       currency,
     }));
@@ -64,8 +64,9 @@ export async function provisionNumber(
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
     if (err instanceof NummerGekauftIdOffen) {
-      markNumberGekauft(state, numberId, err.e164);
-      logger.warn(`[nummer-gekauft-id-offen] number=${numberId} e164=${err.e164}: ${err.message} - Hold bleibt, manuelle Klaerung`);
+      const gekauftE164 = String(Reflect.get(err, "e164"));
+      markNumberGekauft(state, numberId, gekauftE164);
+      logger.warn(`[nummer-gekauft-id-offen] number=${numberId} e164=${gekauftE164}: ${err.message} - Hold bleibt, manuelle Klaerung`);
       throw err;
     }
     failNumber(state, numberId);
@@ -86,6 +87,7 @@ export async function provisionNumber(
         provisioner,
         providerNumberId: ordered.providerNumberId,
         e164: ordered.e164,
+        number,
         tenantId: number.tenantId,
         billing,
         paymentIntentId,
@@ -113,10 +115,10 @@ async function registriereNummerFailSoft(state, number, { sipRegistrar, logger =
       numberId: number.id,
     });
     attachNumberRegistration(state, number.id, phoneNumberId);
-    logger.log(`[el-registrierung] number=${number.id} angelegt=${angelegt}`);
+    logger.log(`[el-registrierung] number=${number.id} angelegt=${String(angelegt)}`);
   } catch (err) {
     logger.warn(
-      `[el-registrierung] FEHLGESCHLAGEN number=${number.id}: ${err.message} - DID bleibt nutzbar, Registrierung nachholbar`,
+      `[el-registrierung] FEHLGESCHLAGEN number=${number.id}: ${fehlerText(err)} - DID bleibt nutzbar, Registrierung nachholbar`,
     );
   }
 }
@@ -184,10 +186,10 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 async function placeSetupFeeHold(
   state,
   numberId,
-  { tenantId, billing, card, holdAmountCents, currency },
+  { tenantId, billing, holdAmountCents, currency },
 ) {
-  const exempt = tenantSubscription(state, tenantId).numberSetupFeeExempt;
-  const { customerId, paymentMethodId } = card;
+  const { numberSetupFeeExempt: exempt } = tenantSubscription(state, tenantId);
+  const { customerId, paymentMethodId } = tenantStripe(state, tenantId);
   let paymentIntentId;
   try {
     const hold = await billing.placeHold({
@@ -220,10 +222,10 @@ async function settleSetupFeeHold(
 async function rollbackAfterOrder(
   state,
   numberId,
-  { provisioner, providerNumberId, e164, tenantId, billing, paymentIntentId, logger },
+  { provisioner, providerNumberId, e164, number, tenantId, billing, paymentIntentId, logger },
 ) {
   failNumber(state, numberId);
-  if (e164 && numberBusyReason(state, { e164 }, { forTenantId: tenantId })) {
+  if (e164 && numberBusyReason(state, { ...number, e164 }, { forTenantId: tenantId })) {
     logger.warn(
       `provisionNumber: releaseNumber uebersprungen (Plattform-Bindung) -> Orphan, Reconcile noetig ` +
         `(number=${numberId} provider=${providerNumberId})`,
@@ -237,7 +239,7 @@ async function rollbackAfterOrder(
   } catch (relErr) {
     logger.warn(
       `provisionNumber: releaseNumber fehlgeschlagen -> Orphan, Reconcile noetig ` +
-        `(number=${numberId} provider=${providerNumberId}): ${relErr.message}`,
+        `(number=${numberId} provider=${providerNumberId}): ${fehlerText(relErr)}`,
     );
   }
   await cancelHoldIfHeld(billing, paymentIntentId);
