@@ -1,13 +1,14 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { config } from "../../src/config.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { startServer, seedState, seedCall, waitUntil, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { startServer, seedState, seedCall, warteAufEreignis, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAttrappe } from "./attrappen-server.js";
@@ -122,7 +123,7 @@ const mailsMit = (mail, teil) => mail.mails.filter(({ text }) => text.includes(t
 const smsKoerper = (telnyx) => telnyx.anfragen.filter(({ pfad }) => pfad === "/v2/messages").map(({ koerper }) => koerper);
 const gleich = (ist, soll, text = "") => assert.ok(JSON.stringify(ist) === JSON.stringify(soll), `${text} ist=${JSON.stringify(ist)} soll=${JSON.stringify(soll)}`.slice(0, 1500));
 const alarmSms = (telnyx) => smsKoerper(telnyx).filter(({ text }) => text.startsWith(KOPF));
-const warteAuf = (bedingung) => waitUntil(bedingung, { timeoutMs: 30_000 });
+const warteAuf = (quellen, bedingung) => warteAufEreignis(quellen, bedingung, { timeoutMs: 30_000 });
 
 async function starteEingang(optionen) {
   const eingang = await starteBetterStackAttrappe(optionen);
@@ -136,16 +137,16 @@ test("Wachtakt: Selbsttest und Halte-Eskalation melden als Vorfall an den Eingan
   const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang({ halten: true })]);
   const env = serverUmgebung({ telnyx, mail, eingang });
   await mitServer({ env, seed: haltStand() }, async (srv) => {
-    await warteAuf(() => ohneKosten(eingang).length === 2);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => ohneKosten(eingang).length === 2);
     for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) {
-      await warteAuf(() => marker(srv, code));
+      await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, code));
       assert.equal(marker(srv, code).reportedAt, null, `${code}: vor der Zustellung nichts als gemeldet`);
       assert.equal(marker(srv, code).deliveredChannels, null, code);
     }
     eingang.freigeben();
-    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).deliveredChannels === "better-stack");
-    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf(() => marker(srv, code).reportedAt);
-    await warteAuf(() => ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT].every((zeile) => srv.stdout.includes(zeile)));
+    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, code).deliveredChannels === "better-stack");
+    for (const code of [EIMER_SELBSTTEST, EIMER_HALT]) await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, code).reportedAt);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => ["[outage] alert_channel_self_test", "[outage] platform_hold_escalation klasse=" + EIMER_HALT].every((zeile) => srv.stdout.includes(zeile)));
     gleich(ohneKosten(eingang).map(({ id, status, text }) => [id, status, text]).sort(), [
       [EIMER_HALT, "alert", HALT_TEXT],
       [EIMER_SELBSTTEST, "alert", SELBSTTEST_TEXT],
@@ -162,7 +163,7 @@ test("Wachtakt: ohne gebundene Absendernummer meldet die Halte-Eskalation trotzd
   const gesetzt = { id: "otg_selbst", code: EIMER_SELBSTTEST, firstSeenAt: zuletzt, lastSeenAt: zuletzt, lastAttemptAt: zuletzt, reportedAt: zuletzt, deliveredChannels: "mail", closedAt: null };
   const env = serverUmgebung({ telnyx, mail, eingang });
   await mitServer({ env, seed: haltStand({ selbsttestMarker: gesetzt }), ownerNumber: null }, async (srv) => {
-    await warteAuf(() => marker(srv, EIMER_HALT)?.reportedAt);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, EIMER_HALT)?.reportedAt);
     await eingang.schranke();
     gleich(ohneKosten(eingang).map(({ id, text }) => [id, text]), [[EIMER_HALT, HALT_TEXT]]);
     assert.ok(!srv.stdout.includes(WARNUNG_OHNE_ABSENDER), srv.stdout);
@@ -197,15 +198,15 @@ test("Anrufende: nicht gestartete Anrufe melden genau einmal als Vorfall, andere
     await meldeEnde(srv, "call_besetzt", { CallStatus: "busy" });
     await meldeEnde(srv, "call_ein", { CallStatus: "completed" });
     await meldeEnde(srv, "call_aus_1", abgelehnt);
-    await warteAuf(() => marker(srv, "not-placed:invite-403"));
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, "not-placed:invite-403"));
     await eingang.schranke();
     gleich(ausfallMeldungen(), [], "der Erstbefund meldet nichts");
     await meldeEnde(srv, "call_aus_2", abgelehnt);
-    await warteAuf(() => ausfallMeldungen().length === 1);
-    await warteAuf(() => marker(srv, "not-placed:invite-403").reportedAt);
-    await warteAuf(() => srv.stdout.includes("outage_detected"));
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => ausfallMeldungen().length === 1);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, "not-placed:invite-403").reportedAt);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => srv.stdout.includes("outage_detected"));
     await meldeEnde(srv, "call_aus_3", abgelehnt);
-    await warteAuf(() => anruf(srv, "call_aus_3").endedAt);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => anruf(srv, "call_aus_3").endedAt);
     await eingang.schranke();
     const alarm = `${KOPF}klasse=not-placed:invite-403 fehler=2 versuche=3 erfolge=0 tenants=1 fenster_min=1440 regel=alarm`;
     gleich(ausfallMeldungen().map(({ status, text }) => [status, text]), [["alert", alarm]]);
@@ -222,7 +223,7 @@ test("Wachtakt ohne Eingang: der Alarm gilt nicht als zugestellt und wird weder 
   const [telnyx, mail, eingang] = await Promise.all([starteTelnyx(), starteMail(), starteEingang()]);
   const env = { ...serverUmgebung({ telnyx, mail, eingang }), BETTERSTACK_ALERT_URL: "" };
   await mitServer({ env, seed: haltStand() }, async (srv) => {
-    await warteAuf(() => marker(srv, EIMER_HALT)?.lastAttemptAt && marker(srv, EIMER_SELBSTTEST)?.lastAttemptAt);
+    await warteAuf([srv.ereignisse, eingang.ereignisse], () => marker(srv, EIMER_HALT)?.lastAttemptAt && marker(srv, EIMER_SELBSTTEST)?.lastAttemptAt);
     for (const code of [EIMER_HALT, EIMER_SELBSTTEST]) {
       assert.equal(marker(srv, code).reportedAt, null, code);
       assert.equal(marker(srv, code).deliveredChannels, null, code);
@@ -251,25 +252,29 @@ async function sendeRueckbuchung(messaging, betterstackAlertUrl) {
 }
 async function mitMeldungen(ablauf) {
   const zeilen = [];
+  const ereignisse = new EventEmitter();
   const original = { warn: console.warn, error: console.error };
-  console.warn = (...teile) => zeilen.push(teile.map(String).join(" "));
+  console.warn = (...teile) => {
+    zeilen.push(teile.map(String).join(" "));
+    ereignisse.emit("aenderung");
+  };
   console.error = console.warn;
   try {
-    await ablauf(zeilen);
+    await ablauf(zeilen, ereignisse);
   } finally {
     Object.assign(console, original);
   }
 }
 
 test("Alarm-SMS an den Betreiber: ohne Bootstrap-Nummer nur die Warnung, mit Nummer eine Fehlermeldung bei abgelehntem Versand", async () => {
-  await mitMeldungen(async (zeilen) => {
+  await mitMeldungen(async (zeilen, ereignisse) => {
     const betterStack = await starteBetterStackAttrappe({ antwortStatus: 500 });
     const versendet = [];
     try {
       await sendeRueckbuchung(() => ({ sendSms: async (sms) => versendet.push(sms) }), betterStack.url);
       await betterStack.aufMeldungen(1);
       assert.deepEqual(versendet, []);
-      await warteAuf(() => zeilen.some((zeile) => /^\[stripe-money-event\] Better-Stack-Meldung stripe-money-event:\S+ nicht zugestellt: HTTP 500$/.test(zeile)));
+      await warteAuf([ereignisse], () => zeilen.some((zeile) => /^\[stripe-money-event\] Better-Stack-Meldung stripe-money-event:\S+ nicht zugestellt: HTTP 500$/.test(zeile)));
       speicher.load().numbers.push({ id: "num_boot", e164: SENDER, tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx", status: "active" });
       await sendeRueckbuchung(() => ({ sendSms: async () => Promise.reject(new Error("sms kaputt")) }), betterStack.url);
       await betterStack.aufMeldungen(2);
