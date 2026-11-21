@@ -380,10 +380,7 @@ test("T-PA6-5 number: leere keep-Liste (deleteMissing empty-branch) prunt genau 
   s.numbers.push(makeNumberRow({ id: "num_owner", e164: "+49999000666", tenantId: BOOTSTRAP_TENANT_ID }));
   await store.save();
 
-  const s2 = store.load();
-  const i = s2.numbers.findIndex((n) => n.id === "num_b");
-  s2.numbers.splice(i, 1);
-  await store.save();
+  await store.nummernSql().nummerEntfernen({ tenantId: TENANT_B, numberId: "num_b" });
 
   const countB = (await db.query(`SELECT count(*)::int AS c FROM number WHERE tenant_id=$1`, [TENANT_B]))
     .rows[0].c;

@@ -194,6 +194,7 @@ function nummernkaufBereich(speicher) {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
     alleMandantenIds: async () => allTenantIds(speicher.load()),
     legeNummerAn: async (eingabe) => speicher.nummernSql?.()?.nummerAnlegen(eingabe) ?? null,
+    entferneNummer: async (eingabe) => speicher.nummernSql?.()?.nummerEntfernen(eingabe) ?? null,
     legeAuftragAn: async (eingabe) => {
       const sql = speicher.nummernSql?.();
       if (!sql) return null;
