@@ -533,7 +533,7 @@ async function testdateiGruen(datei, { mitMutant, fristMs } = {}, lauf) {
 }
 
 export function schutzOrte(dateien) {
-  const orte = dateien.flatMap((datei) => [...readFileSync(datei, "utf8").matchAll(SCHUTZ)].map(({ 1: id, index }) => [id, { datei: resolve(datei), offset: index }]));
+  const orte = dateien.flatMap((datei) => [...readFileSync(datei, "utf8").matchAll(SCHUTZ)].map(({ 1: id, index }) => [id, { datei: realpathSync(datei), offset: index }]));
   return Object.fromEntries(orte.reverse());
 }
 
