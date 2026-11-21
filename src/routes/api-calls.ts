@@ -184,7 +184,6 @@ interface Speicher {
   createCall: (felder: object) => Anruf;
   persistCall: (callId: string) => Promise<unknown>;
   withStoreLock: <T>(arbeit: () => Promise<T>) => Promise<T>;
-  mitAnrufSperre: <T>(tenantId: string | undefined, arbeit: () => Promise<T>) => Promise<T>;
   releaseOutboundReserveCents: (tenantId: string | undefined, cents: number | undefined) => Promise<unknown>;
   rueckfrageGelesen: (callId: string, tenantId: string, nach: null) => Promise<{ status: string | null }>;
   leseCall?: (callId: string) => Promise<Anruf | null | undefined>;
@@ -256,8 +255,13 @@ interface Anrufstart {
   abschaltend?: (() => boolean) | undefined;
 }
 
+type AnrufSperre = <T>(tenantId: string | undefined, arbeit: () => Promise<T>) => Promise<T>;
+
+const ohneAnrufSperre: AnrufSperre = (_tenantId, arbeit) => arbeit();
+
 interface Abhaengigkeiten {
   store: Speicher;
+  mitAnrufSperre?: AnrufSperre;
   leitungsplaetze: Leitungsplaetze;
   budgetReservierung?: BudgetReservierung;
   config: Konfiguration;
@@ -657,6 +661,7 @@ function gibPlatzNachAuflegenFrei({ leitungsplaetze, callId, aufgelegt }: { leit
 
 export function makeCallRoutes({
   store,
+  mitAnrufSperre = ohneAnrufSperre,
   leitungsplaetze,
   budgetReservierung = KEINE_DB_RESERVIERUNG,
   config,
@@ -918,7 +923,7 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        store.mitAnrufSperre(ctx.tenantId, () =>
+        mitAnrufSperre(ctx.tenantId, () =>
           claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
         ),
       );
