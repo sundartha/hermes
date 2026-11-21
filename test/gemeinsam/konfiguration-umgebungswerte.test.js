@@ -670,7 +670,7 @@ test("Oberflaeche: Fehlertexte des Wachters nennen Pfad und Schluessel", () => {
     () => config.safety.gibtEsNicht,
     new TypeError(
       "config.safety.gibtEsNicht existiert nicht (verschobener/entfernter Config-Key? " +
-        "config.<namespace>.<key> nutzen - Gruppierung in src/config.ts pruefen).",
+        "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
     ),
   );
   assert.throws(

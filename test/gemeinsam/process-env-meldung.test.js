@@ -16,6 +16,6 @@ test("process.env außerhalb von src/config.ts: Meldung nennt alle drei Schritte
   assert.ok(meldung);
   assert.match(
     meldung.message,
-    /Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src\/config\.js anlegen, die Variable in \.env\.example eintragen und render\.yaml prüfen\.$/,
+    /Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src\/config\.ts anlegen, die Variable in \.env\.example eintragen und render\.yaml prüfen\.$/,
   );
 });
