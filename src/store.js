@@ -281,6 +281,7 @@ export const {
   setzeAbfrageFrist,
   setzeUebergabeFrist,
   mitStartSperre,
+  mitAnrufSperre,
   nummernVorhanden,
   besitzLage,
   starteInstanzTakt,

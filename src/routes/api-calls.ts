@@ -184,6 +184,7 @@ interface Speicher {
   createCall: (felder: object) => Anruf;
   persistCall: (callId: string) => Promise<unknown>;
   withStoreLock: <T>(arbeit: () => Promise<T>) => Promise<T>;
+  mitAnrufSperre: <T>(tenantId: string | undefined, arbeit: () => Promise<T>) => Promise<T>;
   releaseOutboundReserveCents: (tenantId: string | undefined, cents: number | undefined) => Promise<unknown>;
   rueckfrageGelesen: (callId: string, tenantId: string, nach: null) => Promise<{ status: string | null }>;
   leseCall?: (callId: string) => Promise<Anruf | null | undefined>;
@@ -917,7 +918,9 @@ export function makeCallRoutes({
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
       const claim = await store.withStoreLock(() =>
-        claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
+        store.mitAnrufSperre(ctx.tenantId, () =>
+          claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
+        ),
       );
       if (!claim.created) return await antwortOhneAnruf({ claim, ctx, req, res, store, budgetReservierung, audit, config });
       call = claim.call;
