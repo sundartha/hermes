@@ -713,6 +713,10 @@ function einbettungenAufUnveraendertenQuellen(zaehlen, dateien) {
   return zaehlen && env[ABDECKUNG] !== undefined ? { eingebettete: eingebetteteTests(dateien) } : {};
 }
 
+export function strykerKonfiguration(mutate, bericht) {
+  return { testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, disableTypeChecks: false, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" };
+}
+
 function mutationTeil(argv) {
   const zaehlen = argv.includes("--zaehlen");
   const basis = basisAus(argv);
@@ -724,7 +728,7 @@ function mutationTeil(argv) {
   const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
-  writeFileSync(konfiguration, JSON.stringify({ testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" }));
+  writeFileSync(konfiguration, JSON.stringify(strykerKonfiguration(mutate, bericht)));
   console.log(`${mutate.join(" ")}: ${Object.keys(plan.abdeckung).length} von ${plan.tests.length} Testdateien mit Abdeckung, zuerst die im PR geänderten: ${plan.geaendert.join(" ")}`);
   const start = Date.now();
   if (!lauf("npx", ["stryker", "run", konfiguration], { env: { ...env, [MUTATION_PLAN]: planDatei, ...(zaehlen && { [ZAEHLEN]: "1" }) } })) return false;
