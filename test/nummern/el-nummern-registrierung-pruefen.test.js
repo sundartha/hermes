@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pruefen } from "../../scripts/el-nummern-registrierung.mjs";
-import { provisionNumber } from "../../src/onboarding.js";
+import { provisionNumber } from "../../src/onboarding.ts";
 import { attachNumberRegistration, makeDefaultState, registerTenant, requestNumber } from "../../src/store/state-ops.js";
 import { fakeProvisioner, withFetch } from "../helpers.js";
 

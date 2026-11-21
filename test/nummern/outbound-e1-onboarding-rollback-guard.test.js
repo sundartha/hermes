@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { provisionNumber } from "../../src/onboarding.js";
+import { provisionNumber } from "../../src/onboarding.ts";
 import { fakeBilling, fakeProvisioner } from "../helpers.js";
 import {
   makeDefaultState,

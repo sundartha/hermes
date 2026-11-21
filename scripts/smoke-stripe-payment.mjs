@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { provisionNumber } from "../src/onboarding.js";
+import { provisionNumber } from "../src/onboarding.ts";
 import { stripeBilling } from "../src/billing/stripe.ts";
 import {
   makeDefaultState,

@@ -10,7 +10,7 @@ import {
 import { activateSubscriptionFromCheckoutSession } from "../../src/billing/subscribe.ts";
 import { CustomerMissingError } from "../../src/billing/errors.ts";
 import { isHoldCapablePaymentMethodType } from "../../src/billing/payment-method-eligibility.ts";
-import { provisionNumber } from "../../src/onboarding.js";
+import { provisionNumber } from "../../src/onboarding.ts";
 import { fakeBilling, fakeProvisioner, makeStripeStub } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import {
