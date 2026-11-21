@@ -50,7 +50,8 @@ test("NACHLESEN-1b: die Nachlesung allein braucht einen Client und der Anruf ste
   const { b, call, zaehler } = await zweiInstanzen();
   await b.addTranscript(call.id, "agent", "Hallo");
   assert.equal(zaehler.clients, 2);
-  assert.equal((await b.leseCall(call.id)).transcript.at(-1).text, "Hallo");
+  const nachgelesen = await b.leseCall(call.id);
+  assert.equal(nachgelesen.transcript.at(-1).text, "Hallo");
 });
 
 test("NACHLESEN-2: transkriptLoeschen eines unbekannten Anrufs braucht genau einen Client und loescht das Transkript", async () => {
