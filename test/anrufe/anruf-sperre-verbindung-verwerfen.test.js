@@ -28,7 +28,10 @@ async function datenbankAnlegen() {
       if (verhalten.scheitert(text)) throw new Error(`fehler bei ${text}`);
       return db.query(text, parameter);
     },
-    exec: (text) => db.exec(text),
+    exec: async (text) => {
+      if (verhalten.scheitert(text)) throw new Error(`fehler bei ${text}`);
+      return db.exec(text);
+    },
     transaction: (arbeit) => db.transaction(arbeit),
   };
   poolAufPglite(huelle);
