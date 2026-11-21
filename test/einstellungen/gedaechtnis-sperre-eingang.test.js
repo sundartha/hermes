@@ -18,7 +18,7 @@ const HTTP_FORBIDDEN = 403;
 const MEMORY_HEADING = "WAS BISHER GESCHAH";
 const ZIEL = "+491511234003";
 const ERGEBNIS = `Ergebnis-des-frueheren-Anrufs-an-${ZIEL}`;
-const FRUEHER_MS = 2 * 24 * 60 * 60 * 1000;
+const FRUEHER = new Date("2026-01-01T10:00:00Z").toISOString();
 const FRUEHERER_ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
   to_e164, goal, started_at, answered_at, max_duration_s, provider, result)
   VALUES ($1, $2, $3, 'outbound', 'completed', (SELECT e164 FROM number WHERE tenant_id = $2),
@@ -61,13 +61,12 @@ test("Kriterium 1 (Eingang): haengt die Datenbank nach allowCallMemory=false, le
       TELNYX_CONNECTION_ID: "conn_gedaechtnis",
     };
     await mitZweiHermesAufPostgres(t, { env }, async ({ db, sql, starte }) => {
-      const frueherer = new Date(Date.now() - FRUEHER_MS).toISOString();
       await sql(FRUEHERER_ANRUF_SQL, [
         "call_frueher_sperre",
         BOOTSTRAP_TENANT_ID,
         "tok_frueher_sperre",
         ZIEL,
-        frueherer,
+        FRUEHER,
         JSON.stringify({ outcome: ERGEBNIS, facts: [] }),
       ]);
       assert.equal((await setzeGedaechtnis(sql, true)).rowCount, 1);
