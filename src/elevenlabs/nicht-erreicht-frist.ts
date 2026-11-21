@@ -1,4 +1,4 @@
-import { KOSTENPROFIL } from "../billing/kostenarten.ts";
+import { KOSTENPROFIL, kostenprofilFuerAnruf } from "../billing/kostenarten.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const NICHT_ERREICHT_FRIST_S = 75;
@@ -13,7 +13,9 @@ const OHNE_ABFRAGE_FRIST: ReadonlySet<unknown> = new Set([
 ]);
 
 interface Anruf {
-  costProfile?: unknown;
+  costProfile?: string | null;
+  sipCallId?: unknown;
+  direction?: unknown;
   startedAt?: unknown;
 }
 
@@ -40,7 +42,7 @@ export function nichtErreichtNachFrist({
   conversation: Gespraech;
   nowMs: number;
 }): boolean {
-  if (OHNE_ABFRAGE_FRIST.has(call.costProfile)) return false;
+  if (OHNE_ABFRAGE_FRIST.has(kostenprofilFuerAnruf(call))) return false;
   const startMs = Date.parse(String(call.startedAt));
   if (!Number.isFinite(startMs) || nowMs - startMs < NICHT_ERREICHT_FRIST_MS) return false;
   return !hatGesprochen(conversation) && !hatAnbieterDauer(conversation);
