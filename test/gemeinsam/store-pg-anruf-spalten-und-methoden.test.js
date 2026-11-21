@@ -109,7 +109,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "markNotPlacedMailSent",
   "markNumberElInboundTrunkBelegt", "markSummaryMailSent", "markSummarySmsSent", "newId", "noteConsultPoll",
   "numberHasActiveCall",
-  "numberRecordByE164", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
+  "numberRecordByE164", "nummernSql", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
   "persistCall",
   "planMinutesExceeded", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
   "recordAnsweredUnclearReason", "recordCallCostEvidence", "recordCallCostTruingResult",

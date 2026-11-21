@@ -1,15 +1,14 @@
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
-import { newId } from "./zustand/grundlagen.js";
 import { PROVISION_NUMBER_JOB } from "../begriffe/nummern-vergabe.js";
 
 const FEHLER = "[pg] nummernkauf fehlgeschlagen:";
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 const SPERRE_SQL = `SELECT id FROM tenant WHERE id = $1 FOR UPDATE`;
-const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2)`;
+const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2) AND id <> $3`;
 const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country, language)
   VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`;
 const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
-  VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING`;
+  VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7) ON CONFLICT DO NOTHING`;
 const AUFTRAG_LESEN_SQL = `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
   FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
 const NICHT_ZAEHLEND = [NUMBER_STATUS.RELEASED, NUMBER_STATUS.FAILED];
@@ -54,9 +53,9 @@ const nummerEinfuegen = (client, tenantId, number) =>
     number.language ?? null,
   ]);
 
-async function nummerAnlegen(client, { tenantId, number }) {
-  const { rows } = await client.query(LEBENDE_SQL, [tenantId, NICHT_ZAEHLEND]);
-  if (rows[0].anzahl > 0) return { ok: false };
+async function nummerAnlegen(client, { tenantId, number, hoechstens }) {
+  const { rows } = await client.query(LEBENDE_SQL, [tenantId, NICHT_ZAEHLEND, number.id]);
+  if (rows[0].anzahl >= hoechstens) return { ok: false };
   await nummerEinfuegen(client, tenantId, number);
   return { ok: true };
 }
@@ -64,7 +63,7 @@ async function nummerAnlegen(client, { tenantId, number }) {
 async function auftragAnlegen(client, { tenantId, numberId, idempotencyKey, number, jetztIso }) {
   await nummerEinfuegen(client, tenantId, number);
   await client.query(AUFTRAG_SQL, [
-    newId("job"),
+    `job_${numberId}`,
     tenantId,
     numberId,
     PROVISION_NUMBER_JOB,
