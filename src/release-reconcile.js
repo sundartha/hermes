@@ -30,7 +30,7 @@ function recordDidAudit(audit, { actor, tenantId, action, detail }) {
 }
 
 function providerStatus(err) {
-  return typeof err === "object" && err !== null ? err.providerStatus : undefined;
+  return typeof err === "object" && err !== null && "providerStatus" in err ? err.providerStatus : undefined;
 }
 
 async function providerReleaseOrGone(provisioner, number, logger) {
