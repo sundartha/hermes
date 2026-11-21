@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { stripTypeScriptTypes } from "node:module";
 import { basename, dirname, extname, join, posix, relative, resolve } from "node:path";
@@ -113,6 +113,8 @@ const MUTANT_FRIST_MS = MUTANT_FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_TESTDATEI_FRIST_MINUTEN = 3;
 const MUTANT_TESTDATEI_FRIST_MS = MUTANT_TESTDATEI_FRIST_MINUTEN * MINUTE_MS;
 const KONTROLLLAEUFE = 2;
+const BASIS_ROT_ZEILEN = 40;
+const BASIS_ROT_ZEICHEN = 4000;
 const SCHUTZ = /stryMutAct_\w+\("(\d+)"\)/g;
 const BEGRUENDUNG_MINDESTENS = 20;
 const MUTATION_ANZEIGE = 80;
@@ -522,14 +524,25 @@ function ohneWerkzeugSteuerung(quelle) {
   return Object.fromEntries(Object.entries(quelle).filter(([name]) => !WERKZEUG_STEUERUNG.includes(name)));
 }
 
-async function testdateiGruen(datei, { mitMutant, fristMs } = {}, lauf) {
+function mitAusgabeDatei(mitAusgabe, ablauf) {
+  if (!mitAusgabe) return ablauf("ignore").then((gruen) => ({ gruen }));
+  const ordner = mkdtempSync(join(tmpdir(), "ausgabe-"));
+  const pfad = join(ordner, "ausgabe.txt");
+  const kennung = openSync(pfad, "w");
+  return ablauf(["ignore", kennung, kennung]).then((gruen) => {
+    closeSync(kennung);
+    return { gruen, ausgabe: gruen ? "" : readFileSync(pfad, "utf8") };
+  }).finally(() => rmSync(ordner, { recursive: true, force: true }));
+}
+
+async function testdateiGruen(datei, { mitMutant, fristMs, mitAusgabe } = {}, lauf) {
   const { laeufe, abdeckung, gestartet, aktiv } = lauf;
   gestartet.push(datei);
   const eintrag = { datei, start: Date.now() };
   aktiv.add(eintrag);
   const umgebung = { ...ohneWerkzeugSteuerung(env), NODE_ENV: "test", NODE_V8_COVERAGE: abdeckung, [MUTANT]: mitMutant ? env[MUTANT] : undefined, ...(mitMutant && { NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} ${MUTANT_VORLADEN}`.trim() }) };
-  const gruen = await starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio: "ignore", fristMs }, laeufe).finally(() => aktiv.delete(eintrag));
-  return { gruen, zeitueberschritten: !gruen && fristMs !== undefined && Date.now() - eintrag.start >= fristMs };
+  const ergebnis = await mitAusgabeDatei(mitAusgabe, (stdio) => starteLauf(["test/testbaenke-run.mjs", "regression", datei], { env: umgebung, stdio, fristMs }, laeufe)).finally(() => aktiv.delete(eintrag));
+  return { ...ergebnis, zeitueberschritten: !ergebnis.gruen && fristMs !== undefined && Date.now() - eintrag.start >= fristMs };
 }
 
 export function schutzOrte(dateien) {
@@ -584,8 +597,12 @@ function mutantenZeile({ datei, offset }) {
   return text.slice(text.lastIndexOf("\n", offset) + 1, text.indexOf("\n", offset));
 }
 
-export function basisRotZeilen({ schluessel, ausgeschlossen = [] }) {
-  return ausgeschlossen.map((datei) => `Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`);
+function ausgabeKurz(ausgabe) {
+  return ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN).map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
+}
+
+export function basisRotZeilen({ schluessel, ausgeschlossen = [], basisRotAusgabe = {} }) {
+  return ausgeschlossen.flatMap((datei) => [`Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`, ...(basisRotAusgabe[datei] ? [basisRotAusgabe[datei]] : [])]);
 }
 
 async function mutantGegenTests(plan) {
@@ -595,6 +612,7 @@ async function mutantGegenTests(plan) {
   const kandidat = (datei) => !basisRot.has(datei) && (plan.abdeckung[datei] ?? [env[MUTANT]]).includes(env[MUTANT]);
   const { auswahl: offen, gekuerzt } = mutantKandidaten({ ...plan, tests: plan.tests.filter(kandidat) }, ort === undefined ? "" : mutantenZeile(ort), MUTANT_TESTS_HOECHSTENS);
   const ausgeschlossen = [];
+  const basisRotAusgabe = {};
   const stand = { test: null, frist: false, liefNoch: [] };
   const lauf = { laeufe: new Set(), gestartet: [], aktiv: new Set() };
   const ende = Math.min(plan.frist, start + MUTANT_FRIST_MS);
@@ -615,12 +633,13 @@ async function mutantGegenTests(plan) {
     if (beendet()) return;
     const ersterLauf = await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf);
     if (ersterLauf.gruen || beendet()) return;
-    let basisGruen = false;
-    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !basisGruen && !beendet(); kontrolle += 1) basisGruen = (await testdateiGruen(datei, { mitMutant: false }, lauf)).gruen;
+    let kontrolllauf = { gruen: false };
+    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !kontrolllauf.gruen && !beendet(); kontrolle += 1) kontrolllauf = await testdateiGruen(datei, { mitMutant: false, mitAusgabe: true }, lauf);
     if (beendet()) return;
-    if (!basisGruen) {
+    if (!kontrolllauf.gruen) {
       basisRot.add(datei);
       ausgeschlossen.push(datei);
+      if (kontrolllauf.ausgabe?.trim()) basisRotAusgabe[datei] = ausgabeKurz(kontrolllauf.ausgabe);
       return;
     }
     if (!ersterLauf.zeitueberschritten) {
@@ -641,7 +660,7 @@ async function mutantGegenTests(plan) {
   clearTimeout(fristUhr);
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
   const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt", ...(stand.liefNoch.length > 0 && { liefNoch: stand.liefNoch }), ...(!stand.frist && gekuerzt !== undefined && { gekuerzt }) } : { ergebnis: GETOETET, test: stand.test };
-  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
+  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), ...(Object.keys(basisRotAusgabe).length > 0 && { basisRotAusgabe }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
 }
 
 const teilNummer = () => Number(env.TEIL ?? 0);
