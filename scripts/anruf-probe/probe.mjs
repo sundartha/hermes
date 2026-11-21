@@ -122,7 +122,8 @@ async function ausgangMelden(ergebnis) {
 }
 
 async function auflegen() {
-  if (!env.STAGING_PROBE_ZIEL) return uebersprungen("STAGING_PROBE_ZIEL");
+  const fehlt = PFLICHT.find((name) => !env[name]);
+  if (fehlt !== undefined) return uebersprungen(fehlt);
   const modul = await modulLaden();
   if (modul === null) {
     ende("probe_anrufer_fehlt");
