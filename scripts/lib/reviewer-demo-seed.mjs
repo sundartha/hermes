@@ -89,8 +89,8 @@ function assertEndedAtIso(endedAtIso) {
 function createEndedInboundCall(store, { tenantId, entry, endedAtIso }) {
   const call = store.createCall({ direction: INBOUND, from: entry.from, to: null, tenantId });
   store.recordProviderCallResult(call.id, { summary: entry.summary, objectiveAchieved: null });
-  store.setCallEndedAt(call.id, ENDED_STATUS, endedAtIso);
-  return call.id;
+  const ende = store.setCallEndedAt(call.id, ENDED_STATUS, endedAtIso);
+  return { callId: call.id, ende };
 }
 
 function addMissingItems(store, callId, texts) {
@@ -108,12 +108,21 @@ async function addMissingItemsAbwarten(store, callId, texts) {
 }
 
 function seedCallId(store, tenantId, { step, endedAtIso }) {
-  return step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso });
+  return (
+    step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso }).callId
+  );
 }
 
 async function seedCallIdGespeichert(store, tenantId, schritt) {
-  const callId = seedCallId(store, tenantId, schritt);
-  if (schritt.step.callId === null) await store.save();
+  const { step, endedAtIso } = schritt;
+  if (step.callId !== null) return step.callId;
+  const { callId, ende } = createEndedInboundCall(store, {
+    tenantId,
+    entry: step.entry,
+    endedAtIso,
+  });
+  await ende;
+  await store.save();
   return callId;
 }
 
