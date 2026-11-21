@@ -3,7 +3,7 @@ import http from "node:http";
 import { test } from "node:test";
 import express from "express";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import {

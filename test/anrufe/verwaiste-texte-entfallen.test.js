@@ -8,7 +8,7 @@ import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 
 test("MAX_EMPTY_TURNS=4 startet unveraendert, die Konfiguration kennt maxEmptyTurns nicht mehr", () => {
   const script = [
-    'import("./src/config.js").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, CONFIG_NAMESPACES, configFatalErrors }) => {',
     "process.stdout.write(JSON.stringify({ fehler: configFatalErrors(), voice: config.voice, liste: CONFIG_NAMESPACES.voice }));",
     "});",
   ].join("\n");

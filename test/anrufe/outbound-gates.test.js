@@ -5,7 +5,7 @@ import {
   resolveMaxDurationS,
   tariffCentsPerMin,
 } from "../../src/telephony/outbound-gates.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { outboundReserveCents } from "../../src/begriffe/abrechnung.ts";
 

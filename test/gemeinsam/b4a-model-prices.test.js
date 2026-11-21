@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, resolveModelPrices } from "../../src/config.js";
+import { config, resolveModelPrices } from "../../src/config.ts";
 import { modelPriceScheduleBannerLine } from "../../src/boot.js";
 import { stalePriceFindings, MODEL_PRICE_MAX_AGE_DAYS } from "../../src/boot-guard.ts";
 import { MODEL_PRICE_RATE_FIELDS } from "../../src/begriffe/abrechnung.ts";

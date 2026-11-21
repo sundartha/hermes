@@ -12,7 +12,7 @@ let dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iel-b4a-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ops = await import("../../src/store/state-ops.js");
   jsonStore = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));

@@ -8,7 +8,7 @@ import {
   checkoutSessionIdempotencyKey,
 } from "../../src/billing/subscribe.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { config as realConfig } from "../../src/config.js";
+import { config as realConfig } from "../../src/config.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const TENANT = "t_x";

@@ -10,7 +10,7 @@ let makePgStore, BOOTSTRAP, requestNumber, beginProvisioning, activateNumber, at
 before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-absender-wahrheit-pg-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ makePgStore } = await import("../../src/store/pg.js"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
   ({ requestNumber, beginProvisioning, activateNumber, attachNumberRegistration, registerTenant, FROM_SOURCE } =

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import * as ops from "../../src/store/state-ops.js";
 

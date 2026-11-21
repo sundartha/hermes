@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "../helpers.js";

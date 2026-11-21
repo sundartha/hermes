@@ -29,7 +29,7 @@ before(async () => {
   [{ config }, { wireWebLogin }, { installGlobalMiddleware }, webAuth, { makePgTestStore, BOOTSTRAP_TENANT_ID }, { makeStripeStub }] =
     await importNachUmgebung(
       { VOICE_TARIFF_DEFAULT_CENTS: "6" },
-      () => import("../../src/config.js"),
+      () => import("../../src/config.ts"),
       () => import("../../src/wiring/web-login.js"),
       () => import("../../src/app.js"),
       () => import("../../src/web-auth.js"),

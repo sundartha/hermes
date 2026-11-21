@@ -36,7 +36,7 @@ before(async () => {
   process.env.VOICE_TARIFF_DEFAULT_CENTS = String(TARIFF_CENTS_PER_MIN);
   process.env.VOICE_TARIFF_DOMESTIC_CENTS = "0";
   process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_TARIFF_CENTS_PER_MIN);
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ blockingBudgetAxis } = await import("../../src/budget-gate.js"));
   ({ liveVoiceSpendCents } = await import("../../src/billing/metering.js"));
 });

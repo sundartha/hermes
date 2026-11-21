@@ -18,7 +18,7 @@ before(async () => {
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ systemPrompt, toolDefs } = await import("../../src/claude.js"));
 });
 

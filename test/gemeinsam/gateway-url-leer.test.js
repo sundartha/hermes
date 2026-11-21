@@ -17,11 +17,11 @@ async function mitGatewayUrl(wert, laden, pruefung) {
 }
 
 const faelle = [
-  { laden: () => import("../../src/config.js?gwleer-0"), name: "leer ohne gebundenen Port", wert: "", gebunden: false, erwartet: (c) => `http://localhost:${c.config.server.port}` },
-  { laden: () => import("../../src/config.js?gwleer-1"), name: "leer mit gebundenem Port", wert: "", gebunden: true, erwartet: () => "http://localhost:4321" },
-  { laden: () => import("../../src/config.js?gwleer-2"), name: "fehlend mit gebundenem Port", wert: undefined, gebunden: true, erwartet: () => "http://localhost:4321" },
-  { laden: () => import("../../src/config.js?gwleer-3"), name: "gesetzt mit gebundenem Port", wert: "https://gw.example.test/", gebunden: true, erwartet: () => "https://gw.example.test" },
-  { laden: () => import("../../src/config.js?gwleer-4"), name: "gesetzt ohne gebundenen Port", wert: "https://gw.example.test/", gebunden: false, erwartet: () => "https://gw.example.test" },
+  { laden: () => import("../../src/config.ts?gwleer-0"), name: "leer ohne gebundenen Port", wert: "", gebunden: false, erwartet: (c) => `http://localhost:${c.config.server.port}` },
+  { laden: () => import("../../src/config.ts?gwleer-1"), name: "leer mit gebundenem Port", wert: "", gebunden: true, erwartet: () => "http://localhost:4321" },
+  { laden: () => import("../../src/config.ts?gwleer-2"), name: "fehlend mit gebundenem Port", wert: undefined, gebunden: true, erwartet: () => "http://localhost:4321" },
+  { laden: () => import("../../src/config.ts?gwleer-3"), name: "gesetzt mit gebundenem Port", wert: "https://gw.example.test/", gebunden: true, erwartet: () => "https://gw.example.test" },
+  { laden: () => import("../../src/config.ts?gwleer-4"), name: "gesetzt ohne gebundenen Port", wert: "https://gw.example.test/", gebunden: false, erwartet: () => "https://gw.example.test" },
 ];
 
 for (const fall of faelle) {

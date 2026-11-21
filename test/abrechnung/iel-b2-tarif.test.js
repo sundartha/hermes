@@ -23,7 +23,7 @@ before(async () => {
   process.env.VOICE_TARIFF_DOMESTIC_CENTS = String(DOMESTIC_CENTS);
   process.env.VOICE_TARIFF_DEFAULT_CENTS = String(DEFAULT_CENTS);
   process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_CENTS);
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ callTariffCentsPerMin, liveVoiceSpendCents, makeMetering } = await import("../../src/billing/metering.js"));
   ({ emptyUsage } = await import("../../src/store.js"));
 });

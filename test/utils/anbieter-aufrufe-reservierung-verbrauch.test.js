@@ -56,7 +56,7 @@ const { waitUntil } = await import("../helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 const { PAYMENT_METHOD_TYPE_CARD } = await import("../../src/billing/payment-method-eligibility.ts");
 

@@ -19,7 +19,7 @@ before(async () => {
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   setWorldDefaultLanguageEnabled(true);
   ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
 });

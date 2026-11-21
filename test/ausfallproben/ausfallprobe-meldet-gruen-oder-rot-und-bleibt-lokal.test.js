@@ -179,7 +179,7 @@ test("Kindprozess laedt keine .env aus dem Repo: Code laeuft aus einer Kopie im 
         process.execPath,
         [
           "-e",
-          "import('./src/config.js').then((m) => console.log(JSON.stringify(m.config.billing.stripeSecretKey ?? null)))",
+          "import('./src/config.ts').then((m) => console.log(JSON.stringify(m.config.billing.stripeSecretKey ?? null)))",
         ],
         { cwd: kind.kopie, env: kindUmgebung({ NODE_ENV: "production" }) },
         (fehler, stdout) => resolve(stdout),

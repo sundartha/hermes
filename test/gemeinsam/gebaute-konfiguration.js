@@ -21,7 +21,7 @@ function kindSkript(felder) {
   return [
     `const felder = ${JSON.stringify(felder)};`,
     'const lesen = (quelle, feld) => feld.split(".").reduce((wert, teil) => wert?.[teil], quelle);',
-    'import("./src/config.js").then(({ config }) => process.stdout.write(',
+    'import("./src/config.ts").then(({ config }) => process.stdout.write(',
     "  JSON.stringify(Object.fromEntries(felder.map((feld) => [feld, lesen(config, feld)]))),",
     "));",
   ].join("\n");

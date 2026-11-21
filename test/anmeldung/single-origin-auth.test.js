@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { makeWebAuthRoutes, verifyValue, SESSION_COOKIE_NAME } from "../../src/web-auth.js";
-import { productionFootguns } from "../../src/config.js";
+import { productionFootguns } from "../../src/config.ts";
 import anfrageMitFrist from "../gemeinsam/anfrage-mit-frist.mjs";
 
 const SECRET = "test-session-secret-0123456789";

@@ -15,7 +15,7 @@ let makePgStore,
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-cost-roundtrip-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));

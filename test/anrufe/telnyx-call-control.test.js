@@ -11,7 +11,7 @@ process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 
 const { telnyxVoice } = await import("../../src/telephony/adapters/telnyx/voice.js");
 const { voiceControl } = await import("../../src/telephony/registry.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 function stubFetch(response) {
   const calls = [];

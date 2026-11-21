@@ -9,7 +9,7 @@ import { MONEY_EVENT, PAYMENT_ACTION_GRACE_HOURS } from "../../src/billing/money
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 
 config.server.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-p4-geldereignisse-"));
 const echterSpeicher = await import("../../src/store.js");

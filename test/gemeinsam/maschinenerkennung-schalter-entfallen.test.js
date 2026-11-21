@@ -6,7 +6,7 @@ import { kindUmgebung } from "./kind-umgebung.mjs";
 
 function telephonySchluesselMitGesetztemSchalter() {
   const script = [
-    'import("./src/config.js").then(({ config, configFatalErrors }) => {',
+    'import("./src/config.ts").then(({ config, configFatalErrors }) => {',
     "process.stdout.write(JSON.stringify({ fehler: configFatalErrors(), schluessel: Object.keys(config.telephony) }));",
     "});",
   ].join("\n");

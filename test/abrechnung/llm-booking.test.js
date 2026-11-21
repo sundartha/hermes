@@ -33,7 +33,7 @@ before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
   );
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
   store = await import("../../src/store.js");
   ({ bookTokenUsage } = await import("../../src/llm-usage.js"));
   ({ createAnthropicProvider } = await import("../../src/llm/adapters/anthropic.ts"));

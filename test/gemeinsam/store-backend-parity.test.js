@@ -9,7 +9,7 @@ let json, makePgStore;
 before(async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-store-parity-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   json = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
 });

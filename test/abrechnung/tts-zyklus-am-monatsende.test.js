@@ -6,7 +6,7 @@ let config;
 let store;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
   store = await import("../../src/store.js");
 });
 

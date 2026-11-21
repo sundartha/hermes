@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   makeDefaultState, trackUsage, aiCostCents, budgetExceeded, setTenantBudget, usageFor, tokenCostMicroCents,
 } from "../../src/store/state-ops.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { PRICES, TEST_MODEL_CHEAP, TEST_MODEL_EXPENSIVE, tokensOf, tokensWithCache } from "../_prices.js";
 
 const T = "tenant_p7a";

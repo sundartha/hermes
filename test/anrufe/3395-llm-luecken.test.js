@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createLlmProvider, latchBillingBlockedProvider } from "../../src/llm/registry.js";
 import { makeTransientClassifier } from "../../src/llm/transient-errors.ts";
 import { makeConfigOverrides } from "../helpers.js";

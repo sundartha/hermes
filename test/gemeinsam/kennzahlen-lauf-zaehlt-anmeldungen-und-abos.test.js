@@ -22,7 +22,7 @@ const laufendesHermes = await starteHermesMitPglite({
   kennzahlenAdresse: ADRESSE,
   ohneStartanruf: true,
 });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 Object.assign(config.billing, { paymentEnabled: true, stripeWebhookSecret: STRIPE_ROUTEN_GEHEIMNIS });
 

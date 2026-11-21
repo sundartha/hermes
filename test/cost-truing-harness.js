@@ -5,7 +5,7 @@ import {
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-import { config as prodDefaults } from "../src/config.js";
+import { config as prodDefaults } from "../src/config.ts";
 
 const MS_PER_MINUTE = 60 * 1000;
 

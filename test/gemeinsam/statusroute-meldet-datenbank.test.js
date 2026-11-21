@@ -44,7 +44,7 @@ const pools = poolAufPglite(await neuePglite());
 process.env.STORE_BACKEND = "pg";
 process.env.DATABASE_URL = "postgres://attrappe.invalid/hermes";
 const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "statusroute-"));
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 Object.assign(config.server, {
   dataDir: DATENORDNER,
   webDistDir: path.join(DATENORDNER, "web"),

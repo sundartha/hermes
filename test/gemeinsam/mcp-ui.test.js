@@ -21,7 +21,7 @@ import {
   uiResourceUri,
   uiServerExtension,
 } from "../../src/ui/contract.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 
 const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL);
 

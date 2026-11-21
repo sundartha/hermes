@@ -4,7 +4,7 @@ import http from "node:http";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
-import { CONFIG_NAMESPACES } from "../../src/config.js";
+import { CONFIG_NAMESPACES } from "../../src/config.ts";
 import { VORSPANN_RUECKFALL } from "../../src/elevenlabs/vorspann-pruefung.js";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {

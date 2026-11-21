@@ -61,7 +61,7 @@ const SPEICHERSTAND_OHNE_PAUSE = Object.freeze({
   notifications: [],
 });
 fs.writeFileSync(SPEICHERDATEI, JSON.stringify(SPEICHERSTAND_OHNE_PAUSE));
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 Object.assign(config.server, { dataDir: DATENORDNER, webDistDir: path.join(DATENORDNER, "web") });
 config.auth.deployToken = TOKEN;
 const speicher = await import("../../src/store.js");

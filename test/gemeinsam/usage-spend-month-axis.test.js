@@ -37,7 +37,7 @@ const MICRO_PER_SUBCENT_TURN = 93_000;
 let config;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
 });
 
 async function freshJsonStore() {

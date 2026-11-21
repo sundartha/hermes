@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import {
   applyStripeWebhook,
   interpretStripeEvent,

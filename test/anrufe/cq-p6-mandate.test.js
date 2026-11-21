@@ -32,7 +32,7 @@ before(async () => {
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   await import("../../src/store.js");
   ({ systemPrompt, disclosureSentence, toolDefs } = await import("../../src/claude.js"));
 });

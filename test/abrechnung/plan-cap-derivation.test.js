@@ -22,7 +22,7 @@ before(async () => {
   ] = await importNachUmgebung(
     { MAX_BUDGET_EUR: "30", VOICE_TARIFF_DEFAULT_CENTS: "6" },
     () => import("../../src/store/pg.js"),
-    () => import("../../src/config.js"),
+    () => import("../../src/config.ts"),
     () => import("../../src/store/state-ops.js"),
     () => import("../../src/billing/subscribe.ts"),
     () => import("../../src/billing/webhook.ts"),

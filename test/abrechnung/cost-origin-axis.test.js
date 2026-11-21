@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { callTariffCentsPerMin, makeMetering } from "../../src/billing/metering.js";
 import { RESERVE_LEAD_MINUTES, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";

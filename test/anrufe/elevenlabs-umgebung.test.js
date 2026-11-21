@@ -34,13 +34,13 @@ test("EL-UMGEBUNG e: config.js liest ELEVENLABS_ENVIRONMENT und meldet nur unbek
   const gesetzt = process.env.ELEVENLABS_ENVIRONMENT;
   try {
     delete process.env.ELEVENLABS_ENVIRONMENT;
-    const ohne = await import("../../src/config.js?el-umgebung-ohne");
+    const ohne = await import("../../src/config.ts?el-umgebung-ohne");
     process.env.ELEVENLABS_ENVIRONMENT = "production";
-    const production = await import("../../src/config.js?el-umgebung-production");
+    const production = await import("../../src/config.ts?el-umgebung-production");
     process.env.ELEVENLABS_ENVIRONMENT = "staging";
-    const staging = await import("../../src/config.js?el-umgebung-staging");
+    const staging = await import("../../src/config.ts?el-umgebung-staging");
     process.env.ELEVENLABS_ENVIRONMENT = "Staging";
-    const unbekannt = await import("../../src/config.js?el-umgebung-unbekannt");
+    const unbekannt = await import("../../src/config.ts?el-umgebung-unbekannt");
 
     assert.deepEqual([ohne, production, staging, unbekannt].map(umgebungIn), [
       "production",
@@ -117,7 +117,7 @@ async function configMit(werte, laden) {
 }
 
 test("EL-UMGEBUNG f: Metrik-, SIP- und Instanz-Texte werden getrimmt uebernommen", async () => {
-  const config = await configMit(TEXT_GESETZT, () => import("../../src/config.js?text-gesetzt"));
+  const config = await configMit(TEXT_GESETZT, () => import("../../src/config.ts?text-gesetzt"));
 
   assert.deepEqual(
     [
@@ -134,7 +134,7 @@ test("EL-UMGEBUNG f: Metrik-, SIP- und Instanz-Texte werden getrimmt uebernommen
 });
 
 test("EL-UMGEBUNG g: fehlende Metrik- und SIP-Texte sind leer, die Instanz heisst wie der Rechner", async () => {
-  const config = await configMit({}, () => import("../../src/config.js?text-leer"));
+  const config = await configMit({}, () => import("../../src/config.ts?text-leer"));
 
   assert.deepEqual(
     [

@@ -14,7 +14,7 @@ const ERSATZ_NUMMER = "+12025550133";
 const JSON_KOPF = { "content-type": "application/json" };
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
 

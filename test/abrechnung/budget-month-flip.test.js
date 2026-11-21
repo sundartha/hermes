@@ -14,7 +14,7 @@ import {
   tenantBudgetSnapshot,
 } from "../../src/store/state-ops.js";
 import { emptyUsage } from "../../src/store.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { PRICES } from "../_prices.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";

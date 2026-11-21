@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, seedCall, warteAufEreignis, DOMESTIC_TEST_NUMBER } from "../helpers.js";

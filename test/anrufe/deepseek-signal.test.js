@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createLlmProvider } from "../../src/llm/registry.js";
 import { LLM_PROVIDER } from "../../src/llm/provider.ts";
 import { makeConfigOverrides } from "../helpers.js";

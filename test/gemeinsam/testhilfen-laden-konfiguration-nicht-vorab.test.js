@@ -6,7 +6,7 @@ import path from "node:path";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { importNachUmgebung } from "./umgebung-import.js";
 
-test("test/helpers.js lädt src/config.js nicht, startIdp läuft nach der danach gesetzten Umgebung", async (t) => {
+test("test/helpers.js lädt src/config.ts nicht, startIdp läuft nach der danach gesetzten Umgebung", async (t) => {
   const { startIdp } = await import("../helpers.js");
   const datenverzeichnis = fs.mkdtempSync(path.join(os.tmpdir(), "testhilfen-umgebung-"));
   t.after(() => {

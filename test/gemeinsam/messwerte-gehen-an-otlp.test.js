@@ -613,7 +613,7 @@ test("Messwerte direkt: die Konfiguration liefert getrimmte Telemetrie-Werte und
       RENDER_INSTANCE_ID: "  instanz-x  ",
       METRIKEN_INTERVALL_MS: String(KONFIG_INTERVALL_MS),
     },
-    () => import("../../src/config.js?telemetrie-mit-werten"),
+    () => import("../../src/config.ts?telemetrie-mit-werten"),
   );
   assert.equal(mitWerten.config.telemetry.telemetryOtlpUrl, "https://beispiel.invalid/otlp");
   assert.equal(mitWerten.config.telemetry.telemetryOtlpUser, "nutzer");
@@ -626,7 +626,7 @@ test("Messwerte direkt: die Konfiguration liefert getrimmte Telemetrie-Werte und
       RENDER_INSTANCE_ID: undefined,
       METRIKEN_INTERVALL_MS: undefined,
     },
-    () => import("../../src/config.js?telemetrie-ohne-werte"),
+    () => import("../../src/config.ts?telemetrie-ohne-werte"),
   );
   assert.equal(ohneWerte.config.telemetry.telemetryOtlpUrl, "");
   assert.equal(ohneWerte.config.telemetry.telemetryOtlpUser, "");
@@ -636,8 +636,8 @@ test("Messwerte direkt: die Konfiguration liefert getrimmte Telemetrie-Werte und
 
 test("Messwerte direkt: ein Intervall unter dem Minimum oder keine Zahl faellt auf 60000 zurueck und steht in den Konfigurationsfehlern", async () => {
   const faelle = [
-    [String(UNTER_MINIMUM_INTERVALL_MS), `Minimum ${MINIMUM_INTERVALL_MS}`, () => import("../../src/config.js?telemetrie-unter-minimum")],
-    ["abc", '"abc"', () => import("../../src/config.js?telemetrie-keine-zahl")],
+    [String(UNTER_MINIMUM_INTERVALL_MS), `Minimum ${MINIMUM_INTERVALL_MS}`, () => import("../../src/config.ts?telemetrie-unter-minimum")],
+    ["abc", '"abc"', () => import("../../src/config.ts?telemetrie-keine-zahl")],
   ];
   for (const [wert, erwartet, ladeFrisch] of faelle) {
     const frisch = await konfigurationMit({ METRIKEN_INTERVALL_MS: wert }, ladeFrisch);

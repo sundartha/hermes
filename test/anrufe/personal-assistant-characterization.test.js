@@ -22,7 +22,7 @@ before(async () => {
       ],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
   store.updateSettings(T_PERMISSIVE, { allowPersonalData: true, allowBankData: true });

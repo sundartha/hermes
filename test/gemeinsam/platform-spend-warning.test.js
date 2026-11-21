@@ -83,7 +83,7 @@ test("T6 unlesbares nowIso zweimal -> ZWEI Ereignisse, Marker bleibt unangetaste
 test("T7 Ephemeralitaet (json): platformSpendWarnedMonth erscheint NIE in data/store.json", async () => {
   const dataDir = tempDataDir();
   const file = path.join(dataDir, "store.json");
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   config.server.dataDir = dataDir;
   const jsonStore = await import("../../src/store.js");
 

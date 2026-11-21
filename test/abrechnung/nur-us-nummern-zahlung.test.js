@@ -18,7 +18,7 @@ const KUNDENLAENDER = [
 const SCHALTER_WERTE = ["", "US"];
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 
 function zahlungsEreignis(tenantId) {

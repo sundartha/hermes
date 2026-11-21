@@ -14,7 +14,7 @@ before(async () => {
       calls: [],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ isSideEffectOnlyTool, toolDefs } = await import("../../src/claude.js"));
 });
 

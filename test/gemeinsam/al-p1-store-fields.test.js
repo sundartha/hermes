@@ -10,7 +10,7 @@ let makePgStore, jsonStore, views, config, BOOTSTRAP, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-al-p1-store-"));
   process.env.DATA_DIR = dataDir;
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
   views = await import("../../src/store/views.ts");

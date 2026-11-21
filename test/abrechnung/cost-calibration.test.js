@@ -12,7 +12,7 @@ import {
   driftLine,
 } from "../../src/billing/cost-calibration.ts";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 

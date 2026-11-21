@@ -19,7 +19,7 @@ before(async () => {
   delete legacy.inboxEntryAt;
   delete legacy.inboxSeenAt;
   fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(seedState({ calls: [legacy] })));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));

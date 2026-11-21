@@ -18,7 +18,7 @@ import {
 import { makeCallLifecycle } from "../../src/telephony/call-lifecycle.ts";
 import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { VOICE_ENGINE } from "../../src/config.js";
+import { VOICE_ENGINE } from "../../src/config.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, waitUntilMitLauf, withFetch } from "../helpers.js";
