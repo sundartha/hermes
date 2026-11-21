@@ -142,6 +142,21 @@ test("Nummernkauf: ohne Vorab-Preis der Antwort gilt die Setup-Pauschale", async
   assert.deepEqual(holds, [SETUP_FEE_CENTS]);
 });
 
+test("Nummernkauf: ein nicht ganzzahliger Vorab-Preis der Antwort fällt auf die Setup-Pauschale zurück", async () => {
+  const { holds, job } = await mitKonfig(
+    { gruppe: "billing", schluessel: "providerToBucketRateMicro", wert: 2_000_000 },
+    () =>
+      kaufe(
+        preis({
+          upfrontMicroCents: ONE_UNIT_MICRO_CENTS + 0.5,
+          monthlyMicroCents: ONE_UNIT_MICRO_CENTS + 0.5,
+        }),
+      ),
+  );
+  assert.deepEqual(holds, [SETUP_FEE_CENTS]);
+  assert.equal(job.status, "done");
+});
+
 test("Nummernkauf: ein nicht-numerischer Umrechnungskurs in der Konfiguration stoppt den Kauf ohne Hold", async () => {
   const ergebnis = await mitKonfig(
     { gruppe: "billing", schluessel: "providerToBucketRateMicro", wert: "kaputt" },
