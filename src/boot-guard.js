@@ -53,7 +53,7 @@ export function sttProfileFindings(sttProfile) {
   return [
     {
       message:
-        `STT_PROFILE='${sttProfile}' ist unbekannt. Gueltig: ` +
+        `STT_PROFILE='${String(sttProfile)}' ist unbekannt. Gueltig: ` +
         `${Object.values(STT_PROFILE).join("|")}.`,
       fatal: true,
     },
@@ -100,7 +100,7 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
         fatal: false,
         message:
           `DEFAULT_TENANT_BUDGET_CENTS=0 (Sentinel: kein Tenant-Default) - jeder Tenant ` +
-          `ohne eigene tenant_budget-Zeile faellt auf MAX_BUDGET_EUR*100=${platformCapCents} ` +
+          `ohne eigene tenant_budget-Zeile faellt auf MAX_BUDGET_EUR*100=${String(platformCapCents)} ` +
           "als Pro-Tenant-Decke zurueck (effectiveCapCents Stufe 3).",
       },
     ];
@@ -113,10 +113,10 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
         code: SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
         fatal: true,
         message:
-          `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
-          `* ${RESERVE_LEAD_MINUTES} Vorlauf-Minuten) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
-          `- der teuerste Zielverkehr traegt unter dieser Decke nur noch ${maxDurationS}s Gespraech. ` +
-          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${reserveCents} anheben.`,
+          `Worst-Case-Reserve ${String(reserveCents)} Cent (VOICE_TARIFF_DEFAULT_CENTS=${String(maxTariffCents)} ` +
+          `* ${String(RESERVE_LEAD_MINUTES)} Vorlauf-Minuten) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${String(tenantDefaultCents)} ` +
+          `- der teuerste Zielverkehr traegt unter dieser Decke nur noch ${String(maxDurationS)}s Gespraech. ` +
+          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${String(reserveCents)} anheben.`,
       },
     ];
   }
@@ -140,7 +140,7 @@ export function stalePriceFindings(modelPricesUsd, todayIso) {
       fatal: false,
       message:
         `Preisstaffel '${modelId}' wurde am ${price.asOf} abgerufen (aelter als ` +
-        `${MODEL_PRICE_MAX_AGE_DAYS} Tage) - Raten gegen ${price.source} pruefen.`,
+        `${String(MODEL_PRICE_MAX_AGE_DAYS)} Tage) - Raten gegen ${price.source} pruefen.`,
     }));
 }
 
@@ -156,9 +156,9 @@ export function voiceTariffFloorFindings({ domesticTariffCents, fullCostFloorCen
       code: VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST,
       fatal: false,
       message:
-        `VOICE_TARIFF_DOMESTIC_CENTS=${domesticTariffCents} liegt unter der Vollkostenschwelle ` +
-        `VOICE_TARIFF_FULL_COST_FLOOR_CENTS=${fullCostFloorCents} (Abgleich-Deckung ${coveragePercent}%, ` +
-        `COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% - Kontext, seit KV2-10 kein ` +
+        `VOICE_TARIFF_DOMESTIC_CENTS=${String(domesticTariffCents)} liegt unter der Vollkostenschwelle ` +
+        `VOICE_TARIFF_FULL_COST_FLOOR_CENTS=${String(fullCostFloorCents)} (Abgleich-Deckung ${String(coveragePercent)}%, ` +
+        `COST_TRUING_MIN_COVERAGE_PERCENT=${String(minCoveragePercent)}% - Kontext, seit KV2-10 kein ` +
         "Ausloeser mehr) - der gesenkte Tarif ist der Buchungswert jedes nicht abgeglichenen Calls " +
         "und wird von der Messung nicht gedeckt.",
     },
@@ -182,8 +182,8 @@ export function providerRateOutOfBand(rateMicro) {
       code: PROVIDER_RATE_FINDING.OUT_OF_BAND,
       fatal: true,
       message:
-        `PROVIDER_TO_BUCKET_RATE_MICRO=${rateMicro} liegt ausserhalb des Toleranzbandes ` +
-        `${minMicro}..${maxMicro} (Anker ${PROVIDER_RATE_ANCHOR_MICRO} = 0,92 je Einheit). ` +
+        `PROVIDER_TO_BUCKET_RATE_MICRO=${String(rateMicro)} liegt ausserhalb des Toleranzbandes ` +
+        `${String(minMicro)}..${String(maxMicro)} (Anker ${String(PROVIDER_RATE_ANCHOR_MICRO)} = 0,92 je Einheit). ` +
         "Haeufigste Ursache: Zehnerpotenz-Vertipper (920 statt 920000). Der Kurs bewegt " +
         "seit der Korrekturbuchung Geld - der Start wird verweigert.",
     },
@@ -237,9 +237,9 @@ export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
       code: PLAN_CAP_FINDING.PLAN_CAP_WORST_CASE_UNAFFORDABLE,
       fatal: true,
       message:
-        `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
-        `* ${RESERVE_LEAD_MINUTES} Vorlauf-Minuten) uebersteigt die kleinste Plan-Decke ` +
-        `(${smallestCap.slug}=${smallestCap.capCents} Cent) - ein Tenant mit diesem Plan faellt ` +
+        `Worst-Case-Reserve ${String(reserveCents)} Cent (VOICE_TARIFF_DEFAULT_CENTS=${String(maxTariffCents)} ` +
+        `* ${String(RESERVE_LEAD_MINUTES)} Vorlauf-Minuten) uebersteigt die kleinste Plan-Decke ` +
+        `(${smallestCap.slug}=${String(smallestCap.capCents)} Cent) - ein Tenant mit diesem Plan faellt ` +
         "schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und " +
         "Reserve skalieren beide mit ihm. Abhilfe: inkludierte Minuten/Kopffreiheit des Plans " +
         "anheben (PLAN_CATALOG, PLAN_CAP_HEADROOM).",
@@ -254,7 +254,7 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
 });
 
 export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
-  return Boolean(brevoApiKey || smtpHost);
+  return Boolean(brevoApiKey) || Boolean(smtpHost);
 }
 
 export const ALARM_KANAL = Object.freeze({ MAIL: "mail", SMS: "sms", KEINE: "keine" });
@@ -400,7 +400,7 @@ export function costTruingBookingFindings({
       code: COST_TRUING_BOOKING_FINDING.COVERAGE_BELOW_THRESHOLD,
       fatal: false,
       message:
-        `Deckungsquote ${coveragePercent}% liegt unter COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% ` +
+        `Deckungsquote ${String(coveragePercent)}% liegt unter COST_TRUING_MIN_COVERAGE_PERCENT=${String(minCoveragePercent)}% ` +
         "- Korrekturbuchungen laufen auf einer duennen Datenlage.",
     });
   }
@@ -452,7 +452,7 @@ export const EL_INBOUND_ACCESS_FINDING = Object.freeze({
 });
 
 function zugangsMangelText(defekt) {
-  return `${defekt.envKey} ${defekt.mangel}`;
+  return `${defekt.envKey} ${String(defekt.mangel)}`;
 }
 
 export function elInboundAccessFindings(inbound) {
@@ -547,7 +547,7 @@ function allowlistFindings(allowedOrigins) {
       code: ANGEKUENDIGTER_ORIGIN_FINDING.ALLOWLIST_UNPARSBAR,
       fatal: true,
       message:
-        `MCP_ALLOWED_ORIGINS: Eintrag ${position} ist kein absoluter http(s)-Origin ` +
+        `MCP_ALLOWED_ORIGINS: Eintrag ${String(position)} ist kein absoluter http(s)-Origin ` +
         "(erwartet z.B. https://chatgpt.com, ohne Pfad). Der Wert wird bewusst nicht geloggt.",
     }));
 }
