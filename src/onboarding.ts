@@ -36,7 +36,7 @@ interface Kandidat {
 }
 
 interface OnboardingProvisioner {
-  searchNumbers: (suche: { countryCode: string | undefined; type: string | undefined; limit: number }) => Promise<Kandidat[]>;
+  searchNumbers: (suche: { countryCode: string; type: string | undefined; limit: number }) => Promise<Kandidat[]>;
   orderNumber: (bestellung: {
     e164: string;
     connectionId: string | undefined;
@@ -82,7 +82,7 @@ interface OnboardingDeps {
 
 interface ProvisionAuftrag {
   numberId: string;
-  countryCode: string | undefined;
+  countryCode: string;
   connectionId?: string | undefined;
   type?: string | undefined;
   holdAmountCents: number;
@@ -224,7 +224,7 @@ async function findPurchasableNumber(
     provisioner,
     countryCode,
     type,
-  }: { provisioner: OnboardingProvisioner; countryCode: string | undefined; type: string | undefined },
+  }: { provisioner: OnboardingProvisioner; countryCode: string; type: string | undefined },
 ) {
   try {
     assertKaufbaresLand(countryCode, "provisionNumber");
@@ -235,7 +235,7 @@ async function findPurchasableNumber(
     });
     const candidate = candidates[0];
     if (!candidate)
-      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${String(countryCode)} verfuegbar`);
+      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
     assertKaufbareRufnummer(candidate.e164, "provisionNumber");
     return candidate;
   } catch (err) {
