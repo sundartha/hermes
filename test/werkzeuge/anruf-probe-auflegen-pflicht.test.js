@@ -14,8 +14,6 @@ function auflegen(umgebung) {
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
     STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
-    STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
-    STAGING_PROBE_VORNAME: "Anna",
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify({ eigeneNummer: ZIEL, offene: 3 }),
     ...umgebung,

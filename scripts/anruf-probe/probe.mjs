@@ -10,7 +10,8 @@ const MAX_ERSTVERSUCHE = 5;
 const MAX_ANRUFE = 10;
 const ANRUFE_JE_PROBE = 2;
 const ALARMWEGE = ["SLACK_ALERT_URL", "BETTER_STACK_ALERT_URL"];
-const PFLICHT = ["STAGING_PROBE_ZIEL", "STAGING_TEST_TOKEN", "STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"];
+const PFLICHT_AUFLEGEN = ["STAGING_PROBE_ZIEL", "STAGING_TEST_TOKEN"];
+const PFLICHT = [...PFLICHT_AUFLEGEN, "STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"];
 const COMMIT = /^[0-9a-f]{40}$/;
 const EXIT_ROT = 1;
 const ECHTE_UHR = Object.freeze({
@@ -122,7 +123,7 @@ async function ausgangMelden(ergebnis) {
 }
 
 async function auflegen() {
-  const fehlt = PFLICHT.find((name) => !env[name]);
+  const fehlt = PFLICHT_AUFLEGEN.find((name) => !env[name]);
   if (fehlt !== undefined) return uebersprungen(fehlt);
   const modul = await modulLaden();
   if (modul === null) {
