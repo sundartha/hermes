@@ -17,8 +17,9 @@ const SPERRE_ART = Object.freeze({
   lesen: "LOCK TABLE call IN ACCESS EXCLUSIVE MODE",
 });
 const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
-const SPERREN_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory'";
-const SPERRE_WARTET_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted";
+const EIGENE_DATENBANK_SQL = "database = (SELECT oid FROM pg_database WHERE datname = current_database())";
+const SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND ${EIGENE_DATENBANK_SQL}`;
+const SPERRE_WARTET_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND ${EIGENE_DATENBANK_SQL}`;
 const ANRUF_SPERRE_NAMENSRAUM = 2667;
 const ROLLE_SQL = `SELECT DISTINCT usename FROM pg_stat_activity
   WHERE datname = current_database() AND usename <> current_user`;
