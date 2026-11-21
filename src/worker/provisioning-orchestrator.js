@@ -68,12 +68,40 @@ export function makeProvisioningOrchestrator({
     return queue.enqueue(auftrag);
   }
 
+  async function jobAnlegen(zustand, eingabe) {
+    const inDatenbank = await bereiche.nummernkauf.legeAuftragAn({
+      ...eingabe,
+      number: findNumber(zustand, eingabe.numberId),
+      jetztIso: new Date().toISOString(),
+    });
+    if (!inDatenbank) return recordProvisioningJob(zustand, eingabe);
+    const vorhanden = zustand.provisioningJobs.find((job) => job.idempotencyKey === eingabe.idempotencyKey);
+    if (vorhanden) return vorhanden;
+    zustand.provisioningJobs.push(inDatenbank);
+    return inDatenbank;
+  }
+
+  async function nummerUnterSperre(zustand, ergebnis, tenantId) {
+    if (!ergebnis.ok || ergebnis.reason === PROVISION_REASON.REDRIVE) return null;
+    const zurueck = () => zustand.numbers.splice(zustand.numbers.indexOf(ergebnis.number), 1);
+    let gebucht;
+    try {
+      gebucht = await bereiche.nummernkauf.legeNummerAn({ tenantId, number: ergebnis.number });
+    } catch (fehler) {
+      zurueck();
+      throw fehler;
+    }
+    if (!gebucht || gebucht.ok) return null;
+    zurueck();
+    return { ok: false, reason: PROVISION_REASON.ALREADY_PROVISIONED };
+  }
+
   async function queueProvisioning(numberId, tenantId) {
     const idempotencyKey = `provision_${numberId}`;
     return store
-      .withStoreLock(() => {
+      .withStoreLock(async () => {
         const s = store.load();
-        const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
+        const job = await jobAnlegen(s, { numberId, tenantId, idempotencyKey });
         store.save();
         return { ok: true, jobId: job.id };
       })
@@ -91,7 +119,7 @@ export function makeProvisioningOrchestrator({
     await bereiche.nummernkauf.ensureTenant(tenantId);
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
-      .withStoreLock(() => {
+      .withStoreLock(async () => {
         const s = store.load();
         const r = resolveProvisionRetry(s, {
           tenantId,
@@ -100,6 +128,8 @@ export function makeProvisioningOrchestrator({
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
+        const abgelehnt = await nummerUnterSperre(s, r, tenantId);
+        if (abgelehnt) return abgelehnt;
         if (shouldPersistProvisionResult(r)) {
           store.save();
           store.stammdatenSchreiben?.(tenantId, SKIP_VERMERK_SCHLUESSEL);

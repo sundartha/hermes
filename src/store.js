@@ -298,6 +298,7 @@ export const {
   stammdatenSchreiben,
   rueckfrageGelesen,
   ausfallSql,
+  nummernSql,
   load,
   save,
   drainFlushes,
