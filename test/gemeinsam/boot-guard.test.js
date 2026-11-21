@@ -7,6 +7,16 @@ import {
   meterMappingGaps,
   alertChannelFindings,
   bootstrapHealDecision,
+  sttProfileFindings,
+  spendCapCoherence,
+  stalePriceFindings,
+  voiceTariffFloorFindings,
+  providerRateOutOfBand,
+  planCapReserveFindings,
+  costTruingBookingFindings,
+  elInboundAccessFindings,
+  angekuendigterOriginFindings,
+  mailerKonstruierbar,
   ALERT_CHANNEL_FINDING,
   BOOTSTRAP_HEAL,
 } from "../../src/boot-guard.js";
@@ -250,4 +260,82 @@ test("alertChannelFindings: mit Warnschwelle ueber null, Zahlung und ohne Kanal 
     alertChannelFindings({ ...ohneKanal, paymentEnabled: true, platformSpendWarnPercent: 1 }).map(({ code, fatal }) => ({ code, fatal })),
     [{ code: ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING, fatal: true }],
   );
+});
+
+const meldungen = (befunde) => befunde.map(({ message }) => message);
+
+test("Meldungstext: unbekanntes STT-Profil nennt den Wert", () => {
+  assert.deepEqual(meldungen(sttProfileFindings("zzz")), ["STT_PROFILE='zzz' ist unbekannt. Gueltig: accurate."]);
+});
+
+test("Meldungstext: Tenant-Default 0 nennt die Plattform-Decke", () => {
+  assert.deepEqual(
+    meldungen(spendCapCoherence({ tenantDefaultCents: 0, platformCapCents: 700, maxTariffCents: 30 })),
+    ["DEFAULT_TENANT_BUDGET_CENTS=0 (Sentinel: kein Tenant-Default) - jeder Tenant ohne eigene tenant_budget-Zeile faellt auf MAX_BUDGET_EUR*100=700 als Pro-Tenant-Decke zurueck (effectiveCapCents Stufe 3)."],
+  );
+});
+
+test("Meldungstext: Worst-Case-Reserve ueber der Tenant-Decke nennt alle Zahlen", () => {
+  assert.deepEqual(
+    meldungen(spendCapCoherence({ tenantDefaultCents: 50, platformCapCents: 700, maxTariffCents: 30 })),
+    ["Worst-Case-Reserve 60 Cent (VOICE_TARIFF_DEFAULT_CENTS=30 * 2 Vorlauf-Minuten) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=50 - der teuerste Zielverkehr traegt unter dieser Decke nur noch 60s Gespraech. Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens 60 anheben."],
+  );
+});
+
+test("Meldungstext: veraltete Preisstaffel nennt die 90 Tage", () => {
+  assert.deepEqual(
+    meldungen(stalePriceFindings({ m1: { asOf: "2026-01-01", source: "src-x" } }, "2026-11-01")),
+    ["Preisstaffel 'm1' wurde am 2026-01-01 abgerufen (aelter als 90 Tage) - Raten gegen src-x pruefen."],
+  );
+});
+
+test("Meldungstext: Tarif unter der Vollkostenschwelle nennt Tarif, Schwelle und Deckung", () => {
+  assert.deepEqual(
+    meldungen(voiceTariffFloorFindings({ domesticTariffCents: 20, fullCostFloorCents: 30, coveragePercent: 55, minCoveragePercent: 80 })),
+    ["VOICE_TARIFF_DOMESTIC_CENTS=20 liegt unter der Vollkostenschwelle VOICE_TARIFF_FULL_COST_FLOOR_CENTS=30 (Abgleich-Deckung 55%, COST_TRUING_MIN_COVERAGE_PERCENT=80% - Kontext, seit KV2-10 kein Ausloeser mehr) - der gesenkte Tarif ist der Buchungswert jedes nicht abgeglichenen Calls und wird von der Messung nicht gedeckt."],
+  );
+});
+
+test("Meldungstext: Anbieterkurs ausserhalb des Bandes nennt Band und Anker", () => {
+  assert.deepEqual(
+    meldungen(providerRateOutOfBand(5)),
+    ["PROVIDER_TO_BUCKET_RATE_MICRO=5 liegt ausserhalb des Toleranzbandes 460000..1840000 (Anker 920000 = 0,92 je Einheit). Haeufigste Ursache: Zehnerpotenz-Vertipper (920 statt 920000). Der Kurs bewegt seit der Korrekturbuchung Geld - der Start wird verweigert."],
+  );
+});
+
+test("Meldungstext: Reserve ueber der kleinsten Plan-Decke nennt Plan und Zahlen", () => {
+  assert.deepEqual(
+    meldungen(planCapReserveFindings({ slugs: ["a"], capForSlug: () => 10, maxTariffCents: 30 })),
+    ["Worst-Case-Reserve 60 Cent (VOICE_TARIFF_DEFAULT_CENTS=30 * 2 Vorlauf-Minuten) uebersteigt die kleinste Plan-Decke (a=10 Cent) - ein Tenant mit diesem Plan faellt schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und Reserve skalieren beide mit ihm. Abhilfe: inkludierte Minuten/Kopffreiheit des Plans anheben (PLAN_CATALOG, PLAN_CAP_HEADROOM)."],
+  );
+});
+
+test("Meldungstext: Beleg-Buchung nennt Belegtypen und Deckungsquote", () => {
+  assert.deepEqual(
+    meldungen(costTruingBookingFindings({ requiredRecordTypes: ["x"], assignableRecordTypes: ["y"], coveragePercent: 55, minCoveragePercent: 80 })),
+    [
+      "COST_TRUING_REQUIRED_RECORD_TYPES fordert x - kein zuordenbarer Belegtyp. Zuordenbar sind exakt: y.",
+      "Deckungsquote 55% liegt unter COST_TRUING_MIN_COVERAGE_PERCENT=80% - Korrekturbuchungen laufen auf einer duennen Datenlage.",
+    ],
+  );
+});
+
+test("Meldungstext: unvollstaendiger EL-Inbound-Zugang nennt jeden Mangel", () => {
+  assert.deepEqual(
+    meldungen(elInboundAccessFindings({ sipUser: "", sipPassword: "", initWebhookToken: "" })),
+    ["Der Zugang des EL-Inbound-Wegs ist unvollstaendig: ELEVENLABS_INBOUND_SIP_USER fehlt, ELEVENLABS_INBOUND_SIP_PASSWORD fehlt, ELEVENLABS_INIT_WEBHOOK_TOKEN fehlt. Handlung: die Geheimnisse per Skript-Lauf neu setzen."],
+  );
+});
+
+test("Meldungstext: unparsbarer Allowlist-Eintrag nennt die Position", () => {
+  assert.deepEqual(
+    meldungen(angekuendigterOriginFindings({ publicUrl: "https://a.b", allowedOrigins: ["https://ok.de", "nix"] })),
+    ["MCP_ALLOWED_ORIGINS: Eintrag 2 ist kein absoluter http(s)-Origin (erwartet z.B. https://chatgpt.com, ohne Pfad). Der Wert wird bewusst nicht geloggt."],
+  );
+});
+
+test("mailerKonstruierbar: ein gesetzter Wert genuegt, beide leer nicht", () => {
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "", smtpHost: "h" }), true);
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "k", smtpHost: "" }), true);
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "", smtpHost: "" }), false);
 });
