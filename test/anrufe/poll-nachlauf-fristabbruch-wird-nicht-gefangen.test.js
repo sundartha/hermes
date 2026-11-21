@@ -83,3 +83,28 @@ test("Ein Schreibfehler, dessen Text von einer Frist spricht, aber kein Fristabb
   assert.deepEqual(freigegeben, [call.id]);
   assert.deepEqual(gebucht, [1]);
 });
+
+for (const [name, ablehnen] of [["null", () => Promise.reject(null)], ["undefined", () => Promise.reject(undefined)]]) {
+  test(`Scheitert das Sichern im Nachlauf mit ${name}, wird es gemeldet; Anrufende und Freigabe laufen`, async () => {
+    const state = leererZustand();
+    const call = seedAusgehenderElCall(state, { answeredVorS: LAUFZEIT_S, mitGespraech: true });
+    const freigegeben = [];
+    const { el, store, gebucht } = baueHarness(state);
+    store.addActionItem = ablehnen;
+    store.leitungsplaetze = { freigeben: (id) => freigegeben.push(id) };
+    const zeilen = await fehlerausgabeVonAsync(() =>
+      withFetch(
+        async () => ({ ok: true, status: HTTP_OK, json: async () => GESPRAECH }),
+        async () => {
+          await el.abfrageDurchLauf(call.id);
+          await waitUntil(() => freigegeben.length > 0);
+        },
+      ),
+    );
+
+    assert.ok(zeilen.some((z) => z.includes("[el-nachlauf] Anbieter-Ergebnis nicht gesichert") && z.includes(`call=${call.id}`)), zeilen.join("\n"));
+    assert.equal(call.status, "completed");
+    assert.deepEqual(freigegeben, [call.id]);
+    assert.deepEqual(gebucht, [1]);
+  });
+}
