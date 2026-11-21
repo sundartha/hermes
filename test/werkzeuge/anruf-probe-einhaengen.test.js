@@ -39,6 +39,7 @@ function aufrufen({ umgebung = {}, argumente = [], fall = {} } = {}) {
     GITHUB_SHA: COMMIT,
     STAGING_URL: BASIS,
     STAGING_PROBE_ZIEL: ZIEL,
+    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
     SLACK_ALERT_URL: "http://127.0.0.1:1/x",
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify({ eigeneNummer: ZIEL, stand: { erstversuche: 0, anrufe: 0 }, messungen: [GUT], ...fall }),

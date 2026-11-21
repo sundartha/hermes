@@ -191,6 +191,7 @@ async function probeLaufen(messungen, umgebung = {}) {
     GITHUB_API_URL: `http://127.0.0.1:${github}`,
     STAGING_URL: BASIS,
     STAGING_PROBE_ZIEL: ZIEL,
+    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_TELNYX_KEY: PROBE_TELNYX_SCHLUESSEL,
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify({ eigeneNummer: ZIEL, stand: { erstversuche: 0, anrufe: 0 }, messungen }),
