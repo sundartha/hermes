@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "child_process";
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import dns from "node:dns";
 import fs from "fs";
 import http from "node:http";
@@ -482,6 +483,35 @@ export async function waitUntil(
   }
 }
 
+const EREIGNIS_AENDERUNG = "aenderung";
+
+export function warteAufEreignis(quellen, bedingung, { timeoutMs = WAIT_UNTIL_DEFAULT_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    const abmelden = () => {
+      clearTimeout(frist);
+      for (const quelle of quellen) quelle.off(EREIGNIS_AENDERUNG, pruefen);
+    };
+    const beenden = (fehler) => {
+      abmelden();
+      if (fehler) reject(fehler);
+      else resolve();
+    };
+    function pruefen() {
+      try {
+        if (bedingung()) beenden();
+      } catch (fehler) {
+        beenden(fehler);
+      }
+    }
+    const frist = setTimeout(
+      () => beenden(new Error("Bedingung nicht innerhalb der Testfrist erreicht")),
+      timeoutMs,
+    );
+    for (const quelle of quellen) quelle.on(EREIGNIS_AENDERUNG, pruefen);
+    pruefen();
+  });
+}
+
 export async function waitUntilMitLauf(el, callId, predicate) {
   await waitUntil(() => {
     void el.abfrageDurchLauf(callId);
@@ -940,8 +970,17 @@ export async function startServer({
   });
 
   const output = { text: "" };
-  child.stdout.on("data", (d) => (output.text += d.toString()));
-  child.stderr.on("data", (d) => (output.text += d.toString()));
+  const ereignisse = new EventEmitter();
+  const anhaengen = (d) => {
+    output.text += d.toString();
+    ereignisse.emit(EREIGNIS_AENDERUNG);
+  };
+  child.stdout.on("data", anhaengen);
+  child.stderr.on("data", anhaengen);
+  const speicherWache = fs.watch(dataDir, (_art, name) => {
+    if (name === "store.json") ereignisse.emit(EREIGNIS_AENDERUNG);
+  });
+  child.once("exit", () => speicherWache.close());
 
   const port = await new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -970,6 +1009,7 @@ export async function startServer({
     localUrl: `http://localhost:${port}`,
     externalUrl: externalIp() ? `http://${externalIp()}:${port}` : null,
     vorspannAttrappe: fahrzeug.attrappe,
+    ereignisse,
     get stdout() {
       return output.text;
     },
@@ -977,6 +1017,7 @@ export async function startServer({
       return JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
     },
     async stop() {
+      speicherWache.close();
       await fahrzeug.close();
       if (child.exitCode !== null) return;
       const exited = new Promise((resolve) => child.once("exit", resolve));
