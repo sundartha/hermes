@@ -23,13 +23,79 @@ import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.ts";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "./store.js";
 import { fehlerText } from "./utils/fehler-text.ts";
 
+type OnboardingState = Parameters<typeof beginProvisioning>[0] &
+  Parameters<typeof activateNumber>[0] &
+  Parameters<typeof attachNumberPaymentIntent>[0] &
+  Parameters<typeof tenantStripe>[0];
+type OnboardingNumber = ReturnType<typeof activateNumber>;
+type ProviderPreis = Parameters<typeof holdAmountForProviderPrice>[0];
+
+interface Kandidat {
+  e164: string;
+  price?: ProviderPreis;
+}
+
+interface OnboardingProvisioner {
+  searchNumbers: (suche: { countryCode: string | undefined; type: string | undefined; limit: number }) => Promise<Kandidat[]>;
+  orderNumber: (bestellung: {
+    e164: string;
+    connectionId: string | undefined;
+    idempotencyKey: string;
+  }) => Promise<{ e164: string; providerNumberId: string }>;
+  releaseNumber: (providerNumberId: string) => Promise<unknown>;
+}
+
+interface OnboardingBilling {
+  placeHold: (hold: {
+    tenantRef: string;
+    amountCents: number;
+    currency: string | undefined;
+    customerId: string | null;
+    paymentMethodId: string | null;
+    idempotencyKey: string;
+  }) => Promise<{ paymentIntentId: string }>;
+  captureHold: (paymentIntentId: string | null, amountCents: number) => Promise<unknown>;
+  cancelHold: (paymentIntentId: string | null) => Promise<unknown>;
+}
+
+interface OnboardingSipRegistrar {
+  ensureRegistration: (nummer: { e164: string | null; numberId: string }) => Promise<{ phoneNumberId: string; angelegt: boolean }>;
+}
+
+interface OnboardingInboundTrunkSchreiber {
+  ensureInboundTrunk: (number: OnboardingNumber) => Promise<string>;
+  zugangFp: string;
+}
+
+interface OnboardingLogger {
+  log: (zeile: string) => void;
+  warn: (zeile: string) => void;
+}
+
+interface OnboardingDeps {
+  provisioner: OnboardingProvisioner;
+  billing?: OnboardingBilling | null | undefined;
+  sipRegistrar?: OnboardingSipRegistrar | null | undefined;
+  inboundTrunkSchreiber?: OnboardingInboundTrunkSchreiber | null | undefined;
+  logger?: OnboardingLogger;
+}
+
+interface ProvisionAuftrag {
+  numberId: string;
+  countryCode: string | undefined;
+  connectionId?: string | undefined;
+  type?: string | undefined;
+  holdAmountCents: number;
+  currency?: string | undefined;
+}
+
 const PROVISION_SEARCH_LIMIT = 10;
 
 export async function provisionNumber(
-  state,
-  deps,
-  { numberId, countryCode, connectionId, type, holdAmountCents, currency },
-) {
+  state: OnboardingState,
+  deps: OnboardingDeps,
+  { numberId, countryCode, connectionId, type, holdAmountCents, currency }: ProvisionAuftrag,
+): Promise<OnboardingNumber> {
   const { provisioner, billing, sipRegistrar, inboundTrunkSchreiber, logger = console } = deps;
   const number = findNumber(state, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
@@ -46,8 +112,8 @@ export async function provisionNumber(
 
   const effectiveHoldCents = holdAmountForProviderPrice(candidate.price, holdAmountCents);
 
-  let paymentIntentId = null;
-  let setupFeeExempt = false;
+  let paymentIntentId: string | null = null;
+  let setupFeeExempt: unknown = false;
   if (billing) {
     ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(state, numberId, {
       tenantId: number.tenantId,
@@ -107,7 +173,11 @@ export async function provisionNumber(
   return activatedNumber;
 }
 
-async function registriereNummerFailSoft(state, number, { sipRegistrar, logger = console }) {
+async function registriereNummerFailSoft(
+  state: OnboardingState,
+  number: OnboardingNumber,
+  { sipRegistrar, logger = console }: { sipRegistrar: OnboardingSipRegistrar | null | undefined; logger?: OnboardingLogger },
+) {
   if (!sipRegistrar || number.providerAgentPhoneNumberId) return;
   try {
     const { phoneNumberId, angelegt } = await sipRegistrar.ensureRegistration({
@@ -123,7 +193,14 @@ async function registriereNummerFailSoft(state, number, { sipRegistrar, logger =
   }
 }
 
-async function schreibeInboundTrunkFailSoft(state, number, { inboundTrunkSchreiber, logger = console }) {
+async function schreibeInboundTrunkFailSoft(
+  state: OnboardingState,
+  number: OnboardingNumber,
+  {
+    inboundTrunkSchreiber,
+    logger = console,
+  }: { inboundTrunkSchreiber: OnboardingInboundTrunkSchreiber | null | undefined; logger?: OnboardingLogger },
+) {
   if (!inboundTrunkSchreiber || !number.providerAgentPhoneNumberId) return;
   try {
     const beleg = await inboundTrunkSchreiber.ensureInboundTrunk(number);
@@ -140,7 +217,15 @@ async function schreibeInboundTrunkFailSoft(state, number, { inboundTrunkSchreib
   }
 }
 
-async function findPurchasableNumber(state, numberId, { provisioner, countryCode, type }) {
+async function findPurchasableNumber(
+  state: OnboardingState,
+  numberId: string,
+  {
+    provisioner,
+    countryCode,
+    type,
+  }: { provisioner: OnboardingProvisioner; countryCode: string | undefined; type: string | undefined },
+) {
   try {
     assertKaufbaresLand(countryCode, "provisionNumber");
     const candidates = await provisioner.searchNumbers({
@@ -150,7 +235,7 @@ async function findPurchasableNumber(state, numberId, { provisioner, countryCode
     });
     const candidate = candidates[0];
     if (!candidate)
-      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
+      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${String(countryCode)} verfuegbar`);
     assertKaufbareRufnummer(candidate.e164, "provisionNumber");
     return candidate;
   } catch (err) {
@@ -159,7 +244,7 @@ async function findPurchasableNumber(state, numberId, { provisioner, countryCode
   }
 }
 
-function requireTenantCard(state, numberId, tenantId) {
+function requireTenantCard(state: OnboardingState, numberId: string, tenantId: string) {
   const card = tenantStripe(state, tenantId);
   if (!card.customerId || !card.paymentMethodId) {
     failNumber(state, numberId);
@@ -175,7 +260,7 @@ function requireTenantCard(state, numberId, tenantId) {
   return card;
 }
 
-async function cancelHoldIfHeld(billing, paymentIntentId) {
+async function cancelHoldIfHeld(billing: OnboardingBilling | null | undefined, paymentIntentId: string | null) {
   if (!billing || !paymentIntentId) return;
   try {
     await billing.cancelHold(paymentIntentId);
@@ -184,9 +269,14 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 }
 
 async function placeSetupFeeHold(
-  state,
-  numberId,
-  { tenantId, billing, holdAmountCents, currency },
+  state: OnboardingState,
+  numberId: string,
+  {
+    tenantId,
+    billing,
+    holdAmountCents,
+    currency,
+  }: { tenantId: string; billing: OnboardingBilling; holdAmountCents: number; currency: string | undefined },
 ) {
   const { numberSetupFeeExempt: exempt } = tenantSubscription(state, tenantId);
   const { customerId, paymentMethodId } = tenantStripe(state, tenantId);
@@ -210,9 +300,14 @@ async function placeSetupFeeHold(
 }
 
 async function settleSetupFeeHold(
-  state,
-  numberId,
-  { billing, paymentIntentId, holdAmountCents, exempt },
+  state: OnboardingState,
+  numberId: string,
+  {
+    billing,
+    paymentIntentId,
+    holdAmountCents,
+    exempt,
+  }: { billing: OnboardingBilling; paymentIntentId: string | null; holdAmountCents: number; exempt: unknown },
 ) {
   beginCapturing(state, numberId);
   if (exempt) return billing.cancelHold(paymentIntentId);
@@ -220,9 +315,27 @@ async function settleSetupFeeHold(
 }
 
 async function rollbackAfterOrder(
-  state,
-  numberId,
-  { provisioner, providerNumberId, e164, number, tenantId, billing, paymentIntentId, logger },
+  state: OnboardingState,
+  numberId: string,
+  {
+    provisioner,
+    providerNumberId,
+    e164,
+    number,
+    tenantId,
+    billing,
+    paymentIntentId,
+    logger,
+  }: {
+    provisioner: OnboardingProvisioner;
+    providerNumberId: string;
+    e164: string;
+    number: OnboardingNumber;
+    tenantId: string;
+    billing: OnboardingBilling;
+    paymentIntentId: string | null;
+    logger: OnboardingLogger;
+  },
 ) {
   failNumber(state, numberId);
   if (e164 && numberBusyReason(state, { ...number, e164 }, { forTenantId: tenantId })) {

@@ -1,4 +1,4 @@
-import { provisionNumber } from "../onboarding.js";
+import { provisionNumber } from "../onboarding.ts";
 import { searchParamsForCountry } from "../telephony/provisioning-geo.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { performNumberRelease } from "../release-reconcile.ts";
