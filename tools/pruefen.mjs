@@ -598,11 +598,22 @@ function mutantenZeile({ datei, offset }) {
 }
 
 function ausgabeKurz(ausgabe) {
-  return ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN).map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
+  const zeilen = ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN);
+  return zeilen.map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
 }
 
 export function basisRotZeilen({ schluessel, ausgeschlossen = [], basisRotAusgabe = {} }) {
   return ausgeschlossen.flatMap((datei) => [`Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`, ...(basisRotAusgabe[datei] ? [basisRotAusgabe[datei]] : [])]);
+}
+
+function ausgeschlossenFelder(ausgeschlossen, basisRotAusgabe) {
+  return { ...(ausgeschlossen.length > 0 && { ausgeschlossen }), ...(Object.keys(basisRotAusgabe).length > 0 && { basisRotAusgabe }) };
+}
+
+async function kontrolleOhneMutant(datei, lauf, beendet) {
+  let kontrolllauf = { gruen: false };
+  for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !kontrolllauf.gruen && !beendet(); kontrolle += 1) kontrolllauf = await testdateiGruen(datei, { mitMutant: false, mitAusgabe: true }, lauf);
+  return kontrolllauf;
 }
 
 async function mutantGegenTests(plan) {
@@ -633,8 +644,7 @@ async function mutantGegenTests(plan) {
     if (beendet()) return;
     const ersterLauf = await testdateiGruen(datei, { mitMutant: true, fristMs: testdateiFristMs }, lauf);
     if (ersterLauf.gruen || beendet()) return;
-    let kontrolllauf = { gruen: false };
-    for (let kontrolle = 0; kontrolle < KONTROLLLAEUFE && !kontrolllauf.gruen && !beendet(); kontrolle += 1) kontrolllauf = await testdateiGruen(datei, { mitMutant: false, mitAusgabe: true }, lauf);
+    const kontrolllauf = await kontrolleOhneMutant(datei, lauf, beendet);
     if (beendet()) return;
     if (!kontrolllauf.gruen) {
       basisRot.add(datei);
@@ -660,7 +670,7 @@ async function mutantGegenTests(plan) {
   clearTimeout(fristUhr);
   writeFileSync(plan.basisRot, JSON.stringify([...basisRot]));
   const urteil = stand.test === null ? { ergebnis: stand.frist ? "nicht geprüft (Frist)" : "überlebt", ...(stand.liefNoch.length > 0 && { liefNoch: stand.liefNoch }), ...(!stand.frist && gekuerzt !== undefined && { gekuerzt }) } : { ergebnis: GETOETET, test: stand.test };
-  return { ...urteil, ...(ausgeschlossen.length > 0 && { ausgeschlossen }), ...(Object.keys(basisRotAusgabe).length > 0 && { basisRotAusgabe }), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
+  return { ...urteil, ...ausgeschlossenFelder(ausgeschlossen, basisRotAusgabe), dauer: Math.round((Date.now() - start) / SEKUNDE_MS), laeufe: lauf.gestartet.length };
 }
 
 const teilNummer = () => Number(env.TEIL ?? 0);

@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { basisRotZeilen } from "../../tools/pruefen.mjs";
 
 const PRUEFEN = resolve(import.meta.dirname, "../../tools/pruefen.mjs");
+const FRIST = Date.parse("2100-01-01");
 const TESTLAUF = [
   "const datei = process.argv[3];",
   "const mutant = process.env.__STRYKER_ACTIVE_MUTANT__;",
@@ -31,10 +32,11 @@ function lauf(tests) {
   try {
     mkdirSync(join(ordner, "test"));
     writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF);
-    const plan = { frist: Date.now() + 15_000, testdateiFrist: 5000, tests, dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+    const plan = { frist: FRIST, testdateiFrist: 5000, tests, dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
     writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
     spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, timeout: 20_000, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: "1", MUTATION_PLAN: join(ordner, "plan.json") } });
-    return JSON.parse(readFileSync(plan.protokoll, "utf8").trim().split("\n")[0]);
+    const [erste] = readFileSync(plan.protokoll, "utf8").trim().split("\n");
+    return JSON.parse(erste);
   } finally {
     rmSync(ordner, { recursive: true, force: true });
   }
