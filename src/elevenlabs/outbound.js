@@ -629,7 +629,7 @@ async function finishFromConversationOnce({ store, terminateAndBillCall, billThu
   try {
     await persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik, stimmenAnzahlFuer });
   } catch (fehler) {
-    console.error(ERGEBNIS_SICHERN_FEHLER, callId, String(fehler));
+    console.error(ERGEBNIS_SICHERN_FEHLER, `(call=${callId})`, String(fehler));
   }
   const vorlaeufig = ankerFuerPolitik(politik, answeredAnchorOutcome(new Date(nowMs).toISOString(), conversation));
   const status = endeGrundFuer(vorlaeufig, conversation) ? CALL_FAILED : endStatusOf(conversation);
