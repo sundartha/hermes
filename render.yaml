@@ -340,10 +340,6 @@ services:
         value: "false"
       - key: WEB_DIST_DIR
         value: "apps/web/dist"
-      - key: MACHINE_DETECTION_ENABLED
-        value: "false"
-      - key: MACHINE_DETECTION_TIMEOUT_S
-        value: "5"
       - key: SEND_SMS_SUMMARY
         value: "true"
       - key: PUBLIC_URL
