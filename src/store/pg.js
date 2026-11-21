@@ -304,7 +304,7 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
   async function leseAusDatenbank(id, uebernehmen) {
     const state = requireState();
     const bekannt = ops.getCall(state, id);
-    if (bekannt && eigene.has(id)) return bekannt;
+    if (bekannt && eigene.has(bekannt.id)) return bekannt;
     try {
       const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id), nurFrist: true });
       return gelesen ? uebernehmen(state, gelesen) : null;
