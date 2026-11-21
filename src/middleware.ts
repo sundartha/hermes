@@ -316,6 +316,7 @@ export function createGeteilterRateLimiter({
 
 export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
   console.error("[error]", maskNumbersInText(fehlerStapel(err)));
+  if (res.writableEnded) return;
   if (res.headersSent) {
     next(err);
     return;
