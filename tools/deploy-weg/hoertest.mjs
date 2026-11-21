@@ -175,9 +175,10 @@ async function vorfallSenden({ adresse, koerper, vorsilbe, ausgabe }) {
   const { status } = await anfrage(adresse, { methode: "POST", koerper });
   if (status < HTTP_OK || status >= HTTP_NICHT_OK_AB) {
     ausgabe.melde(vorsilbe + "_nicht_zugestellt", { http: status });
-    return;
+    return false;
   }
   ausgabe.melde(vorsilbe + "_gesendet");
+  return true;
 }
 
 async function vorfallMelden({ einstellungen, vorfall, vorher, ausgabe }) {
@@ -222,13 +223,12 @@ export async function alarmprobe({ einstellungen, ausgabe }) {
   }
   const text =
     "Probe, kein echter Fehler (Alarmweg-Probe, Lauf " + laufAdresse(einstellungen) + ")";
-  await vorfallSenden({
+  return vorfallSenden({
     adresse: einstellungen.slackUrl,
     koerper: { text },
     vorsilbe: "slack",
     ausgabe,
   });
-  return true;
 }
 
 const HEARTBEAT_PROBE_MELDUNGEN = Object.freeze({
