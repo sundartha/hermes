@@ -98,7 +98,8 @@ async function freigegebenVon(pr) {
 const WACKELIG = "wackelig";
 const SAMMEL_JOB = "CI";
 const ROT = "failure";
-const PR_TEXT_JOB = /^(?:Rotprobe|Mutation \d+\/\d+)$/;
+const ROTPROBE_JOB = "Rotprobe";
+const MUTATION_PRAEFIX = "Mutation ";
 const LAUF_ZAEHLER = /^Neulauf-Wackler Nr\. \d+: /;
 const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
 const ZEITSTEMPEL = /^\S+Z /;
@@ -141,8 +142,18 @@ function basisRotEintraege(log) {
   return namen.filter((name) => name !== undefined).map((name) => `${name} (Mutation)`);
 }
 
+function istZahl(teil) {
+  return String(Number(teil)) === teil;
+}
+
+function istPrTextJob(name) {
+  if (name === ROTPROBE_JOB) return true;
+  const teile = name.startsWith(MUTATION_PRAEFIX) ? name.slice(MUTATION_PRAEFIX.length).split("/") : [];
+  return teile.length === 2 && teile.every(istZahl);
+}
+
 function wacklerEintraege(job, log) {
-  return PR_TEXT_JOB.test(job.name) ? basisRotEintraege(log) : rotTests(log, job.name);
+  return istPrTextJob(job.name) ? basisRotEintraege(log) : rotTests(log, job.name);
 }
 
 function wacklerTitel(versuche, logs) {
