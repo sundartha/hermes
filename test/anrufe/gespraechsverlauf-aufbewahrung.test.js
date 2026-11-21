@@ -464,7 +464,7 @@ test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinha
   }
 });
 
-test("Kriterium 5: nur get_call_result trägt im _meta höchstens das Feld transcript, ohne den Gesprächsinhalt; kein anderes Werkzeug trägt ihn irgendwo im Ergebnis", async () => {
+test("Kriterium 5: nur get_call_result trägt im _meta höchstens die Felder transcript und hermes/content_locale, ohne den Gesprächsinhalt; kein anderes Werkzeug trägt ihn irgendwo im Ergebnis", async () => {
   const gateway = http.createServer((req, res) => {
     res.setHeader("content-type", "application/json");
     const body = req.url.endsWith("/cancel")
@@ -491,7 +491,7 @@ test("Kriterium 5: nur get_call_result trägt im _meta höchstens das Feld trans
       }
       assert.doesNotMatch(JSON.stringify({ content: antwort.content, structuredContent: antwort.structuredContent }), new RegExp(MARKER));
       const meta = antwort._meta ?? {};
-      assert.deepEqual(Object.keys(meta).filter((schluessel) => schluessel !== "transcript"), []);
+      assert.deepEqual(Object.keys(meta).filter((schluessel) => !["transcript", "hermes/content_locale"].includes(schluessel)), []);
       assert.doesNotMatch(JSON.stringify(meta.transcript ?? ""), new RegExp(MARKER));
     }
   } finally {
