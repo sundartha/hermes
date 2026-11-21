@@ -8,7 +8,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.IN_CALL_CONSULT_ENABLED = "true";
 
 const { config } = await import("../../src/config.js");
-const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.js");
+const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.ts");
 const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.ts");
 const { H7C2B4B2_WERKZEUG_TOKEN, H7C2B4B2_BINDUNGS_TOKEN } = await import("../gemeinsam/erfundene-geheimnisse.js");
 const { abrufMitFrist } = await import("../gemeinsam/antwortfrist.mjs");
