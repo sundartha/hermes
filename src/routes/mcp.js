@@ -6,7 +6,7 @@ import { registerTools } from "../mcp-tools.js";
 import { registerNoTenantStubs } from "../mcp-no-tenant.js";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
 import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
-import { consultAllowedFor, consultToreFor } from "../consult/gate.js";
+import { consultAllowedFor, consultToreFor } from "../consult/gate.ts";
 import { makeMcpAuth } from "../auth.js";
 import { audit, hashEmail } from "../util.ts";
 import { ANON_IDENTITY, TENANT_REJECT } from "../request-tenant.js";

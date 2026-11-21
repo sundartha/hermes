@@ -27,7 +27,7 @@ Registration order: `src/mcp-tools.js#registerTools` (the `uiTool(...)` calls in
 (`if (consultAllowed)`, `src/mcp-tools.js#registerTools`). Over HTTP, `consultAllowed` is
 `consultAllowedFor(profile)` (`src/routes/mcp.js#router.post("/mcp")`) = `config.tenancy.consultEnabled
 === true && config.tenancy.assistantContextEnabled === true && profile?.allowConsult === true`
-(`src/consult/gate.js#consultAllowedFor`).
+(`src/consult/gate.ts#consultAllowedFor`).
 
 | name | title | condition | readOnlyHint | destructiveHint | openWorldHint | idempotentHint |
 |---|---|---|---|---|---|---|
@@ -403,10 +403,10 @@ conditional tools:
 
 - The two consult tools (`await_call_event`, `answer_consult`) are registered only when the
   consult channel is available to the account; otherwise they are not registered at all
-  (`src/mcp-tools.js#registerTools`). The same gate (`src/consult/gate.js#consultAllowedFor`; the
+  (`src/mcp-tools.js#registerTools`). The same gate (`src/consult/gate.ts#consultAllowedFor`; the
   gates it combines are listed in `consultToreFor` there) decides whether the tools are
   registered and whether the channel is offered on a live call
-  (`src/consult/gate.js#consultAllowedForCall`, which adds no per-call condition). Registering
+  (`src/consult/gate.ts#consultAllowedForCall`, which adds no per-call condition). Registering
   tools whose channel cannot work would put tools into `tools/list` that the account cannot
   use.
 

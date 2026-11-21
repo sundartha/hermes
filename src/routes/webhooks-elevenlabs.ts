@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { blockingBudgetAxisFrisch } from "../budget-gate.js";
-import { consultAllowedForCall } from "../consult/gate.js";
+import { consultAllowedForCall } from "../consult/gate.ts";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { TENANT_TOKEN_VERDICT, tenantTokenVerdict } from "../elevenlabs/tenant-tool-token.ts";
