@@ -47,20 +47,15 @@ const HISTORISCHE_DE_ROHFASSUNGEN = Object.freeze([
   ),
 ]);
 
-const GREETING_ORTHOGRAPHY_MIGRATION = Object.freeze(
-  Object.assign(
-    Object.create(null),
-    Object.fromEntries(
-      HISTORISCHE_DE_ROHFASSUNGEN.map(({ alt, ziel }) => [
-        withInboundNotice(alt, LOCALES.de.inboundNotice),
-        withInboundNotice(ziel, LOCALES.de.inboundNotice),
-      ]),
-    ),
-  ),
+const GREETING_ORTHOGRAPHY_MIGRATION = new Map(
+  HISTORISCHE_DE_ROHFASSUNGEN.map(({ alt, ziel }) => [
+    withInboundNotice(alt, LOCALES.de.inboundNotice),
+    withInboundNotice(ziel, LOCALES.de.inboundNotice),
+  ]),
 );
 
 export function greetingWithCurrentOrthography(storedGreeting) {
-  return GREETING_ORTHOGRAPHY_MIGRATION[storedGreeting] ?? storedGreeting;
+  return GREETING_ORTHOGRAPHY_MIGRATION.get(storedGreeting) ?? storedGreeting;
 }
 
 export function greetingForLanguage(storedGreeting, language) {
