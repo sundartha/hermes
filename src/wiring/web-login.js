@@ -16,7 +16,7 @@ import { mountCookieConsentLog } from "../cookie-consent-log.js";
 import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.ts";
 import { speicherBereiche } from "../store.js";
-import { runReleaseReconcile } from "../release-reconcile.js";
+import { runReleaseReconcile } from "../release-reconcile.ts";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";

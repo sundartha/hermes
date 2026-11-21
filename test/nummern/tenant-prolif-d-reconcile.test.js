@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runReleaseReconcile } from "../../src/release-reconcile.js";
+import { runReleaseReconcile } from "../../src/release-reconcile.ts";
 import { requestNumber } from "../../src/store/state-ops.js";
 import { GLOBAL_CAP_REASON, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
