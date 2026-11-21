@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS } from "./begriffe/abrechnung.ts";
 import { setWorldDefaultLanguageEnabled } from "./konfiguration/standardsprache.ts";
 import {
@@ -30,7 +29,7 @@ import { rohwerteMail } from "./konfiguration/rohwerte-mail.ts";
 import { rohwerteMetrics } from "./konfiguration/rohwerte-metrics.ts";
 import { rohwertePrivacy } from "./konfiguration/rohwerte-privacy.ts";
 import { rohwerteResearch } from "./konfiguration/rohwerte-research.ts";
-import { rohwerteServer } from "./konfiguration/rohwerte-server.ts";
+import { QUELLORDNER, rohwerteServer } from "./konfiguration/rohwerte-server.ts";
 import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.ts";
 import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.ts";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.ts";
@@ -52,12 +51,12 @@ import { LLM_PROVIDER } from "./llm/provider.ts";
 import { MS_PER_MINUTE } from "./utils/timer.ts";
 import { merkeLogGeheimnisse } from "./log-maske.ts";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-if (process.env.NODE_ENV !== "test") {
+const __dirname = QUELLORDNER;
+const env = process.env;
+if (env.NODE_ENV !== "test") {
   dotenv.config({ path: path.join(__dirname, "..", ".env") });
 }
 merkeLogGeheimnisse(process.env);
-const env = process.env;
 
 const fatalConfigErrors = [];
 
