@@ -132,8 +132,7 @@ test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundene
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   await store.save();
 
-  state.numbers = state.numbers.filter((number) => number.id !== "n4");
-  await store.save();
+  await store.nummernSql().nummerEntfernen({ tenantId: "t1", numberId: "n4" });
 
   const remaining = (await db.query(`SELECT id FROM number WHERE id='n4'`)).rows;
   assert.equal(remaining.length, 0, "die Zeile wurde geprunt (DELETE, kein Trigger-Wurf)");
