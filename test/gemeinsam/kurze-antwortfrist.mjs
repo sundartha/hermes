@@ -1,16 +1,10 @@
-import { echtWarten } from "../echt-warten.js";
-
-const KURZE_WARTEZEIT_MS = 20;
-
 export async function mitKurzerFrist(run) {
   const original = AbortSignal.timeout;
   const fristen = [];
   AbortSignal.timeout = (ms) => {
     fristen.push(ms);
     const abbruch = new AbortController();
-    echtWarten(KURZE_WARTEZEIT_MS).then(() =>
-      abbruch.abort(new DOMException("Die Frist ist abgelaufen", "TimeoutError")),
-    );
+    setImmediate(() => abbruch.abort(new DOMException("Die Frist ist abgelaufen", "TimeoutError")));
     return abbruch.signal;
   };
   try {

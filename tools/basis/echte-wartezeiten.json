@@ -5,7 +5,6 @@
   "test/anrufe/intern-anrufpause.test.js",
   "test/anrufe/zwei-instanzen-postgres.js",
   "test/gemeinsam/elternwaechter.mjs",
-  "test/gemeinsam/kurze-antwortfrist.mjs",
   "test/gemeinsam/lebenszeichen-prueft-event-loop-und-datenbank.test.js",
   "test/gemeinsam/messwerte-gehen-an-otlp.test.js",
   "test/posteingang/posteingang-poll-seite.test.js"
