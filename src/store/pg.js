@@ -301,22 +301,10 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     return rows.length > 0 ? await anrufAusZeile(client, rows[0]) : null;
   }
 
-  async function kopieNeuLesen(id, bekannt, uebernehmen) {
-    let gelesen;
-    try {
-      gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id) });
-    } catch (err) {
-      console.error("[pg] leseCall fehlgeschlagen, geladene Kopie bleibt:", err.message);
-      return bekannt;
-    }
-    return gelesen ? uebernehmen(requireState(), gelesen) : bekannt;
-  }
-
   async function leseAusDatenbank(id, uebernehmen) {
     const state = requireState();
     const bekannt = ops.getCall(state, id);
     if (bekannt && eigene.has(id)) return bekannt;
-    if (bekannt) return kopieNeuLesen(id, bekannt, uebernehmen);
     try {
       const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id), nurFrist: true });
       return gelesen ? uebernehmen(state, gelesen) : null;
