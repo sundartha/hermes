@@ -36,7 +36,7 @@ import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorsp
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
-import { metrics } from "../metrics.js";
+import { metrics } from "../metrics.ts";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
 import { ANRUFSTART_SPERR_TORE, makeAnrufstartAuftrag } from "../elevenlabs/anrufstart-auftrag.ts";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
