@@ -23,12 +23,14 @@ export const ALL_GREETING_TEMPLATES = Object.freeze(
   Object.values(GREETING_TEMPLATES_BY_LANGUAGE).flat(),
 );
 
+const DE_VARIANTEN = LOCALES.de.greetingVariants;
+
 const HISTORISCHE_DE_ROHFASSUNGEN = Object.freeze([
   Object.freeze({
     alt: "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
     ziel: LOCALES.de.greetingDefault,
   }),
-  ...LOCALES.de.greetingVariants.slice(0, 1).map((ziel) =>
+  ...DE_VARIANTEN.slice(0, 1).map((ziel) =>
     Object.freeze({
       alt: "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
       ziel,
