@@ -490,3 +490,19 @@ test("GP-P6: die Nummer des Unwissenheits-Slots zaehlt nur offene Slots, weder g
   assert.ok(offen.includes("price-drift:unbekannt:2"));
   assert.ok(!offen.includes("price-drift:unbekannt:3"));
 });
+
+test("GP-P6: OFFENE-MARKER der Sweep mit unbekanntem Preis liest keine Anrufe, auch wenn die Anruftabelle nicht lesbar ist", async () => {
+  const store = fakeStore();
+  let anrufLesungen = 0;
+  store.exportTenantDataGelesen = async () => {
+    anrufLesungen += 1;
+    throw new Error("anrufe-lesen-ausgefallen");
+  };
+  const { lauf, protokoll } = baueWaechter({ preise: werfendesLesen, store });
+  await lauf(T0);
+  assert.equal(anrufLesungen, 0);
+  assert.deepEqual(preisAudit(protokoll), ["price_drift_unknown"]);
+  assert.deepEqual(offeneMarker(store).filter((code) => code.startsWith("price-drift:unbekannt:")), [
+    "price-drift:unbekannt:1",
+  ]);
+});
