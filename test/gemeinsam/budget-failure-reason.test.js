@@ -99,3 +99,47 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
     "Grund liegt VOR dem Provider-Hangup und VOR dem Settlement, wie beim Cap-Pendant",
   );
 });
+
+function lifecycleOhneUebernahme(call, order) {
+  const store = { ...spyStore(call, order), attachActiveCall: async () => null };
+  return makeCallLifecycle({
+    store,
+    config: withConfigNamespaces({ voiceEngine: VOICE_ENGINE.BUDGET, billing: {} }),
+    finishCall: () => {},
+    releaseReserve: () => {},
+    voiceControl: () => ({ endCall: async () => {} }),
+    terminateAndBillCall, hangUpAction, billThunk, reattachActiveCallCore,
+    cappedEndedAtMs, classifyCallTime, blockingBudgetAxis,
+  });
+}
+
+function aktiverAnruf(failureReason) {
+  return {
+    id: "call_ohne_uebernahme",
+    tenantId: "tenant_budget",
+    status: "active",
+    provider: "telnyx",
+    twilioSid: "CA_budget_2",
+    direction: "outbound",
+    startedAt: new Date(Date.now() - RECENTLY_STARTED_MS).toISOString(),
+    maxDurationS: MAX_DURATION_S,
+    failureReason,
+  };
+}
+
+test("Geld-Wache: Anruf, dessen Uebernahme ein anderer Prozess schon beendet hat, endet mit budget-exhausted", async () => {
+  const order = [];
+  const call = aktiverAnruf(undefined);
+  await lifecycleOhneUebernahme(call, order).terminateOverBudgetExpired(call);
+  assert.equal(call.status, "completed");
+  assert.equal(call.failureReason, BUDGET_FAILURE_REASON);
+  assert.deepEqual(order, ["recordFailureReason", "setCallEndedAt"]);
+});
+
+test("Geld-Wache: ein Anruf mit eigenem Grund behaelt max-duration-cap, auch wenn die Uebernahme null liefert", async () => {
+  const order = [];
+  const call = aktiverAnruf("max-duration-cap");
+  await lifecycleOhneUebernahme(call, order).terminateOverBudgetExpired(call);
+  assert.equal(call.status, "completed");
+  assert.equal(call.failureReason, "max-duration-cap");
+});
