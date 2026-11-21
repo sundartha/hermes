@@ -1,5 +1,5 @@
 import { provisionNumber } from "../onboarding.js";
-import { searchParamsForCountry } from "../telephony/provisioning-geo.js";
+import { searchParamsForCountry } from "../telephony/provisioning-geo.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { performNumberRelease } from "../release-reconcile.ts";
 import { TAUSCH_ERGEBNIS, NUMBER_STATUS, speicherBereiche } from "../store.js";

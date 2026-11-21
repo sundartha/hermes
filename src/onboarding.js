@@ -16,7 +16,7 @@ import {
 import {
   holdAmountForProviderPrice,
   monthlyCostCentsForProviderPrice,
-} from "./telephony/provisioning-geo.js";
+} from "./telephony/provisioning-geo.ts";
 import { NummerGekauftIdOffen } from "./begriffe/nummern-vergabe.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.ts";
 import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.ts";

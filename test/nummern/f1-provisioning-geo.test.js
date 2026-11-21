@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
-import { searchParamsForCountry, holdAmountForCountry } from "../../src/telephony/provisioning-geo.js";
+import { searchParamsForCountry, holdAmountForCountry } from "../../src/telephony/provisioning-geo.ts";
 import { config } from "../../src/config.js";
 import { fakeProvisioner } from "../helpers.js";
 import { makeMetering } from "../../src/billing/metering.js";
