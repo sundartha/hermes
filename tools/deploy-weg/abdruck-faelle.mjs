@@ -79,7 +79,6 @@ export function abdruckEinstellungen() {
       },
     },
     telnyx: { telnyxElevenLabs: { voiceId: "abdruck-plattform-stimme" } },
-    safety: { fakeOriginateElevenlabs: false },
   };
 }
 
