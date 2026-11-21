@@ -55,7 +55,7 @@ test("OUT-05-EL: FAKE_ORIGINATE_ELEVENLABS=true ist kein Schalter mehr -> Boot s
   }
 });
 
-test("OUT-05 F2b: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK nennt die Bedingung in der Meldung", async () => {
+test("Boot: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK nennt die Bedingung in der Meldung", async () => {
   const { code, output } = await startServerExpectExit({
     env: { FAKE_ORIGINATE: "true", SKIP_TWILIO_SIGNATURE_CHECK: "false" },
   });
