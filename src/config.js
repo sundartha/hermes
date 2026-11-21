@@ -53,11 +53,11 @@ import { MS_PER_MINUTE } from "./utils/timer.ts";
 import { merkeLogGeheimnisse } from "./log-maske.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const env = process.env;
-if (env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV !== "test") {
   dotenv.config({ path: path.join(__dirname, "..", ".env") });
 }
 merkeLogGeheimnisse(process.env);
+const env = process.env;
 
 const fatalConfigErrors = [];
 
