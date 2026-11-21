@@ -6,7 +6,7 @@ import {
   greetingTemplatesFor,
   greetingWithCurrentOrthography,
   ALL_GREETING_TEMPLATES,
-} from "../../src/i18n/greeting-catalog.js";
+} from "../../src/i18n/greeting-catalog.ts";
 import { INBOUND_NOTICES, hasInboundNotice, withInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { SPOKEN_TRANSLITERATION_STEMS } from ".././umlaut-stems-helper.js";
 

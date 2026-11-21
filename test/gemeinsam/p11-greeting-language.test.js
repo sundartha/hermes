@@ -4,7 +4,7 @@ import {
   greetingForLanguage,
   greetingTemplatesFor,
   ALL_GREETING_TEMPLATES,
-} from "../../src/i18n/greeting-catalog.js";
+} from "../../src/i18n/greeting-catalog.ts";
 import { withInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { DEFAULT_GREETING } from "../../src/store.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";

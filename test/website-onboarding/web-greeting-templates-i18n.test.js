@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { greetingTemplatesFor, ALL_GREETING_TEMPLATES } from "../../src/i18n/greeting-catalog.js";
+import { greetingTemplatesFor, ALL_GREETING_TEMPLATES } from "../../src/i18n/greeting-catalog.ts";
 import { selfServicePatch } from "../../src/self-service.js";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 

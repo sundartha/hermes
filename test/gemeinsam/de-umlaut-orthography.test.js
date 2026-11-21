@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { startServer } from "../helpers.js";
 import { SPOKEN_TRANSLITERATION_STEMS as TRANSLITERATION_STEMS } from "../umlaut-stems-helper.js";
-import { greetingTemplatesFor } from "../../src/i18n/greeting-catalog.js";
+import { greetingTemplatesFor } from "../../src/i18n/greeting-catalog.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const OWNER_NAME = "Jonas Beispiel";

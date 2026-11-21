@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { DEFAULT_GREETING } from "../../src/store.js";
-import { ALL_GREETING_TEMPLATES } from "../../src/i18n/greeting-catalog.js";
+import { ALL_GREETING_TEMPLATES } from "../../src/i18n/greeting-catalog.ts";
 
 const OWNER = "Jonas Beispiel";
 const EXPECTED_TOOL_NAMES = ["end_call", "take_message"];
