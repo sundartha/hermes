@@ -53,7 +53,8 @@ import { MS_PER_MINUTE } from "./utils/timer.ts";
 import { merkeLogGeheimnisse } from "./log-maske.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-if (process.env.NODE_ENV !== "test") {
+const env = process.env;
+if (env.NODE_ENV !== "test") {
   dotenv.config({ path: path.join(__dirname, "..", ".env") });
 }
 merkeLogGeheimnisse(process.env);
@@ -70,7 +71,7 @@ export const {
   csvEnv,
   stripTrailingSlash,
 } = umgebung;
-const { detectProduction } = umgebung;
+const { detectProduction, textEnv } = umgebung;
 
 export const fristenEinstellungen = Object.freeze(rohwerteFristen(process.env, umgebung));
 export { alarmEingangFindings } from "./konfiguration/alarm-eingang-pruefung.ts";
@@ -96,18 +97,18 @@ export { todayIsoDate };
 const rawConfig = {
   ...rohwerteLlm(process.env, umgebung),
   platformSpendCapCents: eurToCents(
-    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 30, min: 0, integer: false }),
+    numEnv("MAX_BUDGET_EUR", env.MAX_BUDGET_EUR, { fallback: 30, min: 0, integer: false }),
   ),
 
   ...rohwerteResearch(process.env, umgebung),
 
   ...rohwerteMetrics(process.env, umgebung),
 
-  telemetryOtlpUrl: (process.env.METRIKEN_OTLP_URL || "").trim(),
-  telemetryOtlpUser: (process.env.METRIKEN_OTLP_BENUTZER || "").trim(),
-  telemetryOtlpToken: (process.env.METRIKEN_OTLP_TOKEN || "").trim(),
-  telemetryInstanceId: (process.env.RENDER_INSTANCE_ID || os.hostname()).trim(),
-  telemetryIntervalMs: numEnv("METRIKEN_INTERVALL_MS", process.env.METRIKEN_INTERVALL_MS, {
+  telemetryOtlpUrl: textEnv(env.METRIKEN_OTLP_URL, "").trim(),
+  telemetryOtlpUser: textEnv(env.METRIKEN_OTLP_BENUTZER, "").trim(),
+  telemetryOtlpToken: textEnv(env.METRIKEN_OTLP_TOKEN, "").trim(),
+  telemetryInstanceId: textEnv(env.RENDER_INSTANCE_ID, os.hostname()).trim(),
+  telemetryIntervalMs: numEnv("METRIKEN_INTERVALL_MS", env.METRIKEN_INTERVALL_MS, {
     fallback: MS_PER_MINUTE,
     min: 10,
   }),
@@ -120,12 +121,12 @@ const rawConfig = {
   elevenLabsInbound: {
     begruessungslautEnabled: boolEnv(
       "ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED",
-      process.env.ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED,
+      env.ELEVENLABS_INBOUND_BEGRUESSUNGSLAUT_ENABLED,
       { fallback: true },
     ),
-    sipUser: (process.env.ELEVENLABS_INBOUND_SIP_USER || "").trim(),
-    sipPassword: (process.env.ELEVENLABS_INBOUND_SIP_PASSWORD || "").trim(),
-    initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(),
+    sipUser: textEnv(env.ELEVENLABS_INBOUND_SIP_USER, "").trim(),
+    sipPassword: textEnv(env.ELEVENLABS_INBOUND_SIP_PASSWORD, "").trim(),
+    initWebhookToken: textEnv(env.ELEVENLABS_INIT_WEBHOOK_TOKEN, "").trim(),
   },
 
   ...rohwerteWerkzeug(process.env),
@@ -151,7 +152,7 @@ const rawConfig = {
 
   modelPricesUsd: resolveModelPrices(MODEL_PRICE_SCHEDULES, todayIsoDate()),
   usdToEur:
-    numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", process.env.PROVIDER_TO_BUCKET_RATE_MICRO, {
+    numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", env.PROVIDER_TO_BUCKET_RATE_MICRO, {
       fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_MICRO_PER_UNIT),
       min: 1,
     }) / FX_MICRO_PER_UNIT,
@@ -181,25 +182,38 @@ export { attachNamespaces, isSelfServiceLive };
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 
-setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
+setWorldDefaultLanguageEnabled(rawConfig.worldDefaultLanguageEnabled);
 
 const { setBoundGatewayPort, resolveGatewayUrl } = gatewayUrlMit({
   umgebung: process.env,
   stripTrailingSlash,
-  standardPort: () => config.server.port,
+  standardPort: () => rawConfig.port,
 });
 export { gatewayUrlForPort, setBoundGatewayPort, resolveGatewayUrl };
 
+const pruefSicht = () => ({
+  auth: rawConfig,
+  safety: rawConfig,
+  store: rawConfig,
+  server: rawConfig,
+  tenancy: rawConfig,
+  llm: rawConfig,
+  billing: rawConfig,
+  voice: rawConfig,
+  provisioning: rawConfig,
+  mail: rawConfig,
+});
+
 export const { productionFootguns, productionAuthHints } = pruefungenProduktionMit({
   umgebung: process.env,
-  standardConfig: () => config,
+  standardConfig: pruefSicht,
   erkenneProduktion: detectProduction,
   fuerAudienceVergleich,
   kanonischeAudience,
 });
 
 export const { assertConfig } = pruefungenStartMit({
-  standardConfig: () => config,
+  standardConfig: pruefSicht,
   fehlerliste: configFatalErrors,
   erkenneProduktion: detectProduction,
   productionFootguns,

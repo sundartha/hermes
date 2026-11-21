@@ -80,7 +80,7 @@ export const MODEL_PRICE_RATE_FIELDS = Object.freeze([
   "cacheWritePerMTok",
   "cacheReadPerMTok",
   "outPerMTok",
-]);
+] as const);
 
 export function globalCapCents(cfg: { platformSpendCapCents: number }): number {
   return cfg.platformSpendCapCents;
