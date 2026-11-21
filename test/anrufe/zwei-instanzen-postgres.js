@@ -18,6 +18,8 @@ const SQL_TAKT_MS = 50;
 const ANRUF_SEKUNDEN = 600;
 const ANRUF_ZIEL = "+4915112345678";
 const NIE_SCHEITERN = 0;
+const IDEMPOTENZ_PRAEFIX = "[webhook-idempotenz]";
+const ZUSTELLUNG_PRAEFIX = "[webhook-zustellung]";
 const ANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164,
   to_e164, goal, started_at, answered_at, max_duration_s, provider)
   VALUES ($1, $2, $3, 'outbound', 'active', (SELECT e164 FROM number WHERE tenant_id = $2),
@@ -64,6 +66,12 @@ export async function antwortNachWartezeit(instanz, zustellung, wartezeitMs) {
 
 export function ablehnungsZeilen(text) {
   return text.split("\n").filter((zeile) => zeile.includes("abgelehnt grund="));
+}
+
+export function ablageZeilen(text) {
+  return text
+    .split("\n")
+    .filter((zeile) => zeile.includes(IDEMPOTENZ_PRAEFIX) || zeile.includes(ZUSTELLUNG_PRAEFIX));
 }
 
 async function seedeAnrufe(sql, ids) {
@@ -116,6 +124,9 @@ export async function mitInstanzenAufPostgres(t, { anzahl = 2, anrufe = [], env 
     instanzen = await starteInstanzen(anzahl, umgebung);
     return await lauf({ instanzen, sql, signer, modell });
   } finally {
+    instanzen.forEach((instanz, nr) => {
+      for (const zeile of ablageZeilen(instanz.stdout)) t.diagnostic(`instanz=${nr} ${zeile}`);
+    });
     await Promise.all(instanzen.map((instanz) => instanz.stop()));
     await modell.close();
     await verwaltung.end();
