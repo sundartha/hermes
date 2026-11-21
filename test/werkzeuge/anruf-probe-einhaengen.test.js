@@ -58,7 +58,7 @@ test("Zeitplan: ein Zeitplan, die Probe läuft im Staging-Job und damit bei Push
   const zeitplaene = [...WORKFLOW.matchAll(/^\s+- cron: "([^"]+)"/gm)].map((treffer) => treffer[1]);
   assert.deepEqual(zeitplaene, ["17 2 * * *"]);
   assert.ok(!/^ {2}probe:/m.test(WORKFLOW));
-  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && !inputs\.lastlauf\)$/m);
+  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && \(!inputs\.lastlauf \|\| inputs\.alarmprobe\)\)$/m);
 });
 
 test("Probe-Schritt: läuft nach dem grünen Abwarten, bei absichtlich_rot trotzdem, und vor dem Heartbeat", () => {
