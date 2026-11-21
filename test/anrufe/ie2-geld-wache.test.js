@@ -842,3 +842,24 @@ test("Hoechstdauer: wirft der Leser, plant der Prozess keinen neuen Versuch, der
   assert.equal(harness.call.status, "completed");
   assert.equal(versuche, 2);
 });
+
+test("Frist-Ende: hat ein anderer Prozess den Anruf mit anderem Status und Grund beendet, behaelt der Spiegel des Besitzers die Werte der Datenbankzeile und die Pruefung fragt im Mandanten des Anrufs", async () => {
+  const betrieb = fristBetrieb();
+  const besitzer = fristProzess(betrieb);
+  const call = await besitzer.store.attachActiveCall("call_ende");
+  const abfragen = [];
+  besitzer.store.attachActiveCall = async (id, optionen) => {
+    abfragen.push(optionen);
+    Object.assign(betrieb.row, { status: "completed", endedAt: "2026-01-01T00:05:00.000Z", failureReason: "budget-exhausted" });
+    Object.assign(call, betrieb.row);
+    return null;
+  };
+  await besitzer.lifecycle.terminateExpiredCall(call);
+  await new Promise((fertig) => setImmediate(fertig));
+  assert.deepEqual(abfragen, [{ mandant: "tenant_ende" }]);
+  const spiegel = besitzer.store.getCall("call_ende");
+  assert.equal(spiegel.status, "completed");
+  assert.equal(spiegel.endedAt, "2026-01-01T00:05:00.000Z");
+  assert.equal(spiegel.failureReason, "budget-exhausted");
+  assert.deepEqual(betrieb.hangups, []);
+});

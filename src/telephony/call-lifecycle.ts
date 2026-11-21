@@ -49,7 +49,7 @@ interface Store {
   leseCall?: (callId: string) => Promise<Call | null | undefined>;
   setCallEndedAt: (callId: string, status: AnrufZustand, endedAtIso: string) => unknown;
   recordFailureReason: (callId: string, reason: string) => unknown;
-  attachActiveCall: (callId: string) => Promise<Call | null | undefined>;
+  attachActiveCall: (callId: string, optionen?: { mandant: string }) => Promise<Call | null | undefined>;
   setzeHoechstdauerFrist?: FristSchreiber;
   setzeReserveFrist?: FristSchreiber;
 }
@@ -210,11 +210,13 @@ export function makeCallLifecycle({
       if (!gelesen) return;
       const { call } = gelesen;
       if (call?.status !== "active") return;
-      if (await inDatenbankBeendet(callId, store.attachActiveCall)) {
-        await persistEndWithReason({
-          store, callId, reason: failureReason,
-          endCall: () => store.setCallEndedAt(callId, status, new Date().toISOString()),
-        })();
+      if (await inDatenbankBeendet(callId, store.attachActiveCall, call.tenantId)) {
+        if (store.getCall(callId)?.status === ACTIVE_CALL_STATUS) {
+          await persistEndWithReason({
+            store, callId, reason: failureReason,
+            endCall: () => store.setCallEndedAt(callId, status, new Date().toISOString()),
+          })();
+        }
         return;
       }
       const endedAtIso = new Date(

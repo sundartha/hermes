@@ -66,10 +66,11 @@ export async function uebernehmeOhneArmierung(
 
 export async function inDatenbankBeendet(
   callId: string,
-  attachActiveCall: ReattachAbhaengigkeiten["attachActiveCall"],
+  attachActiveCall: (callId: string, optionen: { mandant: string }) => Promise<AktiverAnruf | null | undefined>,
+  mandant: string,
 ): Promise<boolean> {
   try {
-    return (await uebernehmeOhneArmierung(callId, attachActiveCall)) === null;
+    return (await uebernehmeOhneArmierung(callId, (id) => attachActiveCall(id, { mandant }))) === null;
   } catch {
     return false;
   }
