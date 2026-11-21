@@ -41,3 +41,19 @@ test("Fristen-Einstellungen: ein Takt ueber 15000 ms und ein Limit ueber 1000 we
 test("Fristen-Einstellungen: genau 15000 ms und genau 1000 gelten unveraendert", () => {
   pruefe({ FRISTEN_TAKT_MS: "15000", FRISTEN_LIMIT_JE_MANDANT: "1000" }, 15000, 1000);
 });
+
+const GELD_WACHE_FALLE = [
+  ["Geld-Wache schneller als der Takt", { BUDGET_WATCHDOG_INTERVAL_MS: "5000" }, 5000],
+  ["Geld-Wache gleich dem Takt", { BUDGET_WATCHDOG_INTERVAL_MS: "15000" }, 15000],
+  ["Geld-Wache langsamer als der Takt", { BUDGET_WATCHDOG_INTERVAL_MS: "20000" }, 15000],
+  ["Geld-Wache aus (0): eingestellter Takt", { BUDGET_WATCHDOG_INTERVAL_MS: "0", FRISTEN_TAKT_MS: "9000" }, 9000],
+  ["Geld-Wache aus (0): Standardtakt", { BUDGET_WATCHDOG_INTERVAL_MS: "0" }, 15000],
+  ["Takt kleiner als die Geld-Wache", { BUDGET_WATCHDOG_INTERVAL_MS: "5000", FRISTEN_TAKT_MS: "3000" }, 3000],
+  ["Geld-Wache 1 ms", { BUDGET_WATCHDOG_INTERVAL_MS: "1" }, 1],
+];
+
+for (const [name, env, takt] of GELD_WACHE_FALLE) {
+  test(`Fristen-Takt an Geld-Wache gebunden: ${name}`, () => {
+    pruefe(env, takt, 20);
+  });
+}

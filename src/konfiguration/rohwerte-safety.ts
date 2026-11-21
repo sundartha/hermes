@@ -1,16 +1,32 @@
 import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 
+type NumEnv = ReturnType<typeof umgebungMit>["numEnv"];
+
+function geldWacheIntervallMs(raw: string | undefined, numEnv: NumEnv): number {
+  return numEnv("BUDGET_WATCHDOG_INTERVAL_MS", raw, {
+    fallback: 15000,
+    min: 0,
+    max: 600000,
+  });
+}
+
 export function rohwerteFristen(
-  env: { FRISTEN_TAKT_MS?: string | undefined; FRISTEN_LIMIT_JE_MANDANT?: string | undefined },
+  env: {
+    FRISTEN_TAKT_MS?: string | undefined;
+    FRISTEN_LIMIT_JE_MANDANT?: string | undefined;
+    BUDGET_WATCHDOG_INTERVAL_MS?: string | undefined;
+  },
   { numEnv }: Pick<ReturnType<typeof umgebungMit>, "numEnv">,
 ): { fristenTaktMs: number; fristenLimitJeMandant: number } {
+  const takt = numEnv("FRISTEN_TAKT_MS", env.FRISTEN_TAKT_MS, {
+    fallback: 15000,
+    min: 1,
+    max: 15000,
+  });
+  const geldWacheMs = geldWacheIntervallMs(env.BUDGET_WATCHDOG_INTERVAL_MS, numEnv);
   return {
-    fristenTaktMs: numEnv("FRISTEN_TAKT_MS", env.FRISTEN_TAKT_MS, {
-      fallback: 15000,
-      min: 1,
-      max: 15000,
-    }),
+    fristenTaktMs: geldWacheMs > 0 ? Math.min(takt, geldWacheMs) : takt,
     fristenLimitJeMandant: numEnv("FRISTEN_LIMIT_JE_MANDANT", env.FRISTEN_LIMIT_JE_MANDANT, {
       fallback: 20,
       min: 1,
@@ -79,11 +95,7 @@ export function rohwerteSafety(
       fallback: 15000,
       min: 0,
     }),
-    budgetWatchdogIntervalMs: numEnv("BUDGET_WATCHDOG_INTERVAL_MS", env.BUDGET_WATCHDOG_INTERVAL_MS, {
-      fallback: 15000,
-      min: 0,
-      max: 600000,
-    }),
+    budgetWatchdogIntervalMs: geldWacheIntervallMs(env.BUDGET_WATCHDOG_INTERVAL_MS, numEnv),
     rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", env.RATE_LIMIT_PER_MIN, {
       fallback: 120,
       min: 0,
