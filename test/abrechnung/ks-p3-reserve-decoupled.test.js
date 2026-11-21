@@ -4,7 +4,7 @@ import { makeOutboundGates, tariffCentsPerMin } from "../../src/telephony/outbou
 import { config } from "../../src/config.js";
 import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
 import { RESERVE_LEAD_MINUTES, outboundReserveCents } from "../../src/begriffe/abrechnung.ts";
-import { planCapReserveFindings, spendCapCoherence } from "../../src/boot-guard.js";
+import { planCapReserveFindings, spendCapCoherence } from "../../src/boot-guard.ts";
 import { CATALOG_SLUGS } from "../../src/plans.ts";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 

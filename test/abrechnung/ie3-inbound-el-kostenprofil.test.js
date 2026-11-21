@@ -11,7 +11,7 @@ import {
   legacyKostenprofil,
   kostenprofilFuerAnruf,
 } from "../../src/billing/kostenarten.ts";
-import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../../src/boot-guard.js";
+import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../../src/boot-guard.ts";
 import { sweepTraegerFuerProfil } from "../../src/billing/sweep-kostenbeleg.ts";
 import { startServer, EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

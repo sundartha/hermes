@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { eurToCents } from "../../src/config.js";
-import { spendCapCoherence } from "../../src/boot-guard.js";
+import { spendCapCoherence } from "../../src/boot-guard.ts";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

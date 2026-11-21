@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../../src/boot-guard.js";
+import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../../src/boot-guard.ts";
 import { ttsQuotaCoverageBannerLine } from "../../src/boot.js";
 import {
   makeDefaultState,

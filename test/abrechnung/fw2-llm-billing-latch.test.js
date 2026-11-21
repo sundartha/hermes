@@ -6,7 +6,7 @@ import { anthropicErrors } from "../../src/llm/adapters/anthropic.ts";
 import { deepseekErrors } from "../../src/llm/adapters/deepseek.ts";
 import { usableFallbackProvider } from "../../src/llm/provider.ts";
 import { markBillingBlocked } from "../../src/llm/billing-latch.ts";
-import { llmFallbackFindings, LLM_FALLBACK_FINDING } from "../../src/boot-guard.js";
+import { llmFallbackFindings, LLM_FALLBACK_FINDING } from "../../src/boot-guard.ts";
 import { makeConfigOverrides } from "../helpers.js";
 import { readFileSync } from "node:fs";
 
