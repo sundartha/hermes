@@ -224,6 +224,13 @@ function anzahlAnrufeSeitVon(speicher) {
   return async (tenantId, seitIso) => speicher.zaehleAnrufeSeit(tenantId, seitIso);
 }
 
+async function nummerSuchen(speicher, e164) {
+  const kopie = speicher.numberRecordByE164(e164);
+  if (kopie) return kopie;
+  await speicher.nummerNachladen?.(e164);
+  return speicher.numberRecordByE164(e164);
+}
+
 export function speicherBereiche(speicher) {
   return {
     einstellungen: {
@@ -281,12 +288,7 @@ export function speicherBereiche(speicher) {
       addTranscript: async (callId, rolle, text) => transkriptMitFrist(callId, speicher.addTranscript(callId, rolle, text)),
       countNoSpeechTurn: async (callId) => speicher.countNoSpeechTurn(callId),
       clearNoSpeechStreak: async (callId) => speicher.clearNoSpeechStreak(callId),
-      numberRecordByE164: async (e164) => {
-        const kopie = speicher.numberRecordByE164(e164);
-        if (kopie) return kopie;
-        await speicher.nummerNachladen?.(e164);
-        return speicher.numberRecordByE164(e164);
-      },
+      numberRecordByE164: async (e164) => nummerSuchen(speicher, e164),
       resolveCallLanguage: async (eingabe) => speicher.resolveCallLanguage(eingabe),
     },
     gespraech: {

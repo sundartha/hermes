@@ -208,8 +208,6 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
-  const verwaltung = verwaltungMethoden(kontext);
-
   return {
     init,
     ausfallSql: () => ausfallSql,
@@ -226,8 +224,8 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     ...mandantBudgetMethoden(kontext),
     ...aboAbrechnungMethoden(kontext),
     ...mandantEinstellungenMethoden(kontext),
-    ...verwaltung,
-    ...nummerMethoden({ requireState, nummernSql, ensureTenant: verwaltung.ensureTenant }),
+    ...verwaltungMethoden(kontext),
+    ...nummerMethoden({ requireState, runner, nummernSql }),
   };
 }
 
@@ -363,11 +361,42 @@ function entbindeEntfernte(mengen, state) {
     for (const callId of menge) if (!ops.getCall(state, callId)) menge.delete(callId);
 }
 
-function nummerMethoden({ requireState, nummernSql, ensureTenant }) {
+async function ensureTenantLaden({ requireState, runner }, tenantId) {
+  try {
+    const state = requireState();
+    return await runner.withClient(async (client) => {
+      const statusRows = (
+        await client.query(`SELECT status FROM tenant WHERE id = $1`, [tenantId])
+      ).rows;
+      if (statusRows.length === 0) return false;
+      const present = ops.findTenant(state, tenantId);
+      if (present) {
+        present.status = statusRows[0].status;
+        return true;
+      }
+      const full = (
+        await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant WHERE id = $1`, [tenantId])
+      ).rows[0];
+      const raced = ops.findTenant(state, tenantId);
+      if (raced) {
+        raced.status = full.status;
+        return true;
+      }
+      state.tenants.push(rowToTenant(full));
+      await hydrateTenant(client, state, tenantId);
+      return true;
+    });
+  } catch (err) {
+    console.error("[pg] ensureTenant fehlgeschlagen:", err.message);
+    return false;
+  }
+}
+
+function nummerMethoden({ requireState, runner, nummernSql }) {
   return {
     async nummerNachladen(e164) {
       const nummer = await nummernSql.nachladen(e164);
-      if (!nummer || !(await ensureTenant(nummer.tenantId))) return false;
+      if (!nummer || !(await ensureTenantLaden({ requireState, runner }, nummer.tenantId))) return false;
       const state = requireState();
       const vorhanden = ops.findNumber(state, nummer.id);
       if (vorhanden) Object.assign(vorhanden, nummer);
@@ -981,36 +1010,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
     resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
     bindSubToTenant: (sub, tenantId) => ops.bindSubToTenant(requireState(), sub, tenantId),
 
-    async ensureTenant(tenantId) {
-      try {
-        const state = requireState();
-        return await runner.withClient(async (client) => {
-          const statusRows = (
-            await client.query(`SELECT status FROM tenant WHERE id = $1`, [tenantId])
-          ).rows;
-          if (statusRows.length === 0) return false;
-          const present = ops.findTenant(state, tenantId);
-          if (present) {
-            present.status = statusRows[0].status;
-            return true;
-          }
-          const full = (
-            await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant WHERE id = $1`, [tenantId])
-          ).rows[0];
-          const raced = ops.findTenant(state, tenantId);
-          if (raced) {
-            raced.status = full.status;
-            return true;
-          }
-          state.tenants.push(rowToTenant(full));
-          await hydrateTenant(client, state, tenantId);
-          return true;
-        });
-      } catch (err) {
-        console.error("[pg] ensureTenant fehlgeschlagen:", err.message);
-        return false;
-      }
-    },
+    ensureTenant: (tenantId) => ensureTenantLaden({ requireState, runner }, tenantId),
     listProfiles: () => ops.listProfiles(requireState()),
     setProfile(tenantId, patch) {
       const result = ops.setProfile(requireState(), tenantId, patch);

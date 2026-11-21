@@ -17,8 +17,7 @@ const NUMMER_ENTFERNEN_SQL = `DELETE FROM number WHERE tenant_id = $1 AND id = $
 const AUFTRAG_ENTFERNEN_SQL = `DELETE FROM provisioning_job WHERE tenant_id = $1 AND id = $2`;
 const NACHLADEN_FEHLER = "[pg] nummer nachladen fehlgeschlagen:";
 const SCHLUESSEL_SQL = `SELECT tenant_id FROM nummer_schluessel WHERE e164_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')`;
-const NUMMER_LESEN_SQL = `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp
-  FROM number WHERE tenant_id = $1 AND e164 = $2`;
+const NUMMER_LESEN_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND e164 = $2`;
 const NICHT_ZAEHLEND = [NUMBER_STATUS.RELEASED, NUMBER_STATUS.FAILED];
 
 function alsAuftrag(zeile) {
