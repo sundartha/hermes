@@ -52,20 +52,49 @@ test("Zwei Kunden duerfen denselben Schluessel je einmal haben", async () => {
   assert.deepEqual(await zeilen(MANDANT_B, "order_gleich"), [{ id: "j_b_gleich", status: "queued" }]);
 });
 
-test("Dieselbe Zeile erneut speichern (ON CONFLICT id) aendert den Status und bleibt eine Zeile", async () => {
-  await jobAnlegen("j_update", MANDANT_A, "order_update");
-  await db.query(
-    `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key)
-     VALUES ('j_update', $1, 'n_job_a', 'order', 'done', 'order_update')
-     ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`,
-    [MANDANT_A],
-  );
-  assert.deepEqual(await zeilen(MANDANT_A, "order_update"), [{ id: "j_update", status: "done" }]);
+const bestand = async () => {
+  const { rows } = await db.query("SELECT id, tenant_id, idempotency_key, status FROM provisioning_job ORDER BY id");
+  return rows;
+};
+
+test("Dieselbe Spur ueber den Speicher erneut speichern aendert den Status und bleibt eine Zeile", async () => {
+  await store.ensureTenant(MANDANT_A);
+  const zustand = store.load();
+  const spur = {
+    id: "j_update",
+    numberId: "n_job_a",
+    tenantId: MANDANT_A,
+    kind: "order",
+    status: "queued",
+    idempotencyKey: "order_update",
+    attempts: 0,
+    lastError: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  zustand.numbers.push({ id: "n_job_a", tenantId: MANDANT_A, e164: null, status: "requested" });
+  zustand.provisioningJobs.push(spur);
+  await store.save();
+  assert.deepEqual(await zeilen(MANDANT_A, "order_update"), [{ id: spur.id, status: "queued" }]);
+  spur.status = "done";
+  await store.save();
+  assert.deepEqual(await zeilen(MANDANT_A, "order_update"), [{ id: spur.id, status: "done" }]);
 });
 
-test("Migration ist wiederholbar: ein zweiter Lauf legt keine zweite Regel an", async () => {
+test("Migration legt die Regel auf einer Tabelle mit Bestandszeilen an und laesst die Zeilen unveraendert", async () => {
+  const vorher = await bestand();
+  assert.equal(vorher.length, 4);
+  await db.query(`ALTER TABLE provisioning_job DROP CONSTRAINT ${REGEL_NAME}`);
   await db.query("DELETE FROM schema_migrations WHERE name = '0029_provisioning_job_eindeutig'");
   await store.init();
   const { rows } = await db.query("SELECT conname FROM pg_constraint WHERE conname = $1", [REGEL_NAME]);
   assert.deepEqual(rows, [{ conname: REGEL_NAME }]);
+  assert.deepEqual(await bestand(), vorher);
+  await assert.rejects(
+    () =>
+      db.query(
+        `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key)
+         SELECT 'j_drei', tenant_id, number_id, kind, status, idempotency_key FROM provisioning_job WHERE idempotency_key = 'order_update'`,
+      ),
+    new RegExp(REGEL_NAME),
+  );
 });
