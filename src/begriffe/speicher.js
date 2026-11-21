@@ -24,6 +24,10 @@ export const LEBENSZEICHEN_LOESCHALTER_MIN = 10;
 
 export const LEITUNGSPLATZ_DB_FRIST_MS = 5_000;
 
+export const ANRUF_SPERRE_NAMENSRAUM = 2_667;
+
+export const ANRUF_SPERRE_FRIST_MS = 5_000;
+
 export const TTS_ABLAGE_DB_FRIST_MS = 5_000;
 
 export const TTS_ABLAGE_TAKT_MS = 100;
