@@ -41,17 +41,28 @@ const MESSUNG = `(() => {
   return JSON.stringify({ texte, karte: kasten(doc.querySelector(".w") || doc.querySelector(".card")), zeilen });
 })()`;
 
-async function messe(html, szenarioWahl) {
+async function oeffneSitzung() {
+  const browser = launch(chrome);
+  const client = connect(await browser.endpoint);
+  await client.opened;
+  return {
+    client,
+    async schliesse() {
+      await browser.stop(client.send);
+      client.close();
+    },
+  };
+}
+
+async function messe(html, szenarioWahl, geteilt) {
   const konfig = { szenario: szenarioWahl, tempo: TEMPO, uhrNachAbgehoben: "weiter", callId: CALL_ID };
   const server = bedieneAnruffolge(html, konfig);
   const port = await server.listening;
-  const browser = launch(chrome);
-  let client;
+  const sitzung = geteilt || (await oeffneSitzung());
+  let targetId;
   try {
-    client = connect(await browser.endpoint);
-    await client.opened;
-    const { send, nextBinding } = client;
-    const { targetId } = await send("Target.createTarget", { url: "about:blank" });
+    const { send, nextBinding } = sitzung.client;
+    ({ targetId } = await send("Target.createTarget", { url: "about:blank" }));
     const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
     await send("Runtime.enable", {}, sessionId);
     await send("Runtime.addBinding", { name: DONE_BINDING }, sessionId);
@@ -61,8 +72,8 @@ async function messe(html, szenarioWahl) {
     const { result } = await send("Runtime.evaluate", { expression: MESSUNG, returnByValue: true }, sessionId);
     return JSON.parse(result.value);
   } finally {
-    await browser.stop(client && client.send);
-    if (client) client.close();
+    if (geteilt) await geteilt.client.send("Target.closeTarget", { targetId });
+    else await sitzung.schliesse();
     server.close();
   }
 }
@@ -76,16 +87,21 @@ async function zusammenfassung(outcome, resultSummary) {
 test("Fehlgeschlagener Anruf: die Grund-Zeile bleibt in jeder Sprache und Breite im Rahmen unter ihrer Beschriftung", OPTIONS, async () => {
   const { call } = await ausgelieferteWidgets();
   const befunde = [];
-  for (const sprache of SPRACHEN) {
-    for (const breite of BREITEN) {
-      const messung = await messe(call, szenario(sprache, breite, { status: "failed", failure_reason: LANGER_GRUND, objective_achieved: false, result_summary: null }));
-      const wo = `${sprache} ${breite}px`;
-      const { sichtbar, wert, beschriftung, abgeschnitten } = messung.zeilen.failure;
-      if (!sichtbar) befunde.push(`${wo}: Grund nicht sichtbar`);
-      if (wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Grund ragt rechts über die Karte`);
-      if (abgeschnitten) befunde.push(`${wo}: Grund ist abgeschnitten`);
-      if (wert.links < beschriftung.rechts - RAND_TOLERANZ) befunde.push(`${wo}: Grund steht nicht neben der Beschriftung`);
+  const sitzung = await oeffneSitzung();
+  try {
+    for (const sprache of SPRACHEN) {
+      for (const breite of BREITEN) {
+        const messung = await messe(call, szenario(sprache, breite, { status: "failed", failure_reason: LANGER_GRUND, objective_achieved: false, result_summary: null }), sitzung);
+        const wo = `${sprache} ${breite}px`;
+        const { sichtbar, wert, beschriftung, abgeschnitten } = messung.zeilen.failure;
+        if (!sichtbar) befunde.push(`${wo}: Grund nicht sichtbar`);
+        if (wert.rechts > messung.karte.rechts + RAND_TOLERANZ) befunde.push(`${wo}: Grund ragt rechts über die Karte`);
+        if (abgeschnitten) befunde.push(`${wo}: Grund ist abgeschnitten`);
+        if (wert.links < beschriftung.rechts - RAND_TOLERANZ) befunde.push(`${wo}: Grund steht nicht neben der Beschriftung`);
+      }
     }
+  } finally {
+    await sitzung.schliesse();
   }
   assert.deepEqual(befunde, []);
 });
