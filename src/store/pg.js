@@ -204,7 +204,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnruf }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -301,12 +301,14 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     return rows.length > 0 ? await anrufAusZeile(client, rows[0]) : null;
   }
 
-  async function leseAusDatenbank(id, uebernehmen) {
+  async function leseAusDatenbank(id, uebernehmen, client) {
     const state = requireState();
     const bekannt = ops.getCall(state, id);
     if (bekannt && eigene.has(bekannt.id)) return bekannt;
     try {
-      const gelesen = await mitZeitgrenze(runner, { arbeit: (client) => anrufLesen(client, id), nurFrist: true });
+      const gelesen = client
+        ? await anrufLesen(client, id)
+        : await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
       return gelesen ? uebernehmen(state, gelesen) : null;
     } catch (err) {
       console.error("[pg] leseCall fehlgeschlagen:", err.message);
@@ -314,9 +316,10 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     }
   }
 
-  const leseAnruf = (id) => leseAusDatenbank(id, (state, gelesen) => anrufEinsetzen({ state, eigene }, gelesen));
+  const leseAnrufMitClient = (id, client) => leseAusDatenbank(id, (state, gelesen) => anrufEinsetzen({ state, eigene }, gelesen), client);
+  const leseAnruf = (id) => leseAnrufMitClient(id);
   const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (_state, gelesen) => gelesen);
-  return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden };
+  return { attachActiveCallRow, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden };
 }
 
 async function loesen(gebunden, callId, schreiben) {
