@@ -403,9 +403,10 @@ conditional tools:
 
 - The two consult tools (`await_call_event`, `answer_consult`) are registered only when the
   consult channel is available to the account; otherwise they are not registered at all
-  (`src/mcp-tools.js#registerTools`). The same gate function decides whether the tools are
-  registered and - extended by one per-call condition, `consultAllowedForCall`
-  (`src/consult/gate.js#consultAllowedForCall`) - whether the channel is offered on a live call. Registering
+  (`src/mcp-tools.js#registerTools`). The same gate (`src/consult/gate.js#consultAllowedFor`; the
+  gates it combines are listed in `consultToreFor` there) decides whether the tools are
+  registered and whether the channel is offered on a live call
+  (`src/consult/gate.js#consultAllowedForCall`, which adds no per-call condition). Registering
   tools whose channel cannot work would put tools into `tools/list` that the account cannot
   use.
 
