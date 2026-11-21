@@ -1,14 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { voiceMinutesOf } from "../../src/billing/metering.js";
-import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { billThunk, terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, withFetch } from "../helpers.js";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";
-import { ACCOUNT, HTTP_OK, POLL_MS, baueStore, leererZustand, seedAusgehenderElCall } from "../_iel-inbound-harness.js";
+import { HTTP_OK, baueHarness, leererZustand, seedAusgehenderElCall } from "../_iel-inbound-harness.js";
 
 const LAUFZEIT_S = 60;
 const NAECHSTER_SCHRITT = "Bring the vehicle registration to the appointment on March 3.";
@@ -28,31 +23,11 @@ test("Schreibfehler beim Sichern des Anbieter-Ergebnisses im Nachlauf: Fehler wi
   const state = leererZustand();
   const call = seedAusgehenderElCall(state, { answeredVorS: LAUFZEIT_S, mitGespraech: true });
   const freigegeben = [];
-  const store = {
-    ...baueStore(state, { detektorZaehlungen: [] }),
-    addActionItem: () => {
-      throw new Error("db weg 5113");
-    },
-    leitungsplaetze: { freigeben: (id) => freigegeben.push(id) },
+  const { el, store, gebucht } = baueHarness(state);
+  store.addActionItem = () => {
+    throw new Error("db weg 5113");
   };
-  const gebucht = [];
-  const callFinish = makeCallFinish({
-    store,
-    config: { billing: { paymentEnabled: false }, privacy: { diagnosticRetentionDays: 0 } },
-    metering: { recordVoiceMinuteMeter() {}, reconcileVoiceBudget: (abgerechnet) => gebucht.push(voiceMinutesOf(abgerechnet)) },
-    messaging: () => ({ sendSms: async () => {} }),
-    summarizeCall: async () => null,
-    planSummarySms: () => ({ send: false }),
-    audit: () => {},
-  });
-  const el = makeElevenLabsOutbound({
-    store,
-    config: withConfigNamespaces({ elevenLabsOutbound: { ...ACCOUNT, resultPollMs: POLL_MS } }),
-    terminateAndBillCall,
-    billThunk,
-    finishCall: callFinish.finishCall,
-    endCarrierCall: () => {},
-  });
+  store.leitungsplaetze = { freigeben: (id) => freigegeben.push(id) };
   const unbehandelt = [];
   const zaehler = (grund) => unbehandelt.push(String(grund));
   process.on("unhandledRejection", zaehler);
