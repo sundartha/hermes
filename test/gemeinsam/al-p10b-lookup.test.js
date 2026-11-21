@@ -102,7 +102,7 @@ before(async () => {
       calls,
     }),
   );
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   store = await import("../../src/store.js");
   inCall = await import("../../src/research/in-call.js");
   ({ withConfig } = makeConfigOverrides(config));

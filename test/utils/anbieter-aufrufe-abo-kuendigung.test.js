@@ -2,7 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
 import { makePgTestStore } from "../pg-helpers.js";

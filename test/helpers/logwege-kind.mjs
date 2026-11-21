@@ -1,5 +1,5 @@
 import "../../src/process-guards.js";
-import "../../src/config.js";
+import "../../src/config.ts";
 import { once } from "node:events";
 import express from "express";
 import { errorHandler } from "../../src/middleware.ts";

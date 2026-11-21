@@ -40,7 +40,7 @@ after(async () => {
   await new Promise((resolve) => exa.close(resolve));
 });
 
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const { withConfig, withConfigOverrides } = makeConfigOverrides(config);
 const registry = await import("../../src/research/registry.js");
 const { LOOKUP_MAX_FACTS, LOOKUP_QUERY_MAX_CHARS, lookupFactsFrom, sanitizeLookupQuery } =

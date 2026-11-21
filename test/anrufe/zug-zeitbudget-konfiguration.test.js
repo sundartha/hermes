@@ -10,7 +10,7 @@ before(async () => {
   process.env.LLM_MAX_RETRIES = "";
   process.env.LLM_BACKOFF_MS = "";
   process.env.ELEVENLABS_SYNTH_TIMEOUT_MS = "";
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
 });
 
 test("Turn-Budget plus Play-TTS-Synthese bleibt unter dem 15-s-Provider-Hardcut (GAP-22)", () => {

@@ -30,7 +30,7 @@ const { renderDirectives } = await import("../../src/telephony/adapters/telnyx/r
 const { say, redirect, dialSip } = await import("../../src/telephony/directives.ts");
 const { elSipUri, EL_CALL_BINDING_SIP_HEADER } = await import("../../src/elevenlabs/inbound-sip-uri.ts");
 const initiation = await import("../../src/elevenlabs/inbound-initiation.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 const { withBlankedConfig } = makeConfigOverrides(config);
 

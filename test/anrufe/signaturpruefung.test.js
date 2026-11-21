@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startServer, waitForLog, makeTelnyxSigner, nowSeconds } from "../helpers.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { inboundSignatureVerifier } from "../../src/telephony/registry.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

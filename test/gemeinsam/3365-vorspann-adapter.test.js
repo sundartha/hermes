@@ -12,7 +12,7 @@ process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 
 const { voiceControl } = await import("../../src/telephony/registry.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 const telnyxVoice = voiceControl("telnyx");
 

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const WURZEL = fileURLToPath(new URL("../../", import.meta.url));
-const LESE_SKRIPT = `import { config } from "./src/config.js"; process.stdout.write(String(config.server.shutdownDrainTimeoutMs));`;
+const LESE_SKRIPT = `import { config } from "./src/config.ts"; process.stdout.write(String(config.server.shutdownDrainTimeoutMs));`;
 
 function drainFrist(wert) {
   const env = { ...process.env };

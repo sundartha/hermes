@@ -57,12 +57,12 @@ function umgebungAusWerten(wertVon) {
 const alleZahlenAuf = (wert) => umgebungAusWerten(() => wert);
 
 const UNGUELTIGE_KONFIGURATIONEN = [
-  { umgebung: alleZahlenAuf("0"), laden: () => import("../../src/config.js?lebenszeichen-null") },
-  { umgebung: alleZahlenAuf("-1"), laden: () => import("../../src/config.js?lebenszeichen-negativ") },
-  { umgebung: alleZahlenAuf("keine-zahl"), laden: () => import("../../src/config.js?lebenszeichen-keine-zahl") },
+  { umgebung: alleZahlenAuf("0"), laden: () => import("../../src/config.ts?lebenszeichen-null") },
+  { umgebung: alleZahlenAuf("-1"), laden: () => import("../../src/config.ts?lebenszeichen-negativ") },
+  { umgebung: alleZahlenAuf("keine-zahl"), laden: () => import("../../src/config.ts?lebenszeichen-keine-zahl") },
   {
     umgebung: umgebungAusWerten(({ untergrenze }) => untergrenze - 1),
-    laden: () => import("../../src/config.js?lebenszeichen-unter-untergrenze"),
+    laden: () => import("../../src/config.ts?lebenszeichen-unter-untergrenze"),
   },
 ];
 
@@ -71,19 +71,19 @@ const GUELTIGE_STARTS = [
     beschreibung: "Standardwerte",
     umgebung: {},
     erwartet: ({ standard }) => standard,
-    laden: () => import("../../src/config.js?lebenszeichen-standard"),
+    laden: () => import("../../src/config.ts?lebenszeichen-standard"),
   },
   {
     beschreibung: "Untergrenzen",
     umgebung: umgebungAusWerten(({ untergrenze }) => untergrenze),
     erwartet: ({ untergrenze }) => untergrenze,
-    laden: () => import("../../src/config.js?lebenszeichen-untergrenzen"),
+    laden: () => import("../../src/config.ts?lebenszeichen-untergrenzen"),
   },
   {
     beschreibung: "Obergrenzen",
     umgebung: umgebungAusWerten(({ obergrenze }) => obergrenze),
     erwartet: ({ obergrenze }) => obergrenze,
-    laden: () => import("../../src/config.js?lebenszeichen-obergrenzen"),
+    laden: () => import("../../src/config.ts?lebenszeichen-obergrenzen"),
   },
 ];
 
@@ -129,7 +129,7 @@ test("Lebenszeichen: Standardwerte und Werte an den Grenzen starten den Dienst m
 test("Lebenszeichen: ein Wert über der Obergrenze bleibt ohne Befund auf der Obergrenze", async () => {
   const { server, befunde } = await konfigurationBei(
     umgebungAusWerten(({ obergrenze }) => obergrenze + 1),
-    () => import("../../src/config.js?lebenszeichen-ueber-obergrenze"),
+    () => import("../../src/config.ts?lebenszeichen-ueber-obergrenze"),
   );
   for (const { variable, schluessel, obergrenze } of ZAHL_EINSTELLUNGEN) {
     assert.equal(server[schluessel], obergrenze, variable);
@@ -140,11 +140,11 @@ test("Lebenszeichen: ein Wert über der Obergrenze bleibt ohne Befund auf der Ob
 test("Lebenszeichen: die Adresse kommt unverändert in die Einstellung, ohne Wert ist sie leer", async () => {
   const mitAdresse = await konfigurationBei(
     { [ADRESSE]: BEISPIEL_ADRESSE },
-    () => import("../../src/config.js?lebenszeichen-mit-adresse"),
+    () => import("../../src/config.ts?lebenszeichen-mit-adresse"),
   );
   assert.equal(mitAdresse.server.herzschlagUrl, BEISPIEL_ADRESSE);
 
-  const ohneAdresse = await konfigurationBei({}, () => import("../../src/config.js?lebenszeichen-ohne-adresse"));
+  const ohneAdresse = await konfigurationBei({}, () => import("../../src/config.ts?lebenszeichen-ohne-adresse"));
   assert.equal(ohneAdresse.server.herzschlagUrl, "");
 });
 

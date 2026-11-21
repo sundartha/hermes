@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { config, assertConfig } from "../../src/config.js";
+import { config, assertConfig } from "../../src/config.ts";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK, startServer } from "../helpers.js";
 import { fehlerausgabeVon } from "./fehlerausgabe.js";
 

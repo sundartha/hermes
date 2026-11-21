@@ -91,7 +91,7 @@ test("Kostenabgleich im Sweep-Takt, 15.08.2026 mit geprüftem Juli (kein zweites
 const { after } = await import("node:test");
 const { default: http } = await import("node:http");
 const { startServer, seedState, PLAN_PRICE_BOOT_ENV } = await import("../helpers.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 const SECHS_STUNDEN_MS = 21_600_000;
 const TAG_MS = 86_400_000;

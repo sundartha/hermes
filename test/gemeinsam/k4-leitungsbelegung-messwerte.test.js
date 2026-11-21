@@ -1,7 +1,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { starteTelemetrie } from "../../src/utils/telemetrie.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { leitungsplaetze, makeLeitungsplaetze, oeffneSpeicher } from "../../src/store.js";
 import { makeConfigOverrides } from ".././helpers.js";
 import { mitVerbindung } from ".././gemeinsam/echtes-postgres.js";

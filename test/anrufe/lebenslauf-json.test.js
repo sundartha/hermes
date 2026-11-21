@@ -9,7 +9,7 @@ let store;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-lebenslauf-json-"));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   fs.writeFileSync(
     path.join(process.env.DATA_DIR, "store.json"),

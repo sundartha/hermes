@@ -62,7 +62,7 @@ before(async () => {
       calls,
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   claude = await import("../../src/claude.js");
   ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));

@@ -104,7 +104,7 @@ before(async () => {
       settings: { allowResearch: true },
     }),
   );
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
   store = await import("../../src/store.js");
   ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
   ({ fetchPrecallBriefing } = await import("../../src/precall-briefing.js"));

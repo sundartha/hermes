@@ -9,7 +9,7 @@ let makePgStore, config, subscribeMod, webhookMod, ops;
 
 before(async () => {
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   subscribeMod = await import("../../src/billing/subscribe.ts");
   webhookMod = await import("../../src/billing/webhook.ts");
   ops = await import("../../src/store/state-ops.js");

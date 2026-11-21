@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spendCapCoherence, unpricedModels, SPEND_CAP_FINDING } from "../../src/boot-guard.ts";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { PRICES } from "../_prices.js";
 
 test("KS-P9: Tenant-Default >= Plattform-Zahl ist kein Befund mehr", () => {

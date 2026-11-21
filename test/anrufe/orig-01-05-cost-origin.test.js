@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { tariffCentsPerMin } from "../../src/telephony/outbound-gates.js";
 import { makeDefaultState, registerTenant, reserveExceedsBudget } from "../../src/store/state-ops.js";
 import { outboundReserveCents } from "../../src/begriffe/abrechnung.ts";

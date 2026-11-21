@@ -178,7 +178,7 @@ test("SCHLUESSEL-9: ohne Schluesselart sucht attachActiveCall weiter nach der An
 
 test("SCHLUESSEL-10: der JSON-Speicher findet einen laufenden Anruf nach Stream-Token und Anbieter-Kennung, einen beendeten nicht", async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-schluessel-"));
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   const store = await import("../../src/store.js");
   const call = store.createCall({ direction: "outbound", from: "+4930123456", to: ZIEL, tenantId: KUNDE, twilioSid: SID });
   assert.equal((await store.attachActiveCall(call.streamToken, NACH_TOKEN)).id, call.id);

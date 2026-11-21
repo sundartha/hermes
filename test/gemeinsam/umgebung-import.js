@@ -10,14 +10,14 @@ function setzeUmgebung(umgebung) {
 function pruefeDatenverzeichnis(config, datenverzeichnis) {
   if (path.resolve(config.server.dataDir) !== path.resolve(datenverzeichnis)) {
     throw new Error(
-      `DATA_DIR ${datenverzeichnis} ist nicht gebunden: src/config.js war schon geladen und zeigt auf ${config.server.dataDir}`,
+      `DATA_DIR ${datenverzeichnis} ist nicht gebunden: src/config.ts war schon geladen und zeigt auf ${config.server.dataDir}`,
     );
   }
 }
 
 async function bindeKonfiguration(env, konfiguration) {
   setzeUmgebung(env);
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   if (env.DATA_DIR) pruefeDatenverzeichnis(config, env.DATA_DIR);
   for (const [namensraum, werte] of Object.entries(konfiguration)) {
     for (const [schluessel, wert] of Object.entries(werte)) {

@@ -4,7 +4,7 @@ import { tempDataDir } from "../helpers.js";
 import { operatorAuthPassThrough, startRouterApp } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 
 const PRAEFIX = "+49";

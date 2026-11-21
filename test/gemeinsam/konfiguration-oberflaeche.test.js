@@ -6,7 +6,7 @@ import {
   gatewayUrlForPort,
   isSelfServiceLive,
   resolveGatewayUrl,
-} from "../../src/config.js";
+} from "../../src/config.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
@@ -325,7 +325,7 @@ test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN F
   const saved = process.env.MAX_CALLS_PER_HOUR;
   process.env.MAX_CALLS_PER_HOUR = "120abc";
   try {
-    const fresh = await import("../../src/config.js?pa12-nodbl");
+    const fresh = await import("../../src/config.ts?pa12-nodbl");
     const before = fresh.configFatalErrors().length;
     for (const [namespace, keys] of Object.entries(fresh.CONFIG_NAMESPACES)) {
       for (const key of keys) void fresh.config[namespace][key];

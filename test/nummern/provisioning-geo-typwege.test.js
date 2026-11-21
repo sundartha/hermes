@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";

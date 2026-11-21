@@ -17,7 +17,7 @@ before(async () => {
     ],
   });
   process.env.DATA_DIR = tempDataDir(seed);
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ systemPrompt, disclosureSentence } = await import("../../src/claude.js"));
 });
 

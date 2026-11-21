@@ -1,7 +1,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { fromPglite } from "pg-boss";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeConfigOverrides } from "../helpers.js";
 import { neuePglite } from "../pglite-helfer.js";

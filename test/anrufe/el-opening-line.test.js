@@ -89,7 +89,7 @@ before(async () => {
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
   store = await import("../../src/store.js");
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   ({ localeFor, SUPPORTED_LANGUAGES, afterGreeting } = await import("../../src/i18n/locales.ts"));
   ({ usageFor } = await import("../../src/store/state-ops.js"));
   ({

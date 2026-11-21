@@ -15,7 +15,7 @@ let createCall, jsonStore, makePgStore, jsonDataDir;
 before(async () => {
   jsonDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-oc-p1-store-"));
   process.env.DATA_DIR = jsonDataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ({ createCall } = await import("../../src/store/state-ops.js"));
   jsonStore = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));

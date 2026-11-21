@@ -44,7 +44,7 @@ const { starteHermesMitPglite } = await import("../abrechnung/server-mit-testdat
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 
 after(async () => {

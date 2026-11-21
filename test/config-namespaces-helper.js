@@ -1,4 +1,4 @@
-import { attachNamespaces, CONFIG_NAMESPACES } from "../src/config.js";
+import { attachNamespaces, CONFIG_NAMESPACES } from "../src/config.ts";
 
 export function withConfigNamespaces(flatConfig) {
   const config = { ...flatConfig };

@@ -155,7 +155,7 @@ test("Paket 15: gezaehlt werden nur aktive Anrufe innerhalb ihrer Hoechstdauer",
 test("Paket 15: die Speicher-Fassade reicht classifyCallTime und MAX_CALL_DURATION_CAP_S an den Endpunkt weiter", async (kontext) => {
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), "intern-anrufe-laufend-"));
   kontext.after(() => fs.rmSync(ordner, { recursive: true, force: true }));
-  const { config } = await import("../../src/config.js");
+  const { config } = await import("../../src/config.ts");
   config.server.dataDir = ordner;
   const fassade = await import("../../src/store.js");
   assert.equal(fassade.classifyCallTime, classifyCallTime);

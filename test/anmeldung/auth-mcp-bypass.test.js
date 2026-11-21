@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { legacyLocalBypassAllowed, makeMcpAuth } from "../../src/auth.js";
 import { _resetJwksCache } from "../../src/auth.js";
 import { makeConfigOverrides } from "../helpers.js";

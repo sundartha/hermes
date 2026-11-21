@@ -58,7 +58,7 @@ before(async () => {
       calls,
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   ops = await import("../../src/store/state-ops.js");
   inCall = await import("../../src/consult/in-call.js");
   question = await import("../../src/consult/question.ts");

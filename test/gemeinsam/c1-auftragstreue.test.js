@@ -54,7 +54,7 @@ before(async () => {
       calls: [seedCall({ id: CALL_ID, direction: "outbound", goal: GOAL, transcript: TRANSCRIPT })],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   ({ systemPrompt, summarizeCall } = await import("../../src/claude.js"));
   ({ LOCALES } = await import("../../src/i18n/locales.ts"));

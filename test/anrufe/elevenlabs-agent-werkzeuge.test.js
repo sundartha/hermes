@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { consultAllowedFor } from "../../src/consult/gate.js";
 import { makeConfigOverrides } from "../helpers.js";
 

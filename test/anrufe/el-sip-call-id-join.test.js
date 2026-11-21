@@ -39,7 +39,7 @@ let jsonStore, makePgStore, BOOTSTRAP, dataDir;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-sipcallid-"));
   process.env.DATA_DIR = dataDir;
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   jsonStore = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));

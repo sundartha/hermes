@@ -10,7 +10,7 @@ const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", 
 delete process.env.COST_TRUING_DELAY_MINUTES;
 delete process.env.COST_TRUING_SWEEP_INTERVAL_MS;
 
-const { config: defaults } = await import("../../src/config.js?ke-p6b-defaults");
+const { config: defaults } = await import("../../src/config.ts?ke-p6b-defaults");
 const costTruingModule = await import("../../src/billing/cost-truing.ts");
 const { makeCostTruing, SWEEP_TRIGGER } = costTruingModule;
 const { makeDefaultState } = await import("../../src/store/state-ops.js");
@@ -85,7 +85,7 @@ test("(P6B-4) Verzug und Kadenz stehen in config.js, .env.example, render.yaml u
 test("(P6B-5) Kadenz unter dem Minimum -> Fatal-Befund (Boot-Refusal) + Fallback statt Sweep-Sturm", async () => {
   process.env.COST_TRUING_SWEEP_INTERVAL_MS = "59999";
   try {
-    const fresh = await import("../../src/config.js?ke-p6b-min");
+    const fresh = await import("../../src/config.ts?ke-p6b-min");
     assert.ok(
       fresh.configFatalErrors().some((e) => e.includes("COST_TRUING_SWEEP_INTERVAL_MS")),
       "eine zu kleine Kadenz muss den Boot verweigern, nicht still durchlaufen",
@@ -99,7 +99,7 @@ test("(P6B-5) Kadenz unter dem Minimum -> Fatal-Befund (Boot-Refusal) + Fallback
 test("(P6B-6) Kadenz ueber der Node-Timer-Grenze wird geklemmt (sonst faellt der Timer auf 1 ms)", async () => {
   process.env.COST_TRUING_SWEEP_INTERVAL_MS = String(MAX_TIMER_DELAY_MS + 1);
   try {
-    const fresh = await import("../../src/config.js?ke-p6b-max");
+    const fresh = await import("../../src/config.ts?ke-p6b-max");
     assert.equal(fresh.config.billing.costTruingSweepIntervalMs, MAX_TIMER_DELAY_MS);
     assert.ok(
       !fresh.configFatalErrors().some((e) => e.includes("COST_TRUING_SWEEP_INTERVAL_MS")),

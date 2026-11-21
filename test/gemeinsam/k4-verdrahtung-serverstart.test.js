@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { makeConfigOverrides, startServer } from "../helpers.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 import { echteDatenbank } from "./echtes-postgres.js";

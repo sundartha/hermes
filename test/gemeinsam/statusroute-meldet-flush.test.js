@@ -31,7 +31,7 @@ const pools = poolAufPglite(db, { exklusiv: false });
 process.env.STORE_BACKEND = "pg";
 process.env.DATABASE_URL = "postgres://attrappe.invalid/hermes";
 const DATENORDNER = fs.mkdtempSync(path.join(os.tmpdir(), "statusroute-flush-"));
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 Object.assign(config.server, { dataDir: DATENORDNER, deployedCommit: COMMIT });
 Object.assign(config.auth, { statusToken: SCHLUESSEL });
 const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);

@@ -20,7 +20,7 @@ const ABGELAUFEN = "Die Frist ist abgelaufen";
 const ZAEHLER_ENDE = "2000-01-01T00:00:00.000Z";
 
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
 
 Object.assign(config.billing, {

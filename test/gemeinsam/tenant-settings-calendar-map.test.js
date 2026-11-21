@@ -34,7 +34,7 @@ let config;
 let jsonBackend;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  config = (await import("../../src/config.js")).config;
+  config = (await import("../../src/config.ts")).config;
   jsonBackend = await import("../../src/store/json.js");
 });
 

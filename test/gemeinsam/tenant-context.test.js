@@ -11,7 +11,7 @@ let jsonBackend;
 let makePgTestStore;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   jsonBackend = await import("../../src/store/json.js");
   ({ makePgTestStore } = await import(".././pg-helpers.js"));
 });

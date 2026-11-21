@@ -253,7 +253,7 @@ test("KV2-10 (cfg2): VOICE_TARIFF_FULL_COST_FLOOR_CENTS-Fallback = 15 in config.
   const saved = process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS;
   try {
     delete process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS;
-    const ohneBoden = await import("../../src/config.js?kv2-10-cfg2");
+    const ohneBoden = await import("../../src/config.ts?kv2-10-cfg2");
     assert.equal(ohneBoden.config.billing.voiceTariffFullCostFloorCents, Number(BODEN_FALLBACK_CENTS));
   } finally {
     if (saved !== undefined) process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS = saved;
@@ -264,18 +264,18 @@ test("KV2-10 (cfg3): unbekanntes Profil oder Muell-Cent in der Env-Karte reisst 
   const saved = process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS;
   try {
     process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS = "unbekanntes_profil:23";
-    const mitUnbekannt = await import("../../src/config.js?kv2-10-cfg3a");
+    const mitUnbekannt = await import("../../src/config.ts?kv2-10-cfg3a");
     assert.ok(
       mitUnbekannt.configFatalErrors().some((msg) => msg.includes("VOICE_TARIFF_GRUNDBETRAG_CENTS")),
       "unbekanntes Profil -> fatalConfigErrors -> Boot-Refusal",
     );
 
     process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS = "el_convai_sip:kein_zahl";
-    const mitMuell = await import("../../src/config.js?kv2-10-cfg3b");
+    const mitMuell = await import("../../src/config.ts?kv2-10-cfg3b");
     assert.ok(mitMuell.configFatalErrors().some((msg) => msg.includes("VOICE_TARIFF_GRUNDBETRAG_CENTS")), "Muell-Cent -> fatal");
 
     process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS = "el_convai_sip:23";
-    const gueltig = await import("../../src/config.js?kv2-10-cfg3c");
+    const gueltig = await import("../../src/config.ts?kv2-10-cfg3c");
     assert.deepEqual(gueltig.config.billing.voiceTariffGrundbetragCentsJeRoute, { el_convai_sip: 23 });
   } finally {
     if (saved === undefined) delete process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS;

@@ -5,7 +5,7 @@ import { kindUmgebung } from "./kind-umgebung.mjs";
 import { BASE_ENV, ROOT } from "../helpers.js";
 
 const SKRIPT = [
-  'import("./src/config.js").then(({ configFatalErrors }) =>',
+  'import("./src/config.ts").then(({ configFatalErrors }) =>',
   "  process.stdout.write(JSON.stringify(configFatalErrors())));",
 ].join("\n");
 

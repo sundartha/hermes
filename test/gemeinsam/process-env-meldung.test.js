@@ -8,7 +8,7 @@ import { ESLint } from "eslint";
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const eslint = new ESLint({ cwd: WURZEL });
 
-test("process.env außerhalb von src/config.js: Meldung nennt alle drei Schritte inklusive render.yaml", async () => {
+test("process.env außerhalb von src/config.ts: Meldung nennt alle drei Schritte inklusive render.yaml", async () => {
   const [ergebnis] = await eslint.lintText("export const a = process.env.X;\n", {
     filePath: resolve(WURZEL, "src/utils/probe-env.js"),
   });

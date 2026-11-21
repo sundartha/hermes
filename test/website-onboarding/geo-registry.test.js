@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { geoLookupAdapter } from "../../src/geo/registry.js";
 import { nullGeoLookup } from "../../src/geo/stub.js";
 
@@ -32,7 +32,7 @@ test("VOICE-05 (Mechanismus, gruen) - ohne GEO_ENABLED in der Env bleibt geoEnab
   const saved = process.env.GEO_ENABLED;
   try {
     delete process.env.GEO_ENABLED;
-    const fresh = await import("../../src/config.js?voice05");
+    const fresh = await import("../../src/config.ts?voice05");
     assert.equal(fresh.config.provisioning.geoEnabled, false);
   } finally {
     if (saved === undefined) delete process.env.GEO_ENABLED;

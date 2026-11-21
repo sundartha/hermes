@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeCallLifecycle, CAP_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
 import { terminateAndBillCall, hangUpAction, billThunk } from "../../src/telephony/call-termination.ts";
 import { cappedEndedAtMs, classifyCallTime } from "../../src/store/state-ops.js";
-import { VOICE_ENGINE } from "../../src/config.js";
+import { VOICE_ENGINE } from "../../src/config.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const MAX_DURATION_S = 60;

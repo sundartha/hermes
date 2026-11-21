@@ -21,7 +21,7 @@ test("Kriterium 4: die Konfiguration liest ELEVENLABS_AGENT_PHONE_NUMBER_ID nich
     [
       "--input-type=module",
       "-e",
-      'import { config } from "./src/config.js"; console.log(JSON.stringify(Object.keys(config.voice.elevenLabsOutbound)));',
+      'import { config } from "./src/config.ts"; console.log(JSON.stringify(Object.keys(config.voice.elevenLabsOutbound)));',
     ],
     { cwd: ROOT, env: { ...process.env, [GLOBALE_KENNUNG]: "phnum_global_test" }, encoding: "utf8" },
   );

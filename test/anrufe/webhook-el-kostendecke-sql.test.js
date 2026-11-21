@@ -9,7 +9,7 @@ process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 process.env.IN_CALL_CONSULT_ENABLED = "true";
 
 const { makeElevenLabsWebhookRoutes } = await import("../../src/routes/webhooks-elevenlabs.ts");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;

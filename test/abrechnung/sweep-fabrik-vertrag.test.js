@@ -100,7 +100,7 @@ import { mock } from "node:test";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { starteSweepTakt } from "../../src/boot.js";
 import { createQueue } from "../../src/queue/registry.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);

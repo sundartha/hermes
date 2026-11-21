@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { PLACE_CALL_HOP_TIMEOUT_MS } from "../../src/mcp-tools.js";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { VORSPANN_TTS_FRIST_MS } from "../../src/elevenlabs/vorspann-pruefung.js";
 import { ANRUF_STEUERN_FRIST_MS } from "../../src/telephony/anruf-fristen.ts";
 import { DEDUP_WINDOW_MS } from "../../src/telephony/call-dedup.ts";

@@ -33,7 +33,7 @@ process.env.TELNYX_CONNECTION_ID = "conn_sweep";
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: ALARM_POSTFACH });
 const { makeDueOutboundCall } = await import("../cost-truing-harness.js");
 const store = await import("../../src/store.js");
-const { config } = await import("../../src/config.js");
+const { config } = await import("../../src/config.ts");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 
 function belegeFuer(call) {

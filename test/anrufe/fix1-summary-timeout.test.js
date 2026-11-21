@@ -69,7 +69,7 @@ before(async () => {
       calls: [seedCall({ id: CALL_ID, direction: "outbound", goal: GOAL, transcript: TRANSCRIPT })],
     }),
   );
-  await import("../../src/config.js");
+  await import("../../src/config.ts");
   store = await import("../../src/store.js");
   ({ summarizeCall } = await import("../../src/claude.js"));
   ({ LlmUnavailableError } = await import("../../src/llm.js"));

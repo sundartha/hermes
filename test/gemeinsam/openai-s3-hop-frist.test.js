@@ -6,7 +6,7 @@ import {
 } from "../../src/mcp-tools.js";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
 import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 import { DEDUP_WINDOW_MS, findDuplicateOutboundCall } from "../../src/telephony/call-dedup.ts";
 
 const BRIEFING_STEPS = 2;

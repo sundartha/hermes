@@ -9,7 +9,7 @@ const MICRO_PER_UNIT = 1_000_000;
 function readBuiltRates(overrides = {}) {
   const env = kindUmgebung({ ...BASE_ENV, ...overrides, NODE_ENV: "test" });
   const script =
-    "import(\"./src/config.js\").then(({ config }) => " +
+    "import(\"./src/config.ts\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +
     "usdToEur: config.llm.usdToEur, " +
     "providerToBucketRateMicro: config.billing.providerToBucketRateMicro })));";

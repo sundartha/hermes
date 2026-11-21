@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, assertConfig } from "../../src/config.js";
+import { config, assertConfig } from "../../src/config.ts";
 import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "../helpers.js";
 import { fehlerausgabeVon } from "../gemeinsam/fehlerausgabe.js";
 

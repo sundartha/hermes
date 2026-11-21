@@ -50,7 +50,7 @@ before(async () => {
       calls,
     }),
   );
-  ({ config } = await import("../../src/config.js"));
+  ({ config } = await import("../../src/config.ts"));
   store = await import("../../src/store.js");
   defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");
