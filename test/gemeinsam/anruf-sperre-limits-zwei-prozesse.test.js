@@ -181,7 +181,8 @@ test(
     await sperre(fremde);
     await keineSperre((text) => eigene.query(text));
     await sperre(eigene);
-    assert.equal((await eigene.query(ANRUF_SPERREN_SQL)).rows[0].anzahl, 1);
+    const { rows } = await eigene.query(ANRUF_SPERREN_SQL);
+    assert.equal(rows[0].anzahl, 1);
     await assert.rejects(keineSperre((text) => eigene.query(text)), assert.AssertionError);
   },
 );
