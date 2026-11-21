@@ -110,10 +110,18 @@ const SPEC_ZEILE = /^\s*✗ (.+) \((\S+\.test\.[cm]?[jt]s):\d+:\d+\)$/;
 const BASIS_ROT_ZEILE = /^Basis rot: (\S+) war bei /;
 const TESTORDNER = /^.*?\/((?:apps\/web\/)?test\/)/;
 
+function bereinigteZeile(roh) {
+  return roh.replace(ZEITSTEMPEL, "").replace(/\r$/, "");
+}
+
+function basisRotName(zeile) {
+  const datei = BASIS_ROT_ZEILE.exec(zeile)?.[1];
+  return datei === undefined ? [] : [`${datei} (Mutation)`];
+}
+
 function speczeilenNamen(zeile) {
   const spec = SPEC_ZEILE.exec(zeile);
-  const basisRot = BASIS_ROT_ZEILE.exec(zeile)?.[1];
-  return [...(spec === null ? [] : [`${spec[2].replace(TESTORDNER, "$1")} › ${spec[1]}`]), ...(basisRot === undefined ? [] : [`${basisRot} (Mutation)`])];
+  return [...(spec === null ? [] : [`${spec[2].replace(TESTORDNER, "$1")} › ${spec[1]}`]), ...basisRotName(zeile)];
 }
 
 function rotTests(log, jobName) {
@@ -121,7 +129,7 @@ function rotTests(log, jobName) {
   let datei;
   let letzteTiefe = 0;
   for (const roh of log.split("\n")) {
-    const zeile = roh.replace(ZEITSTEMPEL, "").replace(/\r$/, "");
+    const zeile = bereinigteZeile(roh);
     const neueDatei = DATEI_ZEILE.exec(zeile)?.[1];
     if (neueDatei !== undefined) {
       datei = neueDatei.replace(TESTORDNER, "$1");
@@ -139,8 +147,7 @@ function rotTests(log, jobName) {
 }
 
 function basisRotEintraege(log) {
-  const namen = log.split("\n").map((roh) => BASIS_ROT_ZEILE.exec(roh.replace(ZEITSTEMPEL, ""))?.[1]);
-  return namen.filter((name) => name !== undefined).map((name) => `${name} (Mutation)`);
+  return log.split("\n").flatMap((roh) => basisRotName(bereinigteZeile(roh)));
 }
 
 function istZahl(teil) {

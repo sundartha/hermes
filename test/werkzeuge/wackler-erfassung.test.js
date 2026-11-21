@@ -246,3 +246,11 @@ test("Tests n/12 mit not-ok-Zeilen bleibt Wackler-Quelle", () => {
   const ergebnis = auswerten({ versuche: [versuch([{ id: 11, name: "Tests 12/12", conclusion: "failure" }])], logs: { 11: NOT_OK_LOG } });
   assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), [TITEL]);
 });
+
+test("Basis-rot-Zeile mit Zeitstempel und CRLF ergibt in Mutations- und Testjob denselben Titel", () => {
+  const log = "2026-11-20T10:00:00.1Z Basis rot: test/anmeldung/sitzung.test.js war bei 14/14 zweimal ohne Mutant rot\r\n";
+  const titel = (job) => auswerten({ versuche: [versuch([job])], logs: { [job.id]: log } }).map(({ anlegen }) => anlegen.title);
+  const erwartet = ["Wackelig: test/anmeldung/sitzung.test.js (Mutation)"];
+  assert.deepEqual(titel({ id: 14, name: "Mutation 14/14", conclusion: "failure" }), erwartet);
+  assert.deepEqual(titel({ id: 11, name: "Tests 3/12", conclusion: "failure" }), erwartet);
+});
