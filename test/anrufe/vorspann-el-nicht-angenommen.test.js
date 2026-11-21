@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 
-import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, warteAufEreignis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -15,7 +16,7 @@ const NUMMER_PRAEFIX = "+4915112392";
 const AUDIO_BYTES = 200_000;
 const GRUND = "el_uebergabe_gescheitert";
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -37,18 +38,21 @@ function beantworte(req, res, anfrage) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       beantworte(req, res, anfrage);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
@@ -117,22 +121,22 @@ async function angenommenerAnruf() {
   });
   const { callId } = await antwort.json();
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
-  await waitUntil(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
   return callId;
 }
 
 async function elLegtAuf(callId, zusatz) {
   await sende(callId, "call.hangup", { bein: elVon(callId), zusatz });
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "hangup").length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "failed");
 }
 
 test("5378-B1: EL-Bein legt vor der Bruecke auf -> Grund el_nicht_angenommen statt el_fehler, Ursache im Log, Anruf endet ohne zweite Ansage", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await angenommenerAnruf();
   await elLegtAuf(callId, { hangup_cause: "timeout", sip_hangup_cause: "480", hangup_source: "callee" });
-  await waitUntil(() => srv.stdout.includes(aufgelegtLog(["timeout", "480", "callee"], callId)));
+  await warteAuf(() => srv.stdout.includes(aufgelegtLog(["timeout", "480", "callee"], callId)));
   assert.ok(srv.stdout.includes(rueckfallLog("el_nicht_angenommen", callId)));
   assert.ok(!srv.stdout.includes(rueckfallLog("el_fehler", callId)));
   assert.equal(anrufIn(callId).failureReason, GRUND);
@@ -149,7 +153,7 @@ test("5378-B2: Ursache fehlt oder hat unsichere Zeichen -> Platzhalter -, kein R
   const { srv } = umgebung;
   const callId = await angenommenerAnruf();
   await elLegtAuf(callId, { hangup_cause: "x y;z", sip_hangup_cause: 480, hangup_source: "+4915112392001" });
-  await waitUntil(() => srv.stdout.includes(aufgelegtLog(["-", "-", "-"], callId)));
+  await warteAuf(() => srv.stdout.includes(aufgelegtLog(["-", "-", "-"], callId)));
   assert.ok(!srv.stdout.includes("+4915112392001 "));
 });
 
@@ -157,14 +161,14 @@ test("5378-B3: nur ein Teil der Ursache vorhanden -> die anderen Felder stehen a
   const { srv } = umgebung;
   const callId = await angenommenerAnruf();
   await elLegtAuf(callId, { sip_hangup_cause: "603" });
-  await waitUntil(() => srv.stdout.includes(aufgelegtLog(["-", "603", "-"], callId)));
+  await warteAuf(() => srv.stdout.includes(aufgelegtLog(["-", "603", "-"], callId)));
 });
 
 test("5378-B4: Angerufener legt auf -> keine Zeile el_bein_aufgelegt", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await angenommenerAnruf();
   await sende(callId, "call.hangup", { zusatz: { hangup_cause: "normal_clearing" } });
-  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "completed");
   assert.ok(!srv.stdout.includes("el_bein_aufgelegt"));
 });
