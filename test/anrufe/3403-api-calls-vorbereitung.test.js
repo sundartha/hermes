@@ -227,7 +227,6 @@ const innereConfig = (zusatz = {}) =>
     diagnosticRetentionDays: 0,
     ownerSelfCallEnabled: false,
     ownerSelfCallTenantIds: [],
-    elevenLabsOutbound: { ueberTelnyx: false, vorspann: false },
     telnyxElevenLabs: {},
     telnyxAssistant: { enabled: false },
     voiceEngine: "budget",
