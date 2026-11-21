@@ -59,7 +59,7 @@ Rollback-Fall: einen Lauf gegen einen Deploy VOR AUTH-P7, wo das Basic-Auth-Gate
 lebt und die Tabellenspalte `ANTWORTET` noch den Wert `gate` traegt.
 
 Der Commit ist ein Pflichtargument und kommt aus `GET /healthz` der Live-Instanz, nicht
-aus `git rev-parse` — Render deployt aus dem Upstream-Remote, der lokale `master` ist
+aus `git rev-parse` — der Live-Dienst wird von Hand aus `sundartha/hermes`, Zweig `master`, deployt (README.md, Abschnitt „Deploy-Realität (Repo-Split)“), der lokale `master` ist
 nicht der Live-Stand. Exit 0 = alles wie erwartet · 1 = Abweichung · 2 = Abbruch vor der
 Messung (falscher Commit, Rate-Limit, `/healthz` nicht erreichbar).
 
