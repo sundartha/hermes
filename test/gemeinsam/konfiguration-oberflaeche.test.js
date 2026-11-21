@@ -179,7 +179,6 @@ telemetry.telemetryIntervalMs
 telemetry.telemetryOtlpToken
 telemetry.telemetryOtlpUrl
 telemetry.telemetryOtlpUser
-telephony.machineDetection
 telephony.telnyxAccountSid
 telephony.telnyxApiBase
 telephony.telnyxApiKey
@@ -228,7 +227,6 @@ billing.voiceTariffGrundbetragCentsJeRoute
 llm.modelPricesUsd
 safety.allowedCountryCodes
 safety.mcpAllowedOrigins
-telephony.machineDetection
 telnyx.telnyxElevenLabs
 voice.elevenLabsInbound
 voice.elevenLabsOutbound

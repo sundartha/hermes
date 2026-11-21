@@ -999,7 +999,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ohne Umgebung gelten die St
     telnyxConnectionId: "",
     telnyxCallControlAppId: "",
     telnyxAccountSid: "",
-    machineDetection: { enabled: false, timeoutS: 5 },
   });
   assert.deepEqual(ist.tenancy, {
     multiTenant: false,
@@ -1043,8 +1042,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     TELNYX_CONNECTION_ID: "c1",
     TELNYX_CALL_CONTROL_APP_ID: "  app1  ",
     TELNYX_ACCOUNT_SID: "sid1",
-    MACHINE_DETECTION_ENABLED: "true",
-    MACHINE_DETECTION_TIMEOUT_S: "9",
     MULTI_TENANT: "true",
     MCP_UI_ENABLED: "false",
     ASSISTANT_CONTEXT_ENABLED: "false",
@@ -1082,7 +1079,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
     telnyxConnectionId: "c1",
     telnyxCallControlAppId: "app1",
     telnyxAccountSid: "sid1",
-    machineDetection: { enabled: true, timeoutS: 9 },
   });
   assert.deepEqual(ist.tenancy, {
     multiTenant: true,
@@ -1119,7 +1115,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: gesetzte Werte werden geles
 });
 
 const GROSSE_ROHWERTE_AM_MINIMUM = {
-  MACHINE_DETECTION_TIMEOUT_S: "3",
   CONSULT_WAIT_MS: "0",
   CONSULT_OPEN_MS: "0",
   EL_CONSULT_DELIVERY_MS: "0",
@@ -1136,7 +1131,6 @@ const GROSSE_ROHWERTE_AM_MINIMUM = {
 test("Rohwerte Telefonie, Mandanten, Nummernvergabe: genau am Minimum gilt der Wert ohne Befund", () => {
   const ist = ladeGrosseRohwerte(GROSSE_ROHWERTE_AM_MINIMUM);
   assert.deepEqual(ist.fehler, []);
-  assert.equal(ist.telephony.machineDetection.timeoutS, 3);
   assert.equal(ist.tenancy.consultWaitMs, 0);
   assert.equal(ist.tenancy.consultOpenMs, 0);
   assert.equal(ist.tenancy.elConsultDeliveryMs, 0);
@@ -1151,10 +1145,9 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: genau am Minimum gilt der W
 
 test("Rohwerte Telefonie, Mandanten, Nummernvergabe: unter dem Minimum gilt der Standardwert mit Befund je Variable", () => {
   const unter = Object.fromEntries(
-    Object.keys(GROSSE_ROHWERTE_AM_MINIMUM).map((name) => [name, name === "MACHINE_DETECTION_TIMEOUT_S" ? "2" : "-1"]),
+    Object.keys(GROSSE_ROHWERTE_AM_MINIMUM).map((name) => [name, "-1"]),
   );
   const ist = ladeGrosseRohwerte(unter);
-  assert.equal(ist.telephony.machineDetection.timeoutS, 5);
   assert.equal(ist.tenancy.consultWaitMs, 4000);
   assert.equal(ist.tenancy.consultOpenMs, 47000);
   assert.equal(ist.tenancy.elConsultDeliveryMs, 5000);
@@ -1166,7 +1159,7 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: unter dem Minimum gilt der 
   assert.equal(ist.provisioning.provisioningRetryMaxAttempts, 3);
   assert.equal(ist.provisioning.provisioningRetryMinIntervalMs, MS_JE_TAG);
   assert.equal(ist.provisioning.releaseGraceMs, 0);
-  assert.equal(ist.fehler.length, 12);
+  assert.equal(ist.fehler.length, 11);
   for (const name of Object.keys(GROSSE_ROHWERTE_AM_MINIMUM)) {
     assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
   }
@@ -1174,7 +1167,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: unter dem Minimum gilt der 
 
 test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das Maximum, am Maximum der Wert", () => {
   const ueber = ladeGrosseRohwerte({
-    MACHINE_DETECTION_TIMEOUT_S: "31",
     CONSULT_WAIT_MS: "60001",
     CONSULT_OPEN_MS: "300001",
     EL_CONSULT_DELIVERY_MS: "55001",
@@ -1183,7 +1175,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das 
     PROVISIONING_REDRIVE_MAX_AGE_MS: String(MS_JE_TAG),
   });
   assert.deepEqual(ueber.fehler, []);
-  assert.equal(ueber.telephony.machineDetection.timeoutS, 30);
   assert.equal(ueber.tenancy.consultWaitMs, 60000);
   assert.equal(ueber.tenancy.consultOpenMs, 300000);
   assert.equal(ueber.tenancy.elConsultDeliveryMs, 55000);
@@ -1191,7 +1182,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das 
   assert.equal(ueber.tenancy.elConsultAnswerMs, 55000);
   assert.equal(ueber.provisioning.provisioningRedriveMaxAgeMs, MS_JE_TAG - 1);
   const genau = ladeGrosseRohwerte({
-    MACHINE_DETECTION_TIMEOUT_S: "30",
     CONSULT_WAIT_MS: "60000",
     CONSULT_OPEN_MS: "300000",
     EL_CONSULT_DELIVERY_MS: "55000",
@@ -1199,7 +1189,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das 
     EL_CONSULT_ANSWER_MS: "55000",
     PROVISIONING_REDRIVE_MAX_AGE_MS: String(MS_JE_TAG - 1),
   });
-  assert.equal(genau.telephony.machineDetection.timeoutS, 30);
   assert.equal(genau.tenancy.consultWaitMs, 60000);
   assert.equal(genau.tenancy.consultOpenMs, 300000);
   assert.equal(genau.tenancy.elConsultDeliveryMs, 55000);
@@ -1210,7 +1199,6 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ueber dem Maximum gilt das 
 
 test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ungueltige Schalter melden den Namen und gelten als Standard", () => {
   const schalter = {
-    MACHINE_DETECTION_ENABLED: false,
     MULTI_TENANT: false,
     MCP_UI_ENABLED: true,
     ASSISTANT_CONTEXT_ENABLED: true,
@@ -1223,11 +1211,10 @@ test("Rohwerte Telefonie, Mandanten, Nummernvergabe: ungueltige Schalter melden 
     WORLD_DEFAULT_LANGUAGE_ENABLED: false,
   };
   const ist = ladeGrosseRohwerte(Object.fromEntries(Object.keys(schalter).map((name) => [name, "kaputt"])));
-  assert.equal(ist.fehler.length, 11);
+  assert.equal(ist.fehler.length, 10);
   for (const name of Object.keys(schalter)) {
     assert.equal(ist.fehler.filter((befund) => befund.startsWith(`${name}=`)).length, 1, name);
   }
-  assert.equal(ist.telephony.machineDetection.enabled, false);
   assert.equal(ist.tenancy.mcpUiEnabled, true);
   assert.equal(ist.tenancy.assistantContextEnabled, true);
   assert.equal(ist.tenancy.multiTenant, false);
