@@ -211,7 +211,10 @@ export function makeCallLifecycle({
       const { call } = gelesen;
       if (call?.status !== "active") return;
       if (await inDatenbankBeendet(callId, store.attachActiveCall)) {
-        await store.setCallEndedAt(callId, status, new Date().toISOString());
+        await persistEndWithReason({
+          store, callId, reason: failureReason,
+          endCall: () => store.setCallEndedAt(callId, status, new Date().toISOString()),
+        })();
         return;
       }
       const endedAtIso = new Date(
