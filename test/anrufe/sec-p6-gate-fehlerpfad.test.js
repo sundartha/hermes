@@ -211,6 +211,7 @@ const KETTEN_QUELLEN = Object.freeze({
   tenantActiveSubscriber: VARIANTE.EINGESCHRAENKT,
   reserveExceedsBudget: VARIANTE.RESERVE_SCHEITERT,
   tenantLanguage: VARIANTE.RESERVE_SCHEITERT,
+  activeCallsForSql: VARIANTE.STANDARD,
 });
 
 const NICHT_KETTEN_QUELLEN = Object.freeze([
@@ -218,7 +219,6 @@ const NICHT_KETTEN_QUELLEN = Object.freeze([
   "claimPlatformSpendWarning",
   "resolveCallLanguage",
   "activeCallsFor",
-  "activeCallsForSql",
   "releaseOutboundReserveCents",
   "createCall",
   "persistCall",
