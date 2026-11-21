@@ -81,3 +81,34 @@ test("Fehlende pr.json oder unlesbarer Text enden mit Exit 2", () => {
   assert.equal(prTextVorab({ body: "{kaputt" }).status, 2);
   assert.equal(prTextVorab({ body: '{"titel":"x"}' }).status, 2);
 });
+
+function repoMitNodeModules() {
+  const ordner = mkdtempSync(join(tmpdir(), "pr-text-vorab-nm-"));
+  git(ordner, "init", "-q", "-b", "master");
+  schreibe(ordner, "package.json", JSON.stringify({ scripts: { test: "node --test" } }));
+  schreibe(ordner, "src/a.js", "export const a = 1;\n");
+  schreibe(ordner, "node_modules/.keep", "");
+  git(ordner, "add", "-A");
+  git(ordner, "commit", "-q", "-m", "basis");
+  const basis = git(ordner, "rev-parse", "HEAD");
+  schreibe(ordner, "src/a.js", "export const a = 2;\n");
+  schreibe(ordner, GRUEN, 'import { test } from "node:test";\ntest("gruen", () => {});\n');
+  git(ordner, "add", "-A");
+  git(ordner, "commit", "-q", "-m", "zweig");
+  return { ordner, basis };
+}
+
+test("Ein schon vorhandenes node_modules im Basis-Worktree ändert das Ergebnis nicht und stürzt nicht mit EEXIST ab", () => {
+  const { ordner, basis } = repoMitNodeModules();
+  try {
+    const datei = join(ordner, "pr.json");
+    writeFileSync(datei, JSON.stringify({ body: "## Was\n\nnichts" }));
+    const ergebnis = spawnSync("node", [PRUEFEN, "pr-text", datei, "--basis", basis], { cwd: ordner, encoding: "utf8", env: { ...process.env, NODE_TEST_CONTEXT: undefined } });
+    const ausgabe = ergebnis.stdout + ergebnis.stderr;
+    assert.doesNotMatch(ausgabe, /EEXIST/);
+    assert.equal(ergebnis.status, 1);
+    assert.match(ausgabe, /test\/bereich\/gruen\.test\.js/);
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
+});
