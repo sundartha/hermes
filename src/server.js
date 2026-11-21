@@ -1,5 +1,5 @@
 import "./process-guards.js";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import * as store from "./store.js";
 import { fruehwarnung } from "./routes/intern-anrufe-laufend.js";
 import { planSummarySms } from "./sms-summary.ts";

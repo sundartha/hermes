@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../test/helpers.js";
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.ts";
 
 function elevenLabsEnvOverrides() {

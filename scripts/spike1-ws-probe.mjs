@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createWriteStream } from "node:fs";
 import WebSocket from "ws";
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 
 const LOG_PREFIX = "[spike1-ws-probe]";
 const CLI_ARGS_START_INDEX = 2;

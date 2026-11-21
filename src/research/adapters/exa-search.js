@@ -1,4 +1,4 @@
-import { config } from "../../config.js";
+import { config } from "../../config.ts";
 import { LOOKUP_MAX_FACTS } from "../lookup-guard.ts";
 import { anfrage } from "../../utils/anfrage.js";
 

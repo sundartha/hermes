@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { config, stripTrailingSlash } from "../src/config.js";
+import { config, stripTrailingSlash } from "../src/config.ts";
 
 const LOG_PREFIX = "[spike1-setup]";
 const CLI_ARGS_START_INDEX = 2;

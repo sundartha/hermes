@@ -133,7 +133,7 @@ function tabelleFehlt(context, { datei, tabelle }) {
 
 const TABELLE_FEHLT = "{{tabelle}} aus {{datei}} lässt sich nicht laden; ohne die Tabelle prüft diese Regel nichts.";
 const NEUE_KONFIGURATION =
-  "Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.js anlegen, die Variable in .env.example eintragen und render.yaml prüfen.";
+  "Neue Konfiguration braucht drei Schritte: den Schlüssel in rawConfig und im passenden Namensraum von CONFIG_NAMESPACES in src/config.ts anlegen, die Variable in .env.example eintragen und render.yaml prüfen.";
 
 function mitKonfigurationsSchritten(text) {
   return `${text} ${NEUE_KONFIGURATION}`;
@@ -322,9 +322,9 @@ const configPfade = {
     ],
     messages: {
       tabelleFehlt: TABELLE_FEHLT,
-      keinNamensraum: mitKonfigurationsSchritten("config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.js. Lies den Wert über einen vorhandenen Namensraum."),
-      ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>. Lies einen einzelnen Wert aus dem Namensraum in src/config.js.",
-      unbekanntesBlatt: mitKonfigurationsSchritten("config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.js. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}}."),
+      keinNamensraum: mitKonfigurationsSchritten("config.{{namensraum}} ist kein Namensraum aus CONFIG_NAMESPACES in src/config.ts. Lies den Wert über einen vorhandenen Namensraum."),
+      ohneBlatt: "config.{{namensraum}} ohne Blatt; erwartet ist config.{{namensraum}}.<wert>. Lies einen einzelnen Wert aus dem Namensraum in src/config.ts.",
+      unbekanntesBlatt: mitKonfigurationsSchritten("config.{{namensraum}}.{{blatt}} steht nicht in CONFIG_NAMESPACES in src/config.ts. Nimm einen vorhandenen Schlüssel aus dem Namensraum {{namensraum}}."),
     },
   },
   create(context) {

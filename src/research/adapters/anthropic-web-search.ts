@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { config } from "../../config.js";
+import { config } from "../../config.ts";
 
 const WEB_SEARCH_TOOL_TYPE = "web_search_20250305";
 const WEB_SEARCH_TOOL_NAME = "web_search";

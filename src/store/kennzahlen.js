@@ -1,5 +1,5 @@
 import pg from "pg";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { merkeKennzahlenPasswort } from "./kennzahlen-passwort.js";
 import { START_ROUTINE, START_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
 import { KENNZAHLEN_LESER_ROLLE } from "../db/migrate.js";

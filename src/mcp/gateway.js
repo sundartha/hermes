@@ -1,5 +1,5 @@
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "../consult/delivery.js";
-import { resolveGatewayUrl, config } from "../config.js";
+import { resolveGatewayUrl, config } from "../config.ts";
 import { placeCallHopFristMs } from "../telephony/anruf-fristen.ts";
 import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
 import { ToolError } from "./fehler.js";

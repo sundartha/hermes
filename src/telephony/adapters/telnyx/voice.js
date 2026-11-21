@@ -1,4 +1,4 @@
-import { config } from "../../../config.js";
+import { config } from "../../../config.ts";
 import { assertTelnyxOk } from "./errors.ts";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.ts";
 import { createMinuteWindowThrottle } from "./rate-limit.ts";

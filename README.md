@@ -206,6 +206,6 @@ src/claude.js      Gespraechslogik Budget-Engine + System-Prompts, Tools, Disclo
 src/mcp-tools.js   MCP-Tool-Definitionen (gemeinsam fuer HTTP- und stdio-Transport)
 src/mcp-server.js  MCP stdio-Einstieg fuer Claude Desktop
 src/store.js       JSON-Persistenz: Calls, Transkripte, Action Items, Kalender, Budget
-src/config.js      .env-Konfiguration + Validierung
+src/config.ts      .env-Konfiguration + Validierung
 scripts/check-setup.js  Setup-Checker: npm run check
 ```

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { z } from "zod";
-import { config } from "../../../config.js";
+import { config } from "../../../config.ts";
 import { publicKeyOrNull } from "./schluessel.ts";
 import { MS_PER_SECOND } from "../../../utils/timer.ts";
 

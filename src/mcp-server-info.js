@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { NOT_PLACED } from "./telephony/failure-reason.ts";

@@ -1,4 +1,4 @@
-import { config as defaultConfig } from "../config.js";
+import { config as defaultConfig } from "../config.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import {
   countryForE164,

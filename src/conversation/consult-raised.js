@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
 import { sanitizeConsultQuestion } from "../consult/question.ts";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { faelligkeitsfensterMs } from "../src/billing/kosten-abschluss.ts";
 import { oeffneZwangsGesettelteElAnrufe } from "../src/billing/nachlauf-phasenschnitt.ts";
 

@@ -15,7 +15,7 @@ Datenbank-Anfragen warten auf eine freie Verbindung; Antworten stauen sich.
 ## Beheben
 
 - Lange hängende Abfragen beenden.
-- Hängt die Datenbank, sie im Render-Dashboard neu starten; Pool-Größe ist in `src/config.js` und `.env.example` beschrieben.
+- Hängt die Datenbank, sie im Render-Dashboard neu starten; Pool-Größe ist in `src/config.ts` und `.env.example` beschrieben.
 - Bei Datenverlust-Verdacht nicht selbst reparieren, sondern eskalieren.
 
 ## Eskalieren

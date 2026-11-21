@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { createRateLimiter, createSameOriginGuard } from "./middleware.ts";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
 import { promptLineRejection } from "./routes/_validation.ts";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";

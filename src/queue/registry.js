@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { makeMemoryQueue } from "./adapters/memory/queue.ts";
 import { makePgBossQueue } from "./adapters/pgboss/queue.ts";
 

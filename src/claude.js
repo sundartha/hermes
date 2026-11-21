@@ -1,5 +1,5 @@
 import { createSecondaryLlmClient } from "./llm.js";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";

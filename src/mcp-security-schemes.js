@@ -1,5 +1,5 @@
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { OAUTH_SCOPES } from "./auth.js";
 
 export const TOOL_SECURITY_SCHEMES = Object.freeze([

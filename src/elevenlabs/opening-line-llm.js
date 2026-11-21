@@ -1,5 +1,5 @@
 import { attemptReachedProvider, createSecondaryLlmClient } from "../llm.js";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { metrics } from "../metrics.js";
 import { forcedTool } from "../llm/tool-choice.ts";
 import {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { makeAccounts } from "../src/web-auth.js";
 import { makeWorkosManagement } from "../src/workos-management.js";
 import { createPortalRunner } from "../src/portal-pool.js";

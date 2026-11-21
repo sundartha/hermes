@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.ts";
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.ts";
 import { declineOf, declineDetail, attachProviderDecline } from "./decline.ts";
