@@ -330,18 +330,17 @@ function assertBootGates(config, store, durableAudit) {
     process.exit(1);
   }
 
-  const fakeOriginateFlags = [
-    { envName: "FAKE_ORIGINATE", fakeOriginate: config.safety.fakeOriginate },
-    { envName: "FAKE_ORIGINATE_ELEVENLABS", fakeOriginate: config.safety.fakeOriginateElevenlabs },
-  ];
-  for (const { envName, fakeOriginate } of fakeOriginateFlags) {
-    if (fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck: config.safety.skipTwilioSignatureCheck })) {
-      console.error(
-        `[boot] Start abgebrochen: ${envName}=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true ` +
-          "zulaessig (Test-Seam, in Produktion unzulaessig).",
-      );
-      process.exit(1);
-    }
+  if (
+    fakeOriginateBootBlocked({
+      fakeOriginate: config.safety.fakeOriginate,
+      skipTwilioSignatureCheck: config.safety.skipTwilioSignatureCheck,
+    })
+  ) {
+    console.error(
+      "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
+        "zulaessig (Test-Seam, in Produktion unzulaessig).",
+    );
+    process.exit(1);
   }
 
   if (!hasActiveNumber(store.load())) {

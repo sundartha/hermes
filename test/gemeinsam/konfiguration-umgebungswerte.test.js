@@ -1467,7 +1467,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
     mcpOriginEnforce: true,
     skipTwilioSignatureCheck: false,
     fakeOriginate: false,
-    fakeOriginateElevenlabs: false,
   });
   assert.deepEqual(ist.voice.elevenLabsPlayTts, {
     enabled: false,
@@ -1575,7 +1574,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
     mcpOriginEnforce: false,
     skipTwilioSignatureCheck: true,
     fakeOriginate: true,
-    fakeOriginateElevenlabs: true,
   });
   assert.deepEqual(ist.voice.elevenLabsPlayTts, {
     enabled: true,
@@ -1690,7 +1688,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "MCP_ORIGIN_ENFORCE",
     "SKIP_TWILIO_SIGNATURE_CHECK",
     "FAKE_ORIGINATE",
-    "FAKE_ORIGINATE_ELEVENLABS",
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
     "ELEVENLABS_OPENING_LINE_LLM_ENABLED",

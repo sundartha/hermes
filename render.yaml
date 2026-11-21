@@ -292,8 +292,6 @@ services:
         value: "25000"
       - key: FAKE_ORIGINATE
         value: "false"
-      - key: FAKE_ORIGINATE_ELEVENLABS
-        value: "false"
       - key: RATE_LIMIT_PER_MIN
         value: "120"
       - key: SERVER_INSTANCES
