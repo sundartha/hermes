@@ -305,6 +305,19 @@ const ERNEUTE_STORE_STARTS = [
   () => import("../../src/store.js?schema-erneut-4").then(oeffneSpeicherAn),
 ];
 
+async function anrufwegAufwaermen(aktiv, { anmelden, betreiberDarfAnrufen, aufwaermen }) {
+  if (!aktiv) return null;
+  await anmelden();
+  await betreiberDarfAnrufen();
+  const antwort = await aufwaermen("/api/calls", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-internal-identity": LOGIN_SUB },
+    body: JSON.stringify({ to: AUFWAERM_ZIEL, objective: "Termin vereinbaren" }),
+  });
+  await antwort.arrayBuffer();
+  return antwort.status;
+}
+
 async function hermesAufbauen({
   alarmPostfach,
   anrufstartAbgelehnt = false,
@@ -314,7 +327,6 @@ async function hermesAufbauen({
   appRolleDatenbankAnlegen = false,
   appRolleVerwaltetZusatzRollen = false,
   clientBruecke = false,
-  anrufwegWaermen = false,
   ...kennzahlenOptionen
 }) {
   const testPostfach = [];
@@ -400,18 +412,7 @@ async function hermesAufbauen({
     return new pg.Client({ connectionString: process.env.DATABASE_URL });
   }
 
-  let aufwaermStatus = null;
-  if (anrufwegWaermen) {
-    await anmelden();
-    await betreiberDarfAnrufen();
-    const aufwaermAntwort = await aufwaermen("/api/calls", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-internal-identity": LOGIN_SUB },
-      body: JSON.stringify({ to: AUFWAERM_ZIEL, objective: "Termin vereinbaren" }),
-    });
-    await aufwaermAntwort.arrayBuffer();
-    aufwaermStatus = aufwaermAntwort.status;
-  }
+  const aufwaermStatus = await anrufwegAufwaermen(kennzahlenOptionen.anrufwegWaermen, { anmelden, betreiberDarfAnrufen, aufwaermen });
 
   return { db, testPostfach, vorfaelle, aufwaermStatus, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }
