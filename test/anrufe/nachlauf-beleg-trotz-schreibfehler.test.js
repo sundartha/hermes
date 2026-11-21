@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import { waitUntil, withFetch } from "../helpers.js";
 import { fehlerausgabeVonAsync } from "../gemeinsam/fehlerausgabe.js";
-import * as ops from "../../src/store/state-ops.js";
 import { HTTP_OK, baueHarness, leererZustand, seedAusgehenderElCall } from "../_iel-inbound-harness.js";
 
 const LAUFZEIT_S = 60;
@@ -33,9 +32,10 @@ async function laufeMitSchreibfehler(ausfall) {
   const call = seedAusgehenderElCall(state, { answeredVorS: LAUFZEIT_S, mitGespraech: true });
   const freigegeben = [];
   const { el, store } = baueHarness(state);
-  store.recordCallCostEvidence = (eingabe) => ops.recordCallCostEvidence(state, eingabe);
-  store.recordSipCallId = (id, sip) => ops.recordSipCallId(state, id, sip);
-  store.recordActualSender = (id, absender) => ops.recordActualSender(state, id, absender);
+  const belege = [];
+  const sipKennungen = [];
+  store.recordCallCostEvidence = (eingabe) => belege.push(eingabe);
+  store.recordSipCallId = (id, sip) => sipKennungen.push([id, sip]);
   store[ausfall] = () => {
     throw new Error("db weg 5747");
   };
@@ -49,24 +49,21 @@ async function laufeMitSchreibfehler(ausfall) {
       },
     ),
   );
-  return { state, call, zeilen };
+  return { call, zeilen, belege, sipKennungen };
 }
 
-const belegeVon = (state, id) => (state.callCostEvidence ?? []).filter((zeile) => zeile.callId === id);
-
 test("addActionItem scheitert im Abfrage-Weg: EL-Kostenbeleg ist trotzdem gebucht, Fehler wird gemeldet, Anruf beendet", async () => {
-  const { state, call, zeilen } = await laufeMitSchreibfehler("addActionItem");
-  const belege = belegeVon(state, call.id);
+  const { call, zeilen, belege } = await laufeMitSchreibfehler("addActionItem");
   assert.ok(belege.some((beleg) => beleg.traeger === "elevenlabs_convai"), JSON.stringify(belege));
   assert.ok(zeilen.some((z) => z.includes("[el-nachlauf] Anbieter-Ergebnis nicht gesichert") && z.includes("db weg 5747")), zeilen.join("\n"));
   assert.equal(call.status, "completed");
 });
 
 test("recordProviderCallResult scheitert im Abfrage-Weg: SIP-Kennung und Absender sind trotzdem gespeichert, Fehler wird gemeldet, Anruf beendet", async () => {
-  const { state, call, zeilen } = await laufeMitSchreibfehler("recordProviderCallResult");
-  assert.equal(call.sipCallId, SIP_KENNUNG);
+  const { call, zeilen, belege, sipKennungen } = await laufeMitSchreibfehler("recordProviderCallResult");
+  assert.deepEqual(sipKennungen, [[call.id, SIP_KENNUNG]]);
   assert.equal(call.fromActualE164, ABSENDER);
-  assert.ok(belegeVon(state, call.id).length > 0);
+  assert.ok(belege.some((beleg) => beleg.traeger === "elevenlabs_convai"));
   assert.ok(zeilen.some((z) => z.includes("[el-nachlauf] Anbieter-Ergebnis nicht gesichert") && z.includes("db weg 5747")), zeilen.join("\n"));
   assert.equal(call.status, "completed");
 });
