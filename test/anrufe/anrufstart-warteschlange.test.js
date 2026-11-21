@@ -199,3 +199,24 @@ test("Warteschlange: ein waehrend des Wartens abgebrochener Anruf wird am frisch
   assert.equal(bau.spur.filter((eintrag) => eintrag === "kein-platz").length, 1);
   assert.equal(await bau.marker.lies(CALL_ID), null);
 });
+
+for (const [name, sperre, grund] of [
+  ["Anrufpause", { pausiert: () => true }, ANRUFSTART_SPERRE.PAUSE],
+  ["OUTBOUND_FROZEN", { eingefroren: () => true }, ANRUFSTART_SPERRE.EINGEFROREN],
+]) {
+  test(`Warteschlange: ${name} gilt auch fuer einen Auftrag mit abgelaufener Frist vor der Fristpruefung`, async () => {
+    const bau = aufbau({ belegt: [false, true], sperren: sperre });
+    bau.uhr.ms = ANGELEGT_MS + WARTEFRIST_MS + MS_JE_SEKUNDE;
+    assert.equal(await lauf(bau), ANRUFSTART_AUSGANG.ABGESPERRT);
+    assert.deepEqual(bau.spur, [`ohne-wahl:${CALL_ID}:${grund}`]);
+    assert.equal(await bau.marker.lies(CALL_ID), null);
+  });
+}
+
+test("Warteschlange: ein abgebrochener Auftrag mit abgelaufener Frist endet als abgesperrt und nicht als Wartefrist", async () => {
+  const bau = aufbau({ belegt: [false, true] });
+  bau.uhr.ms = ANGELEGT_MS + WARTEFRIST_MS + MS_JE_SEKUNDE;
+  bau.call.status = "cancelled";
+  assert.equal(await lauf(bau), ANRUFSTART_AUSGANG.ABGESPERRT);
+  assert.deepEqual(bau.spur, []);
+});
