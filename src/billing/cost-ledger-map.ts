@@ -79,7 +79,7 @@ export const COST_LEDGER_MAP: Readonly<Record<string, LedgerRow>> = Object.freez
     ledger: true,
     gate: false,
     preisquelle:
-      "config.billing.smsCostCents, Default 0 (kein Fail-closed, min:0 in config.ts) - " +
+      "config.billing.smsCostCents, Default 0 (kein Fail-closed, min:0 in src/konfiguration/rohwerte-billing.ts (SMS_COST_CENTS)) - " +
       "ein fehlender Preis ist hier lautlos 0, nicht 'nicht erfasst'. Gate: kein " +
       "addUsageCostCents/trackUsage-Aufruf im SMS-Pfad, strukturell nie vorgesehen.",
   },
