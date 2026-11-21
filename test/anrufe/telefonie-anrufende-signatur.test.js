@@ -4,7 +4,7 @@ import {
   startServer,
   seedState,
   seedCall,
-  waitUntil,
+  warteAufEreignis,
   makeTelnyxSigner,
   nowSeconds,
   DOMESTIC_TEST_NUMBER,
@@ -114,14 +114,14 @@ test("3974-1: signierte Endemeldung eines gefuehrten Anrufs liefert 200, Hinweis
   }));
   await mitAnruf({ calls: [beendeterAnruf("sig_ok", { summary: "Termin steht." })], actionItems: punkte }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "sig_ok", "completed")).status, HTTP_OK);
-    await waitUntil(() => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse, telnyx.ereignisse], () => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
     assert.equal(telnyx.anfragen[0].pfad, "/v2/messages");
     assert.deepEqual(telnyx.anfragen[0].koerper, {
       from: DOMESTIC_TEST_NUMBER.e164,
       to: EIGENE_NUMMER,
       text: `[Hermes] Anruf bei ${ZIEL}\n\nTermin steht.\n\nAction Items:\n1. Zweiter Punkt\n2. Erster Punkt`,
     });
-    await waitUntil(() => anrufVon(srv, "sig_ok").summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse], () => anrufVon(srv, "sig_ok").summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
     const hinweis = hinweiseVon(srv).find((n) => n.title === "Neue Call Summary");
     assert.equal(hinweis.body, `Anruf bei ${ZIEL}: Termin steht.`);
     assert.equal(hinweis.callId, "sig_ok");
@@ -154,7 +154,7 @@ test("3974-4: signierte Meldung eines eingehenden Anrufs ohne Gespraech nennt di
   const eingehend = seedCall({ id: "sig_ein", direction: "inbound", from: ZIEL, to: DOMESTIC_TEST_NUMBER.e164 });
   await mitAnruf({ calls: [eingehend] }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "sig_ein", "no-answer")).status, HTTP_OK);
-    await waitUntil(() => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse], () => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
     const [hinweis] = hinweiseVon(srv);
     assert.equal(hinweis.title, "Anruf nicht zustande gekommen");
     assert.equal(hinweis.body, `${ZIEL} (Status: failed, Grund: niemand hat abgenommen)`);
@@ -169,7 +169,7 @@ test("3974-5: signierte Meldungen ausgehender Anrufe ohne Abheben oder ohne Mits
   await mitAnruf({ calls: [besetzt, ohneText] }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "sig_busy", "busy")).status, HTTP_OK);
     assert.equal((await meldeStatus(srv, "sig_still", "completed")).status, HTTP_OK);
-    await waitUntil(() => hinweiseVon(srv).length === 2, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse], () => hinweiseVon(srv).length === 2, { timeoutMs: WARTEZEIT_MS });
     const bodies = hinweiseVon(srv).map((n) => n.body).sort();
     assert.deepEqual(bodies, [
       `${ZIEL} (Status: completed)`,

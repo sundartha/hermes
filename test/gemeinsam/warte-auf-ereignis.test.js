@@ -6,6 +6,7 @@ import { test } from "node:test";
 
 import * as helfer from "../helpers.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
+import { starteAnbieterServer } from "./anbieter-attrappe.mjs";
 import { starteBetterStackAttrappe } from "./better-stack-attrappe.mjs";
 
 const FRIST_MS = 30_000;
@@ -104,5 +105,24 @@ test("warte-auf-ereignis: die Better-Stack-Attrappe meldet jede eingegangene Mel
     assert.deepEqual(gesehen, [1]);
   } finally {
     await eingang.close();
+  }
+});
+
+test("warte-auf-ereignis: die Anbieter-Attrappe meldet jede vermerkte Anfrage als Ereignis", async () => {
+  const anbieter = await starteAnbieterServer(({ req, body, res, vermerke }) => {
+    vermerke({ pfad: req.url, koerper: body });
+    res.writeHead(200).end();
+  });
+  try {
+    const gesehen = [];
+    anbieter.ereignisse.on("aenderung", () => gesehen.push(anbieter.anfragen.length));
+    const antwort = await abrufMitFrist(`${anbieter.url}/v2/messages`, { method: "POST", body: "x" });
+    assert.equal(antwort.status, 200);
+    await helfer.warteAufEreignis([anbieter.ereignisse], () => gesehen.length === 1, {
+      timeoutMs: FRIST_MS,
+    });
+    assert.deepEqual(gesehen, [1]);
+  } finally {
+    await anbieter.close();
   }
 });

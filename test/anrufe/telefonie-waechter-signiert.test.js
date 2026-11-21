@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitUntil, makeTelnyxSigner, nowSeconds, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { startServer, seedState, seedCall, warteAufEreignis, makeTelnyxSigner, nowSeconds, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 
@@ -70,13 +70,13 @@ test("Anrufende mit scharfer Signaturpruefung: abgewiesen ohne Wirkung, echt sig
     assert.equal(anruf(srv, "call_sig_1").endedAt, null);
 
     assert.equal((await melde(sitz, "call_sig_1")).status, HTTP_OK);
-    await waitUntil(() => marker(srv), { timeoutMs: 30_000 });
+    await warteAufEreignis([srv.ereignisse, eingang.ereignisse], () => marker(srv), { timeoutMs: 30_000 });
     assert.deepEqual(alarmTexte(eingang), [], "der Erstbefund meldet nichts");
     assert.equal((await melde(sitz, "call_sig_2")).status, HTTP_OK);
-    await waitUntil(() => alarmTexte(eingang).length === 1, { timeoutMs: 30_000 });
+    await warteAufEreignis([srv.ereignisse, eingang.ereignisse], () => alarmTexte(eingang).length === 1, { timeoutMs: 30_000 });
     assert.equal((await melde(sitz, "call_sig_3")).status, HTTP_OK);
-    await waitUntil(() => srv.stdout.includes("outage_detected"), { timeoutMs: 30_000 });
-    await waitUntil(() => anruf(srv, "call_sig_3").endedAt, { timeoutMs: 30_000 });
+    await warteAufEreignis([srv.ereignisse, eingang.ereignisse], () => srv.stdout.includes("outage_detected"), { timeoutMs: 30_000 });
+    await warteAufEreignis([srv.ereignisse, eingang.ereignisse], () => anruf(srv, "call_sig_3").endedAt, { timeoutMs: 30_000 });
     assert.deepEqual(alarmTexte(eingang), [ALARM]);
   } finally {
     await srv.stop();
