@@ -5,32 +5,42 @@ import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { NummerGekauftIdOffen } from "../../src/begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { fakeBilling, fakeProvisioner } from "../helpers.js";
-import {
-  makeDefaultState,
-  registerTenant,
-  requestNumber,
-  findNumber,
-  setTenantStripe,
-  setTenantSubscription,
-} from "../../src/store/state-ops.js";
+import { makePgTestStore } from "../pg-helpers.js";
 
-const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 const KUNDE = "cus_fehlerwege";
 const ZAHLUNGSMITTEL = "pm_fehlerwege";
 const GEKAUFT = "+12025550188";
+const NUMMER = "num_fehlerwege";
 
-function angelegt(abo = {}) {
-  const state = makeDefaultState();
-  registerTenant(state, "t_user1");
-  setTenantStripe(state, "t_user1", {
-    customerId: KUNDE,
-    paymentMethodId: ZAHLUNGSMITTEL,
-    paymentMethodType: "card",
+async function mitNummer(mandant = {}) {
+  const { store } = await makePgTestStore();
+  const state = store.load();
+  state.tenants.push({ id: "t_user1", status: "active", ...mandant });
+  state.numbers.push({
+    id: NUMMER,
+    e164: null,
+    tenantId: "t_user1",
+    provider: "telnyx",
+    country: "DE",
+    language: "de",
+    status: "requested",
+    providerNumberId: null,
+    paymentIntentId: null,
   });
-  if (Object.keys(abo).length > 0) setTenantSubscription(state, "t_user1", abo);
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
-  return { state, numberId: number.id };
+  return state;
+}
+
+const MIT_KARTE = {
+  stripeCustomerId: KUNDE,
+  stripePaymentMethodId: ZAHLUNGSMITTEL,
+  stripePaymentMethodType: "card",
+};
+
+const nummer = (state) => state.numbers.find((eintrag) => eintrag.id === NUMMER);
+
+async function angelegt(abo = {}) {
+  return { state: await mitNummer({ ...MIT_KARTE, ...abo }), numberId: NUMMER };
 }
 
 function protokoll() {
@@ -43,7 +53,7 @@ function auftrag(numberId) {
 }
 
 test("Registrierung wirft einen Text: Warnung nennt den Text, die Nummer bleibt aktiv", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const sipRegistrar = {
     async ensureRegistration() {
@@ -53,7 +63,7 @@ test("Registrierung wirft einen Text: Warnung nennt den Text, die Nummer bleibt 
 
   await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
 
-  assert.equal(findNumber(state, numberId).status, NUMBER_STATUS.ACTIVE);
+  assert.equal(nummer(state).status, NUMBER_STATUS.ACTIVE);
   assert.equal(
     zeilen.warn.some((zeile) =>
       zeile.includes(`[el-registrierung] FEHLGESCHLAGEN number=${numberId}: registrierung-text-fehler - DID bleibt nutzbar`),
@@ -63,7 +73,7 @@ test("Registrierung wirft einen Text: Warnung nennt den Text, die Nummer bleibt 
 });
 
 test("Registrierung wirft einen Error: Warnung nennt dessen Meldung", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const sipRegistrar = {
     async ensureRegistration() {
@@ -78,18 +88,18 @@ test("Registrierung wirft einen Error: Warnung nennt dessen Meldung", async () =
 });
 
 test("Registrierung gelingt neu angelegt: Log nennt angelegt=true", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const sipRegistrar = { ensureRegistration: async () => ({ phoneNumberId: "phnum_a", angelegt: true }) };
 
   await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
 
   assert.deepEqual(zeilen.log, [`[el-registrierung] number=${numberId} angelegt=true`]);
-  assert.equal(findNumber(state, numberId).providerAgentPhoneNumberId, "phnum_a");
+  assert.equal(nummer(state).providerAgentPhoneNumberId, "phnum_a");
 });
 
 test("Registrierung gelingt schon vorhanden: Log nennt angelegt=false", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const sipRegistrar = { ensureRegistration: async () => ({ phoneNumberId: "phnum_b", angelegt: false }) };
 
@@ -99,7 +109,7 @@ test("Registrierung gelingt schon vorhanden: Log nennt angelegt=false", async ()
 });
 
 test("Freigabe nach gescheitertem Einzug wirft einen Text: Warnung nennt Nummer, Anbieter-ID und Text", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const provisioner = fakeProvisioner({
     async releaseNumber() {
@@ -123,11 +133,11 @@ test("Freigabe nach gescheitertem Einzug wirft einen Text: Warnung nennt Nummer,
     ),
     true,
   );
-  assert.equal(findNumber(state, numberId).status, NUMBER_STATUS.FAILED);
+  assert.equal(nummer(state).status, NUMBER_STATUS.FAILED);
 });
 
 test("Freigabe nach gescheitertem Einzug wirft einen Error: Warnung nennt dessen Meldung, Hold wird freigegeben", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const provisioner = fakeProvisioner({
     async releaseNumber() {
@@ -151,7 +161,7 @@ test("Freigabe nach gescheitertem Einzug wirft einen Error: Warnung nennt dessen
 });
 
 test("Kauf gekauft, ID offen: Warnung nennt Nummer, E164 und Ursache, die Nummer behält die E164 und bleibt in Bereitstellung", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const { zeilen, logger } = protokoll();
   const provisioner = fakeProvisioner({
     async orderNumber() {
@@ -168,8 +178,8 @@ test("Kauf gekauft, ID offen: Warnung nennt Nummer, E164 und Ursache, die Nummer
   assert.deepEqual(zeilen.warn, [
     `[nummer-gekauft-id-offen] number=${numberId} e164=${GEKAUFT}: Telnyx orderNumber: Nummer gekauft, Nummern-ID offen (Bestellung ohne Nummern-ID) - Hold bleibt, manuelle Klaerung`,
   ]);
-  assert.equal(findNumber(state, numberId).e164, GEKAUFT);
-  assert.equal(findNumber(state, numberId).status, NUMBER_STATUS.PROVISIONING);
+  assert.equal(nummer(state).e164, GEKAUFT);
+  assert.equal(nummer(state).status, NUMBER_STATUS.PROVISIONING);
   assert.equal(
     billing.log.some((eintrag) => eintrag[0] === "cancelHold"),
     false,
@@ -177,7 +187,7 @@ test("Kauf gekauft, ID offen: Warnung nennt Nummer, E164 und Ursache, die Nummer
 });
 
 test("Einzugs-Hold nutzt Kunde und Zahlungsmittel des Mandanten", async () => {
-  const { state, numberId } = angelegt();
+  const { state, numberId } = await angelegt();
   const billing = fakeBilling();
 
   await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing }, ARGS);
@@ -192,7 +202,7 @@ test("Einzugs-Hold nutzt Kunde und Zahlungsmittel des Mandanten", async () => {
 });
 
 test("Mandant ohne Einrichtungsgebühr: der Hold wird freigegeben statt eingezogen", async () => {
-  const { state, numberId } = angelegt({ numberSetupFeeExempt: true });
+  const { state, numberId } = await angelegt({ stripeNumberSetupFeeExempt: true });
   const billing = fakeBilling();
 
   await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing }, ARGS);
@@ -204,28 +214,24 @@ test("Mandant ohne Einrichtungsgebühr: der Hold wird freigegeben statt eingezog
 });
 
 test("Mandant ohne Zahlungsmittel: Kauf bricht ab, Nummer scheitert, kein Anbieteraufruf", async () => {
-  const state = makeDefaultState();
-  registerTenant(state, "t_user1");
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
+  const state = await mitNummer();
   const provisioner = fakeProvisioner();
   const billing = fakeBilling();
 
   await assert.rejects(
-    handleProvisionJob(state, auftrag(number.id), { provisioner, billing }, ARGS),
+    handleProvisionJob(state, auftrag(NUMMER), { provisioner, billing }, ARGS),
     /kein hinterlegtes Zahlungsmittel/,
   );
 
   assert.deepEqual(provisioner.log, []);
   assert.deepEqual(billing.log, []);
-  assert.equal(findNumber(state, number.id).status, NUMBER_STATUS.FAILED);
+  assert.equal(nummer(state).status, NUMBER_STATUS.FAILED);
 });
 
 test("Kauf ohne Abrechnung braucht kein Zahlungsmittel: Nummer wird aktiv", async () => {
-  const state = makeDefaultState();
-  registerTenant(state, "t_user1");
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
+  const state = await mitNummer();
 
-  await handleProvisionJob(state, auftrag(number.id), { provisioner: fakeProvisioner() }, ARGS);
+  await handleProvisionJob(state, auftrag(NUMMER), { provisioner: fakeProvisioner() }, ARGS);
 
-  assert.equal(findNumber(state, number.id).status, NUMBER_STATUS.ACTIVE);
+  assert.equal(nummer(state).status, NUMBER_STATUS.ACTIVE);
 });
