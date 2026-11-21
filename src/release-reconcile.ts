@@ -12,6 +12,43 @@ import {
 import { NUMBER_STATUS } from "./begriffe/nummern.js";
 import { fehlerText } from "./utils/fehler-text.ts";
 
+type ReleaseNumber = Parameters<typeof numberBusyReason>[1];
+type ReleaseState = Parameters<typeof releaseNumber>[0] & Parameters<typeof classifyNumbersForRelease>[0];
+
+export interface ReleaseStore {
+  load: () => ReleaseState;
+  save: () => unknown;
+  withStoreLock: <T>(fn: () => T) => Promise<T>;
+  numberHasActiveCall?: ((e164: string | null) => Promise<boolean>) | undefined;
+}
+
+export interface ReleaseProvisioner {
+  releaseNumber: (providerNumberId: string | null | undefined) => Promise<unknown>;
+}
+
+interface ReleaseAudit {
+  record: (entry: { actorSub: string; tenantId: string | null; action: string; detail: string }) => unknown;
+}
+
+export interface ReleaseSipRegistrar {
+  removeRegistration: (providerAgentPhoneNumberId: string) => Promise<unknown>;
+}
+
+interface ReleaseLogger {
+  log: (message: string) => void;
+  warn: (message: string) => void;
+}
+
+interface ReleaseDeps {
+  store: ReleaseStore;
+  provisioner: ReleaseProvisioner;
+  audit: ReleaseAudit;
+  logger?: ReleaseLogger;
+  sipRegistrar?: ReleaseSipRegistrar | null | undefined;
+}
+
+type ReleaseDepsMitLogger = ReleaseDeps & { logger: ReleaseLogger };
+
 const PROVIDER_NOT_FOUND = 404;
 const RECONCILE_ACTOR = "system:release-reconcile";
 const ERASE_ACTOR = "system:erase-release";
@@ -25,15 +62,18 @@ const ABORT_REASON = Object.freeze({
   STORE_MUTATION_NACH_DELETE: "store_mutation_nach_delete",
 });
 
-function recordDidAudit(audit, { actor, tenantId, action, detail }) {
+function recordDidAudit(
+  audit: ReleaseAudit,
+  { actor, tenantId, action, detail }: { actor: string; tenantId: string | null; action: string; detail: string },
+) {
   return audit.record({ actorSub: actor, tenantId, action, detail });
 }
 
-function providerStatus(err) {
+function providerStatus(err: unknown): unknown {
   return typeof err === "object" && err !== null && "providerStatus" in err ? err.providerStatus : undefined;
 }
 
-async function providerReleaseOrGone(provisioner, number, logger) {
+async function providerReleaseOrGone(provisioner: ReleaseProvisioner, number: ReleaseNumber, logger: ReleaseLogger) {
   try {
     await provisioner.releaseNumber(number.providerNumberId);
     return true;
@@ -47,7 +87,7 @@ async function providerReleaseOrGone(provisioner, number, logger) {
   }
 }
 
-async function stillReleasableUnderLock(store, numberId) {
+async function stillReleasableUnderLock(store: ReleaseStore, numberId: string) {
   const number = await store.withStoreLock(() => {
     const state = store.load();
     const num = findNumber(state, numberId);
@@ -58,12 +98,26 @@ async function stillReleasableUnderLock(store, numberId) {
   if (!number) return false;
   if (!store.numberHasActiveCall) return true;
   return store.numberHasActiveCall(number.e164).then(
-    (busy) => !busy,
+    (busy: boolean) => !busy,
     () => false,
   );
 }
 
-async function abortRelease({ audit, actor, number, reason, logger, message }) {
+async function abortRelease({
+  audit,
+  actor,
+  number,
+  reason,
+  logger,
+  message,
+}: {
+  audit: ReleaseAudit;
+  actor: string;
+  number: ReleaseNumber;
+  reason: string;
+  logger: ReleaseLogger;
+  message: string;
+}) {
   logger.warn(message);
   await recordDidAudit(audit, {
     actor,
@@ -74,7 +128,15 @@ async function abortRelease({ audit, actor, number, reason, logger, message }) {
   return false;
 }
 
-export async function performNumberRelease({ store, provisioner, audit, logger, actor, number, sipRegistrar }) {
+export async function performNumberRelease({
+  store,
+  provisioner,
+  audit,
+  logger,
+  actor,
+  number,
+  sipRegistrar,
+}: ReleaseDepsMitLogger & { actor: string; number: ReleaseNumber }): Promise<boolean> {
   if (!(await stillReleasableUnderLock(store, number.id)))
     return abortRelease({
       audit, actor, number, logger,
@@ -121,7 +183,16 @@ export async function performNumberRelease({ store, provisioner, audit, logger, 
   return true;
 }
 
-async function releaseCandidate({ store, provisioner, audit, logger, nowMs, graceMs, numberId, sipRegistrar }) {
+async function releaseCandidate({
+  store,
+  provisioner,
+  audit,
+  logger,
+  nowMs,
+  graceMs,
+  numberId,
+  sipRegistrar,
+}: ReleaseDepsMitLogger & { nowMs: number; graceMs: number; numberId: string }) {
   const fresh = store.load();
   const number = findNumber(fresh, numberId);
   const stillReleasable =
@@ -141,7 +212,19 @@ async function releaseCandidate({ store, provisioner, audit, logger, nowMs, grac
   return performNumberRelease({ store, provisioner, audit, logger, actor: RECONCILE_ACTOR, number, sipRegistrar });
 }
 
-export async function runReleaseReconcile({ store, provisioner, audit, logger = console, nowMs, graceMs, sipRegistrar }) {
+export async function runReleaseReconcile({
+  store,
+  provisioner,
+  audit,
+  logger = console,
+  nowMs,
+  graceMs,
+  sipRegistrar,
+}: ReleaseDeps & { nowMs: number; graceMs: number }): Promise<{
+  released: number;
+  aborted: number;
+  observed: number;
+}> {
   const buckets = classifyNumbersForRelease(store.load(), { nowMs, graceMs });
   const candidates = buckets.release;
   for (const { number, reason } of buckets.hold)
@@ -163,7 +246,14 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
   return { released, aborted, observed: 0 };
 }
 
-export async function releaseTenantNumbersOnErase({ store, provisioner, audit, logger = console, tenantId, sipRegistrar }) {
+export async function releaseTenantNumbersOnErase({
+  store,
+  provisioner,
+  audit,
+  logger = console,
+  tenantId,
+  sipRegistrar,
+}: ReleaseDeps & { tenantId: string }): Promise<{ released: number; aborted: number }> {
   const { release, hold } = tenantNumbersForErase(store.load(), tenantId);
   let released = 0;
   let aborted = 0;
