@@ -109,6 +109,7 @@ export function macheAusfallSql({ einreihen, runner }) {
       const { rows } = await lesen(OFFEN_SQL, [code]);
       return rows[0] ? alsMarker(rows[0]) : undefined;
     },
+    offeneMarkerListe: async () => (await lesen(ALLE_OFFENEN_SQL)).rows.map(alsMarker),
     offeneAusfallZustand: async (calls) => ({
       calls,
       outageAlerts: (await lesen(ALLE_OFFENEN_SQL)).rows.map(alsMarker),

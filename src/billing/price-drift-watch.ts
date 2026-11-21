@@ -34,7 +34,7 @@ interface Bereiche {
       nowMs: number;
       istFaellig: (marker: Alert | null | undefined) => boolean;
     }) => Promise<boolean>;
-    offeneAusfallZustand: () => Promise<{ outageAlerts: Alert[] }>;
+    offeneMarkerListe: () => Promise<Alert[]>;
     offeneMarkerSchliessen: (auftrag: {
       istZuSchliessen: (code: string) => boolean;
       nowMs: number;
@@ -242,8 +242,8 @@ async function schliesseBehobene({
 
 async function offeneUnbekanntSlots(store: Store): Promise<Alert[]> {
   const bereiche = bereicheVon(store);
-  const { outageAlerts } = await bereiche.ausfall.offeneAusfallZustand();
-  return outageAlerts.filter((alert) => istUnbekanntSlot(alert.code));
+  const offene = await bereiche.ausfall.offeneMarkerListe();
+  return offene.filter((alert) => istUnbekanntSlot(alert.code));
 }
 
 async function behandleUnwissenheit({
