@@ -228,7 +228,7 @@
       "zweck": "Nummern bestellen, binden und freigeben.",
       "quellen": [
         "src/onboarding.js",
-        "src/release-reconcile.js",
+        "src/release-reconcile.ts",
         "src/worker/",
         "src/queue/",
         "src/telephony/provisioning-geo.js",
@@ -238,7 +238,7 @@
       ],
       "eingaenge": [
         "src/elevenlabs/nummern-port.ts",
-        "src/release-reconcile.js",
+        "src/release-reconcile.ts",
         "src/telephony/provisioning-geo.js"
       ],
       "nutzt": ["abrechnung"]

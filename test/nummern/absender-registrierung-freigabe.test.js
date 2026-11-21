@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.js";
+import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner, fakeSipRegistrar } from "../helpers.js";
