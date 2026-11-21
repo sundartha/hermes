@@ -291,3 +291,13 @@ test("Prozess-Waechter: zweimal installiert steht rid= je Zeile einmal und das G
   }
   assert.deepEqual(gesehen, [`${MARKE_PROBE}a ***\n${MARKE_PROBE}b\n`]);
 });
+
+test("Eine Umgebung mit leerem Eintrag hindert die Log-Maskierung der übrigen Geheimnisse nicht", () => {
+  const umgebung = {
+    API_KEY: undefined,
+    HERZSCHLAG_URL: undefined,
+    SESSION_SECRET: WEB_SITZUNGS_GEHEIMNIS,
+  };
+  assert.doesNotThrow(() => merkeLogGeheimnisse(umgebung));
+  assert.equal(maskiereLogText(`wert ${WEB_SITZUNGS_GEHEIMNIS} ende`), "wert *** ende");
+});
