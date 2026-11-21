@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
+import { statusNachWiederholung } from "../gemeinsam/status-nach-wiederholung.mjs";
 import { zweiProzesse } from "../gemeinsam/zwei-prozesse.js";
 
 const ZEITGRENZE_MS = 180_000;
@@ -59,7 +60,10 @@ async function neuerSchluessel(adresse, prozess, absender) {
 
 async function positivKontrolle(a, b) {
   assert.deepEqual(
-    [await loginStatus(a, KONTROLL_ADRESSEN[0]), await loginStatus(b, KONTROLL_ADRESSEN[1])],
+    [
+      await statusNachWiederholung(() => loginStatus(a, KONTROLL_ADRESSEN[0])),
+      await statusNachWiederholung(() => loginStatus(b, KONTROLL_ADRESSEN[1])),
+    ],
     [HTTP_FOUND, HTTP_FOUND],
     "Positiv-Kontrolle: /auth/login muss für eine frische Adresse umleiten",
   );
