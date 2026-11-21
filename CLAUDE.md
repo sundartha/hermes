@@ -30,7 +30,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden.
    Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates.
    (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der
-   Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`.
+   Key wird nicht mehr gelesen, s. `.env.example` und `src/config.ts`.
    Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
    `SKIP_TWILIO_SIGNATURE_CHECK` bleibt trotz des Namens: der Schalter ist der **globale**
    `/voice`-Bypass (`routes/voice.ts`), kein Twilio-Schalter, und `boot-guard.ts` haengt daran.
@@ -117,7 +117,7 @@ Code, Tests oder Konfiguration so zu schreiben, dass eine Prüfung einen Versto�
 ## Referenzen
 
 - `README.md` — Setup, Engines, bewusste Vereinfachungen
-- `.env.example` — alle Env-Variablen; Env-Variablen immer in `src/config.js` zentralisieren und in `.env.example` dokumentieren, für Render zusätzlich `render.yaml`
+- `.env.example` — alle Env-Variablen; Env-Variablen immer in `src/config.ts` zentralisieren und in `.env.example` dokumentieren, für Render zusätzlich `render.yaml`
 - Eingaben von außen (Körper, Abfrage, Pfad-Parameter, Webhook-Nutzlast) nur mit Schema über `src/utils/eingabe-pruefen.js` prüfen (`pruefeKoerper`, `pruefeAbfrage`; Schemas in `src/routes/_validation.ts` oder neben der Route), nie von Hand mit `typeof`; die Regel `hermes/eingabe-nur-mit-schema` in `eslint.config.js` meldet die Handprüfung.
 - `docs/sicherheitsgrenzen.md` — Sicherheitsgrenzen, gegen die Plan und Urteil prüfen
 - Vor Website-Arbeit `docs/RUNBOOK-LAB-LIVE.md` lesen.
