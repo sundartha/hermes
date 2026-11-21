@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMetrics } from "../../src/metrics.js";
-import { LOG_PREFIX } from "../../src/metrics.js";
+import { createMetrics } from "../../src/metrics.ts";
+import { LOG_PREFIX } from "../../src/metrics.ts";
 
 function collector() {
   const entries = [];
