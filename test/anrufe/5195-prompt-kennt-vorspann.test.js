@@ -21,3 +21,14 @@ test("5195-K4b: das Anliegen steht im Prompt nur zusammen mit dieser Sperre", ()
 test("5195-K4c: die Sperre nennt das erste Hallo der Gegenseite als Fall", () => {
   assert.match(prompt, /even when the other party only says "Hello\?"/);
 });
+
+test("5195-K4d: die Sperre gilt nur gegenueber der Person, die die Eroeffnung gehoert hat", () => {
+  assert.match(prompt, /second time to the same person who heard your opening/);
+});
+
+test("5195-K4e: nach Menue, Weiterleitung oder Partnerwechsel nennt der Agent dem neuen Menschen den Grund einmal", () => {
+  assert.match(
+    prompt,
+    /A new person on the line after an automated menu, a transfer or a change of conversation partner has not heard your opening: tell that person your reason for calling once\./,
+  );
+});
