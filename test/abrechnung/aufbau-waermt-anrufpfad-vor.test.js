@@ -22,5 +22,6 @@ test("aufbau-waermt-anrufpfad-vor: der Aufbau hat vor der Rückgabe einen Anruf 
 test("aufbau-waermt-anrufpfad-vor: die Betreibernummer wird nach der Aufwärmung nicht ein zweites Mal angelegt", async () => {
   await laufendesHermes().betreiberDarfAnrufen();
   const store = await import("../../src/store.js");
-  assert.equal(store.load().numbers.filter((nummer) => nummer.id === "num_kv2_betreiber").length, 1);
+  const betreiberNummern = store.load().numbers.filter((nummer) => nummer.id === "num_kv2_betreiber");
+  assert.equal(betreiberNummern.length, 1);
 });
