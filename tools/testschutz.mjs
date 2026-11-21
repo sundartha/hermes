@@ -102,7 +102,7 @@ const LAUF_ZAEHLER = /^Neulauf-Wackler Nr\. \d+: /;
 const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
 const ZEITSTEMPEL = /^\S+Z /;
 const DATEI_ZEILE = /^# Subtest: (.+\.test\.[cm]?[jt]s)$/;
-const TEST_ZEILE = /^\s+not ok \d+ - (.+?)(?: # .*)?$/;
+const TEST_ZEILE = /^(\s+)not ok \d+ - (.+?)(?: # .*)?$/;
 const SPEC_ZEILE = /^\s*✗ (.+) \((\S+\.test\.[cm]?[jt]s):\d+:\d+\)$/;
 const BASIS_ROT_ZEILE = /^Basis rot: (\S+) war bei /;
 const TESTORDNER = /^.*?\/((?:apps\/web\/)?test\/)/;
@@ -116,13 +116,21 @@ function speczeilenNamen(zeile) {
 function rotTests(log, jobName) {
   const namen = [];
   let datei;
+  let letzteTiefe = 0;
   for (const roh of log.split("\n")) {
     const zeile = roh.replace(ZEITSTEMPEL, "").replace(/\r$/, "");
     const neueDatei = DATEI_ZEILE.exec(zeile)?.[1];
-    if (neueDatei !== undefined) datei = neueDatei.replace(TESTORDNER, "$1");
+    if (neueDatei !== undefined) {
+      datei = neueDatei.replace(TESTORDNER, "$1");
+      letzteTiefe = 0;
+    }
     namen.push(...speczeilenNamen(zeile));
-    const name = TEST_ZEILE.exec(zeile)?.[1];
-    if (name !== undefined) namen.push(datei === undefined ? `${jobName} › ${name}` : `${datei} › ${name}`);
+    const treffer = TEST_ZEILE.exec(zeile);
+    if (treffer === null) continue;
+    const tiefe = treffer[1].length;
+    const istEltern = tiefe < letzteTiefe;
+    letzteTiefe = tiefe;
+    if (!istEltern) namen.push(datei === undefined ? `${jobName} › ${treffer[2]}` : `${datei} › ${treffer[2]}`);
   }
   return namen.length === 0 ? [jobName] : namen;
 }

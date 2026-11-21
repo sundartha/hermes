@@ -185,3 +185,34 @@ test("Basis-rot-Zeile im Mutationsjob ergibt Titel mit Mutation und keinen Jobna
   const ergebnis = auswerten({ versuche: [versuch([{ id: 14, name: "Mutation 14/14", conclusion: "failure" }])], logs: { 14: log } });
   assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: test/anmeldung/sitzung.test.js (Mutation)"]);
 });
+
+const TAP_ZEIT = "2026-11-20T10:00:00.1234567Z ";
+const TAP_DATEI = `${TAP_ZEIT}# Subtest: /w/hermes/test/a/b.test.js`;
+
+function tapLog(...zeilen) {
+  return [TAP_DATEI, ...zeilen].map((zeile) => (zeile.startsWith(TAP_ZEIT) ? zeile : `${TAP_ZEIT}${zeile}`)).join("\n");
+}
+
+const ELTERN_FAELLE = [
+  ["Eltern nach dem Kind", ["    not ok 1 - Kind", "  not ok 1 - Eltern"], ["Wackelig: test/a/b.test.js › Kind"]],
+  ["zwei unverwandte rote Tests auf gleicher Ebene", ["    not ok 1 - Eins", "    not ok 2 - Zwei"], ["Wackelig: test/a/b.test.js › Eins", "Wackelig: test/a/b.test.js › Zwei"]],
+  ["drei Ebenen", ["      not ok 1 - Kind", "    not ok 1 - Eltern", "  not ok 1 - Grosseltern"], ["Wackelig: test/a/b.test.js › Kind"]],
+  [
+    "zwei Gruppen nacheinander",
+    ["    not ok 1 - Kind A", "  not ok 1 - Gruppe A", "    not ok 1 - Kind B", "  not ok 2 - Gruppe B"],
+    ["Wackelig: test/a/b.test.js › Kind A", "Wackelig: test/a/b.test.js › Kind B"],
+  ],
+];
+
+for (const [name, zeilen, erwartet] of ELTERN_FAELLE) {
+  test(`Rote Eltern-Tests ergeben kein zweites Issue: ${name}`, () => {
+    const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB])], logs: { 11: tapLog(...zeilen) } });
+    assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), erwartet);
+  });
+}
+
+test("Die Eltern-Erkennung gilt je Testdatei", () => {
+  const log = tapLog("    not ok 1 - Kind", "# Subtest: /w/hermes/test/c/d.test.js", "  not ok 1 - Einzeln");
+  const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB])], logs: { 11: log } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: test/a/b.test.js › Kind", "Wackelig: test/c/d.test.js › Einzeln"]);
+});
