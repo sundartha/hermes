@@ -1,4 +1,4 @@
-import { ALL_GREETING_TEMPLATES } from "./i18n/greeting-catalog.js";
+import { ALL_GREETING_TEMPLATES } from "./i18n/greeting-catalog.ts";
 
 export const SELF_SERVICE_FREE_FIELDS = ["agentName", "language", "agentStyle"];
 
