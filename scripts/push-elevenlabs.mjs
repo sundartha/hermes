@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { fetchConvaiSettings, patchConvaiSettings } from "../src/elevenlabs/convai.ts";
 import {
   HERMES_RENDER_SERVICE_ID,

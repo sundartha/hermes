@@ -3,7 +3,7 @@ import "./process-guards.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./mcp-tools.js";
-import { config, resolveGatewayUrl } from "./config.js";
+import { config, resolveGatewayUrl } from "./config.ts";
 import { HERMES_SERVER_INFO, mcpServerOptions } from "./mcp-server-info.js";
 
 const STDIO_CONSULT_LOOP = false;

@@ -1,5 +1,5 @@
 import { hasWidget, widgetHtml, widgetTitle, widgetVersion } from "./widget-catalog.js";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { normalisierterOrigin } from "../middleware.ts";
 
 export const UI_MIME = "text/html;profile=mcp-app";

@@ -40,7 +40,7 @@ src/claude.js      Gesprächslogik (Budget-Engine): System-Prompts, Tools, Discl
 src/mcp-tools.js   MCP-Tool-Definitionen (place_call, get_call_status, get_call_result, ...)
 src/mcp-server.js  MCP stdio-Variante für Claude Desktop
 src/store.js       JSON-Persistenz (auf Render ephemer - reset bei jedem Deploy)
-src/config.js      Konfiguration aus Env-Vars
+src/config.ts      Konfiguration aus Env-Vars
 public/tenant.html Dashboard (Navy-Design, Polling auf /api/state)
 scripts/           check-setup.js (npm run check), set-public-url.js
 ```

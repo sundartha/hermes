@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { LLM_PROVIDER, LLM_PROVIDER_VALUES, usableFallbackProvider } from "./provider.ts";
 import { anthropicErrors, createAnthropicProvider } from "./adapters/anthropic.ts";
 import { createDeepseekProvider, deepseekErrors } from "./adapters/deepseek.ts";

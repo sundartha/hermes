@@ -137,7 +137,7 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    AC1 und unimplementiert). Ein vergessenes/falsches `STORE_BACKEND` startet **still** auf
    dem fluechtigen json-Store -> erneuter Datenverlust. Darum hier **manuell** verifizieren
    (Render-Env + Boot-Log). Der einzige existierende STORE_BACKEND-Boot-Refusal ist das
-   Gegenteil: `STORE_BACKEND=pg` OHNE `DATABASE_URL` (`src/config.js:251`).
+   Gegenteil: `STORE_BACKEND=pg` OHNE `DATABASE_URL` (`src/config.ts:251`).
 4. **Manuellen Redeploy** ausloesen (Render: "Manual Deploy -> Deploy latest commit"). Der Start
    traegt jede Migrationsdatei mit Name und Pruefsumme in `schema_migrations` ein und fuehrt
    eingetragene Dateien **nicht erneut** aus. Ein erneuter Lauf gegen die wiederhergestellte
@@ -209,7 +209,7 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    ```
 6. **Erst wenn 1-5 gruen sind:** Inbound / Telefonnummer wieder freigeben (die scharf
    schaltenden Env-Vars und ihre fail-closed Defaults stehen in `.env.example` und
-   `src/config.js` — das ist die einzige aktuelle Quelle).
+   `src/config.ts` — das ist die einzige aktuelle Quelle).
 
 ---
 
@@ -295,7 +295,7 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
 ## 12. Querverweise
 
 - `README.md` — Deploy-Realität (Live-Dienst deployt `sundartha/hermes`, Zweig `master`, Auto-Deploy aus).
-- `.env.example` / `src/config.js` — die scharf schaltenden Env-Vars + fail-closed Defaults.
+- `.env.example` / `src/config.ts` — die scharf schaltenden Env-Vars + fail-closed Defaults.
 - `STATUS.md` §1 — Postgres-Prod (non-superuser/NOBYPASSRLS + pgBouncer) als offenes Live-Gate.
 - `docs/RELEASE-GATE-killer-test.md` — manuelles RLS-/Pooling-Gate vor Prod-Deploy.
 - `STATUS-OFFENE-PHASEN.md` Abschnitt 3 — Betreiber-ToDo "Postgres prod:

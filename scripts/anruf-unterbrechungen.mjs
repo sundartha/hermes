@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
 

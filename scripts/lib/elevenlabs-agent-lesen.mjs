@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 
 import { VORLAGE_REL } from "./elevenlabs-besitz.mjs";
 

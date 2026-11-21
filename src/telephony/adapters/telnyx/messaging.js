@@ -1,4 +1,4 @@
-import { config } from "../../../config.js";
+import { config } from "../../../config.ts";
 import { assertTelnyxOk } from "./errors.ts";
 import { anfrage } from "../../../utils/anfrage.js";
 

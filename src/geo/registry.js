@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { nullGeoLookup } from "./stub.js";
 import { makeMaxmindGeoLookup } from "./maxmind.js";
 

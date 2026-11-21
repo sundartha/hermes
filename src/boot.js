@@ -5,7 +5,7 @@ import {
   gatewayUrlForPort,
   setBoundGatewayPort,
   todayIsoDate,
-} from "./config.js";
+} from "./config.ts";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   fakeOriginateBootBlocked,

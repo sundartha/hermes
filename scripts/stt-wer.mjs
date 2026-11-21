@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.ts";
 
 const execFileAsync = promisify(execFile);

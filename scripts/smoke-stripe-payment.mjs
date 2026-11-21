@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "url";
-import { config } from "../src/config.js";
+import { config } from "../src/config.ts";
 import { provisionNumber } from "../src/onboarding.ts";
 import { stripeBilling } from "../src/billing/stripe.ts";
 import {

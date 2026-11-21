@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import * as jsonBackend from "./store/json.js";
 import { anrufpauseSetzen as anrufpauseSetzenImJson } from "./store/state-ops.js";
 import { macheSpeicherSperre } from "./store/sperre.js";

@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { snapshotTools, runBench } from "./bench.mjs";
 import { compareReports } from "./metriken.mjs";
 import { anthropicModel, dummyModel } from "./modelle.mjs";
-import { config } from "../../src/config.js";
+import { config } from "../../src/config.ts";
 
 const DEFAULT_RUNS = "5";
 const MODE_DUMMY = "attrappe";

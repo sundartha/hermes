@@ -1,6 +1,6 @@
 import { anthropicWebSearch } from "./adapters/anthropic-web-search.ts";
 import { exaSearch } from "./adapters/exa-search.js";
-import { config } from "../config.js";
+import { config } from "../config.ts";
 import { elevenLabsLookupCount } from "../store/state-ops.js";
 
 const RESEARCH_PROVIDER = Object.freeze({

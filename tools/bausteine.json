@@ -68,8 +68,8 @@
     {
       "baustein": "konfiguration",
       "zweck": "Liest Umgebungsvariablen, prüft sie beim Start und liefert config nach Namensräumen.",
-      "quellen": ["src/config.js", "src/konfiguration/"],
-      "eingaenge": ["src/config.js", "src/konfiguration/standardsprache.ts"],
+      "quellen": ["src/config.ts", "src/konfiguration/"],
+      "eingaenge": ["src/config.ts", "src/konfiguration/standardsprache.ts"],
       "nutzt": []
     },
     {

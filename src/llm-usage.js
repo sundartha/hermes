@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import * as store from "./store.js";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.ts";
 import { aiCostCents, inputTokensOf, tokenCostMicroCents } from "./store/state-ops.js";
