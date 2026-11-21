@@ -1,6 +1,18 @@
 import { config } from "../config.js";
 import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.ts";
 import { kauflandFuer } from "../store.js";
+import { z } from "zod";
+
+const kauflandVon = kauflandFuer;
+
+const GEO_KONFIG = z.object({
+  telephony: z.object({ telnyxConnectionId: z.string() }),
+  billing: z.object({ providerCurrency: z.string(), providerToBucketRateMicro: z.number() }),
+});
+
+function geoKonfig() {
+  return GEO_KONFIG.parse(config);
+}
 
 const DEFAULT_PHONE_NUMBER_TYPE = "local";
 
@@ -18,19 +30,19 @@ const COUNTRY_SEARCH_PARAMS = Object.freeze({
 });
 
 export function searchParamsForCountry(country) {
-  const countryCode = kauflandFuer(country);
-  const entry = COUNTRY_SEARCH_PARAMS[countryCode];
+  const countryCode = kauflandVon(country);
+  const entry = COUNTRY_SEARCH_PARAMS[countryCode ?? ""];
   return {
     countryCode,
-    connectionId: entry?.connectionId || config.telephony.telnyxConnectionId,
-    type: entry?.phoneNumberType || DEFAULT_PHONE_NUMBER_TYPE,
+    connectionId: entry?.connectionId ?? geoKonfig().telephony.telnyxConnectionId,
+    type: entry?.phoneNumberType ?? DEFAULT_PHONE_NUMBER_TYPE,
   };
 }
 
 export function holdAmountForCountry(country, defaultHoldCents) {
-  const key = String(country || "").toUpperCase();
+  const key = (country ?? "").toUpperCase();
   const entry = COUNTRY_SEARCH_PARAMS[key];
-  if (!entry || entry.holdAmountCents === undefined) return defaultHoldCents;
+  if (entry?.holdAmountCents === undefined) return defaultHoldCents;
   if (!Number.isInteger(entry.holdAmountCents)) {
     throw new Error(`holdAmountCents fuer ${key} muss Integer-Cents sein`);
   }
@@ -39,9 +51,12 @@ export function holdAmountForCountry(country, defaultHoldCents) {
 
 function bucketCentsFromProviderPrice(price, providerMicroCents) {
   if (!price) return null;
-  if (price.currency !== config.billing.providerCurrency) return null;
-  if (!Number.isInteger(providerMicroCents)) return null;
-  return providerMicroCentsToBucketCents(providerMicroCents, config.billing.providerToBucketRateMicro);
+  if (price.currency !== geoKonfig().billing.providerCurrency) return null;
+  if (providerMicroCents === undefined || !Number.isInteger(providerMicroCents)) return null;
+  return providerMicroCentsToBucketCents(
+    providerMicroCents,
+    geoKonfig().billing.providerToBucketRateMicro,
+  );
 }
 
 export function holdAmountForProviderPrice(price, defaultHoldCents) {
