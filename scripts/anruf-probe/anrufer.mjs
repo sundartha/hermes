@@ -1,6 +1,9 @@
 import { env } from "node:process";
 
-import { EL_ABORT_PROVIDER_TIMEOUT_MS, EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js";
+import {
+  EL_ABORT_PROVIDER_TIMEOUT_MS,
+  EL_TERMINATION_RESULT_ATTEMPTS,
+} from "../../src/elevenlabs/outbound.js";
 import { STIMMEN_FRIST_MS } from "../../src/elevenlabs/wirksame-stimme.ts";
 import { ELEVENLABS_RESULT_POLL_STANDARD_MS } from "../../src/konfiguration/rohwerte-voice.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
@@ -18,15 +21,24 @@ const WIEDERHOLUNG_PUFFER_MS = PROBEN_LAENGEN_IM_PUFFER * DAUER_GRENZE_S * MS_JE
 const WIEDERHOLUNG_BIS_MS = ABSTAND_MS + WIEDERHOLUNG_PUFFER_MS;
 const SPRACHE = "de";
 const RICHTUNG = "eingehend";
-const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
+const ZIEL_OBJECTIVE =
+  "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
 const TAG_LAENGE = 10;
 export const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
-const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary));
+const ZUSAMMENFASSUNG_PLATZHALTER = Object.freeze(
+  Object.values(LOCALES).map((locale) => locale.mcp.awaitSummary),
+);
+export const STIMMEN_NACHLAUF_QUELLEN = Object.freeze({
+  versuche: EL_TERMINATION_RESULT_ATTEMPTS,
+  abrufFristMs: EL_ABORT_PROVIDER_TIMEOUT_MS,
+  pauseMs: ELEVENLABS_RESULT_POLL_STANDARD_MS,
+  stimmenFristMs: STIMMEN_FRIST_MS,
+});
 const STIMMEN_NACHLAUF_FRIST_MS =
-  EL_TERMINATION_RESULT_ATTEMPTS * EL_ABORT_PROVIDER_TIMEOUT_MS +
-  (EL_TERMINATION_RESULT_ATTEMPTS - 1) * ELEVENLABS_RESULT_POLL_STANDARD_MS +
-  STIMMEN_FRIST_MS;
+  STIMMEN_NACHLAUF_QUELLEN.versuche * STIMMEN_NACHLAUF_QUELLEN.abrufFristMs +
+  (STIMMEN_NACHLAUF_QUELLEN.versuche - 1) * STIMMEN_NACHLAUF_QUELLEN.pauseMs +
+  STIMMEN_NACHLAUF_QUELLEN.stimmenFristMs;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
 const ECHTE_UHR = Object.freeze({
@@ -51,7 +63,12 @@ async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur =
       accept: "application/json, text/event-stream",
       authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: argumente } }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: argumente },
+    }),
   });
   if (!antwort.ok) throw new Error(`mcp_http_${antwort.status}`);
   const ergebnis = leseRpc(await antwort.text())?.result;
@@ -115,15 +132,32 @@ async function gegenStimmenAnzahl(ruf, probeStartMs) {
   for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
     const gegen = await ruf("get_call_status", { call_id: anruf.id });
     const nach = Date.parse(gegen.started_at) - probeStartMs;
-    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS)
+      return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
   }
   return undefined;
 }
 
-export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
+export function anruferBauen({
+  basis,
+  token,
+  ziel,
+  sprache,
+  auftraggeber,
+  vorname,
+  abfrage,
+  uhr = ECHTE_UHR,
+}) {
   const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
   const abbrechen = (callId) =>
-    werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
+    werkzeug({
+      abfrage,
+      basis,
+      token,
+      name: "cancel_call",
+      argumente: { call_id: callId },
+      ohneStruktur: true,
+    });
 
   let probeStartMs = Number.NaN;
   let probeCallId;
@@ -138,7 +172,10 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       if (ENDSTATUS.includes(stand.status)) return { stand, ...verlaufErgebnis(verlauf, jetzt) };
       if (jetzt - beginn >= DAUER_GRENZE_S * MS_JE_SEKUNDE) {
         await abbrechen(callId);
-        return { stand: await ruf("get_call_status", { call_id: callId }), ...verlaufErgebnis(verlauf, jetzt) };
+        return {
+          stand: await ruf("get_call_status", { call_id: callId }),
+          ...verlaufErgebnis(verlauf, jetzt),
+        };
       }
       await uhr.warte(TAKT_MS);
     }
@@ -149,7 +186,12 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     for (;;) {
       const ergebnis = await ruf("get_call_result", { call_id: callId }).catch(() => undefined);
       const text = ergebnis?.result_summary;
-      if (typeof text === "string" && text.trim() !== "" && !ZUSAMMENFASSUNG_PLATZHALTER.includes(text)) return true;
+      if (
+        typeof text === "string" &&
+        text.trim() !== "" &&
+        !ZUSAMMENFASSUNG_PLATZHALTER.includes(text)
+      )
+        return true;
       if (uhr.jetzt() - beginn >= ERGEBNIS_FRIST_MS) return false;
       await uhr.warte(TAKT_MS);
     }
@@ -160,23 +202,31 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     tagesstand: async () => {
       const { calls } = await ruf("list_calls", {});
       const heute = new Date(uhr.jetzt()).toISOString().slice(0, TAG_LAENGE);
-      const startVon = async (anruf) => startMs(await ruf("get_call_status", { call_id: anruf.id }));
+      const startVon = async (anruf) =>
+        startMs(await ruf("get_call_status", { call_id: anruf.id }));
       const tag = (ms) => new Date(ms).toISOString().slice(0, TAG_LAENGE);
       if (calls.length >= LISTE_OBERGRENZE) {
         const tage = [];
         for (const anruf of calls) tage.push(tag(await startVon(anruf)));
         if (!tage.some((eintrag) => eintrag < heute)) throw new Error("probe_tageszaehl_unklar");
       }
-      const eigene = calls.filter((anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel);
+      const eigene = calls.filter(
+        (anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel,
+      );
       const starts = [];
       for (const anruf of eigene) starts.push(await startVon(anruf));
-      const heutige = starts.filter((ms) => tag(ms) === heute).sort((frueher, spaeter) => frueher - spaeter);
+      const heutige = starts
+        .filter((ms) => tag(ms) === heute)
+        .sort((frueher, spaeter) => frueher - spaeter);
       return { erstversuche: heutige.length - wiederholungen(heutige), anrufe: heutige.length };
     },
     offeneBeenden: async () => {
       const { calls } = await ruf("list_calls", {});
       const offene = calls.filter(
-        (anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel && !ENDSTATUS.includes(anruf.status),
+        (anruf) =>
+          anruf.direction === "outbound" &&
+          anruf.counterparty === ziel &&
+          !ENDSTATUS.includes(anruf.status),
       );
       for (const anruf of offene) await abbrechen(anruf.id);
       return offene.length;
@@ -207,7 +257,8 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       probeStartMs = Date.parse(stand.started_at);
       probeCallId = platziert.call_id;
       return {
-        annahmeSekunden: (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
+        annahmeSekunden:
+          (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
         begruessung,
         gegenseite,
         stillstandSekunden,

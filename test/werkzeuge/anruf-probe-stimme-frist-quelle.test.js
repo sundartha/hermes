@@ -2,22 +2,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
-import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
-import { EL_ABORT_PROVIDER_TIMEOUT_MS, EL_TERMINATION_RESULT_ATTEMPTS } from "../../src/elevenlabs/outbound.js";
-import { STIMMEN_FRIST_MS } from "../../src/elevenlabs/wirksame-stimme.ts";
-import { ELEVENLABS_RESULT_POLL_STANDARD_MS } from "../../src/konfiguration/rohwerte-voice.ts";
+import { anruferBauen, STIMMEN_NACHLAUF_QUELLEN } from "../../scripts/anruf-probe/anrufer.mjs";
 
 const JETZT = Date.parse("2026-11-17T10:00:00.000Z");
 const ZIEL = "+12722205602";
 const SCHLUESSEL = "hermes/stimmen_anzahl";
 const TAKT_MS = 2000;
-const ERWARTET_MS =
-  EL_TERMINATION_RESULT_ATTEMPTS * EL_ABORT_PROVIDER_TIMEOUT_MS +
-  (EL_TERMINATION_RESULT_ATTEMPTS - 1) * ELEVENLABS_RESULT_POLL_STANDARD_MS +
-  STIMMEN_FRIST_MS;
+const { versuche, abrufFristMs, pauseMs, stimmenFristMs } = STIMMEN_NACHLAUF_QUELLEN;
+const ERWARTET_MS = versuche * abrufFristMs + (versuche - 1) * pauseMs + stimmenFristMs;
 
 function antwort(strukturiert, meta) {
-  const ergebnis = { isError: false, structuredContent: strukturiert, ...(meta === undefined ? {} : { _meta: meta }) };
+  const ergebnis = {
+    isError: false,
+    structuredContent: strukturiert,
+    ...(meta === undefined ? {} : { _meta: meta }),
+  };
   const koerper = JSON.stringify({ jsonrpc: "2.0", id: 1, result: ergebnis });
   return { ok: true, status: 200, text: async () => koerper };
 }
@@ -76,7 +75,13 @@ async function gelesen(zahlAbAbruf) {
 
 const summe = (liste) => liste.reduce((a, b) => a + b, 0);
 
-test("Frist-Quelle: erwartete Frist ergibt aus den Server-Konstanten 50000 ms", () => {
+test("Frist-Quelle: die Quellen sind die Server-Werte 3, 10000, 5000 und 10000", () => {
+  assert.deepEqual(STIMMEN_NACHLAUF_QUELLEN, {
+    versuche: 3,
+    abrufFristMs: 10_000,
+    pauseMs: 5000,
+    stimmenFristMs: 10_000,
+  });
   assert.equal(ERWARTET_MS, 50_000);
 });
 
