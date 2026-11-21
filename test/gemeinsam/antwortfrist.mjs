@@ -16,13 +16,19 @@ export function mitAntwortfrist(anfrage, { wartezeitMs = 0 } = {}) {
 }
 
 export function abrufMitFrist(url, optionen = {}, { wartezeitMs = 0 } = {}) {
-  const frist = fristSignal({ wartezeitMs });
   const methode = (optionen.method ?? "GET").toUpperCase();
   return fetch(url, {
     ...optionen,
-    signal: AbortSignal.any([frist, ...(optionen.signal ? [optionen.signal] : [])]),
+    signal: AbortSignal.any([
+      fristSignal({ wartezeitMs }),
+      ...(optionen.signal ? [optionen.signal] : []),
+    ]),
   }).catch((fehler) => {
-    if (!frist.aborted || optionen.signal?.aborted) throw fehler;
-    throw keineAntwort(wartezeitMs + ANTWORTFRIST_MS, `: ${methode} ${new URL(url).pathname}`, fehler);
+    if (fehler?.name !== "TimeoutError" || optionen.signal?.aborted) throw fehler;
+    throw keineAntwort(
+      wartezeitMs + ANTWORTFRIST_MS,
+      `: ${methode} ${new URL(url).pathname}`,
+      fehler,
+    );
   });
 }
