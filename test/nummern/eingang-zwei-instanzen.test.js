@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import express from "express";
 
@@ -8,7 +7,7 @@ import { makeVoiceRoutes } from "../../src/routes/voice.ts";
 import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+import { makePgStore, pgliteAlsRolleOhneSuperuser, schemaErneutAnwenden } from "../pg-helpers.js";
 
 const MANDANT = "t_eingang_a";
 const FREMD = "t_eingang_fremd";
@@ -234,8 +233,8 @@ test("28b: Nummern, die schon vor der Migration in der Datenbank standen, stehen
   await nummerKaufenAufA(db);
   await nummerKaufenAufA(db, { id: "num_fremd", e164: NEU, mandant: FREMD });
   await db.exec("DELETE FROM nummer_schluessel");
-  const migration = readFileSync(new URL("../../src/db/migrations/0030_nummer_schluessel.sql", import.meta.url), "utf8");
-  await db.exec(migration);
+  await db.exec("DELETE FROM schema_migrations WHERE version = 30");
+  await schemaErneutAnwenden(db);
   assert.deepEqual(
     await schluessel(db),
     [
