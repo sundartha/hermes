@@ -1,9 +1,12 @@
+import { z } from "zod";
 import { config } from "./config.ts";
 import { LOG_PREFIX } from "./utils/messzeilen-marke.ts";
 
 export { LOG_PREFIX };
 
 const MAX_TRACKED_CALLS = 10000;
+
+const METRICS_KONFIG = z.object({ metrics: z.object({ metricsEnabled: z.boolean() }) });
 
 const LLM_OPTIONAL_FIELDS = Object.freeze([
   "callId",
@@ -13,11 +16,12 @@ const LLM_OPTIONAL_FIELDS = Object.freeze([
   "output_tokens",
 ]);
 
-const defaultLog = (kind, payload) =>
+const defaultLog = (kind, payload) => {
   console.log(`${LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`);
+};
 
 export function createMetrics({
-  enabled = config.metrics.metricsEnabled,
+  enabled = METRICS_KONFIG.parse(config).metrics.metricsEnabled,
   log = defaultLog,
   now = Date.now,
   maxTrackedCalls = MAX_TRACKED_CALLS,
