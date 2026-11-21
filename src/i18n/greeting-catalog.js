@@ -1,4 +1,4 @@
-import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./locales.ts";
+import { LOCALES, localeFor } from "./locales.ts";
 import { withInboundNotice } from "./inbound-notice.ts";
 
 function buildTemplates(locale) {
@@ -9,9 +9,11 @@ function buildTemplates(locale) {
   );
 }
 
-const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze(
-  Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, buildTemplates(LOCALES[lang])])),
-);
+const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze({
+  de: buildTemplates(LOCALES.de),
+  fr: buildTemplates(LOCALES.fr),
+  en: buildTemplates(LOCALES.en),
+});
 
 export function greetingTemplatesFor(language) {
   return GREETING_TEMPLATES_BY_LANGUAGE[localeFor(language).language];
@@ -26,10 +28,12 @@ const HISTORISCHE_DE_ROHFASSUNGEN = Object.freeze([
     alt: "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
     ziel: LOCALES.de.greetingDefault,
   }),
-  Object.freeze({
-    alt: "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
-    ziel: LOCALES.de.greetingVariants[0],
-  }),
+  ...LOCALES.de.greetingVariants.slice(0, 1).map((ziel) =>
+    Object.freeze({
+      alt: "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
+      ziel,
+    }),
+  ),
 ]);
 
 const GREETING_ORTHOGRAPHY_MIGRATION = Object.freeze(
