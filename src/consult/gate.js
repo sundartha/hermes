@@ -1,11 +1,16 @@
 import { config } from "../config.ts";
 
+function istWahr(quelle, schluessel) {
+  return Reflect.get(Object(quelle), schluessel) === true;
+}
+
 export function consultToreFor(profile) {
+  const tenancy = Reflect.get(config, "tenancy");
   return {
-    master: config.tenancy.consultEnabled === true,
-    kontext: config.tenancy.assistantContextEnabled === true,
-    mandant: profile?.allowConsult === true,
-    in_call: config.tenancy.inCallConsultEnabled === true,
+    master: istWahr(tenancy, "consultEnabled"),
+    kontext: istWahr(tenancy, "assistantContextEnabled"),
+    mandant: istWahr(profile, "allowConsult"),
+    in_call: istWahr(tenancy, "inCallConsultEnabled"),
   };
 }
 
