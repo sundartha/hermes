@@ -57,6 +57,7 @@ const DEPCRUISE = "node_modules/.bin/depcruise";
 const ARCHITEKTUR_ORDNER = ["src", "test"];
 const BAUSTEINKARTE = "tools/bausteine.json";
 const EXIT_ROT = 1;
+const EXIT_UNLESBAR = 2;
 const GROSSE_AUSGABE = 268_435_456;
 const ERSTE_DATEI = 3;
 const JSON_EINZUG = 2;
@@ -105,6 +106,8 @@ const EXIT_SIGNAL = 128;
 const SIGNALE = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
 const FRIST_MINUTEN = 45;
 const MUTATION_FRIST_MS = FRIST_MINUTEN * MINUTE_MS;
+const ROTPROBE_FRIST_MINUTEN = 10;
+const ROTPROBE_FRIST_MS = ROTPROBE_FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_FRIST_MINUTEN = 25;
 const MUTANT_FRIST_MS = MUTANT_FRIST_MINUTEN * MINUTE_MS;
 const MUTANT_TESTDATEI_FRIST_MINUTEN = 3;
@@ -728,6 +731,47 @@ export function mutationUrteil(mutanten, minuten) {
   return offen.length === 0 && unbelegt.length === 0;
 }
 
+function prTextLesen(argv) {
+  try {
+    const { body } = JSON.parse(readFileSync(argv[ERSTE_DATEI], "utf8"));
+    return typeof body === "string" ? body : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function gruenAufBasis(basis, neu) {
+  const ordner = mkdtempSync(join(tmpdir(), "rotprobe-vorab-"));
+  const arbeitsbaum = join(ordner, "basis");
+  git(["worktree", "add", "--detach", arbeitsbaum, basis]);
+  try {
+    for (const datei of neu) {
+      mkdirSync(join(arbeitsbaum, dirname(datei)), { recursive: true });
+      writeFileSync(join(arbeitsbaum, datei), readFileSync(datei));
+    }
+    if (existsSync("node_modules")) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
+    return neu.filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
+  } finally {
+    git(["worktree", "remove", "--force", arbeitsbaum]);
+    rmSync(ordner, { recursive: true, force: true });
+  }
+}
+
+function prTextVorab(argv) {
+  const prText = prTextLesen(argv);
+  if (prText === undefined) return EXIT_UNLESBAR;
+  const basis = basisAus(argv);
+  const neu = git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n").filter((datei) => TESTDATEI.test(datei));
+  if (neu.length === 0 || git(["diff", "--name-only", basis, "--", "src"]) === "") {
+    console.log("Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen.");
+    return 0;
+  }
+  const genannt = gruenAufMaster(prText).map(({ datei }) => datei);
+  const fehlend = gruenAufBasis(basis, neu).filter((datei) => !genannt.includes(datei));
+  for (const datei of fehlend) console.log(`${datei} ist auf master grün; der PR-Text nennt sie nicht unter „## Überlebende Mutanten“. Eintrag: \`src/datei.js:zeile/id\` wird getötet von \`${datei}\``);
+  return fehlend.length === 0 ? 0 : EXIT_ROT;
+}
+
 function rotprobeAusnahmenAusgeben() {
   for (const { datei } of gruenAufMaster(env.PR_TEXT)) console.log(datei);
   return true;
@@ -957,6 +1001,10 @@ async function main() {
   const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben }[gewuenscht];
   if (mutation !== undefined) {
     if (!(await mutation())) process.exitCode = EXIT_ROT;
+    return;
+  }
+  if (gewuenscht === "pr-text") {
+    process.exitCode = prTextVorab(process.argv);
     return;
   }
   if (gewuenscht === "betroffen") {
