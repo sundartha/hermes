@@ -192,7 +192,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
   const profil = macheProfilSql({ ...optionen, innerhalbFrist });
   const ausfallSql = macheAusfallSql(optionen);
-  const nummernSql = macheNummernSql(optionen);
+  const nummernSql = macheNummernSql({ ...optionen, zeileZuNummer: rowToNumber });
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -207,6 +207,8 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
   const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+
+  const verwaltung = verwaltungMethoden(kontext);
 
   return {
     init,
@@ -224,7 +226,8 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     ...mandantBudgetMethoden(kontext),
     ...aboAbrechnungMethoden(kontext),
     ...mandantEinstellungenMethoden(kontext),
-    ...verwaltungMethoden(kontext),
+    ...verwaltung,
+    ...nummerMethoden({ requireState, nummernSql, ensureTenant: verwaltung.ensureTenant }),
   };
 }
 
@@ -358,6 +361,20 @@ async function loesen(gebunden, callId, schreiben) {
 function entbindeEntfernte(mengen, state) {
   for (const menge of mengen)
     for (const callId of menge) if (!ops.getCall(state, callId)) menge.delete(callId);
+}
+
+function nummerMethoden({ requireState, nummernSql, ensureTenant }) {
+  return {
+    async nummerNachladen(e164) {
+      const nummer = await nummernSql.nachladen(e164);
+      if (!nummer || !(await ensureTenant(nummer.tenantId))) return false;
+      const state = requireState();
+      const vorhanden = ops.findNumber(state, nummer.id);
+      if (vorhanden) Object.assign(vorhanden, nummer);
+      else state.numbers.push(nummer);
+      return true;
+    },
+  };
 }
 
 function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe, posteingang, posteingangAnrufe }) {

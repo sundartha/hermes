@@ -1,5 +1,7 @@
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import { PROVISION_NUMBER_JOB } from "../begriffe/nummern-vergabe.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
+import { innerhalbFrist } from "./einstellungen-sql.js";
 
 const FEHLER = "[pg] nummernkauf fehlgeschlagen:";
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
@@ -13,6 +15,10 @@ const AUFTRAG_LESEN_SQL = `SELECT id, tenant_id, number_id, kind, status, idempo
   FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
 const NUMMER_ENTFERNEN_SQL = `DELETE FROM number WHERE tenant_id = $1 AND id = $2`;
 const AUFTRAG_ENTFERNEN_SQL = `DELETE FROM provisioning_job WHERE tenant_id = $1 AND id = $2`;
+const NACHLADEN_FEHLER = "[pg] nummer nachladen fehlgeschlagen:";
+const SCHLUESSEL_SQL = `SELECT tenant_id FROM nummer_schluessel WHERE e164_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')`;
+const NUMMER_LESEN_SQL = `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp
+  FROM number WHERE tenant_id = $1 AND e164 = $2`;
 const NICHT_ZAEHLEND = [NUMBER_STATUS.RELEASED, NUMBER_STATUS.FAILED];
 
 function alsAuftrag(zeile) {
@@ -90,10 +96,43 @@ async function imMandanten(client, tenantId, arbeit) {
   }
 }
 
-export function macheNummernSql({ einreihen }) {
+async function nummerLesen(client, e164) {
+  const { rows: schluessel } = await client.query(SCHLUESSEL_SQL, [e164]);
+  if (schluessel.length === 0) return null;
+  const tenantId = schluessel[0].tenant_id;
+  await client.query("BEGIN");
+  try {
+    await client.query(KONTEXT_SQL, [tenantId]);
+    const { rows } = await client.query(NUMMER_LESEN_SQL, [tenantId, e164]);
+    await client.query("COMMIT");
+    return rows[0] ?? null;
+  } catch (fehler) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw fehler;
+  }
+}
+
+function macheNachladen({ runner, zeileZuNummer, fristMs }) {
+  const bei = (meldung) => console.error(NACHLADEN_FEHLER, meldung);
+  return async (e164) => {
+    const lesen = runner
+      .withClient((client) => nummerLesen(client, e164))
+      .then(
+        (zeile) => (zeile ? zeileZuNummer(zeile) : null),
+        (fehler) => {
+          bei(fehler.message);
+          return null;
+        },
+      );
+    return (await innerhalbFrist(lesen, fristMs, () => bei("Frist abgelaufen"))) || null;
+  };
+}
+
+export function macheNummernSql({ einreihen, runner, zeileZuNummer, fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS }) {
   const unterSperre = (tenantId, arbeit) =>
     einreihen((client) => unterMandantenSperre(client, tenantId, () => arbeit(client)));
   return {
+    nachladen: macheNachladen({ runner, zeileZuNummer, fristMs }),
     nummerAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => nummerAnlegen(client, eingabe)),
     auftragAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => auftragAnlegen(client, eingabe)),
     nummerEntfernen: ({ tenantId, numberId }) =>

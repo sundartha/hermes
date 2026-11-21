@@ -38,6 +38,7 @@ const ANRUF_ZUSTAND_PRUEFREGEL_NAME = "0026_anruf_zustand_pruefregel.sql";
 const ANRUF_FRIST_UEBERGABE_NAME = "0027_anruf_frist_uebergabe.sql";
 const PLATTFORM_ABSENDER_BINDUNG_GESCHLOSSEN_NAME = "0028_plattform_absender_bindung_geschlossen.sql";
 const PROVISIONING_JOB_EINDEUTIG_NAME = "0029_provisioning_job_eindeutig.sql";
+const NUMMER_SCHLUESSEL_NAME = "0030_nummer_schluessel.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -173,6 +174,10 @@ const MIGRATION_READERS = [
   {
     name: PROVISIONING_JOB_EINDEUTIG_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", PROVISIONING_JOB_EINDEUTIG_NAME), "utf8"),
+  },
+  {
+    name: NUMMER_SCHLUESSEL_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", NUMMER_SCHLUESSEL_NAME), "utf8"),
   },
 ];
 
