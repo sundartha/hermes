@@ -30,7 +30,7 @@ function repo({ neueTests, srcAendern }) {
   const basis = git(ordner, "rev-parse", "HEAD");
   if (srcAendern) schreibe(ordner, "src/a.js", "export const a = 2;\n");
   if (neueTests) {
-    schreibe(ordner, GRUEN, 'import { test } from "node:test";\ntest("gruen", () => {});\n');
+    schreibe(ordner, GRUEN, 'import { test } from "node:test";\nimport { h } from "./helfer.js";\ntest("gruen", () => { if (h !== 1) throw new Error("helfer"); });\n');
     schreibe(ordner, "test/bereich/helfer.js", "export const h = 1;\n");
     schreibe(ordner, ROT, 'import { test } from "node:test";\ntest("rot", () => { throw new Error("rot"); });\n');
   }
