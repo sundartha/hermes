@@ -58,3 +58,13 @@ test("P11-G8 ALL_GREETING_TEMPLATES ist die Sprach-Union aller Kataloge", () => 
     }
   }
 });
+
+test("P11-G9 der Rueckfall ist ein Text und gleich der Standardvorlage der Anrufsprache mit Hinweis", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const fremd = SUPPORTED_LANGUAGES.find((l) => l !== lang);
+    const erwartet = withInboundNotice(LOCALES[lang].greetingDefault, LOCALES[lang].inboundNotice);
+    const ergebnis = greetingForLanguage(greetingTemplatesFor(fremd)[0], lang);
+    assert.equal(typeof ergebnis, "string", `${lang}: Rueckfall ist kein Text`);
+    assert.equal(ergebnis, erwartet, `${lang}: Rueckfall ist nicht die Standardvorlage`);
+  }
+});
