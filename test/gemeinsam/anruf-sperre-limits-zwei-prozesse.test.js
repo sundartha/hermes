@@ -17,7 +17,11 @@ const SPERRE_ART = Object.freeze({
   lesen: "LOCK TABLE call IN ACCESS EXCLUSIVE MODE",
 });
 const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
+const EIGENE_DATENBANK_SQL = "database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 const SPERREN_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory'";
+const EIGENE_SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND ${EIGENE_DATENBANK_SQL}`;
+const SPERRE_WARTET_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND ${EIGENE_DATENBANK_SQL}`;
+const ANRUF_SPERRE_NAMENSRAUM = 2667;
 const ROLLE_SQL = `SELECT DISTINCT usename FROM pg_stat_activity
   WHERE datname = current_database() AND usename <> current_user`;
 const SPALTEN_SQL = "SELECT column_name FROM information_schema.columns WHERE table_name = 'call'";
@@ -48,6 +52,7 @@ async function gleichzeitig(sql, auftraege, art = "schreiben") {
 
 const rolleDerAnwendung = async (sql) => (await sql(ROLLE_SQL)).rows[0].usename;
 const keineSperre = async (sql) => assert.equal((await sql(SPERREN_SQL)).rows[0].anzahl, 0);
+const keineEigeneSperre = async (sql) => assert.equal((await sql(EIGENE_SPERREN_SQL)).rows[0].anzahl, 0);
 
 test(
   "zwei Prozesse, Stundenlimit 1: zwei gleichzeitige Anrufe an verschiedene Nummern ergeben einen Anruf und 429 stundenlimit",
@@ -126,6 +131,40 @@ test(
       const folgend = await antwort(rufeAnMit(b, { to: ZIEL_B }));
       assert.equal(folgend.status, HTTP_OK);
       assert.deepEqual((await sql(ANRUFE_SQL)).rows, [{ ziel: ZIEL_B }]);
+      assert.equal(anbieter.starts().length, 1);
+    });
+  },
+);
+
+test(
+  "zwei Prozesse: faellt das Lesen der laufenden Anrufe erst unter der gehaltenen Sperre aus, antwortet place_call 503, legt nichts an und waehlt nicht; die Sperre ist frei und der naechste Anruf laeuft sofort",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiHermesAufPostgres(t, {}, async ({ a, b, anbieter, sql }) => {
+      const rolle = await rolleDerAnwendung(sql);
+      const spalten = (await sql(SPALTEN_SQL)).rows.map((zeile) => zeile.column_name);
+      const schluessel = [ANRUF_SPERRE_NAMENSRAUM, BOOTSTRAP_TENANT_ID];
+      await sql("SELECT pg_advisory_lock($1, hashtext($2))", schluessel);
+      const antwortet = antwort(rufeAnMit(a, { to: ZIEL_A }));
+      try {
+        await zeilenBis(
+          async () => (await sql(SPERRE_WARTET_SQL)).rows[0].anzahl,
+          (wartende) => wartende >= 1,
+        );
+        await sql(`REVOKE SELECT ON call FROM ${rolle}`);
+        await sql(`GRANT SELECT (${spalten.filter((name) => name !== "goal").join(", ")}) ON call TO ${rolle}`);
+      } finally {
+        await sql("SELECT pg_advisory_unlock($1, hashtext($2))", schluessel);
+      }
+      const fehlgeschlagen = await antwortet;
+      assert.deepEqual([fehlgeschlagen.status, fehlgeschlagen.body.error], [HTTP_UNAVAILABLE, NICHT_GEWAEHLT]);
+      assert.equal((await sql(ANRUFE_SQL)).rows.length, 0);
+      assert.equal(anbieter.starts().length, 0);
+      await keineEigeneSperre(sql);
+      await sql(`GRANT SELECT ON call TO ${rolle}`);
+      const folgend = await antwort(rufeAnMit(b, { to: ZIEL_A }));
+      assert.equal(folgend.status, HTTP_OK);
       assert.equal(anbieter.starts().length, 1);
     });
   },
