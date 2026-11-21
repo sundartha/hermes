@@ -49,7 +49,7 @@
         "src/chain-mutex.js",
         "src/single-flight.ts",
         "src/log-maske.ts",
-        "src/metrics.js",
+        "src/metrics.ts",
         "src/middleware.ts",
         "src/config-fingerprint.js",
         "src/brand-icon-data.js",
