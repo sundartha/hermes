@@ -256,10 +256,6 @@ export function save() {
 
 export async function drainFlushes() {}
 
-export function mitAnrufSperre(_tenantId, arbeit) {
-  return arbeit();
-}
-
 export const newId = ops.newId;
 
 export function createCall(input) {

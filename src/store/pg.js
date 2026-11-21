@@ -10,7 +10,6 @@ import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
-import { mitAnrufSperre } from "./anruf-sperre-pg.js";
 import {
   hydratedCostCents,
   nutzungAuffrischen,
@@ -213,7 +212,6 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     load: () => requireState(),
     save,
     drainFlushes,
-    mitAnrufSperre: (tenantId, arbeit) => mitAnrufSperre(runner, tenantId, arbeit),
     newId: ops.newId,
     ...anrufStatusMethoden(kontext),
     ...anrufBelegMethoden(kontext),

@@ -38,6 +38,7 @@ async function createPgBackend() {
     "./store/webhook-zustellung.js"
   );
   const startSperre = await import("./store/start-sperre.js");
+  const anrufSperre = await import("./store/anruf-sperre-pg.js");
   const { rolleVorhanden: rolleImKatalog } = await import("./db/migrate.js");
   const { makeStripeEreignisRegister } = await import("./store/stripe-ereignis-register.js");
   const { makePostgresTtsAblage } = await import("./store/tts-ablage.js");
@@ -58,6 +59,7 @@ async function createPgBackend() {
       mitAblage: Boolean(webhookZustellung),
     });
   const mitStartSperre = (routine, arbeit) => startSperre.mitStartSperre(runner, routine, arbeit);
+  const mitAnrufSperre = (tenantId, arbeit) => anrufSperre.mitAnrufSperre(runner, tenantId, arbeit);
   const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
   const besitzLage = () => besitzLageVon(runner);
   const starteInstanzTakt = async () => {
@@ -104,6 +106,7 @@ async function createPgBackend() {
     budgetReservierung: await makePostgresBudgetReserve(runner),
     starteZustellungsLoeschtakt,
     mitStartSperre,
+    mitAnrufSperre,
     nummernVorhanden,
     besitzLage,
     starteInstanzTakt,
@@ -213,6 +216,7 @@ function jsonBackendAufbauen() {
     },
     starteZustellungsLoeschtakt: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
+    mitAnrufSperre: (_tenantId, arbeit) => arbeit(),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
     besitzLage: async () => ({ eigene: EIGENE_KENNUNG, lebende: [EIGENE_KENNUNG] }),
     starteInstanzTakt: async () => ({ stoppen: async () => {}, abmelden: async () => {} }),
