@@ -116,7 +116,8 @@
       "^src/store/stripe-ereignis-regeln\\.[jt]s$",
       "^src/utils/eingabe-pruefen\\.[jt]s$",
       "^src/begriffe/",
-      "^src/i18n/anruf-eingabe-texte\\.[jt]s$"
+      "^src/i18n/anruf-eingabe-texte\\.[jt]s$",
+      "^src/i18n/locales\\.[jt]s$"
     ]
   }
 ]
