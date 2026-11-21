@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { PROBE_STAGING_TEST_TOKEN, PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const COMMIT = "e".repeat(40);
 const ZIEL = "+4930555000199";
@@ -36,6 +36,7 @@ async function laufen({ fall = {}, umgebung = {}, mitOutput = true } = {}) {
     GITHUB_RUN_ID: "88",
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
+    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_TELNYX_KEY: PROBE_TELNYX_SCHLUESSEL,
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify(werte),
