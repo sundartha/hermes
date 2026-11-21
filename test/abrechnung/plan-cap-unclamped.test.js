@@ -13,7 +13,7 @@ before(async () => {
   ops = await import("../../src/store/state-ops.js");
   subscribeMod = await import("../../src/billing/subscribe.ts");
   webhookMod = await import("../../src/billing/webhook.ts");
-  bootGuardMod = await import("../../src/boot-guard.js");
+  bootGuardMod = await import("../../src/boot-guard.ts");
   config.billing.stripeStarterPriceId = "price_starter_test";
   config.billing.stripeBusinessPriceId = "price_business_test";
 });

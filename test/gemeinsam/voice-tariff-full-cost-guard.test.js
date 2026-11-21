@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { voiceTariffFloorFindings, VOICE_TARIFF_FLOOR_FINDING } from "../../src/boot-guard.js";
+import { voiceTariffFloorFindings, VOICE_TARIFF_FLOOR_FINDING } from "../../src/boot-guard.ts";
 import { startServer, seedState, outboundCallsSeed } from ".././helpers.js";
 import { abrufMitFrist } from ".././gemeinsam/antwortfrist.mjs";
 

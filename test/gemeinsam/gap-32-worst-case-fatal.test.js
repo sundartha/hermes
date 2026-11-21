@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spendCapCoherence, SPEND_CAP_FINDING } from "../../src/boot-guard.js";
+import { spendCapCoherence, SPEND_CAP_FINDING } from "../../src/boot-guard.ts";
 
 const UNAFFORDABLE = Object.freeze({
   tenantDefaultCents: 600,
