@@ -98,6 +98,7 @@ async function freigegebenVon(pr) {
 const WACKELIG = "wackelig";
 const SAMMEL_JOB = "CI";
 const ROT = "failure";
+const PR_TEXT_JOB = /^(?:Rotprobe|Mutation \d+\/\d+)$/;
 const LAUF_ZAEHLER = /^Neulauf-Wackler Nr\. \d+: /;
 const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
 const ZEITSTEMPEL = /^\S+Z /;
@@ -135,11 +136,20 @@ function rotTests(log, jobName) {
   return namen.length === 0 ? [jobName] : namen;
 }
 
+function basisRotEintraege(log) {
+  const namen = log.split("\n").map((roh) => BASIS_ROT_ZEILE.exec(roh.replace(ZEITSTEMPEL, ""))?.[1]);
+  return namen.filter((name) => name !== undefined).map((name) => `${name} (Mutation)`);
+}
+
+function wacklerEintraege(job, log) {
+  return PR_TEXT_JOB.test(job.name) ? basisRotEintraege(log) : rotTests(log, job.name);
+}
+
 function wacklerTitel(versuche, logs) {
   const titel = new Set();
   for (const { jobs } of versuche) {
     for (const job of jobs.filter(({ conclusion, name }) => conclusion === ROT && name !== SAMMEL_JOB)) {
-      for (const eintrag of rotTests(logs[job.id] ?? "", job.name)) titel.add(`Wackelig: ${eintrag}`);
+      for (const eintrag of wacklerEintraege(job, logs[job.id] ?? "")) titel.add(`Wackelig: ${eintrag}`);
     }
   }
   return [...titel];
