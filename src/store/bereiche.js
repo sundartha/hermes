@@ -97,6 +97,7 @@ function ausfallJsonBereich(speicher) {
     },
     offenerMarker: async (eingabe) => ausfall.offenerMarker(speicher.load(), eingabe),
     offeneAusfallZustand: async () => ausfall.offeneAusfallZustand(speicher.load(), await anrufeFuerBericht(speicher)),
+    offeneMarkerListe: async () => ausfall.offeneMarkerListe(speicher.load()),
     holdKandidaten: async (eingabe) => ausfall.holdKandidaten(speicher.load(), eingabe),
     beanspruchMarker: async ({ code, nowMs, istFaellig }) => {
       const beansprucht = await speicher.withStoreLock(() => {
