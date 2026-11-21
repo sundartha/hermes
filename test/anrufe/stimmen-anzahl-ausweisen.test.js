@@ -178,3 +178,54 @@ for (const [name, antwort] of [
     }
   });
 }
+
+const FRANZOESISCHE_STIMME = "WeAAwKYcS06VmXw086yZ";
+const EIGENE_NUMMER = "+15005550006";
+
+async function mitNummerEigenerSprache({ richtung, sprache, agentAntwort }, lauf) {
+  const anbieter = await starteAnbieter(agentAntwort);
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: {
+      MCP_AUTH: "oauth",
+      OAUTH_ISSUER_URL: idp.issuer,
+      MULTI_TENANT: "true",
+      ...EL_OUTBOUND_BOOT_ENV,
+      ELEVENLABS_API_BASE: anbieter.url,
+      ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS),
+      FRISTEN_TAKT_MS: "40",
+    },
+    seed: seedState({
+      tenants: [{ id: TENANT, idpSubject: SUB, status: "active", ownerName: "Stimmen Kunde" }],
+      profiles: { [TENANT]: planProfileFor("business") },
+      numbers: [{ id: "num_stimme", e164: EIGENE_NUMMER, tenantId: TENANT, provider: "telnyx", status: "active", providerNumberId: null, language: sprache }],
+      calls: [{ ...anrufDerRichtung(richtung), language: undefined }],
+    }),
+  });
+  try {
+    await waitForStoreState(srv, (stand) => stand.calls.some((call) => call.id === CALL_ID && call.status === "completed"), FRIST_MS);
+    const token = await idp.sign({ sub: SUB });
+    const frage = async (name) => readToolResult(await mcpPost(`${srv.localUrl}/mcp`, token, toolCall(name, { call_id: CALL_ID })));
+    await frage("get_call_status");
+    await lauf((await frage("get_call_result"))._meta[META_SCHLUESSEL]);
+  } finally {
+    await srv.stop();
+    await idp.close();
+    await anbieter.close();
+  }
+}
+
+test("get_call_result (outbound): die Nummer des Absenders mit französischer Sprache fordert die französische Stimme an, eine Stimme", async () => {
+  const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
+  await mitNummerEigenerSprache({ richtung: "outbound", sprache: "fr", agentAntwort }, async (anzahl) => assert.equal(anzahl, EINS));
+});
+
+test("get_call_result (outbound): die Nummer des Absenders mit deutscher Sprache fordert nicht die französische Stimme an, zwei Stimmen", async () => {
+  const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
+  await mitNummerEigenerSprache({ richtung: "outbound", sprache: "de", agentAntwort }, async (anzahl) => assert.equal(anzahl, ZWEI));
+});
+
+test("get_call_result (inbound): die angerufene Nummer mit französischer Sprache gibt eine Stimme aus", async () => {
+  const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
+  await mitNummerEigenerSprache({ richtung: "inbound", sprache: "fr", agentAntwort }, async (anzahl) => assert.equal(anzahl, EINS));
+});
