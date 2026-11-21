@@ -216,3 +216,33 @@ test("Die Eltern-Erkennung gilt je Testdatei", () => {
   const ergebnis = auswerten({ versuche: [versuch([ROTER_JOB])], logs: { 11: log } });
   assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: test/a/b.test.js › Kind", "Wackelig: test/c/d.test.js › Einzeln"]);
 });
+
+const NOT_OK_LOG = `${LOG}\n`;
+const PR_TEXT_JOBS = [
+  ["Rotprobe mit not-ok-Zeilen", { id: 11, name: "Rotprobe", conclusion: "failure" }],
+  ["Mutation 3/14 mit not-ok-Zeilen", { id: 11, name: "Mutation 3/14", conclusion: "failure" }],
+  ["Mutation 12/20 ohne Basis-rot-Zeile", { id: 11, name: "Mutation 12/20", conclusion: "failure" }],
+];
+
+for (const [name, job] of PR_TEXT_JOBS) {
+  test(`Keine Aktion bei rotem Vorversuch nur im Job ${name}`, () => {
+    assert.deepEqual(auswerten({ versuche: [versuch([job])], logs: { 11: NOT_OK_LOG } }), []);
+  });
+}
+
+test("Rotprobe zaehlt nicht mit, auch wenn daneben ein Testjob rot war", () => {
+  const jobs = [{ id: 11, name: "Rotprobe", conclusion: "failure" }, { id: 12, name: "Web-Tests", conclusion: "failure" }];
+  const ergebnis = auswerten({ versuche: [versuch(jobs)], logs: { 11: NOT_OK_LOG, 12: "Fehler ohne TAP\n" } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: Web-Tests"]);
+});
+
+test("Ein Job, dessen Name nur mit Rotprobe oder Mutation beginnt, wird weiter gewertet", () => {
+  const jobs = [{ id: 11, name: "Rotprobe extra", conclusion: "failure" }, { id: 12, name: "Mutation 1/2 x", conclusion: "failure" }];
+  const ergebnis = auswerten({ versuche: [versuch(jobs)], logs: { 11: "x\n", 12: "y\n" } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), ["Wackelig: Rotprobe extra", "Wackelig: Mutation 1/2 x"]);
+});
+
+test("Tests n/12 mit not-ok-Zeilen bleibt Wackler-Quelle", () => {
+  const ergebnis = auswerten({ versuche: [versuch([{ id: 11, name: "Tests 12/12", conclusion: "failure" }])], logs: { 11: NOT_OK_LOG } });
+  assert.deepEqual(ergebnis.map(({ anlegen }) => anlegen.title), [TITEL]);
+});
