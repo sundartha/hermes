@@ -1,7 +1,9 @@
 export const ANTWORTFRIST_MS = 5_000;
 
-function keineAntwort() {
-  return new Error(`keine Antwort nach ${ANTWORTFRIST_MS} ms`);
+function keineAntwort(fristMs = ANTWORTFRIST_MS, anfrage = "", ursache = undefined) {
+  const fehler = new Error(`keine Antwort nach ${fristMs} ms${anfrage}`, { cause: ursache });
+  if (ursache) fehler.name = "TimeoutError";
+  return fehler;
 }
 
 export function fristSignal({ wartezeitMs = 0 } = {}) {
@@ -14,11 +16,13 @@ export function mitAntwortfrist(anfrage, { wartezeitMs = 0 } = {}) {
 }
 
 export function abrufMitFrist(url, optionen = {}, { wartezeitMs = 0 } = {}) {
+  const frist = fristSignal({ wartezeitMs });
+  const methode = (optionen.method ?? "GET").toUpperCase();
   return fetch(url, {
     ...optionen,
-    signal: AbortSignal.any([
-      fristSignal({ wartezeitMs }),
-      ...(optionen.signal ? [optionen.signal] : []),
-    ]),
+    signal: AbortSignal.any([frist, ...(optionen.signal ? [optionen.signal] : [])]),
+  }).catch((fehler) => {
+    if (!frist.aborted || optionen.signal?.aborted) throw fehler;
+    throw keineAntwort(wartezeitMs + ANTWORTFRIST_MS, `: ${methode} ${new URL(url).pathname}`, fehler);
   });
 }
