@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import pg from "pg";
 
+import { ANRUF_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.js";
 import { echtWarten } from "../echt-warten.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -425,3 +426,7 @@ export async function sperreDatenbank(sql, db) {
 export function gibDatenbankFrei(db) {
   return setzeZugang(db, true);
 }
+
+export const ANRUF_SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks
+  WHERE locktype = 'advisory' AND classid = ${ANRUF_SPERRE_NAMENSRAUM}
+  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`;
