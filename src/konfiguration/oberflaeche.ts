@@ -11,7 +11,7 @@ export function guardedConfig<T extends object>(target: T, path = "config"): T {
       if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
       throw new TypeError(
         `${path}.${prop} existiert nicht (verschobener/entfernter Config-Key? ` +
-          "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
+          "config.<namespace>.<key> nutzen - Gruppierung in src/config.ts pruefen).",
       );
     },
     set(obj, prop, value) {
