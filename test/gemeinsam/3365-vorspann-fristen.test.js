@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 
 import {
@@ -11,7 +12,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil as wartebis,
+  warteAufEreignis,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -32,7 +33,10 @@ const AUDIO_BYTES = 200_000;
 const NUR_LESEN = 0o555;
 const SCHREIBBAR = 0o755;
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) =>
+  warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, {
+    timeoutMs: WARTE_FRIST_MS,
+  });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -71,18 +75,21 @@ function beantworte({ req, res }, anfrage) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       beantworte({ req, res }, anfrage);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
@@ -146,7 +153,8 @@ const anrufIn = (id) => {
 };
 const rueckfallLog = (grund, callId) => `[el-vorspann] rueckfall grund=${grund} call=${callId}`;
 const logZeileMit = (callId, aktion) => `[el-vorspann] ${aktion} fehlgeschlagen call=${callId}:`;
-const abrechnungLog = (callId) => `[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId}):`;
+const abrechnungLog = (callId) =>
+  `[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId}):`;
 const kostenCents = () => {
   const { usage } = umgebung.srv.readStore();
   return usage[TENANT_ID].costCents;
@@ -186,12 +194,12 @@ async function abgehobenerAnruf() {
   const { callId } = await antwort.json();
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
   const { attrappe } = umgebung;
-  await waitUntil(() =>
+  await warteAuf(() =>
     attrappe.anfragen.some(
       (anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId),
     ),
   );
-  await waitUntil(() => aktionen(attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => aktionen(attrappe, calleeVon(callId), "playback_start").length === EINMAL);
   return callId;
 }
 
@@ -207,23 +215,25 @@ async function mitGesperrtemSpeicher(run) {
 async function nachElFrist() {
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
-  await waitUntil(() => anrufIn(callId).failureReason === "el_frist");
+  await warteAuf(() => anrufIn(callId).failureReason === "el_frist");
 }
 
 async function nachWiedergabeFrist() {
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(umgebung.attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(umgebung.attrappe, callId, [EINMAL, EINMAL]));
 }
 
 const elAngenommenGemeldet = (callId) =>
-  waitUntil(() => new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout));
+  warteAuf(() =>
+    new RegExp(`el_angenommen ms_seit_abheben=\\d+ call=${callId}`).test(umgebung.srv.stdout),
+  );
 
 const gleich = (attrappe, callId, soll) => aufleger(attrappe, callId).join() === soll.join();
 
 test("3365-F2: ohne Wiedergabe-Rueckmeldung werden beide Beine nach der Frist aufgelegt, keine Bruecke", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
   assert.equal(bruecken(attrappe, callId), NIE);
   await nachElFrist();
@@ -234,10 +244,10 @@ test("3365-F2: ohne Wiedergabe-Rueckmeldung werden beide Beine nach der Frist au
 test("3365-F2b: nicht vollstaendiges Wiedergabe-Ende nach dem Fristabbruch legt nicht noch einmal auf und meldet den Rueckfall nicht doppelt", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended", { status: "failed" });
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
   assert.equal(vorkommen(srv.stdout, rueckfallLog("vorspann_nicht_abgespielt", callId)), EINMAL);
 });
@@ -245,20 +255,20 @@ test("3365-F2b: nicht vollstaendiges Wiedergabe-Ende nach dem Fristabbruch legt 
 test("3365-F9: Auflegen des Anbieters nach dem Fristabbruch legt kein Bein noch einmal auf und beendet den Anruf", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status === "failed");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
 
 test("3365-F9b: Auflegen des EL-Beins nach dem Fristabbruch legt das Callee-Bein nicht noch einmal auf", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await waitUntil(() => anrufIn(callId).status === "failed");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
 });
 
@@ -268,13 +278,13 @@ test("3365-F10: scheitert das Auflegen eines Beins beim Fristabbruch, wird es na
   let callId;
   try {
     callId = await abgehobenerAnruf();
-    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+    await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   } finally {
     umgebung.hangupFehler = false;
   }
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status === "failed");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => abgerechnet(callId));
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL + EINMAL]);
 });
 
@@ -284,22 +294,22 @@ test("3365-F10b: nach dem nachgeholten Auflegen steht der Anruf auf failed mit v
   let callId;
   try {
     callId = await abgehobenerAnruf();
-    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+    await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   } finally {
     umgebung.hangupFehler = false;
   }
   await sende(callId, "call.hangup");
-  await waitUntil(() => anrufIn(callId).status === "failed");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
 });
 
 test("3365-F11: Auflegen nach der Wiedergabe-Frist beendet den Anruf als failed mit vorspann_nicht_abgespielt und bucht einmal", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(anrufIn(callId).status, "failed");
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
 });
@@ -307,9 +317,9 @@ test("3365-F11: Auflegen nach der Wiedergabe-Frist beendet den Anruf als failed 
 test("3365-F11b: Auflegen des EL-Beins nach der Wiedergabe-Frist ergibt failed mit vorspann_nicht_abgespielt", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(anrufIn(callId).status, "failed");
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
 });
@@ -318,11 +328,11 @@ test("3365-F11d: scheitert das Speichern des Vermerks bei der Wiedergabe-Frist, 
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
   await mitGesperrtemSpeicher(async () => {
-    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
-    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
+    await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+    await warteAuf(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
   });
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   const zeile = srv.stdout.split("\n").find((z) => z.includes(logZeileMit(callId, "vermerk")));
   assert.match(zeile, /vermerk fehlgeschlagen call=\S+: \S+/);
   assert.match(zeile, /EACCES|EPERM|permission/i);
@@ -333,7 +343,7 @@ test("3365-F11d: scheitert das Speichern des Vermerks bei der Wiedergabe-Frist, 
 test("3365-F11a: Auflegen vor der Wiedergabe-Frist bleibt completed ohne failureReason", async () => {
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(anrufIn(callId).status, "completed");
   assert.equal(anrufIn(callId).failureReason ?? null, null);
 });
@@ -341,9 +351,9 @@ test("3365-F11a: Auflegen vor der Wiedergabe-Frist bleibt completed ohne failure
 test("3365-F11c: nach der EL-Frist bleibt el_frist der Grund und der Anruf failed", async () => {
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
-  await waitUntil(() => anrufIn(callId).failureReason === "el_frist");
+  await warteAuf(() => anrufIn(callId).failureReason === "el_frist");
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(anrufIn(callId).status, "failed");
   assert.equal(anrufIn(callId).failureReason, "el_frist");
 });
@@ -353,7 +363,7 @@ test("3365-F2a: vor der Wiedergabe-Frist wird noch nichts aufgelegt", async () =
   const beginn = Date.now();
   const callId = await abgehobenerAnruf();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.ok(Date.now() - beginn >= WIEDERGABE_FRIST_MS / 2);
 });
 
@@ -362,7 +372,7 @@ test("3365-F1: Rueckmeldung vor der Frist fuehrt zur Bruecke, nach der Frist wir
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
   await sende(callId, "call.answered", { bein: elVon(callId) });
-  await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
+  await warteAuf(() => bruecken(attrappe, callId) === EINMAL);
   await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
 });
@@ -370,7 +380,7 @@ test("3365-F1: Rueckmeldung vor der Frist fuehrt zur Bruecke, nach der Frist wir
 test("3365-F3: spaetes completed nach der Frist ergibt keine Bruecke und kein zweites Auflegen", async () => {
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.playback.ended");
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await elAngenommenGemeldet(callId);
@@ -383,9 +393,9 @@ test("3365-F4: schon aufgelegter Anruf wird bei Fristablauf nicht noch einmal au
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.hangup");
-  await waitUntil(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "completed");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => abgerechnet(callId));
   const gebucht = anrufIn(callId).billedAt;
   await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, EINMAL]);
@@ -397,7 +407,7 @@ test("3365-F5: EL-Annahme vor der EL-Frist fuehrt zur Bruecke, nach der Frist pa
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await sende(callId, "call.playback.ended");
-  await waitUntil(() => bruecken(attrappe, callId) === EINMAL);
+  await warteAuf(() => bruecken(attrappe, callId) === EINMAL);
   await nachElFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
   assert.notEqual(anrufIn(callId).failureReason, "el_frist");
@@ -409,7 +419,7 @@ test("3365-F6: ohne EL-Annahme wird el_frist vermerkt und es werden beide Beine 
   await sende(callId, "call.playback.ended");
   await nachWiedergabeFrist();
   assert.deepEqual(aufleger(attrappe, callId), [NIE, NIE]);
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(anrufIn(callId).failureReason, "el_frist");
   assert.equal(vorkommen(srv.stdout, rueckfallLog("el_frist", callId)), EINMAL);
   assert.equal(bruecken(attrappe, callId), NIE);
@@ -418,14 +428,14 @@ test("3365-F6: ohne EL-Annahme wird el_frist vermerkt und es werden beide Beine 
 test("3365-F7: scheitert das Speichern des Endes nach der Wiedergabe-Frist, bleibt es beim Auflegen und einem Fehler ende im Log", async () => {
   const { attrappe, srv } = umgebung;
   const callId = await abgehobenerAnruf();
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   assert.equal(bruecken(attrappe, callId), NIE);
   const vorher = kostenCents();
   let ende;
   await mitGesperrtemSpeicher(async () => {
     ende = sende(callId, "call.hangup");
-    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "ende")));
-    await waitUntil(() => srv.stdout.includes(abrechnungLog(callId)));
+    await warteAuf(() => srv.stdout.includes(logZeileMit(callId, "ende")));
+    await warteAuf(() => srv.stdout.includes(abrechnungLog(callId)));
   });
   await ende;
   assert.deepEqual(aufleger(attrappe, callId), [EINMAL, EINMAL]);
@@ -447,13 +457,13 @@ test("3365-F7a: scheitert das Speichern des Vermerks bei der EL-Frist, bleibt es
   const callId = await abgehobenerAnruf();
   const vorher = kostenCents();
   await sende(callId, "call.playback.ended");
-  await waitUntil(() => anrufIn(callId).transcript.length > 0);
+  await warteAuf(() => anrufIn(callId).transcript.length > 0);
   await mitGesperrtemSpeicher(async () => {
-    await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
-    await waitUntil(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
+    await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+    await warteAuf(() => srv.stdout.includes(logZeileMit(callId, "vermerk")));
   });
   await sende(callId, "call.hangup");
-  await waitUntil(() => abgerechnet(callId));
+  await warteAuf(() => abgerechnet(callId));
   assert.equal(kostenCents() - vorher, TARIF_CENTS);
   assert.equal(vorkommen(srv.stdout, logZeileMit(callId, "vermerk")), EINMAL);
 });
@@ -462,7 +472,7 @@ test("3365-F6a: spaete EL-Annahme nach der EL-Frist ergibt keine Bruecke, auch w
   const { attrappe } = umgebung;
   const callId = await abgehobenerAnruf();
   await sende(callId, "call.playback.ended");
-  await waitUntil(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
+  await warteAuf(() => gleich(attrappe, callId, [EINMAL, EINMAL]));
   await sende(callId, "call.answered", { bein: elVon(callId) });
   await elAngenommenGemeldet(callId);
   assert.equal(bruecken(attrappe, callId), NIE);
@@ -479,13 +489,19 @@ test("3365-F8: ohne gesetzte Variablen gelten 20000 ms und 30000 ms", async () =
 
 const FRIST_ZU_KLEIN = "99";
 
-const befund = (fresh) => ({ meldungen: fresh.configFatalErrors(), aussen: fresh.config.voice.elevenLabsOutbound });
+const befund = (fresh) => ({
+  meldungen: fresh.configFatalErrors(),
+  aussen: fresh.config.voice.elevenLabsOutbound,
+});
 
 test("3365-F8b: eine zu kleine EL-Frist nennt ihren Namen im Fatal-Befund und fällt auf 30000 ms zurück", async () => {
   process.env.EL_BRIDGE_START_DEADLINE_MS = FRIST_ZU_KLEIN;
   try {
     const { meldungen, aussen } = befund(await import("../../src/config.js?3365-f8b"));
-    assert.ok(meldungen.includes("EL_BRIDGE_START_DEADLINE_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
+    assert.ok(
+      meldungen.includes("EL_BRIDGE_START_DEADLINE_MS=99 unterschreitet das Minimum 100."),
+      meldungen.join("|"),
+    );
     assert.equal(aussen.bridgeStartDeadlineMs, STANDARD_EL_FRIST_MS);
   } finally {
     delete process.env.EL_BRIDGE_START_DEADLINE_MS;
@@ -496,7 +512,10 @@ test("3365-F8c: eine zu kleine Wiedergabe-Frist nennt ihren Namen im Fatal-Befun
   process.env.VORSPANN_WIEDERGABE_FRIST_MS = FRIST_ZU_KLEIN;
   try {
     const { meldungen, aussen } = befund(await import("../../src/config.js?3365-f8c"));
-    assert.ok(meldungen.includes("VORSPANN_WIEDERGABE_FRIST_MS=99 unterschreitet das Minimum 100."), meldungen.join("|"));
+    assert.ok(
+      meldungen.includes("VORSPANN_WIEDERGABE_FRIST_MS=99 unterschreitet das Minimum 100."),
+      meldungen.join("|"),
+    );
     assert.equal(aussen.vorspannWiedergabeFristMs, STANDARD_WIEDERGABE_FRIST_MS);
   } finally {
     delete process.env.VORSPANN_WIEDERGABE_FRIST_MS;
