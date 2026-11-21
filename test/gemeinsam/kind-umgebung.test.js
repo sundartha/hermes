@@ -51,8 +51,8 @@ async function mitUmgebung(werte, arbeit) {
 }
 
 test("Mutant und das NODE_OPTIONS-Vorladen des Testprozesses kommen im gestarteten Server an", async () => {
-  const angekommen = await serverMitTestprozessUmgebung({ [MUTANT]: "7" });
-  assert.equal(angekommen.mutant, "7");
+  const angekommen = await serverMitTestprozessUmgebung({ [MUTANT]: "probe-kein-mutant" });
+  assert.equal(angekommen.mutant, "probe-kein-mutant");
 });
 
 test("ein Kind mit Stryker-Kopf, das den Mutanten selbst liest, bekommt ihn trotzdem", async () => {
