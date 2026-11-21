@@ -339,7 +339,7 @@
       "count": 1
     }
   },
-  "src/i18n/greeting-catalog.js": {
+  "src/i18n/greeting-catalog.ts": {
     "id-length": {
       "count": 1
     }

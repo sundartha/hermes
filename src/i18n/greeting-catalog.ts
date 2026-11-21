@@ -1,11 +1,13 @@
 import { LOCALES, localeFor } from "./locales.ts";
 import { withInboundNotice } from "./inbound-notice.ts";
 
-function standardVorlage(locale) {
+type Locale = { greetingDefault: string; greetingVariants: readonly string[]; inboundNotice: string };
+
+function standardVorlage(locale: Locale) {
   return withInboundNotice(locale.greetingDefault, locale.inboundNotice);
 }
 
-function buildTemplates(locale) {
+function buildTemplates(locale: Locale) {
   return Object.freeze([
     standardVorlage(locale),
     ...locale.greetingVariants.map((t) => withInboundNotice(t, locale.inboundNotice)),
@@ -24,7 +26,7 @@ const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze({
   en: buildTemplates(LOCALES.en),
 });
 
-export function greetingTemplatesFor(language) {
+export function greetingTemplatesFor(language: string | undefined) {
   return GREETING_TEMPLATES_BY_LANGUAGE[localeFor(language).language];
 }
 
@@ -54,11 +56,11 @@ const GREETING_ORTHOGRAPHY_MIGRATION = new Map(
   ]),
 );
 
-export function greetingWithCurrentOrthography(storedGreeting) {
+export function greetingWithCurrentOrthography(storedGreeting: string): string {
   return GREETING_ORTHOGRAPHY_MIGRATION.get(storedGreeting) ?? storedGreeting;
 }
 
-export function greetingForLanguage(storedGreeting, language) {
+export function greetingForLanguage(storedGreeting: string, language: string | undefined) {
   const greeting = greetingWithCurrentOrthography(storedGreeting);
   const templates = greetingTemplatesFor(language);
   if (templates.includes(greeting)) return greeting;
@@ -67,7 +69,7 @@ export function greetingForLanguage(storedGreeting, language) {
     : greeting;
 }
 
-export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }) {
+export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }: { storedGreeting: unknown; language: string | undefined; ownerName: string }) {
   if (typeof storedGreeting !== "string")
     throw new TypeError("gespeicherteBegruessungFuer: storedGreeting muss ein String sein, replaceAll braucht Text");
   return greetingForLanguage(storedGreeting, language).replaceAll("{owner}", ownerName);

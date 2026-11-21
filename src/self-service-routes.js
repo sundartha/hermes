@@ -6,7 +6,7 @@ import { config } from "./config.ts";
 import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
 import { promptLineRejection } from "./routes/_validation.ts";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
-import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
+import { greetingTemplatesFor } from "./i18n/greeting-catalog.ts";
 import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.ts";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.ts";
 import { requirePaymentEnabled, requirePublicUrl } from "./billing/payment-gate.ts";
