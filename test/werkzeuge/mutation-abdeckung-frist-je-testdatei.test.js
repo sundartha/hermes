@@ -32,7 +32,7 @@ test("Hängt beim Zählen der Abdeckung eine Testdatei, bricht ihre eigene Frist
   try {
     mkdirSync(join(ordner, "test"));
     writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF);
-    const plan = { frist: Date.now() + 15_000, testdateiFrist: 300, tests: ["test/haengt.test.js", "test/gut.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+    const plan = { frist: 4_102_444_800_000, testdateiFrist: 300, tests: ["test/haengt.test.js", "test/gut.test.js"], dateien: [], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
     writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
     const ergebnis = spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL", env: { ...process.env, TEIL: "0", TEILE: "1", MUTANTEN_ZAEHLEN: "1", MUTATION_ABDECKUNG: join(ordner, "abdeckung"), MUTATION_PLAN: join(ordner, "plan.json") } });
     const ausgabe = `${ergebnis.stdout}${ergebnis.stderr}`;
