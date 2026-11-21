@@ -98,14 +98,43 @@ function addMissingItems(store, callId, texts) {
     .length;
 }
 
+async function addMissingItemsAbwarten(store, callId, texts) {
+  let angelegt = 0;
+  for (const text of texts) {
+    const ergebnis = await store.addActionItem(callId, text, ACTION_ITEM_TYPE);
+    if (!ergebnis.duplicate) angelegt += 1;
+  }
+  return angelegt;
+}
+
+function seedCallId(store, tenantId, step, endedAtIso) {
+  return step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso });
+}
+
+async function seedCallIdGespeichert(store, tenantId, step, endedAtIso) {
+  const callId = seedCallId(store, tenantId, step, endedAtIso);
+  if (step.callId === null) await store.save();
+  return callId;
+}
+
 export function applyReviewerSeedAusAuszug(store, tenantId, { endedAtIso, auszug }) {
   assertEndedAtIso(endedAtIso);
   const counts = { callsCreated: 0, itemsCreated: 0 };
   for (const step of planReviewerSeed(store, tenantId, auszug)) {
-    const callId =
-      step.callId ?? createEndedInboundCall(store, { tenantId, entry: step.entry, endedAtIso });
+    const callId = seedCallId(store, tenantId, step, endedAtIso);
     if (step.callId === null) counts.callsCreated += 1;
     counts.itemsCreated += addMissingItems(store, callId, step.missingItems);
+  }
+  return counts;
+}
+
+async function applyReviewerSeedAbwarten(store, tenantId, { endedAtIso, auszug }) {
+  assertEndedAtIso(endedAtIso);
+  const counts = { callsCreated: 0, itemsCreated: 0 };
+  for (const step of planReviewerSeed(store, tenantId, auszug)) {
+    const callId = await seedCallIdGespeichert(store, tenantId, step, endedAtIso);
+    if (step.callId === null) counts.callsCreated += 1;
+    counts.itemsCreated += await addMissingItemsAbwarten(store, callId, step.missingItems);
   }
   return counts;
 }
@@ -119,7 +148,7 @@ export function applyReviewerSeed(store, tenantId, endedAtIso) {
 
 export async function applyReviewerSeedAndPersist(store, tenantId, endedAtIso) {
   const auszug = await leseSeedAuszug(store, tenantId);
-  const counts = applyReviewerSeedAusAuszug(store, tenantId, { endedAtIso, auszug });
+  const counts = await applyReviewerSeedAbwarten(store, tenantId, { endedAtIso, auszug });
   await store.save();
   await store.drainFlushes();
   return counts;
