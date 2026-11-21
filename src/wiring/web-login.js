@@ -32,7 +32,7 @@ import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.ts";
 import { makeSmtpMailer } from "../smtp-mail.js";
 import { makeBrevoMailer } from "../brevo-mail.js";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
-import { mailerKonstruierbar } from "../boot-guard.js";
+import { mailerKonstruierbar } from "../boot-guard.ts";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.ts";
 import { scheduleSessionRetention } from "./session-aufbewahrung.js";
 import { zeitplanImProzess } from "../utils/zeitplan-im-prozess.ts";

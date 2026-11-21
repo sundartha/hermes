@@ -11,7 +11,7 @@ import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.j
 import { speicherBereiche } from "../store.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.ts";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
-import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
+import { alarmKanalZeile, betreiberAlarmKanaele, type AlarmEingabe } from "../boot-guard.ts";
 import {
   tariffDriftReportFromConfig,
   alertableDriftFindings,
@@ -134,8 +134,8 @@ interface Bereiche {
 }
 
 interface Konfiguration {
-  billing: Abrechnung;
-  mail: unknown;
+  billing: Abrechnung & AlarmEingabe["billing"];
+  mail: AlarmEingabe["mail"];
 }
 
 interface Sammler {
@@ -207,7 +207,7 @@ const kostenprofilVon: (call: KostenAnruf) => string = kostenprofilFuerAnruf;
 const nextAttemptOf: (call: KostenAnruf) => number = nextCostTruingAttempt;
 const bereicheVon: (store: Speicher) => Bereiche = speicherBereiche;
 const pflichttypenFuer: (profil: string, envPflichttypen: string[]) => readonly string[] = pflichttypenFuerProfil;
-const kanalZeileVon: (kanaele: unknown) => string = alarmKanalZeile;
+const kanalZeileVon: (kanaele: string[]) => string = alarmKanalZeile;
 
 type Auditschreiber = (ereignis: string, ziel: null, zeile: string) => unknown;
 type Befundmelder = (code: string, detail: string, nowMs: number) => Promise<void>;
