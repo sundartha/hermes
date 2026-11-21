@@ -34,6 +34,7 @@ const PROTOKOLL_FRIST_MS = 3000;
 const PROTOKOLL_TAKT_MS = 20;
 const ANFRAGE_FRIST_MS = 5000;
 export const START_FRIST_MS = 15000;
+const AUFWAERM_ZIEL = "+4917312345680";
 
 function umgebungSetzen(alarmPostfach) {
   process.env.NODE_ENV = BASE_ENV.NODE_ENV;
@@ -346,6 +347,16 @@ async function hermesAufbauen({
     return abrufMitFrist(`${basis}${pfad}`, optionen, { wartezeitMs: START_FRIST_MS });
   }
 
+  const aufwaermAnfragen = [];
+  server.on("request", (req) => aufwaermAnfragen.push(`${req.method} ${req.url}`));
+  const aufwaermAntwort = await aufwaermen("/api/calls", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-internal-identity": LOGIN_SUB },
+    body: JSON.stringify({ to: AUFWAERM_ZIEL, objective: "Termin vereinbaren" }),
+  });
+  await aufwaermAntwort.arrayBuffer();
+  const aufwaermStatus = aufwaermAntwort.status;
+
   async function anmelden() {
     const start = await anfrage("/auth/login", { redirect: "manual" });
     const weiterleitung = new URL(start.headers.get("location"));
@@ -397,5 +408,5 @@ async function hermesAufbauen({
     return new pg.Client({ connectionString: process.env.DATABASE_URL });
   }
 
-  return { db, testPostfach, vorfaelle, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
+  return { db, testPostfach, vorfaelle, aufwaermAnfragen, aufwaermStatus, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }
