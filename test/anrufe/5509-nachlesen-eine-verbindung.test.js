@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ZUGRIFF_FRIST_MS } from "../../src/store/webhook-zustellung.js";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const KUNDE = "t_5509_kunde";
@@ -9,6 +8,7 @@ const ZIEL = "+4915112345509";
 const ABSENDER = "+4930555005509";
 const UNBEKANNT = "call_5509_unbekannt";
 const GELESENE_ZEILE = "FROM call WHERE";
+const ZUGRIFF_FRIST_MS = 1000;
 
 const setzeKontext = (db, tenantId) => db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
 
