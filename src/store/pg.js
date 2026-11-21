@@ -586,7 +586,7 @@ function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern, 
     aktiveAnrufeAlle: () => aktiveAnrufe.alle(requireState()),
     anderesAnrufMitKonversation: (callId, konversationId) =>
       anrufSuche.anderesMitKonversation(requireState(), callId, konversationId),
-    anrufeDesMandanten: (tenantId) => anrufSuche.anrufeDesMandanten(requireState(), tenantId),
+    anrufeDesMandanten: (tenantId, seit) => anrufSuche.anrufeDesMandanten(requireState(), tenantId, seit),
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     tenantBudgetSnapshot: (tenantId, cfg) =>

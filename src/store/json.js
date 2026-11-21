@@ -676,8 +676,8 @@ export async function anderesAnrufMitKonversation(callId, konversationId) {
   return load().calls.some((call) => call.id !== callId && call.elevenlabsConversationId === konversationId);
 }
 
-export async function anrufeDesMandanten(tenantId) {
-  return load().calls.filter((call) => call.tenantId === tenantId);
+export async function anrufeDesMandanten(tenantId, seit) {
+  return load().calls.filter((call) => call.tenantId === tenantId && (seit === undefined || call.endedAt >= seit));
 }
 
 export async function numberHasActiveCall(e164) {

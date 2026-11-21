@@ -36,7 +36,7 @@ export async function planNotPlacedMail({
   mailer,
   accounts,
 }: {
-  store: { anrufeDesMandanten(tenantId: string): Promise<NotPlacedCall[]> };
+  store: { anrufeDesMandanten(tenantId: string, seit?: string): Promise<NotPlacedCall[]> };
   call: NotPlacedCall;
   mailer: unknown;
   accounts?: Accounts | null | undefined;
@@ -46,7 +46,11 @@ export async function planNotPlacedMail({
   if (!meldetAlsNichtGestartet(call.failureReason))
     return { send: false, targets: [], reason: null };
   if (!mailer) return { send: false, targets: [], reason: "no_mailer" };
-  const fruehere = await store.anrufeDesMandanten(call.tenantId).catch((err: unknown) => {
+  const endedMs = Date.parse(call.endedAt ?? "");
+  const seit = Number.isNaN(endedMs)
+    ? undefined
+    : new Date(endedMs - NOT_PLACED_MAIL_DEBOUNCE_MS).toISOString();
+  const fruehere = await store.anrufeDesMandanten(call.tenantId, seit).catch((err: unknown) => {
     console.error(`[mail] not-placed Entprellung nicht lesbar (call=${call.id}):`, String(err));
     return null;
   });
