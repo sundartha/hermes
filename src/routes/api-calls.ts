@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { makeKeyedChainMutex } from "../chain-mutex.js";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
@@ -566,18 +567,24 @@ async function claimCallRecord({
   callQuotaDenial: (ctx: Kontext) => Promise<Ablehnung | null | undefined>;
   wartet: boolean;
 }): Promise<Anspruch> {
-  const laufender = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
-    to: ctx.to,
-    nowMs,
+  const vorab = await store.withStoreLock(async (): Promise<Anspruch | null> => {
+    const laufender = findDuplicateOutboundCall(await store.activeCallsForSql(ctx.tenantId), {
+      to: ctx.to,
+      nowMs,
+    });
+    if (laufender) return { call: laufender, created: false };
+    const denial = await callQuotaDenial(ctx);
+    return denial ? { denial, created: false } : null;
   });
-  if (laufender) return { call: laufender, created: false };
-  const denial = await callQuotaDenial(ctx);
-  if (denial) return { denial, created: false };
+  if (vorab) return vorab;
   const platz = await belegePlatzOderWarte({ leitungsplaetze, ctx, felder, wartet });
   if (platz.abgelehnt)
     return { denial: leitungsplatzAblehnung({ store, ctx, entscheidung: platz.abgelehnt }), created: false };
-  const call = store.createCall(felder);
-  await store.persistCall(call.id);
+  const call = await store.withStoreLock(async () => {
+    const angelegt = store.createCall(felder);
+    await store.persistCall(angelegt.id);
+    return angelegt;
+  });
   zaehleAnrufGestartet("outbound");
   return { call, created: true, wartet: platz.wartet };
 }
@@ -686,6 +693,7 @@ export function makeCallRoutes({
   OWNER_ID,
 }: Abhaengigkeiten): Router {
   const router = Router();
+  const jeMandant = makeKeyedChainMutex();
   const bereiche: Bereiche = speicherBereiche(store);
   const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
@@ -922,7 +930,7 @@ export function makeCallRoutes({
         diagnostic,
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
-      const claim = await store.withStoreLock(() =>
+      const claim = await jeMandant(String(ctx.tenantId), () =>
         mitAnrufSperre(ctx.tenantId, () =>
           claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
         ),
