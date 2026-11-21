@@ -57,9 +57,12 @@ async function imVorgang(client, arbeit) {
 }
 
 function ausSpiegelEntfernen(state, item) {
-  state.actionItems.splice(state.actionItems.indexOf(item), 1);
+  const stelle = state.actionItems.indexOf(item);
+  if (stelle < 0) return;
+  state.actionItems.splice(stelle, 1);
   const ids = ops.getCall(state, item.callId)?.actionItemIds;
-  ids?.splice(ids.indexOf(item.id), 1);
+  const idStelle = ids?.indexOf(item.id) ?? -1;
+  if (idStelle >= 0) ids.splice(idStelle, 1);
 }
 
 async function einfuegen(client, call, item) {
@@ -115,6 +118,7 @@ export function macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebun
       const call = await anrufFuer(state, callId);
       if (!call) return null;
       const spiegel = ops.addActionItem(state, callId, text, type);
+      if (spiegel.duplicate) return spiegel;
       try {
         const { zeile, angelegt } = await einreihen((client) => imVorgang(client, () => einfuegen(client, call, spiegel.item)));
         if (zeile) {
