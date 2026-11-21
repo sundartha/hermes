@@ -222,6 +222,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
   app.use(
     makeCallRoutes({
       store,
+      mitAnrufSperre: store.mitAnrufSperre,
       leitungsplaetze: store.leitungsplaetze,
       budgetReservierung: store.budgetReservierung,
       config,
