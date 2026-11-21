@@ -45,12 +45,15 @@ export async function createPgPoolRunner(connectionString) {
     async halten(fn) {
       const client = await pool.connect();
       const halt = { client, aktiv: true, reihe: macheReihe() };
+      let verworfen;
       try {
-        return await haltSpeicher.run({ halt, innen: false }, () => fn(sichtAuf(client)));
+        return await haltSpeicher.run({ halt, innen: false }, () => fn(sichtAuf(client), (fehler) => {
+          verworfen = fehler;
+        }));
       } finally {
         halt.aktiv = false;
         await halt.reihe.abwarten();
-        client.release();
+        client.release(verworfen);
       }
     },
   };
