@@ -100,6 +100,7 @@ const SAMMEL_JOB = "CI";
 const ROT = "failure";
 const ROTPROBE_JOB = "Rotprobe";
 const MUTATION_PRAEFIX = "Mutation ";
+const MUTATION_TEILE = 2;
 const LAUF_ZAEHLER = /^Neulauf-Wackler Nr\. \d+: /;
 const ERSTES_VORKOMMEN_ZAEHLT_MIT = 2;
 const ZEITSTEMPEL = /^\S+Z /;
@@ -149,7 +150,7 @@ function istZahl(teil) {
 function istPrTextJob(name) {
   if (name === ROTPROBE_JOB) return true;
   const teile = name.startsWith(MUTATION_PRAEFIX) ? name.slice(MUTATION_PRAEFIX.length).split("/") : [];
-  return teile.length === 2 && teile.every(istZahl);
+  return teile.length === MUTATION_TEILE && teile.every(istZahl);
 }
 
 function wacklerEintraege(job, log) {
