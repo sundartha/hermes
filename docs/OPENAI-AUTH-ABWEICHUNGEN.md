@@ -239,7 +239,7 @@ nur eben nicht mehr durch einen Scope ausgeloest, den kein Access-Token je traeg
 Wir verlangen `aud` == kanonische Resource. Die erwartete Audience (`src/auth.js#audience`) und die in der Protected-Resource-Metadata angekuendigte `resource`
 (`src/auth.js#doc.resource`) kommen aus **derselben Funktion**; die Pruefung nutzt sie in `#verifyOauth`. Live
 gemessen: `"resource":"https://app.sundartha.com/mcp"` (Abschnitt 3). Boot-fatal ist genau ein
-Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.js#audienceFindings`,
+Fall: `OAUTH_AUDIENCE` gesetzt und ungleich `publicUrl + /mcp` (`src/boot-guard.ts#audienceFindings`,
 belegt in `test/oauth.test.js#"MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)"`). Falsches `aud` im Token -> 401
 (`test/oauth.test.js#"falsche Audience -> 401"`).
 
@@ -486,7 +486,7 @@ requests." — "Configure your authorization server to copy that value into the 
 We require `aud == https://app.sundartha.com/mcp`. The expected audience and the `resource`
 announced in the protected-resource metadata come from the **same function** (`src/auth.js#audience`, used for the check at `#verifyOauth` and for the metadata at `#doc.resource`), so they cannot
 diverge at runtime. Boot is refused in exactly one case: `OAUTH_AUDIENCE` is set and differs from
-`publicUrl + /mcp` (`src/boot-guard.js#audienceFindings`, `test/oauth.test.js#"MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)"`). A wrong `aud` in
+`publicUrl + /mcp` (`src/boot-guard.ts#audienceFindings`, `test/oauth.test.js#"MCP_AUTH=oauth: divergenter OAUTH_AUDIENCE -> Boot verweigert (exit 1)"`). A wrong `aud` in
 the token -> 401 (`test/oauth.test.js#"falsche Audience -> 401"`).
 
 Side finding: WorkOS does **not** advertise `resource_indicators_supported` (absent from both
