@@ -1,13 +1,22 @@
 import { LOCALES, localeFor } from "./locales.ts";
 import { withInboundNotice } from "./inbound-notice.ts";
 
-function buildTemplates(locale) {
-  return Object.freeze(
-    [locale.greetingDefault, ...locale.greetingVariants].map((t) =>
-      withInboundNotice(t, locale.inboundNotice),
-    ),
-  );
+function standardVorlage(locale) {
+  return withInboundNotice(locale.greetingDefault, locale.inboundNotice);
 }
+
+function buildTemplates(locale) {
+  return Object.freeze([
+    standardVorlage(locale),
+    ...locale.greetingVariants.map((t) => withInboundNotice(t, locale.inboundNotice)),
+  ]);
+}
+
+const GREETING_DEFAULT_BY_LANGUAGE = Object.freeze({
+  de: standardVorlage(LOCALES.de),
+  fr: standardVorlage(LOCALES.fr),
+  en: standardVorlage(LOCALES.en),
+});
 
 const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze({
   de: buildTemplates(LOCALES.de),
@@ -58,7 +67,9 @@ export function greetingForLanguage(storedGreeting, language) {
   const greeting = greetingWithCurrentOrthography(storedGreeting);
   const templates = greetingTemplatesFor(language);
   if (templates.includes(greeting)) return greeting;
-  return ALL_GREETING_TEMPLATES.includes(greeting) ? templates[0] : greeting;
+  return ALL_GREETING_TEMPLATES.includes(greeting)
+    ? GREETING_DEFAULT_BY_LANGUAGE[localeFor(language).language]
+    : greeting;
 }
 
 export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }) {
