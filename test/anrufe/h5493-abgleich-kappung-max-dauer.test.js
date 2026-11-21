@@ -49,7 +49,7 @@ test("Abgleich-Anruf: nach der Uebernahme beendet der echte Fristen-Takt ihn mit
     ...vorspannUmgebung({ attrappe, signer: makeTelnyxSigner(), publicUrl: "https://agent.test", kennung: KENNUNG }),
     ELEVENLABS_API_BASE: konto.url,
     ELEVENLABS_TOOL_TOKEN: GEHEIMNIS,
-    ELEVENLABS_RESULT_POLL_MS: "100",
+    ELEVENLABS_RESULT_POLL_MS: "60000",
     FRISTEN_TAKT_MS: "40",
   };
   await mitHermesAufPostgres(t, { env }, async ({ srv, sql }) => {
@@ -67,8 +67,10 @@ test("Abgleich-Anruf: nach der Uebernahme beendet der echte Fristen-Takt ihn mit
       async () => (await sql(STATUS_SQL, [callId])).rows,
       (zeilen) => zeilen[0]?.status === "completed" || zeilen[0]?.status === "failed",
     );
-    assert.equal(ende.status, "completed");
-    assert.equal(ende.failure_reason, "max-duration-cap");
+    assert.deepEqual(
+      { status: ende.status, failure_reason: ende.failure_reason },
+      { status: "completed", failure_reason: "max-duration-cap" },
+    );
     assert.equal(ende.id, KONVERSATION);
     assert.equal(attrappe.pfade.filter((pfad) => pfad === "/v2/calls").length, 0);
     await zeilenBis(
