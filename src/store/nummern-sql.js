@@ -11,6 +11,8 @@ const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kin
   VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7) ON CONFLICT DO NOTHING`;
 const AUFTRAG_LESEN_SQL = `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
   FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
+const NUMMER_ENTFERNEN_SQL = `DELETE FROM number WHERE tenant_id = $1 AND id = $2`;
+const AUFTRAG_ENTFERNEN_SQL = `DELETE FROM provisioning_job WHERE tenant_id = $1 AND id = $2`;
 const NICHT_ZAEHLEND = [NUMBER_STATUS.RELEASED, NUMBER_STATUS.FAILED];
 
 function alsAuftrag(zeile) {
@@ -75,11 +77,28 @@ async function auftragAnlegen(client, { tenantId, numberId, idempotencyKey, numb
   return alsAuftrag(rows[0]);
 }
 
+async function imMandanten(client, tenantId, arbeit) {
+  await client.query("BEGIN");
+  try {
+    await client.query(KONTEXT_SQL, [tenantId]);
+    await arbeit();
+    await client.query("COMMIT");
+  } catch (fehler) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(FEHLER, fehler.message);
+    throw fehler;
+  }
+}
+
 export function macheNummernSql({ einreihen }) {
   const unterSperre = (tenantId, arbeit) =>
     einreihen((client) => unterMandantenSperre(client, tenantId, () => arbeit(client)));
   return {
     nummerAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => nummerAnlegen(client, eingabe)),
     auftragAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => auftragAnlegen(client, eingabe)),
+    nummerEntfernen: ({ tenantId, numberId }) =>
+      einreihen((client) => imMandanten(client, tenantId, () => client.query(NUMMER_ENTFERNEN_SQL, [tenantId, numberId]))),
+    auftragEntfernen: ({ tenantId, jobId }) =>
+      einreihen((client) => imMandanten(client, tenantId, () => client.query(AUFTRAG_ENTFERNEN_SQL, [tenantId, jobId]))),
   };
 }

@@ -28,6 +28,7 @@ if (mitErsatz || mitRueckbau) {
     process.exit(1);
   }
   if (ergebnis.geaendert !== false) await store.save();
+  if (ergebnis.auftragId) await store.nummernSql()?.auftragEntfernen({ tenantId: BOOTSTRAP_TENANT_ID, jobId: ergebnis.auftragId });
   if (mitRueckbau) {
     console.log(`[seed-owner-number] Rueckbau ok: ${alteE164} ist wieder die gewaehlte Absendernummer.`);
     process.exit(0);

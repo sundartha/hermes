@@ -56,6 +56,6 @@ export function ersatzSpurEntfernen(state, { e164, alteE164, tenantId }) {
   );
   if (index < 0) return neu ? { ok: true, geaendert: false } : { ok: false, grund: ERSATZ_GRUND.KEINE_SPUR };
   if (!neu || state.provisioningJobs[index].numberId !== neu.id) return { ok: false, grund: ERSATZ_GRUND.ANDERER_ERSATZ };
-  state.provisioningJobs.splice(index, 1);
-  return { ok: true, geaendert: true };
+  const [entfernt] = state.provisioningJobs.splice(index, 1);
+  return { ok: true, geaendert: true, auftragId: entfernt.id };
 }

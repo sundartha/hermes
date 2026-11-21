@@ -85,7 +85,10 @@ export function makeProvisioningOrchestrator({
 
   async function nummerUnterSperre(zustand, ergebnis, tenantId) {
     if (!ergebnis.ok || ergebnis.reason === PROVISION_REASON.REDRIVE) return null;
-    const zurueck = () => zustand.numbers.splice(zustand.numbers.indexOf(ergebnis.number), 1);
+    const zurueck = async () => {
+      zustand.numbers.splice(zustand.numbers.indexOf(ergebnis.number), 1);
+      await bereiche.nummernkauf.entferneNummer({ tenantId, numberId: ergebnis.number.id });
+    };
     let gebucht;
     try {
       gebucht = await bereiche.nummernkauf.legeNummerAn({
@@ -94,11 +97,11 @@ export function makeProvisioningOrchestrator({
         hoechstens: config.provisioning.maxNumbersPerTenant,
       });
     } catch (fehler) {
-      zurueck();
+      await zurueck().catch(() => {});
       throw fehler;
     }
     if (!gebucht || gebucht.ok) return null;
-    zurueck();
+    await zurueck();
     return { ok: false, reason: PROVISION_REASON.ALREADY_PROVISIONED };
   }
 

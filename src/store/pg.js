@@ -2027,67 +2027,57 @@ function rowToUsageEvent(zeile) {
 }
 
 async function flushNumbers(client, tenantId, numbers) {
-  await flushOwnScoped({
-    client,
-    tenantId,
-    table: "number",
-    rows: numbers,
-    insertRow: (n) =>
-      client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-         ON CONFLICT (id) DO UPDATE SET
-           e164=EXCLUDED.e164, provider=EXCLUDED.provider,
-           status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
-           payment_intent_id=EXCLUDED.payment_intent_id,
-           country=EXCLUDED.country, language=EXCLUDED.language,
-           monthly_cost_cents=EXCLUDED.monthly_cost_cents,
-           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id,
-           el_inbound_trunk_belegt_at=EXCLUDED.el_inbound_trunk_belegt_at,
-           el_inbound_trunk_zugang_fp=EXCLUDED.el_inbound_trunk_zugang_fp`,
-        [
-          n.id,
-          tenantId,
-          n.e164 ?? null,
-          n.provider || DEFAULT_PROVIDER,
-          n.status,
-          n.providerNumberId ?? null,
-          n.paymentIntentId ?? null,
-          n.country ?? null,
-          n.language ?? null,
-          n.monthlyCostCents ?? null,
-          n.providerAgentPhoneNumberId ?? null,
-          ...inboundTrunkBelegWerte(n),
-        ],
-      ),
-  });
+  for (const n of numbers.filter((zeile) => zeile.tenantId === tenantId)) {
+    await client.query(
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (id) DO UPDATE SET
+         e164=EXCLUDED.e164, provider=EXCLUDED.provider,
+         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
+         payment_intent_id=EXCLUDED.payment_intent_id,
+         country=EXCLUDED.country, language=EXCLUDED.language,
+         monthly_cost_cents=EXCLUDED.monthly_cost_cents,
+         provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id,
+         el_inbound_trunk_belegt_at=EXCLUDED.el_inbound_trunk_belegt_at,
+         el_inbound_trunk_zugang_fp=EXCLUDED.el_inbound_trunk_zugang_fp`,
+      [
+        n.id,
+        tenantId,
+        n.e164 ?? null,
+        n.provider || DEFAULT_PROVIDER,
+        n.status,
+        n.providerNumberId ?? null,
+        n.paymentIntentId ?? null,
+        n.country ?? null,
+        n.language ?? null,
+        n.monthlyCostCents ?? null,
+        n.providerAgentPhoneNumberId ?? null,
+        ...inboundTrunkBelegWerte(n),
+      ],
+    );
+  }
 }
 
 async function flushProvisioningJobs(client, tenantId, jobs) {
-  await flushOwnScoped({
-    client,
-    tenantId,
-    table: "provisioning_job",
-    rows: jobs,
-    insertRow: (j) =>
-      client.query(
-        `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (id) DO UPDATE SET
-           status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
-        [
-          j.id,
-          tenantId,
-          j.numberId,
-          j.kind,
-          j.status,
-          j.idempotencyKey,
-          j.attempts,
-          j.lastError ?? null,
-          j.createdAt,
-        ],
-      ),
-  });
+  for (const j of jobs.filter((zeile) => zeile.tenantId === tenantId)) {
+    await client.query(
+      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
+      [
+        j.id,
+        tenantId,
+        j.numberId,
+        j.kind,
+        j.status,
+        j.idempotencyKey,
+        j.attempts,
+        j.lastError ?? null,
+        j.createdAt,
+      ],
+    );
+  }
 }
 
 async function flushTenantBudgets(client, tenantId, budgets) {
