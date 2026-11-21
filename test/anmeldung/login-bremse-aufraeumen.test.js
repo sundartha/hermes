@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { statusNachWiederholung } from "../gemeinsam/status-nach-wiederholung.mjs";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { zweiProzesse } from "../gemeinsam/zwei-prozesse.js";
 
@@ -57,9 +58,19 @@ async function neuerSchluessel(adresse, prozess, absender) {
   return neu[0];
 }
 
-async function positivKontrolle(a, b) {
+async function kontrollStatus(prozess, absender, adresse) {
+  return statusNachWiederholung(
+    () => loginStatus(prozess, absender),
+    () => mitVerbindung(adresse, (verbindung) => verbindung.query("SELECT 1")),
+  );
+}
+
+async function positivKontrolle(a, b, adresse) {
   assert.deepEqual(
-    [await loginStatus(a, KONTROLL_ADRESSEN[0]), await loginStatus(b, KONTROLL_ADRESSEN[1])],
+    [
+      await kontrollStatus(a, KONTROLL_ADRESSEN[0], adresse),
+      await kontrollStatus(b, KONTROLL_ADRESSEN[1], adresse),
+    ],
     [HTTP_FOUND, HTTP_FOUND],
     "Positiv-Kontrolle: /auth/login muss für eine frische Adresse umleiten",
   );
@@ -75,7 +86,7 @@ test(
     const rolle = await echteDatenbankMitRolle(t);
     if (!rolle) return;
     const { a, b } = await zweiProzesse(t, { ...UMGEBUNG, DATABASE_URL: rolle.adresse });
-    await positivKontrolle(a, b);
+    await positivKontrolle(a, b, rolle.adresse);
 
     const abgelaufen = await neuerSchluessel(rolle.adresse, a, ABLAUFENDE_ADRESSE);
     const nebenstehend = await neuerSchluessel(rolle.adresse, a, NEBENSTEHENDE_ADRESSE);
