@@ -78,3 +78,11 @@ test("5434-5: Die Entprellung fragt mit dem Fensterbeginn 60 Minuten vor endedAt
   await planNotPlacedMail({ store, call: { ...basis, endedAt: "kaputt" }, mailer: {}, accounts: konto });
   assert.deepEqual(gefragt, [["t1", iso(60)], ["t1", undefined]]);
 });
+
+test("5434-6: Ein nur im eigenen Spiegel liegender Anruf mit endedAt genau am Fensterbeginn zaehlt mit", async () => {
+  const { b } = await zweiInstanzen();
+  const grenze = b.createCall({ direction: "outbound", from: "+4930555000435", to: "+4915112345434", goal: "Test", tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" });
+  grenze.endedAt = iso(60);
+  const ids = (await b.anrufeDesMandanten(BOOTSTRAP_TENANT_ID, iso(60))).map((call) => call.id);
+  assert.deepEqual(ids, [grenze.id]);
+});
