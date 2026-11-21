@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
+import { echteDatenbank } from "./echtes-postgres.js";
 import { ANRUF_SPERREN_SQL, mitZweiHermesAufPostgres, postgresVorhanden, rufeAnMit, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 
 const ZEITGRENZE_MS = 240_000;
@@ -166,5 +167,21 @@ test(
       assert.equal(folgend.status, HTTP_OK);
       assert.equal(anbieter.starts().length, 1);
     });
+  },
+);
+
+test(
+  "Sperrenzaehlung: eine Advisory-Sperre in einer anderen Datenbank desselben Postgres zaehlt nicht, eine in der eigenen schon",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    const eigene = await (await echteDatenbank(t)).verbinden();
+    const fremde = await (await echteDatenbank(t)).verbinden();
+    const sperre = (verbindung) => verbindung.query(`SELECT pg_advisory_lock($1, 1)`, [ANRUF_SPERRE_NAMENSRAUM]);
+    await sperre(fremde);
+    await keineSperre((text) => eigene.query(text));
+    await sperre(eigene);
+    assert.equal((await eigene.query(ANRUF_SPERREN_SQL)).rows[0].anzahl, 1);
+    await assert.rejects(keineSperre((text) => eigene.query(text)), assert.AssertionError);
   },
 );
