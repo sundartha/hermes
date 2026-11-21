@@ -32,7 +32,7 @@ const SERVER_TOKEN = "github_pat_" + "A".repeat(RUMPF_LAENGE);
 const KERNZIFFERN = "1511234";
 const TRENNER = /[ ()/-]|%20/g;
 const LAUF_LAENGE = 10;
-const EXPRESS_SCHREIBER = 2;
+const EXPRESS_SCHREIBER = 1;
 
 const lauf = (zeichen) => zeichen.repeat(LAUF_LAENGE);
 
