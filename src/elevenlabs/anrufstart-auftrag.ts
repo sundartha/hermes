@@ -186,11 +186,12 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
 
   async function wartePlatz(aktuell: A, fristEnde: number): Promise<AnrufstartAusgang | null> {
     if (await sperreVorDemStart(aktuell)) return ANRUFSTART_AUSGANG.ABGESPERRT;
-    if (!platz || (await platz.belege(aktuell))) return null;
+    if (!platz) return null;
     if (!(jetztMs() < fristEnde)) {
       await platz.beendeNachWartefrist(aktuell.id);
       return ANRUFSTART_AUSGANG.ABGELAUFEN;
     }
+    if (await platz.belege(aktuell)) return null;
     await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
     const neu = await store.leseCall(aktuell.id);
     if (!neu) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
