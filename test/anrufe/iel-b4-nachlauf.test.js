@@ -14,7 +14,7 @@ import {
   CONVERSATION_IN_PROGRESS,
   ERROR_ENVELOPES,
 } from "../fixtures/elevenlabs-conversations.js";
-import { waitUntil, withFetch } from "../helpers.js";
+import { warteAufEreignis, withFetch } from "../helpers.js";
 import {
   CONV_ID,
   FIXTURE_ZEILEN,
@@ -119,7 +119,7 @@ test("IEL-B4-2: Inbound done -> summarizeCall laeuft auf dem EL-Transkript, kein
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.zusammenfassungen.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.zusammenfassungen.length === 1, WARTE);
   });
 
   assert.deepEqual(harness.zusammenfassungen, [{ summary: null, rollen: ["agent", "caller"] }]);
@@ -139,7 +139,7 @@ test("IEL-B4-2P: Positiv-Kontrolle - dieselbe Fixture als Outbound-EL-Call schre
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
   });
 
   assert.equal(call.summary, CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary);
@@ -155,7 +155,7 @@ test("IEL-B4-3: Inbound done 90 s nach dem Carrier-Ende -> endedAt ist der Nachl
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
   });
 
   assert.equal(call.endedAt, marker);
@@ -172,7 +172,7 @@ test("IEL-B4-4: Frist ab Marker abgelaufen -> Abschluss ueber das Traeger-Bein, 
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
   });
 
   assert.equal(call.endedAt, marker);
@@ -192,7 +192,7 @@ test("IEL-B4-5: Frist zaehlt ab dem Marker, nicht ab dem Anbieter-Deckel - 20 mi
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.gets >= MINDEST_TAKTE, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= MINDEST_TAKTE, WARTE);
     assert.equal(call.status, "active");
     assert.equal(call.billedAt, null);
     await beendeSchleifen(state, anbieter);
@@ -207,7 +207,7 @@ test("IEL-B4-5P: Positiv-Kontrolle - Outbound-EL-Call mit demselben answeredAt s
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
   });
 
   assert.notEqual(call.status, "active");
@@ -223,7 +223,7 @@ test("IEL-B4-6: 3x 404 -> Anker bleibt (kein clearAnchor), Traeger-Bein wird bee
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
   });
 
   assert.equal(anbieter.gets, PERMANENT_ERROR_STREAK_LIMIT);
@@ -270,7 +270,7 @@ async function startTorWaehrendAbruf(harness, anbieter, callId) {
     freigeben = resolve;
   });
   anbieter.setzeAntwort(() => tor);
-  await waitUntil(() => anbieter.offen === 1, WARTE);
+  await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === 1, WARTE);
   harness.el.startInboundNachlauf(callId);
   await ruhe(RUHE_TAKTE);
   const offenNachStart = anbieter.offen;
@@ -287,12 +287,12 @@ test("IEL-B4-8: Boot-Re-Arm plus Start-Tor -> eine Schleife, genau eine Persiste
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.gets >= ZWEI_SCHLEIFEN, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= ZWEI_SCHLEIFEN, WARTE);
     assert.equal(await startTorWaehrendAbruf(harness, anbieter, call.id), 1, "das Start-Tor startet keine zweite Schleife");
     assert.ok(call.elNachlaufStartedAt, "das Start-Tor setzt den Marker auch bei laufender Schleife");
-    await waitUntil(() => anbieter.gets >= ZWEI_SCHLEIFEN + MINDEST_TAKTE, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= ZWEI_SCHLEIFEN + MINDEST_TAKTE, WARTE);
     anbieter.setzeAntwort(async () => okAntwort(INBOUND_DONE));
-    await waitUntil(() => harness.zusammenfassungen.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.zusammenfassungen.length === 1, WARTE);
     await ruhe(RUHE_TAKTE);
   });
 
@@ -313,7 +313,7 @@ test("IEL-B4-9: startInboundNachlauf zweimal synchron -> eine Schleife, der erst
     harness.el.startInboundNachlauf(call.id);
     const ersterMarker = call.elNachlaufStartedAt;
     harness.el.startInboundNachlauf(call.id);
-    await waitUntil(() => anbieter.gets >= MINDEST_TAKTE, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= MINDEST_TAKTE, WARTE);
     assert.equal(call.elNachlaufStartedAt, ersterMarker);
     await beendeSchleifen(state, anbieter);
   });
@@ -336,9 +336,9 @@ async function zweiSchleifenImSelbenAbruf() {
 
   await mitAnbieter({ state, anbieter }, async () => {
     for (const harness of beide()) await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.offen === ZWEI_SCHLEIFEN, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === ZWEI_SCHLEIFEN, WARTE);
     freigeben(okAntwort(INBOUND_DONE));
-    await waitUntil(() => summe("zusammenfassungen") === 1, WARTE);
+    await warteAufEreignis([...beide().map((harness) => harness.ereignisse)], () => summe("zusammenfassungen") === 1, WARTE);
     await ruhe(RUHE_TAKTE);
   });
   return { state, call, beide, summe, anbieter };
@@ -389,10 +389,10 @@ test("IEL-B4-13: Rueckfall waehrend eines laufenden Abrufs -> kein Abschluss, ke
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.offen === 1, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === 1, WARTE);
     ops.markInboundElFallback(state, call.id, new Date().toISOString());
     freigeben(okAntwort(INBOUND_DONE));
-    await waitUntil(() => anbieter.offen === 0, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === 0, WARTE);
     await ruhe(RUHE_TAKTE);
   });
 
@@ -411,10 +411,10 @@ test("IEL-B4-14: GEBUNDEN ohne Nachlauf-Start -> keine eigene Frist; done schlie
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.gets >= MINDEST_TAKTE, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= MINDEST_TAKTE, WARTE);
     assert.equal(call.status, "active");
     anbieter.setzeAntwort(async () => okAntwort(INBOUND_DONE));
-    await waitUntil(() => harness.gebucht.length === 1, WARTE);
+    await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
     await ruhe(RUHE_TAKTE);
   });
 
@@ -430,10 +430,10 @@ test("IEL-B4-15: Marker waehrend laufender Schleife -> frische Frist ab Marker, 
 
   await mitAnbieter({ state, anbieter }, async () => {
     await harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.gets >= ZWEI_SCHLEIFEN, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= ZWEI_SCHLEIFEN, WARTE);
     assert.equal(await startTorWaehrendAbruf(harness, anbieter, call.id), 1, "das Start-Tor startet keine zweite Schleife");
     const getsBeimStart = anbieter.gets;
-    await waitUntil(() => anbieter.gets >= getsBeimStart + ZWEI_SCHLEIFEN, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= getsBeimStart + ZWEI_SCHLEIFEN, WARTE);
     assert.equal(call.status, "active");
     assert.equal(harness.gebucht.length, 0);
     await beendeSchleifen(state, anbieter);

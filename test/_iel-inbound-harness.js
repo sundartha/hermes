@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import http from "node:http";
 import { voiceMinutesOf } from "../src/billing/metering.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
@@ -18,6 +19,7 @@ export const POLL_MS = 5;
 export const HTTP_OK = 200;
 const WARTE_FRIST_MS = 5000;
 export const WARTE = { timeoutMs: WARTE_FRIST_MS };
+const EREIGNIS_AENDERUNG = "aenderung";
 export const RUHE_TAKTE = 4;
 export const TRAEGER_SID = "v3:inbound-leg-sid";
 export const INBOUND_FROM = "+491701111111";
@@ -90,36 +92,48 @@ export const initBindungsKoerper = ({ bindung, agentId, conversationId }) => ({
 });
 
 export function makeAnbieter(antwort) {
-  const anbieter = { gets: 0, deletes: 0, offen: 0, maxOffen: 0, antwort };
+  const anbieter = { gets: 0, deletes: 0, offen: 0, maxOffen: 0, antwort, ereignisse: new EventEmitter() };
   anbieter.setzeAntwort = (neueAntwort) => {
     anbieter.antwort = neueAntwort;
   };
   anbieter.fetch = async (_url, init) => {
     if (init.method === "DELETE") {
       anbieter.deletes += 1;
+      anbieter.ereignisse.emit(EREIGNIS_AENDERUNG);
       return okAntwort({});
     }
     anbieter.gets += 1;
     anbieter.offen += 1;
     anbieter.maxOffen = Math.max(anbieter.maxOffen, anbieter.offen);
+    anbieter.ereignisse.emit(EREIGNIS_AENDERUNG);
     try {
       return await anbieter.antwort();
     } finally {
       anbieter.offen -= 1;
+      anbieter.ereignisse.emit(EREIGNIS_AENDERUNG);
     }
   };
   return anbieter;
 }
 
 export function baueStore(state, beobachtung) {
+  const melde = () => beobachtung.ereignisse?.emit(EREIGNIS_AENDERUNG);
   return {
     ...storeOpsFacade(state),
     setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso).call,
     markInboundElNachlaufStarted: (id, iso) => ops.markInboundElNachlaufStarted(state, id, iso),
     markAnswered: (id) => ops.markAnswered(state, id),
     recordElDetectorCounts: (id) => beobachtung.detektorZaehlungen.push(id),
-    purgeTranscript: (id) => ops.purgeTranscript(state, id),
-    markBilled: (id) => ops.markBilled(state, id),
+    purgeTranscript: (id) => {
+      const ergebnis = ops.purgeTranscript(state, id);
+      melde();
+      return ergebnis;
+    },
+    markBilled: (id) => {
+      const ergebnis = ops.markBilled(state, id);
+      melde();
+      return ergebnis;
+    },
     withStoreLock: (fn) => fn(),
     releaseOutboundReserve: async () => {},
     tenantContext: () => ({ settings: {} }),
@@ -154,15 +168,22 @@ function mitFristenlauf(echt, store) {
 }
 
 export function baueHarness(state) {
-  const beobachtung = { gebucht: [], zusammenfassungen: [], detektorZaehlungen: [], traegerAuflegen: [] };
+  const beobachtung = { gebucht: [], zusammenfassungen: [], detektorZaehlungen: [], traegerAuflegen: [], ereignisse: new EventEmitter() };
   const store = baueStore(state, beobachtung);
   const callFinish = makeCallFinish({
     store,
     config: { billing: { paymentEnabled: false }, privacy: { diagnosticRetentionDays: 0 } },
-    metering: { recordVoiceMinuteMeter() {}, reconcileVoiceBudget: (call) => beobachtung.gebucht.push(voiceMinutesOf(call)) },
+    metering: {
+      recordVoiceMinuteMeter() {},
+      reconcileVoiceBudget: (call) => {
+        beobachtung.gebucht.push(voiceMinutesOf(call));
+        beobachtung.ereignisse.emit(EREIGNIS_AENDERUNG);
+      },
+    },
     messaging: () => ({ sendSms: async () => {} }),
     summarizeCall: async (call) => {
       beobachtung.zusammenfassungen.push({ summary: call.summary, rollen: call.transcript.map((zeile) => zeile.role) });
+      beobachtung.ereignisse.emit(EREIGNIS_AENDERUNG);
       return null;
     },
     planSummarySms: () => ({ send: false }),
@@ -214,12 +235,13 @@ function beantworteTts(attrappe, { req, res, treffer }) {
 
 function beantworteConversation(attrappe, { req, res }) {
   attrappe.anfragen.push({ method: req.method, url: req.url, atMs: Date.now() });
+  attrappe.ereignisse.emit(EREIGNIS_AENDERUNG);
   res.writeHead(HTTP_OK, { "content-type": "application/json" });
   res.end(JSON.stringify(req.method === "DELETE" ? {} : attrappe.antwort));
 }
 
 export async function starteAnbieterAttrappe() {
-  const attrappe = { anfragen: [], ttsStimmen: [], antwort: CONVERSATION_IN_PROGRESS };
+  const attrappe = { anfragen: [], ttsStimmen: [], antwort: CONVERSATION_IN_PROGRESS, ereignisse: new EventEmitter() };
   attrappe.setzeAntwort = (conversation) => {
     attrappe.antwort = conversation;
   };
