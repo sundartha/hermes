@@ -2,6 +2,8 @@
 # Verhaltenstest zu paket.sh (Rücklauf-Stelle): Liegt der PR eines Häppchens auf system/<name>, findet die Kette den Worktree paket-<name> (Branch paket/<name>) wie bei paket/<name>. Die Stelle wird aus paket.sh selbst gelesen, nicht nachgebaut.
 S=${1:-${0:A:h}/paket.sh}
 T=$(mktemp -d); fehler=0
+gitr() { git -C "$REPO" "$@"; }   # paket.sh ruft git im Ordner REPO über gitr auf (Sperre, Issue 5760); der Test nutzt es ohne Sperre
+
 REPO=$T/repo; mkdir -p $REPO && git -C $REPO init -q -b master && git -C $REPO commit -q --allow-empty -m a
 git -C $REPO worktree add -q $T/wt-x1 -b paket/x1 >/dev/null
 STELLE=$(grep -o 'LB=\$B; \[\[ \$B == [a-z]*/\* \]\] && LB=paket/\${B#system/}; WT=[^#]*' $S | head -1)
@@ -31,4 +33,47 @@ weiter
 weiter
 halt"
 pruefe "neuer Kopf setzt den Zaehler zurueck" "$(LOG=$T/ueber-neu; rm -rf $LOG; mkdir -p $LOG; PR=5311; freigeben() { :; }; einstufung() { echo "sonnet -"; }; for k in a a a b; do PRK=$k; ( eval "$UEBER" ) 2>/dev/null; done; tail -1 $LOG/uebersprungen.txt)" "5311 b 1"
+# CI-ROT-1119: PASS auf unverändertem Kopf wird nur bei grüner CI übersprungen; bei roter CI geht die Kette in die Rücklauf-Schleife statt zu überspringen (2973, 5006).
+pruefe "Skip-Bedingung prueft die CI" "$(grep -c 'pass_auf_kopf \$PR \$PRK && { case "$(ci_lage \$PR)" in gruen) ;; \*) CIROT=1' $S)" "1"
+pruefe "Schleife betritt PASS-PR bei roter CI" "$(grep -c '\[ "\$PRM" = CONFLICTING \] || \[ -n "\$CIROT" \]; do' $S)" "1"
+pruefe "rote CI startet keinen neuen Bau" "$(grep -c 'elif \[ -n "\$CIROT" \]; then :' $S)" "1"
+# 5473: pcmd mit fehlender PID (Elternprozess schon weg) bricht unter set -u nicht ab und liefert leer; mit PID weiter die Befehlszeile.
+PCMD=$(grep -o '^pcmd() {[^#]*' $S | head -1)
+[ -n "$PCMD" ] || { echo "ROT  pcmd nicht in paket.sh gefunden"; exit 1; }
+pruefe "pcmd ohne PID bricht nicht ab" "$(STELLE=$PCMD zsh -c 'set -u; eval "$STELLE"; pcmd; pcmd ""; echo ok' 2>&1)" "ok"
+pruefe "pcmd mit PID liefert die Befehlszeile" "$(STELLE=$PCMD zsh -c 'set -u; eval "$STELLE"; [ -n "$(pcmd $$)" ] && echo ja' 2>&1)" "ja"
+# A-VA2YWR 19.11. (5137, 5491): Halt-Grund der Nachbesserung ehrlich. Kopf seit dem letzten Nachtrag unverändert = nicht umgesetzt; dreimal umgesetzt = Grenze; sonst weiter. Die Stelle wird aus paket.sh gelesen.
+NBST=$(grep -A2 -m1 'KN=\$(kopf \$PR); KL=' $S)
+[ -n "$NBST" ] || { echo "ROT  Nachbesserungs-Stelle nicht in paket.sh gefunden"; exit 1; }
+nb() { local D=$(mktemp -d); LOG=$D; PR=9; N=1; R=1; : > $LOG/bau-1-bewerten-1.log; kopf() { echo "$KOPFNEU"; }; [ -n "$1" ] && printf "$1" > $LOG/nachbessern.txt; [ -n "$2" ] && echo "9 $2" > $LOG/nachbessern-kopf.txt; KOPFNEU=$3; eval "$NBST"; echo "$HG" | cut -c1-30; }
+pruefe "erster Nachtrag: weiter" "$(nb '' '' aaa)" ""
+pruefe "Kopf unveraendert seit Nachtrag: nicht umgesetzt" "$(nb '9\n' aaa aaa)" "Bau hat den letzten Plan-Nacht"
+pruefe "dreimal umgesetzt: Grenze" "$(nb '9\n9\n9\n' aaa bbb)" "Nachbesserungsgrenze erreicht "
+pruefe "zweimal umgesetzt: weiter" "$(nb '9\n9\n' aaa bbb)" ""
+pruefe "Halt-Kommentar mit letzter Bewertung steht im Issue" "$(grep -c 'Paket hält bei PR #\$PR: \$HG. Letzte Bewertung' $S)" "1"
+# wt-steuerung (Issue 5760): alle Git-Aufrufe im gemeinsamen Ordner laufen unter einer Sperre; ein index.lock-Zusammenstoß wird wiederholt statt zu scheitern
+GITR=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
+[ -n "$GITR" ] || { echo "ROT  gitr in paket.sh nicht gefunden"; exit 1; }
+pruefe "paket.sh ruft git im Ordner REPO nur noch ueber gitr auf" "$(grep -v '^gitr()' $S | grep -c 'git -C "\$REPO"')" "0"
+G=$T/gr; mkdir -p $G && git -C $G init -q -b master && git -C $G commit -q --allow-empty -m a
+KETTEN=$T/k; mkdir -p $KETTEN; REPO=$G; eval "$GITR"
+touch $G/.git/index.lock; ( sleep 3; mv $G/.git/index.lock $T/lock.weg ) &
+gitr checkout -q --detach master; pruefe "index.lock-Zusammenstoss wird wiederholt und gelingt" "$?" "0"; wait
+( gitr checkout -q --detach master & gitr checkout -q --detach master & gitr checkout -q --detach master & wait ) 2>/dev/null
+pruefe "drei gleichzeitige Checkouts unter der Sperre" "$(git -C $G rev-parse --abbrev-ref HEAD)" "HEAD"
+# Host-Weiche (#5766): eine Quelle fuer Mac und Server; die Werte je Host stehen allein in host_werte(), uname wird als Funktion vorgegeben.
+HW=$(sed -n '/^host_werte() {/,/^}/p' $S)
+[ -n "$HW" ] || { echo "ROT  host_werte nicht in paket.sh gefunden"; exit 1; }
+hw() { zsh -c 'uname() { echo $UN; }; HOME=/h; PATH=/usr/bin:/bin; eval "$HW"; host_werte; print -r -- "$MAX_KETTEN|$PATH|$GHBIN|$PYBIN|${(j: :)SEDI}"' ; }
+pruefe "Darwin: 14 Ketten, kein Node-22-Pfad, gh und python3 aus homebrew, BSD-sed" "$(UN=Darwin HW=$HW hw)" "14|/usr/bin:/bin|/opt/homebrew/bin/gh|/opt/homebrew/bin/python3|sed -i "
+pruefe "Linux: 3 Ketten, Node 22 vorn, gh und python3 aus dem Pfad, GNU-sed" "$(UN=Linux HW=$HW hw)" "3|/h/node22/bin:/usr/bin:/bin|gh|python3|sed -i"
+KE=$(grep -E '^konto_env\(\) \{' $S | sed 's/   # .*//')
+[ -n "$KE" ] || { echo "ROT  konto_env nicht in paket.sh gefunden"; exit 1; }
+ke() { zsh -c 'uname() { echo $UN; }; eval "$KE"; CLAUDE_CODE_OAUTH_TOKEN=x konto_env 2 env | grep -E "^(KONTO_FEST|CLAUDE_KONTO|CLAUDE_CODE_OAUTH_TOKEN)=" | tr "\n" " "'; }
+pruefe "Linux: Verbrauchsabfrage laeuft mit festem Konto und ohne Abo-Schluessel" "$(UN=Linux KE=$KE ke)" "KONTO_FEST=1 CLAUDE_KONTO=2 "
+pruefe "Darwin: Verbrauchsabfrage laeuft ohne Konto-Umgebung" "$(UN=Darwin KE=$KE ke)" "CLAUDE_CODE_OAUTH_TOKEN=x "
+pruefe "Linux-Teile (Scope, Konto-Schluessel, Lastampel) laufen nur unter Linux" "$(grep -E 'PAKET_SCOPE|_kn=1;|AMPEL_K=' $S | grep -c '^\[\[ \$(uname) == Linux \]\]\|^if \[\[ \$(uname) == Linux \]\]')" "3"
+pruefe "paket.sh kennt keine feste homebrew-Datei ausserhalb der Weiche" "$(grep -v '^  *Darwin)' $S | grep -c '/opt/homebrew/bin/\(gh\|python3\)')" "0"
+GL=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
+pruefe "gitr nimmt unter Linux flock und unter Darwin lockf" "$(print -r -- "$GL" | grep -c 'flock -w 120.*lockf -k -t 120\|lockf -k -t 120.*flock -w 120')" "1"
 exit $fehler
