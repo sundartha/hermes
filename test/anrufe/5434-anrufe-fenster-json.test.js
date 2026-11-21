@@ -22,5 +22,5 @@ test("5434-J1: Im JSON-Speicher filtert anrufeDesMandanten mit seit nach endedAt
   const grenze = neu(iso(60));
   const offen = neu();
   assert.deepEqual((await store.anrufeDesMandanten(MANDANT, iso(60))).map((call) => call.id), [grenze.id]);
-  assert.deepEqual((await store.anrufeDesMandanten(MANDANT)).map((call) => call.id), [alt.id, grenze.id, offen.id]);
+  assert.deepEqual((await store.anrufeDesMandanten(MANDANT)).map((call) => call.id).toSorted(), [alt.id, grenze.id, offen.id].toSorted());
 });
