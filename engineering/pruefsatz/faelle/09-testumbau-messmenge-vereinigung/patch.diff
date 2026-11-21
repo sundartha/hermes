@@ -1,0 +1,13 @@
+diff --git a/tools/auftrag/testumbau.mjs b/tools/auftrag/testumbau.mjs
+index 815102b..aa2ada9 100644
+--- a/tools/auftrag/testumbau.mjs
++++ b/tools/auftrag/testumbau.mjs
+@@ -105,7 +105,7 @@ function vereint(jeDatei) {
+ }
+ 
+ export function messmenge(alteTests, neueTests) {
+-  return [...new Set([...alteTests, ...neueTests])].sort();
++  return [...new Set([...alteTests])].sort();
+ }
+ 
+ export async function testumbauFaelle({ basis, root }) {

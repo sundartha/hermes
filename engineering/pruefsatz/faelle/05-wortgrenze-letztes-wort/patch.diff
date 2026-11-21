@@ -1,0 +1,13 @@
+diff --git a/src/utils/text.js b/src/utils/text.js
+index 7824f7a..e13bfa9 100644
+--- a/src/utils/text.js
++++ b/src/utils/text.js
+@@ -1,7 +1,7 @@
+ export function clampAtWordBoundary(text, maxChars) {
+   if (text.length <= maxChars) return text;
+   const cut = text.slice(0, maxChars);
+-  const lastSpace = text.lastIndexOf(" ", maxChars);
++  const lastSpace = cut.lastIndexOf(" ");
+   return lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+ }
+ 

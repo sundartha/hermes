@@ -1,0 +1,22 @@
+diff --git a/src/billing/cancellation-mail.js b/src/billing/cancellation-mail.js
+index 405ff45..fd27858 100644
+--- a/src/billing/cancellation-mail.js
++++ b/src/billing/cancellation-mail.js
+@@ -54,9 +54,6 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
+   const { pending, receivedAt } = store.cancellationMailPending(tenantId);
+   if (!pending) return false;
+ 
+-  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenantId);
+-  if (cancelAtPeriodEnd === false) return true;
+-
+   if (!mailer) {
+     logger.warn(`[cancellation-mail] SMTP nicht konfiguriert - Bestaetigung offen tenant=${tenantId}`);
+     await auditStore.record({
+@@ -78,6 +75,7 @@ async function attemptSend({ store, mailer, accounts, auditStore, logger, config
+     return true;
+   }
+ 
++  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenantId);
+   const { subject, text } = buildCancellationMailText({
+     planSlug,
+     currentPeriodEnd,

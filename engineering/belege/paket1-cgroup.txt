@@ -1,0 +1,3 @@
+Paket 1 (A-GUD85H), 18.11.2026 23:2x: paket.sh startet sich per systemd-run --user --scope neu (Zeile 31, Rücknahme: cp paket.sh.bak-20261118-cgroup paket.sh).
+Beleg: PAKET_PROBE-Lauf (KETTEN=/tmp/kt-test): Prozess 670915 lag danach in app.slice/paket-999997-1795040406.scope, nicht mehr in openclaw-gateway.service.
+Tote Sperre (.lauf/pid mit totem Prozess) wird schon seit früher übernommen (paket.sh Zeile 52-53), keine Änderung nötig.

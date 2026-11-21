@@ -1,0 +1,3 @@
+# Push-Prüfweg Grenzen – Beleg 19.11.2026 18:35 (Karte 87bf90c4)
+1. Prüfregel keine-selbstaufruf: BELEGT. PR 4220 gemergt 13.11. 12:18Z. Verhaltenstest test/werkzeuge/selbstaufruf-wacht.test.js (Regel findet Selbstaufruf und Muster ohne Datei, lässt feste Fremddatei zu; Wächter bricht bei TEST_TIEFE>=2 ab). Im Bestand 10 Treffer behoben, 0 offen. CI am PR grün.
+2. 6-GB-Speichergrenze: NICHT belegt. Sie steht nur in .bin/paket-grenze (Hülle außerhalb des Repos, auf dem Mac). Die PR-Messung belegt die Grenzen für Prozesszahl (>150) und Ebenen (>40) (Kette 3 s, Fächer 3-4 s), keine Messung zeigt einen Abbruch bei 6 GB. Der Mac ist von hier aus nicht erreichbar; der Speichertest (Attrappe, die Speicher belegt) steht aus.

@@ -1,0 +1,24 @@
+# Vorschlag für die Aufnahme von engineering/ ins Hermes-Repo (Issue sundartha/hermes#5765, A-Z729F5)
+# Laufende Kettenzustände: nicht versioniert, werden laufend von paket.sh geschrieben
+/ketten/
+
+# Laufend erzeugte Messdaten (nicht die Werkzeuge erzeuge.mjs/vorlage.html selbst)
+/kennzahlen/zustand/
+
+# Logs
+*.log
+*.out
+kette.out
+
+# Geheimnisse
+.env
+.env.*
+*zugangsdaten*
+*credentials*
+
+# Sicherungskopien und Vor-Stände (Antonio entscheidet über Löschen, nicht Git)
+*.bak-*
+*.bak
+paket.sh.vor-*
+*.vor-*
+*vor-*

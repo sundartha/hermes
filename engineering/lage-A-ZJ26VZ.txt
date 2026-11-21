@@ -1,0 +1,21 @@
+Lage 18.11.2026 22:32:56 - 1 Ketten - GitHub ok (frisch)
+#2973 ARBEITET: Ruecklauf-Sitzung (Nacharbeit) laeuft - seit 22:31 (1 min) - bei: kette - Prozesse: 615239 (2 min, claude (sonnet)) - "Paket S4-A t6: anruf-spiegel-entfernen"
+    Grund: claude-Sitzung laeuft seit 1 min, innerhalb der Frist (120 min). PID 615239.
+    Quellen: zustand=prozess, phase=prozess, seit=prozess
+
+Prozesse:
+
+Lage 18.11.2026 22:32:59 - 1 Ketten - GitHub ok (frisch)
+#5380 ARBEITET: Schritt node openclaw gateway laeuft - seit 22:32 (0 min) - bei: kette - Prozesse: 618371 (1 min, node openclaw gateway) - "Rückfrage (get_consult) im Anruf wird bei Problemen nicht ge"
+    Grund: aktiver git/gh/npm-Schritt 'node openclaw gateway' seit 0 min.
+    Quellen: zustand=prozess, phase=prozess, seit=prozess
+
+Prozesse:
+
+Lage 18.11.2026 22:33:02 - 1 Ketten - GitHub ok (Zwischenspeicher 0 min alt)
+#3412 HAENGT: Ordner fehlt - bei: niemand - "TS S7.7: Abschluss Schritt 7 – Testanruf auf Staging und Aus"
+    Grund: Kein Ketten-Ordner paket-3412 gefunden.
+    Quellen: zustand=datei
+
+Prozesse:
+

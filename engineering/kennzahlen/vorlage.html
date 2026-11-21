@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Kennzahlen Bausystem</title>
+<style>
+:root {
+  color-scheme: light;
+  --flaeche: #fcfcfb; --karte: #ffffff; --rand: #e3e2de; --gitter: #ecebe7;
+  --text: #0b0b0b; --text2: #52514e; --text3: #787772;
+  --akzent: #2a78d6; --gut: #006300; --schlecht: #b42323; --warn-bg: #fff3d6; --warn-rand: #e0a100; --warn-text: #5c3d00;
+  --st-bau: #2a78d6; --st-ruecklauf: #eb6834; --st-pruefer: #1baf7a; --st-ci: #eda100; --st-konflikt: #e87ba4;
+  --st-queue: #008300; --st-platz: #6250d6; --st-halt: #e34948; --st-sonst: #b9b8b2;
+}
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {
+  color-scheme: dark;
+  --flaeche: #1a1a19; --karte: #222221; --rand: #3a3a37; --gitter: #2e2e2c;
+  --text: #f0efec; --text2: #c3c2b7; --text3: #9a998f;
+  --akzent: #3987e5; --gut: #4cc24c; --schlecht: #ff8a85; --warn-bg: #3a2f10; --warn-rand: #c98500; --warn-text: #ffd98a;
+  --st-bau: #3987e5; --st-ruecklauf: #d95926; --st-pruefer: #199e70; --st-ci: #c98500; --st-konflikt: #d55181;
+  --st-queue: #008300; --st-platz: #9085e9; --st-halt: #e66767; --st-sonst: #5a5a56;
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --flaeche: #1a1a19; --karte: #222221; --rand: #3a3a37; --gitter: #2e2e2c;
+  --text: #f0efec; --text2: #c3c2b7; --text3: #9a998f;
+  --akzent: #3987e5; --gut: #4cc24c; --schlecht: #ff8a85; --warn-bg: #3a2f10; --warn-rand: #c98500; --warn-text: #ffd98a;
+  --st-bau: #3987e5; --st-ruecklauf: #d95926; --st-pruefer: #199e70; --st-ci: #c98500; --st-konflikt: #d55181;
+  --st-queue: #008300; --st-platz: #9085e9; --st-halt: #e66767; --st-sonst: #5a5a56;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--flaeche); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 17px; margin: 34px 0 4px; }
+.unter { color: var(--text2); font-size: 13.5px; margin: 0 0 12px; }
+a { color: var(--akzent); }
+header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.stand { font-size: 13.5px; color: var(--text2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+button, .chip { font: inherit; font-size: 13.5px; color: var(--text); background: var(--karte); border: 1px solid var(--rand); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--text3); }
+button:focus-visible, a:focus-visible, tr[tabindex]:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+.chip[aria-pressed="true"] { background: var(--text); color: var(--flaeche); border-color: var(--text); }
+.hinweis { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); border: 1px solid var(--warn-rand); color: var(--warn-text); font-weight: 600; }
+.hinweis.leise { font-weight: 400; }
+.kacheln { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-top: 16px; }
+.kachel { background: var(--karte); border: 1px solid var(--rand); border-radius: 12px; padding: 14px 16px; }
+.kachel h3 { margin: 0; font-size: 14px; color: var(--text2); font-weight: 600; }
+.wert { font-size: 34px; font-weight: 650; letter-spacing: -.5px; line-height: 1.15; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.wert small { font-size: 15px; font-weight: 500; color: var(--text2); letter-spacing: 0; }
+.zeile { font-size: 13.5px; color: var(--text2); margin-top: 3px; }
+.gut { color: var(--gut); font-weight: 600; } .schlecht { color: var(--schlecht); font-weight: 600; }
+.def { font-size: 12.5px; color: var(--text3); margin-top: 8px; border-top: 1px solid var(--rand); padding-top: 8px; }
+.raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+.diagramm { background: var(--karte); border: 1px solid var(--rand); border-radius: 12px; padding: 12px 14px 8px; position: relative; }
+.diagramm h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+svg text { fill: var(--text3); font: 11px -apple-system, sans-serif; }
+svg .gitter { stroke: var(--gitter); stroke-width: 1; }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--text); color: var(--flaeche); padding: 6px 9px; border-radius: 7px; font-size: 12.5px; max-width: 320px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.balken { display: flex; height: 26px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--flaeche); margin-bottom: 8px; }
+.balken span { display: block; min-width: 2px; }
+.punkt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.legende { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th { text-align: left; color: var(--text2); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--rand); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--gitter); vertical-align: middle; }
+td.z, th.z { text-align: right; font-variant-numeric: tabular-nums; }
+tr.klick { cursor: pointer; } tr.klick:hover td { background: color-mix(in srgb, var(--akzent) 8%, transparent); }
+.tabellenrahmen { background: var(--karte); border: 1px solid var(--rand); border-radius: 12px; padding: 6px 8px; overflow-x: auto; }
+.abzeichen { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--rand); white-space: nowrap; }
+.mini { display: flex; height: 10px; width: 130px; border-radius: 3px; overflow: hidden; gap: 1px; background: var(--gitter); }
+.mini span { display: block; }
+.leer { color: var(--text3); padding: 14px; }
+.art { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 14px; }
+.umschalter { display: inline-flex; border: 1px solid var(--rand); border-radius: 10px; overflow: hidden; background: var(--karte); }
+.umschalter button { border: 0; border-radius: 0; padding: 6px 16px; font-weight: 600; background: transparent; }
+.umschalter button + button { border-left: 1px solid var(--rand); }
+.umschalter button[aria-checked="true"] { background: var(--text); color: var(--flaeche); }
+.defart { font-size: 13.5px; color: var(--text2); flex: 1 1 380px; }
+.andere { font-size: 13px; color: var(--text2); margin-top: 3px; padding: 3px 8px; background: var(--flaeche); border: 1px dashed var(--rand); border-radius: 6px; }
+.art-produkt { border-color: var(--st-bau); } .art-werkzeug { border-color: var(--st-platz); } .art-offen { border-style: dashed; color: var(--text3); }
+#drill { position: fixed; inset: 0; background: var(--flaeche); z-index: 40; overflow: auto; display: none; }
+#drill.offen { display: block; }
+#drill .innen { max-width: 1180px; margin: 0 auto; padding: 18px 18px 80px; }
+.fakten { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+.fakt { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 8px 12px; }
+.fakt b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+.fakt span { font-size: 12.5px; color: var(--text2); }
+.satz { font-size: 16px; background: var(--karte); border: 1px solid var(--rand); border-left: 4px solid var(--akzent); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+.links a { margin-right: 14px; }
+.scroll { max-height: 420px; overflow: auto; }
+@media (max-width: 640px) { .kacheln, .raster { grid-template-columns: 1fr; } .wert { font-size: 28px; } }
+</style>
+</head>
+<body>
+<main id="haupt">
+<header>
+  <div><h1>Kennzahlen Bausystem</h1><p class="unter" style="margin:2px 0 0">Wie schnell, wie sparsam und wie reibungslos die Pakete von Hermes gebaut werden.</p></div>
+  <div class="stand"><span id="stand"></span><button id="thema" type="button" title="Hell, Dunkel oder automatisch">Darstellung: automatisch</button></div>
+</header>
+<div id="alarm"></div>
+<div class="art">
+  <div class="umschalter" role="radiogroup" aria-label="Art der Pakete" id="umschalter"></div>
+  <div class="defart" id="defart"></div>
+</div>
+<section class="kacheln" id="kacheln" aria-label="Wichtigste Kennzahlen"></section>
+
+<h2>Verlauf pro Tag</h2>
+<p class="unter">Die letzten 15 Tage (Berliner Zeit). Leere Tage: an diesem Tag wurde kein Paket fertig bzw. kein Häppchen gemergt. Die lokalen Protokolle der Paketsteuerung reichen nur bis zum 7.11. zurück, davor gibt es nur die PR-Zahlen.</p>
+<div class="raster" id="verlauf"></div>
+
+<h2>Verbrauch je Tag und Konto</h2>
+<p class="unter" id="verbrauchkopf"></p>
+<div class="tabellenrahmen"><table id="verbrauch"></table></div>
+
+<h2>Wo geht die Zeit hin?</h2>
+<p class="unter" id="zeitkopf"></p>
+<div class="diagramm" id="zeit"></div>
+
+<h2>Pakete</h2>
+<p class="unter">Anklicken öffnet die Einzelansicht mit Zeitleiste, Stationen und Links. Es erscheinen alle Pakete mit Aktivität in den letzten 14 Tagen.</p>
+<div class="legende" id="filter" role="group" aria-label="Filter nach Zustand"></div>
+<div class="tabellenrahmen"><table id="liste"></table></div>
+</main>
+
+<div id="drill" role="dialog" aria-modal="true" aria-label="Einzelansicht Paket"><div class="innen" id="drillinnen"></div></div>
+<div class="tip" id="tip"></div>
+
+<script>
+const D = /*DATEN*/null;
+const ST = D.stationen, NAMEN = D.namen;
+const ARTNAME = { produkt: 'Produkt', werkzeug: 'Werkzeug', alle: 'Alle', offen: 'offen' };
+const FARBE = (s) => `var(--st-${s})`;
+const ZUSTAND = { laufend: ['▶', 'läuft'], wartend: ['⏳', 'wartet auf Platz'], angehalten: ['⏸', 'angehalten'], fertig: ['✓', 'fertig'], ruht: ['–', 'ruht'] };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (id) => document.getElementById(id);
+const de = (n, d = 0) => n == null ? '–' : n.toLocaleString('de-DE', { maximumFractionDigits: d, minimumFractionDigits: d });
+function dauerMin(min) {
+  if (min == null) return '–';
+  min = Math.round(min);
+  if (min < 1) return 'unter 1 min';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+const dauerMs = (ms) => dauerMin(ms / 60e3);
+const tokText = (t) => t == null ? '–' : t >= 1e6 ? `${de(t / 1e6, 1)} Mio.` : t >= 1e3 ? `${de(t / 1e3, 0)} Tsd.` : de(t);
+const tf = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const hf = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+const zeit = (t) => tf.format(t).replace(',', '');
+const GH = `https://github.com/${D.repo}`;
+const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
+
+function standAnzeige() {
+  const alter = (Date.now() - D.erzeugt) / 60e3;
+  $('stand').textContent = `Datenstand: ${zeit(D.erzeugt)} Uhr (vor ${dauerMin(alter)})`;
+  const h = [];
+  if (alter > 30) h.push(`<div class="hinweis" role="alert">⚠ Die Daten sind ${dauerMin(alter)} alt. Die Seite sollte alle 15 Minuten aktualisiert werden – die Aktualisierung hängt offenbar. Die Zahlen unten sind veraltet.</div>`);
+  if (D.quellen.gh.fehler.length) h.push(`<div class="hinweis leise" role="status">Hinweis zum letzten Lauf: ${esc(D.quellen.gh.fehler.join(' · '))}</div>`);
+  if (!D.quellen.lokal.tmpDa) h.push(`<div class="hinweis leise" role="status">Die Protokollordner sind weg (Neustart?). Es gelten die gesicherten Kopien.</div>`);
+  $('alarm').innerHTML = h.join('');
+}
+
+function fmtKennwert(k, v) {
+  if (v == null) return ['–', ''];
+  if (k.einheit === 'min') return [dauerMin(v), ''];
+  if (k.einheit === 'tok') return [tokText(v), ''];
+  if (k.einheit === 'prozent') return [de(v, 0), ' %'];
+  return [de(v, k.id === 'prsProTag' ? 1 : 2), k.id === 'prsProTag' ? ' pro Tag' : ' je Häppchen'];
+}
+function zielText(k) {
+  if (k.ziel == null) return 'Ziel: noch keins festgelegt';
+  const w = k.einheit === 'min' ? dauerMin(k.ziel) : k.einheit === 'tok' ? tokText(k.ziel) : de(k.ziel, 2);
+  return `Ziel: ${k.besser === 'kleiner' ? '≤' : '≥'} ${w}`;
+}
+function kachel(k0) {
+  const k = { ...k0, ...k0.a[art] };
+  const [w, einh] = fmtKennwert(k, k.jetzt);
+  let trend = '<span style="color:var(--text3)">Vorwoche: keine Daten</span>';
+  if (k.jetzt != null && k.vorher != null && k.vorher !== 0) {
+    const p = (k.jetzt - k.vorher) / Math.abs(k.vorher) * 100;
+    const gut = k.besser === 'kleiner' ? p < 0 : p > 0;
+    const [vw, ve] = fmtKennwert(k, k.vorher);
+    const dazu = `(Vorwoche: ${vw}${ve}${k.nVorher < 4 ? `, nur ${k.nVorher} Werte` : ''})`;
+    trend = Math.abs(p) < 1 ? `→ unverändert ${dazu}` : `<span class="${gut ? 'gut' : 'schlecht'}">${p > 0 ? '▲' : '▼'} ${de(Math.abs(p), 0)} % ${gut ? '✓ besser' : '! schlechter'}</span> ${dazu}`;
+  } else if (k.jetzt != null && k.vorher === 0) trend = 'Vorwoche: 0';
+  let ziel = zielText(k);
+  if (k.ziel != null && k.jetzt != null) { const ok = k.besser === 'kleiner' ? k.jetzt <= k.ziel : k.jetzt >= k.ziel; ziel += ok ? ' · <span class="gut">✓ erreicht</span>' : ' · <span class="schlecht">✗ verfehlt</span>'; }
+  const z = k.zusatz && k.zusatz.wert != null ? `<div class="zeile">${esc(k.zusatz.text)}: ${tokText(k.zusatz.wert)} (${k.zusatz.n} Häppchen)</div>` : '';
+  const fremd = (nm) => { const o = k0.a[nm]; const [ow, oe] = fmtKennwert(k0, o.jetzt); return `${ARTNAME[nm]}: <b>${esc(ow)}${esc(oe)}</b> (${o.n} ${k0.id === 'prsProTag' ? 'PR' : 'Werte'})`; };
+  const andere = (art === 'alle' ? ['produkt', 'werkzeug'] : [art === 'produkt' ? 'werkzeug' : 'produkt']).map(fremd).join(' · ');
+  return `<article class="kachel"><h3>${esc(k.titel)} <span class="abzeichen art-${art}" style="font-weight:500">${esc(ARTNAME[art])}</span></h3><div class="wert">${esc(w)}<small>${esc(einh)}</small></div>
+  <div class="zeile">Letzte 7 Tage · ${esc(k.aggName)} · ${k.n} ${k.id === 'prsProTag' ? 'PRs' : 'Werte'}</div>
+  <div class="zeile">${trend}</div><div class="zeile">${ziel}</div>${z}<div class="andere" title="Zum Vergleich: der Wert der anderen Art">${art === 'alle' ? 'davon' : 'zum Vergleich'} ${andere}</div><div class="def">${esc(k.def)}</div></article>`;
+}
+
+
+function verlauf(k0) {
+  const k = { ...k0, ...k0.a[art] };
+  const W = 520, H = 170, L = 52, R = 10, T = 12, B = 24;
+  const pts = k.tage;
+  const vals = pts.map((p) => p.wert).filter((v) => v != null);
+  const mx = Math.max(...vals, k.ziel ?? 0, 1e-9) * 1.1;
+  const x = (i) => L + (i + 0.5) * (W - L - R) / pts.length;
+  const y = (v) => T + (H - T - B) * (1 - v / mx);
+  const balken = k.id === 'prsProTag' || k.einheit === 'prozent';
+  const fmt = (v) => k.einheit === 'min' ? dauerMin(v) : k.einheit === 'tok' ? tokText(v) : k.einheit === 'prozent' ? `${de(v, 0)} %` : de(v, k.id === 'nachbesserung' ? 2 : 0);
+  const achse = (t) => k.einheit === 'min' ? (t >= 60 ? de(t / 60, 1) + ' h' : de(t, 0) + ' min') : k.einheit === 'tok' ? de(t / 1e6, 1) + ' Mio.' : k.einheit === 'prozent' ? de(t, 0) + ' %' : de(t, k.id === 'nachbesserung' ? 1 : 0);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(k.titel)} pro Tag" data-k="${k.id}">`;
+  for (const f of [0, 0.5, 1]) { const t = f * mx / 1.1; s += `<line class="gitter" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${esc(achse(t))}</text>`; }
+  if (k.ziel != null) s += `<line x1="${L}" x2="${W - R}" y1="${y(k.ziel)}" y2="${y(k.ziel)}" stroke="var(--gut)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W - R}" y="${y(k.ziel) - 4}" text-anchor="end" style="fill:var(--gut)">Ziel</text>`;
+  pts.forEach((p, i) => { if (i % 2 === 0 || i === pts.length - 1) s += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${esc(p.tag.slice(8) + '.' + p.tag.slice(5, 7))}</text>`; });
+  if (balken) pts.forEach((p, i) => { if (p.wert != null && p.wert > 0) { const bw = (W - L - R) / pts.length * 0.62; s += `<path d="M${x(i) - bw / 2},${y(0)} V${y(p.wert) + 3} q0,-3 3,-3 h${bw - 6} q3,0 3,3 V${y(0)} z" fill="var(--st-bau)"/>`; } });
+  else {
+    let d = '', pen = false;
+    pts.forEach((p, i) => { if (p.wert == null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i)},${y(p.wert)} `; pen = true; });
+    s += `<path d="${d}" fill="none" stroke="var(--st-bau)" stroke-width="2" stroke-linejoin="round"/>`;
+    pts.forEach((p) => { });
+    pts.forEach((p, i) => { if (p.wert != null) s += `<circle cx="${x(i)}" cy="${y(p.wert)}" r="4" fill="var(--st-bau)" stroke="var(--karte)" stroke-width="2"/>`; });
+  }
+  const bw = (W - L - R) / pts.length;
+  pts.forEach((p, i) => { s += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-i="${i}"/>`; });
+  s += '</svg>';
+  const tipp = (i) => { const p = pts[i]; return `<b>${esc(p.tag.slice(8) + '.' + p.tag.slice(5, 7) + '.')}</b><br>${p.wert == null ? 'keine Daten' : esc(fmt(p.wert)) + (k.id === 'prsProTag' ? ' PRs' : ` (${p.n} Werte)`)}`; };
+  return { html: `<div class="diagramm"><h3>${esc(k.titel)} <span class="abzeichen art-${art}" style="font-weight:500">${esc(ARTNAME[art])}</span></h3>${s}</div>`, tipp };
+}
+const verlaufTips = {};
+function zeichneVerlauf() { $('verlauf').innerHTML = D.kennzahlen.map((k) => { const v = verlauf(k); verlaufTips[k.id] = v.tipp; return v.html; }).join(''); }
+
+const tip = $('tip');
+function zeigTip(html, ev) { tip.innerHTML = html; tip.style.display = 'block'; const w = tip.offsetWidth; tip.style.left = Math.max(4, Math.min(ev.clientX + 14, innerWidth - w - 8)) + 'px'; tip.style.top = (ev.clientY + 14) + 'px'; }
+document.addEventListener('mousemove', (ev) => {
+  const t = ev.target;
+  const r = t.closest && t.closest('rect[data-i]');
+  if (r) { zeigTip(verlaufTips[r.closest('svg').dataset.k](+r.dataset.i), ev); return; }
+  const g = t.closest && t.closest('[data-tip]');
+  if (g) { zeigTip(g.dataset.tip, ev); return; }
+  tip.style.display = 'none';
+});
+
+function verteilung(summe, tok, leerText) {
+  const gesamt = ST.reduce((a, s) => a + (summe[s] || 0), 0);
+  if (!gesamt) return `<div class="leer">${leerText}</div>`;
+  let bal = '<div class="balken" role="img" aria-label="Anteile der Stationen">';
+  for (const s of ST) { const v = summe[s] || 0; if (v > 0) bal += `<span style="flex:${v};background:${FARBE(s)}" data-tip="${esc(NAMEN[s])}: ${dauerMs(v)} (${de(v / gesamt * 100, 0)} %)"></span>`; }
+  bal += '</div>';
+  let tab = '<table><thead><tr><th>Station</th><th class="z">Zeit</th><th class="z">Anteil</th><th class="z">Tokens</th></tr></thead><tbody>';
+  for (const s of ST.slice().sort((a, b) => (summe[b] || 0) - (summe[a] || 0))) { const v = summe[s] || 0; tab += `<tr><td><span class="punkt" style="background:${FARBE(s)}"></span>${esc(NAMEN[s])}</td><td class="z">${dauerMs(v)}</td><td class="z">${de(v / gesamt * 100, 0)} %</td><td class="z">${tok && tok[s] ? tokText(tok[s]) : '–'}</td></tr>`; }
+  tab += `<tr><td><b>Summe</b></td><td class="z"><b>${dauerMs(gesamt)}</b></td><td class="z">100 %</td><td class="z"><b>${tokText(ST.reduce((a, s) => a + (tok?.[s] || 0), 0))}</b></td></tr></tbody></table>`;
+  return bal + tab;
+}
+function zeichneVerbrauch() {
+  const V = D.verbrauch, G = V.gewicht;
+  $('verbrauchkopf').textContent = `Gewichtete Tokens (Eingabe ×${de(G.input_tokens, 0)}, Cache schreiben ×${de(G.cache_creation_input_tokens, 2)}, Cache lesen ×${de(G.cache_read_input_tokens, 1)}, Ausgabe ×${de(G.output_tokens, 0)}) und US-Dollar aus den Sitzungen aller Ketten, auch der nicht fertigen, mit Wiederholungen. Tag nach Berliner Zeit. „In Paketen bis 3 Mio.“: Anteil der Tokens des Tages, der in Paketen steckt, deren Kette insgesamt höchstens 3 Millionen gewichtete Tokens verbraucht hat.`;
+  let t = '<thead><tr><th>Tag</th>' + V.konten.map((k) => `<th class="z">Konto ${esc(k)}</th>`).join('') + '<th class="z">Summe</th><th class="z">In Paketen bis 3 Mio.</th></tr></thead><tbody>';
+  for (const d of V.tage.slice().reverse()) {
+    const sum = Object.values(d.konten).reduce((a, x) => ({ tok: a.tok + x.tok, usd: a.usd + x.usd }), { tok: 0, usd: 0 });
+    const zelle = (x) => x ? `${tokText(x.tok)} · ${de(x.usd, 0)} $` : '–';
+    t += `<tr><td>${esc(d.tag.slice(8) + '.' + d.tag.slice(5, 7) + '.')}</td>` + V.konten.map((k) => `<td class="z">${zelle(d.konten[k])}</td>`).join('') + `<td class="z"><b>${zelle(sum)}</b></td><td class="z">${d.anteilBis3Mio == null ? '–' : de(100 * d.anteilBis3Mio, 0) + ' %'}</td></tr>`;
+  }
+  $('verbrauch').innerHTML = t + '</tbody>';
+}
+function zeichneZeit() {
+  const Z = D.zeit[art];
+  // Zeit-Summen kommen in Minuten (Gesamt) bzw. Millisekunden (je Paket): hier in Millisekunden umrechnen
+  const zeitMs = Object.fromEntries(ST.map((s) => [s, (Z.summe[s] || 0) * 60e3]));
+  $('zeitkopf').textContent = `${ARTNAME[art]}: Summe der Zeit je Station über ${Z.pakete} Pakete der letzten 7 Tage (ab ${zeit(D.zeit.von)} Uhr). „Halt“ ist die Zeit, in der eine Kette stillstand, bis sie neu gestartet wurde. „Übergaben“ sind kurze Lücken ohne bekannte Ursache (Befehle, Abfragen, Pausen). „CI-Warten“ zählt nur, wenn gerade kein Agent arbeitet; wartet der Prüfer selbst auf die CI, steht die Zeit beim Prüfer.`;
+  $('zeit').innerHTML = verteilung(zeitMs, Z.tok, 'Keine Daten für die letzten 7 Tage.') + (Z.haltOffenPakete ? `<p class="unter" style="margin-top:10px">Nicht mitgezählt: ${Z.haltOffenPakete} Pakete stehen gerade still und wurden noch nicht neu gestartet (zusammen ${dauerMin(Z.haltOffenMin)} in den letzten 7 Tagen). „Halt“ oben zählt nur Stillstand, der durch einen Neustart beendet wurde.</p>` : '');
+}
+
+let filter = 'alle';
+function artAbzeichen(p) {
+  const vorl = p.artQuelle === 'vorlaeufig';
+  const tip = p.artQuelle === 'pr' ? (p.art === 'produkt' ? `PR ${p.srcPrs.map((n) => '#' + n).join(', ')} ändert src/` : 'kein PR ändert src/') : p.artQuelle === 'vorlaeufig' ? 'vorläufig nach Plan bzw. Labels des Issues, noch kein PR gelesen' : 'noch nicht einzuordnen (kein PR, kein Hinweis im Plan)';
+  return `<span class="abzeichen art-${p.art}" data-tip="${esc(tip)}">${esc(ARTNAME[p.art])}${vorl ? ' (vorl.)' : ''}</span>`;
+}
+const sichtbar = () => D.pakete.filter((p) => art === 'alle' || p.art === art);
+function filterLeiste() {
+  const ZAEHL = {};
+  sichtbar().forEach((p) => { ZAEHL[p.status] = (ZAEHL[p.status] || 0) + 1; });
+  const opts = [['alle', 'Alle', sichtbar().length], ['laufend', 'Laufend', ZAEHL.laufend || 0], ['wartend', 'Wartend', ZAEHL.wartend || 0], ['angehalten', 'Angehalten', ZAEHL.angehalten || 0], ['fertig', 'Fertig', ZAEHL.fertig || 0]];
+  $('filter').innerHTML = opts.map(([k, t, n]) => `<button class="chip" type="button" aria-pressed="${filter === k}" data-f="${k}">${t} (${n})</button>`).join('');
+}
+function liste() {
+  const ps = sichtbar().filter((p) => filter === 'alle' || p.status === filter);
+  if (!ps.length) { $('liste').innerHTML = '<tbody><tr><td class="leer">Keine Pakete in dieser Gruppe.</td></tr></tbody>'; return; }
+  const rang = { laufend: 0, wartend: 1, angehalten: 2, ruht: 3, fertig: 4 };
+  ps.sort((a, b) => rang[a.status] - rang[b.status] || b.ende - a.ende);
+  $('liste').innerHTML = '<thead><tr><th>Paket</th><th>Art</th><th>Zustand</th><th class="z">Gesamtzeit</th><th>Verteilung der Zeit</th><th class="z">Rückläufe</th><th class="z">Tokens</th><th>Haltegrund</th></tr></thead><tbody>' + ps.map((p) => {
+    const g = ST.reduce((a, s) => a + p.summe[s], 0) || 1;
+    const mini = '<div class="mini">' + ST.map((s) => p.summe[s] > 0 ? `<span style="flex:${p.summe[s]};background:${FARBE(s)}" data-tip="${esc(NAMEN[s])}: ${dauerMs(p.summe[s])} (${de(p.summe[s] / g * 100, 0)} %)"></span>` : '').join('') + '</div>';
+    const z = ZUSTAND[p.status];
+    return `<tr class="klick" tabindex="0" data-p="${p.nr}"><td><b>#${p.nr}</b> ${esc(p.titel).slice(0, 90)}</td><td>${artAbzeichen(p)}</td><td><span class="abzeichen">${z[0]} ${z[1]}</span></td><td class="z">${dauerMs(p.gesamt)}</td><td>${mini}</td><td class="z">${p.ruecklauf}</td><td class="z">${tokText(p.tok)}</td><td>${esc((p.haltGrund || '').slice(0, 110)) || '–'}</td></tr>`;
+  }).join('') + '</tbody>';
+}
+$('filter').addEventListener('click', (ev) => { const b = ev.target.closest('[data-f]'); if (b) { filter = b.dataset.f; filterLeiste(); liste(); } });
+$('liste').addEventListener('click', (ev) => { const r = ev.target.closest('[data-p]'); if (r) location.hash = 'paket-' + r.dataset.p; });
+$('liste').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { const r = ev.target.closest('[data-p]'); if (r) { ev.preventDefault(); location.hash = 'paket-' + r.dataset.p; } } });
+
+function gantt(p) {
+  const W = 1000, L = 150, R = 14, T = 8, ZH = 24, H = T + ST.length * ZH + 26;
+  const a = p.start, b = Math.max(p.ende, p.start + 60e3);
+  const x = (t) => L + (t - a) / (b - a) * (W - L - R);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Zeitleiste der Stationen">`;
+  ST.forEach((st, i) => { const y = T + i * ZH; s += `<line class="gitter" x1="${L}" x2="${W - R}" y1="${y + ZH}" y2="${y + ZH}"/><text x="${L - 8}" y="${y + 16}" text-anchor="end">${esc(NAMEN[st])}</text>`; });
+  const n = 6;
+  for (let i = 0; i <= n; i++) { const t = a + (b - a) * i / n; s += `<line class="gitter" x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${T + ST.length * ZH}"/><text x="${x(t)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === n ? 'end' : 'middle'}">${esc(zeit(t))}</text>`; }
+  p.seg.forEach(([s0, e0, art, text, tok, h]) => {
+    const y = T + art * ZH + 3, w = Math.max(2.5, x(e0) - x(s0));
+    const tipp = `<b>${esc(NAMEN[ST[art]])}</b>${h ? ` · Häppchen ${h}` : ''}<br>${esc(text)}<br>${esc(zeit(s0))} – ${esc(hf.format(e0))} Uhr · ${dauerMs(e0 - s0)}${tok ? `<br>${tokText(tok)} Tokens` : ''}`;
+    s += `<rect x="${x(s0)}" y="${y}" width="${w}" height="${ZH - 6}" rx="3" fill="${FARBE(ST[art])}" data-tip="${esc(tipp)}"/>`;
+  });
+  return s + '</svg>';
+}
+function drill(nr) {
+  const p = D.pakete.find((q) => q.nr === nr);
+  if (!p) { $('drillinnen').innerHTML = `<p><button type="button" id="zu">← Zurück</button></p><p class="leer">Paket #${nr} ist nicht in den Daten (letzte 14 Tage).</p>`; return; }
+  const g = ST.reduce((a, s) => a + p.summe[s], 0) || 1;
+  const top = ST.slice().sort((x, y) => p.summe[y] - p.summe[x])[0];
+  const z = ZUSTAND[p.status];
+  const satz = p.summe[top] > 0 ? `Die meiste Zeit geht auf <b>${esc(NAMEN[top])}</b>: ${dauerMs(p.summe[top])} von ${dauerMs(g)} (${de(p.summe[top] / g * 100, 0)} %).` : 'Noch keine Zeit erfasst.';
+  const links = [link(`${GH}/issues/${p.nr}`, `Issue #${p.nr}`), ...p.prs.map((q) => link(`${GH}/pull/${q.nr}`, `PR #${q.nr}${q.status === 'gemergt' ? ' ✓' : q.status === 'offen' ? ' (offen)' : ' (zu)'}`))].join('');
+  let h = `<p><button type="button" id="zu">← Zurück zur Übersicht</button></p>
+  <h1>#${p.nr} ${esc(p.titel)}</h1>
+  <p class="unter">${artAbzeichen(p)} <span class="abzeichen">${z[0]} ${z[1]}</span>${p.haltGrund ? ' · Haltegrund: ' + esc(p.haltGrund) : ''}</p>
+  <p class="links">${links}</p>
+  <div class="fakten">
+   <div class="fakt"><b>${dauerMs(p.gesamt)}</b><span>Gesamtzeit${p.fertig ? '' : ' bis jetzt'}</span></div>
+   <div class="fakt"><b>${esc(zeit(p.start))}</b><span>Start der Kette</span></div>
+   <div class="fakt"><b>${tokText(p.tok)}</b><span>Tokens gesamt</span></div>
+   <div class="fakt"><b>${p.ruecklauf}</b><span>Rückläufe</span></div>
+   <div class="fakt"><b>${p.haeppchenGemergt}${p.offen ? ' + 1 offen' : ''}</b><span>Häppchen gemergt</span></div>
+   <div class="fakt"><b>${p.starts}</b><span>Starts der Kette (${p.mitHalt ? 'mit Halt' : 'ohne Halt'})</span></div>
+  </div>
+  <div class="satz">${satz}</div>
+  <h2>Zeitleiste</h2><p class="unter">Eine Zeile je Station, die Zeit läuft von links nach rechts. Mit der Maus über einen Balken sehen Sie Beginn, Dauer und Tokens.</p>
+  <div class="diagramm">${gantt(p)}</div>
+  <h2>Zeit und Tokens je Station</h2><div class="diagramm">${verteilung(Object.fromEntries(ST.map((s) => [s, p.summe[s]])), p.tokSt, 'Keine Zeit erfasst.')}</div>
+  <h2>Häppchen</h2><div class="tabellenrahmen"><table><thead><tr><th>Nr.</th><th>PR</th><th>Beginn</th><th>Merge</th><th class="z">Dauer</th><th class="z">Rückläufe</th><th class="z">Prüferläufe</th><th class="z">Tokens</th></tr></thead><tbody>` +
+    (p.haeppchen.map((q) => `<tr><td>${q.h}</td><td>${link(`${GH}/pull/${q.pr}`, '#' + q.pr)}</td><td>${esc(zeit(q.start))}</td><td>${esc(zeit(q.ende))}</td><td class="z">${dauerMs(q.dauer)}</td><td class="z">${q.ruecklauf}</td><td class="z">${q.pruefer}</td><td class="z">${tokText(q.tok)}</td></tr>`).join('') || '<tr><td colspan="8" class="leer">Noch kein Häppchen gemergt.</td></tr>') +
+    (p.offen ? `<tr><td>${p.offen.h}</td><td>${p.offen.pr ? link(`${GH}/pull/${p.offen.pr}`, '#' + p.offen.pr + ' (offen)') : 'noch kein PR'}</td><td colspan="6" style="color:var(--text3)">in Arbeit, ${p.offen.sitzungen} Sitzungen bisher</td></tr>` : '') + '</tbody></table></div>' +
+  `<h2>Ablauf in Reihenfolge</h2><div class="tabellenrahmen scroll"><table><thead><tr><th>Von</th><th>Station</th><th class="z">Dauer</th><th class="z">Tokens</th><th>Was</th></tr></thead><tbody>` +
+    p.seg.filter(([s0, e0, art]) => e0 - s0 >= 20000 || !['ci', 'sonst'].includes(ST[art])).map(([s0, e0, art, text, tok, hh]) => `<tr><td>${esc(zeit(s0))}</td><td><span class="punkt" style="background:${FARBE(ST[art])}"></span>${esc(NAMEN[ST[art]])}</td><td class="z">${dauerMs(e0 - s0)}</td><td class="z">${tok ? tokText(tok) : '–'}</td><td>${hh ? 'Häppchen ' + hh + ': ' : ''}${esc(text)}</td></tr>`).join('') + '</tbody></table></div>';
+  if (p.urteile.length) h += `<h2>Urteile der Prüfer</h2><div class="tabellenrahmen scroll"><table><tbody>` + p.urteile.map((u) => `<tr><td>${esc(zeit(u.t))}</td><td>${link(`${GH}/pull/${u.pr}`, '#' + u.pr)}</td><td><span class="abzeichen ${u.u === 'PASS' ? 'gut' : 'schlecht'}">${u.u === 'PASS' ? '✓ PASS' : '✗ FAIL'}</span></td><td>${esc(u.text)}</td></tr>`).join('') + '</tbody></table></div>';
+  if (p.ci.length) h += `<h2>CI-Läufe</h2><div class="tabellenrahmen scroll"><table><thead><tr><th>Start</th><th>Prüfung</th><th>PR</th><th>Stand</th><th>Ergebnis</th><th class="z">Dauer</th></tr></thead><tbody>` + p.ci.map((c) => {
+    const erg = { success: '✓ grün', failure: '✗ rot', cancelled: 'abgebrochen', in_progress: '… läuft', queued: '… wartet' }[c.ergebnis] || c.ergebnis || '–';
+    return `<tr><td>${esc(zeit(c.start))}</td><td>${link(`${GH}/actions/runs/${c.id}`, c.name)}</td><td>${link(`${GH}/pull/${c.pr}`, '#' + c.pr)}</td><td>${esc(c.kopf)}</td><td class="${c.ergebnis === 'failure' ? 'schlecht' : c.ergebnis === 'success' ? 'gut' : ''}">${esc(erg)}</td><td class="z">${dauerMs(c.ende - c.start)}</td></tr>`;
+  }).join('') + '</tbody></table></div>';
+  if (p.halts.length) h += `<h2>Halte</h2><div class="tabellenrahmen"><table><tbody>` + p.halts.map((x) => `<tr><td>${esc(zeit(x.t))}</td><td>${esc(x.grund)}</td></tr>`).join('') + '</tbody></table></div>';
+  $('drillinnen').innerHTML = h;
+}
+function route() {
+  const m = /^#paket-(\d+)$/.exec(location.hash);
+  const d = $('drill');
+  if (m) { drill(+m[1]); d.classList.add('offen'); d.scrollTop = 0; $('haupt').setAttribute('inert', ''); }
+  else { d.classList.remove('offen'); $('haupt').removeAttribute('inert'); }
+}
+document.addEventListener('click', (ev) => { if (ev.target.id === 'zu') location.hash = ''; });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && location.hash) location.hash = ''; });
+addEventListener('hashchange', route);
+
+const modi = ['auto', 'hell', 'dunkel'];
+let modus = 'auto';
+try { modus = localStorage.getItem('kennzahlen-thema') || 'auto'; } catch (e) { /* kein Speicher */ }
+function setzeModus() {
+  if (modus === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', modus === 'hell' ? 'light' : 'dark');
+  $('thema').textContent = 'Darstellung: ' + (modus === 'auto' ? 'automatisch' : modus);
+}
+$('thema').addEventListener('click', () => { modus = modi[(modi.indexOf(modus) + 1) % 3]; try { localStorage.setItem('kennzahlen-thema', modus); } catch (e) { /* egal */ } setzeModus(); });
+
+const ARTEN = ['produkt', 'werkzeug', 'alle'];
+let art = 'produkt';
+try { const g = localStorage.getItem('kennzahlen-art'); if (ARTEN.includes(g)) art = g; } catch (e) { /* kein Speicher */ }
+function zeichneAlles() {
+  $('umschalter').innerHTML = ARTEN.map((a) => `<button type="button" role="radio" aria-checked="${art === a}" data-art="${a}">${ARTNAME[a]}</button>`).join('');
+  const z = D.arten.zaehlung;
+  $('defart').innerHTML = `<b>Produkt</b> = der PR ändert mindestens eine Datei unter <code>src/</code>; ein Paket ist Produkt, sobald einer seiner PRs das tut. <b>Werkzeug</b> = alles andere (tools, .github, .claude, nur test/ oder nur docs). Pakete ohne PR werden vorläufig nach dem Plan im Issue eingeordnet („vorl.“), sonst sind sie „offen“ und zählen nur unter „Alle“. Im Datenstand: ${z.produkt} Produkt, ${z.werkzeug} Werkzeug, ${z.offen} offen.`;
+  $('kacheln').innerHTML = D.kennzahlen.map(kachel).join('');
+  zeichneVerlauf(); zeichneVerbrauch(); zeichneZeit(); filterLeiste(); liste();
+}
+$('umschalter').addEventListener('click', (ev) => { const b = ev.target.closest('[data-art]'); if (!b) return; art = b.dataset.art; try { localStorage.setItem('kennzahlen-art', art); } catch (e) { /* egal */ } zeichneAlles(); });
+$('umschalter').addEventListener('keydown', (ev) => { if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return; art = ARTEN[(ARTEN.indexOf(art) + (ev.key === 'ArrowRight' ? 1 : 2)) % 3]; zeichneAlles(); $('umschalter').querySelector('[aria-checked="true"]').focus(); });
+setzeModus(); zeichneAlles(); standAnzeige(); route();
+setInterval(standAnzeige, 30000);
+</script>
+</body>
+</html>
