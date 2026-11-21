@@ -61,7 +61,7 @@ test("H3 Workflow: der Lastlauf startet nachts und per Eingabe ohne Adresse, die
   assert.match(STAGING, /^ {6}lastlauf:\n {8}description: .+\n {8}type: boolean\n {8}default: false$/m);
   assert.ok(!/inputs\.(url|adresse|ziel)/i.test(STAGING));
   assert.match(job("lastlauf"), /^ {4}if: github\.event_name == 'workflow_dispatch' && inputs\.lastlauf && !inputs\.alarmprobe$/m);
-  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && !inputs\.lastlauf\)$/m);
+  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && \(!inputs\.lastlauf \|\| inputs\.alarmprobe\)\)$/m);
 });
 
 test("H3 Workflow: der Lastlauf teilt die Concurrency-Gruppe des Deploy-Prueffjobs, liest nur die drei Staging-Geheimnisse und nennt keine Adresse", () => {

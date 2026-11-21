@@ -106,7 +106,7 @@ function job(name) {
 }
 
 test("Workflow: der Zeitplan führt die Prüfung nach Deploy aus, der Lastlauf nur per Hand mit lastlauf", () => {
-  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && !inputs\.lastlauf\)$/m);
+  assert.match(job("staging"), /^ {4}if: github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && \(!inputs\.lastlauf \|\| inputs\.alarmprobe\)\)$/m);
   assert.match(job("lastlauf"), /^ {4}if: github\.event_name == 'workflow_dispatch' && inputs\.lastlauf && !inputs\.alarmprobe$/m);
   assert.equal([...WORKFLOW.matchAll(/^ {2}[a-z]+:\n {4}name: /gm)].length, 2);
 });
