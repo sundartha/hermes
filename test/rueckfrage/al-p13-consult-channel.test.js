@@ -1071,7 +1071,7 @@ test("AL-P13-H6c2: ein dem Poll unbekannter Anruf liefert event=none statt eines
 test("AL-P13-38b: consultToreFor liest Schalter und Mandantenrecht nur bei genau true", async () => {
   const { config } = await import("../../src/config.ts");
   const vorher = { ...config.tenancy };
-  const tore = (master, kontext, inCall, profile) => {
+  const tore = ([master, kontext, inCall], profile) => {
     config.tenancy.consultEnabled = master;
     config.tenancy.assistantContextEnabled = kontext;
     config.tenancy.inCallConsultEnabled = inCall;
@@ -1081,24 +1081,24 @@ test("AL-P13-38b: consultToreFor liest Schalter und Mandantenrecht nur bei genau
     const mandantAus = [null, undefined, "x", {}, { allowConsult: "true" }, { allowConsult: 1 }];
     for (const profile of mandantAus)
       assert.deepEqual(
-        tore(true, true, true, profile),
+        tore([true, true, true], profile),
         { tore: { master: true, kontext: true, mandant: false, in_call: true }, erlaubt: false },
         JSON.stringify(profile),
       );
-    assert.deepEqual(tore(true, true, false, { allowConsult: true }), {
+    assert.deepEqual(tore([true, true, false], { allowConsult: true }), {
       tore: { master: true, kontext: true, mandant: true, in_call: false },
       erlaubt: true,
     });
-    assert.deepEqual(tore(false, true, true, { allowConsult: true }), {
+    assert.deepEqual(tore([false, true, true], { allowConsult: true }), {
       tore: { master: false, kontext: true, mandant: true, in_call: true },
       erlaubt: false,
     });
-    assert.deepEqual(tore(true, false, false, { allowConsult: true }), {
+    assert.deepEqual(tore([true, false, false], { allowConsult: true }), {
       tore: { master: true, kontext: false, mandant: true, in_call: false },
       erlaubt: false,
     });
     for (const wert of ["true", 1, undefined])
-      assert.equal(tore(wert, wert, wert, { allowConsult: true }).erlaubt, false, String(wert));
+      assert.equal(tore([wert, wert, wert], { allowConsult: true }).erlaubt, false, String(wert));
   } finally {
     Object.assign(config.tenancy, vorher);
   }
