@@ -693,7 +693,7 @@ export function makeCallRoutes({
   OWNER_ID,
 }: Abhaengigkeiten): Router {
   const router = Router();
-  const jeMandant = makeKeyedChainMutex();
+  const jeMandant: <T>(schluessel: string, arbeit: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
   const bereiche: Bereiche = speicherBereiche(store);
   const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
