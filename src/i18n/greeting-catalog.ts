@@ -1,7 +1,11 @@
 import { LOCALES, localeFor } from "./locales.ts";
 import { withInboundNotice } from "./inbound-notice.ts";
 
-type Locale = { greetingDefault: string; greetingVariants: readonly string[]; inboundNotice: string };
+interface Locale {
+  greetingDefault: string;
+  greetingVariants: readonly string[];
+  inboundNotice: string;
+}
 
 function standardVorlage(locale: Locale) {
   return withInboundNotice(locale.greetingDefault, locale.inboundNotice);
@@ -26,7 +30,7 @@ const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze({
   en: buildTemplates(LOCALES.en),
 });
 
-export function greetingTemplatesFor(language: string | undefined) {
+export function greetingTemplatesFor(language: string | undefined): readonly string[] {
   return GREETING_TEMPLATES_BY_LANGUAGE[localeFor(language).language];
 }
 
@@ -60,7 +64,7 @@ export function greetingWithCurrentOrthography(storedGreeting: string): string {
   return GREETING_ORTHOGRAPHY_MIGRATION.get(storedGreeting) ?? storedGreeting;
 }
 
-export function greetingForLanguage(storedGreeting: string, language: string | undefined) {
+export function greetingForLanguage(storedGreeting: string, language: string | undefined): string {
   const greeting = greetingWithCurrentOrthography(storedGreeting);
   const templates = greetingTemplatesFor(language);
   if (templates.includes(greeting)) return greeting;
@@ -69,7 +73,7 @@ export function greetingForLanguage(storedGreeting: string, language: string | u
     : greeting;
 }
 
-export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }: { storedGreeting: unknown; language: string | undefined; ownerName: string }) {
+export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }: { storedGreeting: unknown; language: string | undefined; ownerName: string }): string {
   if (typeof storedGreeting !== "string")
     throw new TypeError("gespeicherteBegruessungFuer: storedGreeting muss ein String sein, replaceAll braucht Text");
   return greetingForLanguage(storedGreeting, language).replaceAll("{owner}", ownerName);
