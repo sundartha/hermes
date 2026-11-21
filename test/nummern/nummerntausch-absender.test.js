@@ -7,7 +7,6 @@ const HTTP_BAD_GATEWAY = 502;
 const NUMMERN_OBERGRENZE = 100;
 const MONATSMIETE_CENTS = 120;
 const ZIEL = "+4917312345679";
-const AUFWAERM_ZIEL = "+4917312345680";
 const JSON_KOPF = { "content-type": "application/json" };
 const MANDANT_GEBUCHT = "t_absender_gebucht";
 const MANDANT_UNGEBUCHT = "t_absender_ungebucht";
@@ -16,7 +15,7 @@ const ERSATZ_NUMMERN = ["+12025550141", "+12025550142", "+12025550143"];
 const MONATSBELEG = "number_month";
 
 process.env.OUTAGE_ALERT_WINDOW_MS = "0";
-const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", vorspannWahlAbgelehnt: true });
+const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", vorspannWahlAbgelehnt: true, anrufwegWaermen: true });
 const { config } = await import("../../src/config.js");
 const store = await import("../../src/store.js");
 const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
@@ -97,15 +96,13 @@ async function tauschen() {
 
 const tauschErgebnisse = await tauschen();
 
-function anrufen(ziel = ZIEL, senden = hermes.anfrage) {
-  return senden("/api/calls", {
+function anrufen(ziel = ZIEL) {
+  return hermes.anfrage("/api/calls", {
     method: "POST",
     headers: { ...JSON_KOPF, "x-internal-identity": LOGIN_SUB },
     body: JSON.stringify({ to: ziel, objective: "Termin vereinbaren" }),
   });
 }
-
-await anrufen(AUFWAERM_ZIEL, hermes.aufwaermen);
 
 async function aktiveNummerImDashboard() {
   const antwort = await hermes.anfrage("/api/state", { headers: { "x-internal-identity": LOGIN_SUB } });

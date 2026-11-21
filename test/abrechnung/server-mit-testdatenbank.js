@@ -314,6 +314,7 @@ async function hermesAufbauen({
   appRolleDatenbankAnlegen = false,
   appRolleVerwaltetZusatzRollen = false,
   clientBruecke = false,
+  anrufwegWaermen = false,
   ...kennzahlenOptionen
 }) {
   const testPostfach = [];
@@ -347,16 +348,6 @@ async function hermesAufbauen({
     return abrufMitFrist(`${basis}${pfad}`, optionen, { wartezeitMs: START_FRIST_MS });
   }
 
-  const aufwaermAnfragen = [];
-  server.on("request", (req) => aufwaermAnfragen.push(`${req.method} ${req.url}`));
-  const aufwaermAntwort = await aufwaermen("/api/calls", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-internal-identity": LOGIN_SUB },
-    body: JSON.stringify({ to: AUFWAERM_ZIEL, objective: "Termin vereinbaren" }),
-  });
-  await aufwaermAntwort.arrayBuffer();
-  const aufwaermStatus = aufwaermAntwort.status;
-
   async function anmelden() {
     const start = await anfrage("/auth/login", { redirect: "manual" });
     const weiterleitung = new URL(start.headers.get("location"));
@@ -388,7 +379,8 @@ async function hermesAufbauen({
     const gewuenschtesProfil = state.profiles[tenantId];
     delete state.profiles[tenantId];
     store.setProfile(tenantId, gewuenschtesProfil);
-    state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber", ...vorspannNummerFelder() });
+    if (!state.numbers.some((nummer) => nummer.id === "num_kv2_betreiber"))
+      state.numbers.push({ id: "num_kv2_betreiber", ...DOMESTIC_TEST_NUMBER, tenantId, status: "active", providerNumberId: null, providerAgentPhoneNumberId: "phnum_kv2_betreiber", ...vorspannNummerFelder() });
     store.save();
     await store.setKycLevel(tenantId, "card");
     await store.drainFlushes();
@@ -408,5 +400,18 @@ async function hermesAufbauen({
     return new pg.Client({ connectionString: process.env.DATABASE_URL });
   }
 
-  return { db, testPostfach, vorfaelle, aufwaermAnfragen, aufwaermStatus, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
+  let aufwaermStatus = null;
+  if (anrufwegWaermen) {
+    await anmelden();
+    await betreiberDarfAnrufen();
+    const aufwaermAntwort = await aufwaermen("/api/calls", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-internal-identity": LOGIN_SUB },
+      body: JSON.stringify({ to: AUFWAERM_ZIEL, objective: "Termin vereinbaren" }),
+    });
+    await aufwaermAntwort.arrayBuffer();
+    aufwaermStatus = aufwaermAntwort.status;
+  }
+
+  return { db, testPostfach, vorfaelle, aufwaermStatus, anfrage, aufwaermen, anmelden, warteAufProtokoll, betreiberDarfAnrufen, schemaErneutAnwenden, neuerClient };
 }
