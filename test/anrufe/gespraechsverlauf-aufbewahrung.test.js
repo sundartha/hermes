@@ -463,3 +463,42 @@ test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinha
     await sms.close();
   }
 });
+
+test("Kriterium 5: nur get_call_result trägt im _meta höchstens das Feld transcript, ohne den Gesprächsinhalt; kein anderes Werkzeug trägt ihn irgendwo im Ergebnis", async () => {
+  const gateway = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    const body = req.url.endsWith("/cancel")
+      ? { status: "cancelled" }
+      : { ...BEENDET, calls: [BEENDET], callId: BEENDET.id, event: "done", entries: [] };
+    res.end(JSON.stringify(body));
+  });
+  await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
+  const vorher = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = `http://127.0.0.1:${gateway.address().port}`;
+  const server = new McpServer({ name: "hermes-gv-meta", version: "0.0.0" });
+  registerTools(server, { consultAllowed: true, uiHost: { enabled: true }, language: "de" });
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hermes-gv-meta-client", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const { tools } = await client.listTools();
+    assert.ok(tools.some((tool) => tool.name === "get_call_result"));
+    for (const tool of tools) {
+      const antwort = await client.callTool({ name: tool.name, arguments: WERKZEUG_ARGUMENTE[tool.name] ?? {} });
+      if (tool.name !== "get_call_result") {
+        assert.doesNotMatch(JSON.stringify(antwort), new RegExp(MARKER), `${tool.name}: kein Transkript im Ergebnis`);
+        continue;
+      }
+      assert.doesNotMatch(JSON.stringify({ content: antwort.content, structuredContent: antwort.structuredContent }), new RegExp(MARKER));
+      const meta = antwort._meta ?? {};
+      assert.deepEqual(Object.keys(meta).filter((schluessel) => schluessel !== "transcript"), []);
+      assert.doesNotMatch(JSON.stringify(meta.transcript ?? ""), new RegExp(MARKER));
+    }
+  } finally {
+    if (vorher === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = vorher;
+    await client.close();
+    await server.close();
+    await new Promise((resolve) => gateway.close(resolve));
+  }
+});
