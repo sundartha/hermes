@@ -10,13 +10,25 @@ const GEO_KONFIG = z.object({
   billing: z.object({ providerCurrency: z.string(), providerToBucketRateMicro: z.number() }),
 });
 
-function geoKonfig() {
+function geoKonfig(): z.infer<typeof GEO_KONFIG> {
   return GEO_KONFIG.parse(config);
 }
 
 const DEFAULT_PHONE_NUMBER_TYPE = "local";
 
-const COUNTRY_SEARCH_PARAMS = Object.freeze({
+interface CountrySearchEntry {
+  connectionId?: string;
+  phoneNumberType?: string;
+  holdAmountCents?: number;
+}
+
+export interface ProviderPrice {
+  currency: string;
+  upfrontMicroCents?: number;
+  monthlyMicroCents?: number;
+}
+
+const COUNTRY_SEARCH_PARAMS: Readonly<Record<string, CountrySearchEntry>> = Object.freeze({
   AT: {},
   AU: {},
   CA: {},
@@ -29,7 +41,9 @@ const COUNTRY_SEARCH_PARAMS = Object.freeze({
   US: {},
 });
 
-export function searchParamsForCountry(country) {
+export function searchParamsForCountry(
+  country: string | null | undefined,
+): { countryCode: string | undefined; connectionId: string; type: string } {
   const countryCode = kauflandVon(country);
   const entry = COUNTRY_SEARCH_PARAMS[countryCode ?? ""];
   return {
@@ -39,7 +53,7 @@ export function searchParamsForCountry(country) {
   };
 }
 
-export function holdAmountForCountry(country, defaultHoldCents) {
+export function holdAmountForCountry(country: string | null | undefined, defaultHoldCents: number): number {
   const key = (country ?? "").toUpperCase();
   const entry = COUNTRY_SEARCH_PARAMS[key];
   if (entry?.holdAmountCents === undefined) return defaultHoldCents;
@@ -49,7 +63,7 @@ export function holdAmountForCountry(country, defaultHoldCents) {
   return entry.holdAmountCents;
 }
 
-function bucketCentsFromProviderPrice(price, providerMicroCents) {
+function bucketCentsFromProviderPrice(price: ProviderPrice | null | undefined, providerMicroCents: number | undefined): number | null {
   if (!price) return null;
   if (price.currency !== geoKonfig().billing.providerCurrency) return null;
   if (providerMicroCents === undefined || !Number.isInteger(providerMicroCents)) return null;
@@ -59,11 +73,11 @@ function bucketCentsFromProviderPrice(price, providerMicroCents) {
   );
 }
 
-export function holdAmountForProviderPrice(price, defaultHoldCents) {
+export function holdAmountForProviderPrice(price: ProviderPrice | null | undefined, defaultHoldCents: number): number {
   const cents = bucketCentsFromProviderPrice(price, price?.upfrontMicroCents);
   return cents !== null && cents > 0 ? cents : defaultHoldCents;
 }
 
-export function monthlyCostCentsForProviderPrice(price) {
+export function monthlyCostCentsForProviderPrice(price: ProviderPrice | null | undefined): number | null {
   return bucketCentsFromProviderPrice(price, price?.monthlyMicroCents);
 }

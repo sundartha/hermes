@@ -8,7 +8,7 @@ import {
 } from "../begriffe/nummern-vergabe.js";
 import { ANRUFSTART_JOB } from "../begriffe/anrufe.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
-import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
+import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.ts";
 import { speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";

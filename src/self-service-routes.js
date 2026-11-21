@@ -35,7 +35,7 @@ import {
   NUMBER_DISPLAY_STATUS,
 } from "./store/views.ts";
 import { tenantGeo } from "./store/state-ops.js";
-import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
+import { holdAmountForCountry } from "./telephony/provisioning-geo.ts";
 import { kauflandFuer, speicherBereiche } from "./store.js";
 import { isKnownPlanSlug } from "./plans.ts";
 import { tenantQuotaView } from "./billing/meter.js";

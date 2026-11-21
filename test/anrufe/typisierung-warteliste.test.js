@@ -41,7 +41,6 @@ const WARTELISTE = {
   "src/telephony/call-finish.js": GROSS,
   "src/telephony/outage-report.js": GROSS,
   "src/telephony/outbound-gates.js": GROSS,
-  "src/telephony/provisioning-geo.js": FOLGE,
   "src/telephony/registry.js": FOLGE,
   "src/telephony/voice-render.js": FOLGE,
   "src/tts/directive-synth.js": FOLGE,
