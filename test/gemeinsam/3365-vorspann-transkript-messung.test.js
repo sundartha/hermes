@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 
-import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, waitUntil as wartebis } from "../helpers.js";
+import { OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, warteAufEreignis } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
@@ -13,7 +14,7 @@ const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
 const FERTIG = "completed";
 
-const waitUntil = (bedingung, timeoutMs = WARTE_FRIST_MS) => wartebis(bedingung, { timeoutMs });
+const warteAuf = (bedingung, timeoutMs = WARTE_FRIST_MS) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -37,18 +38,21 @@ function beantworte({ req, res }, anfrage) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       beantworte({ req, res }, anfrage);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
@@ -121,18 +125,18 @@ async function waehleAnruf() {
 async function angenommenerAnruf() {
   const callId = await waehleAnruf();
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
-  await waitUntil(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && koerper(anfrage).command_id === `vorspann-${callId}-el`));
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && koerper(anfrage).command_id === `vorspann-${callId}-el`));
   return callId;
 }
 
 test("3365-K22: Messzeilen mit Abstand seit Abheben und seit Vorspann-Ende, je Anruf mit Kennung", async () => {
   const callId = await angenommenerAnruf();
-  await waitUntil(() => log(`[el-vorspann] playback_start ms_seit_abheben=`));
+  await warteAuf(() => log(`[el-vorspann] playback_start ms_seit_abheben=`));
   await wiedergabeEnde(callId);
   await elAngenommen(callId);
-  await waitUntil(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
-  await waitUntil(() => new RegExp(`bridge ms_seit_vorspann_ende=\\d+ call=${callId}`).test(server().stdout));
+  await warteAuf(() => bruecken(umgebung.attrappe, callId).length === EINMAL);
+  await warteAuf(() => new RegExp(`bridge ms_seit_vorspann_ende=\\d+ call=${callId}`).test(server().stdout));
   const werte = [...server().stdout.matchAll(new RegExp(`\\[el-vorspann\\] (playback_start|el_angenommen|bridge) ms_seit_\\w+=(\\d+) call=${callId}`, "g"))];
   assert.deepEqual(werte.map((treffer) => treffer[1]).sort(), ["bridge", "el_angenommen", "playback_start"]);
   for (const treffer of werte) assert.ok(Number(treffer[2]) < WARTE_FRIST_MS * 2, `Messwert ${treffer[2]}`);
@@ -142,7 +146,7 @@ test("3365-K22: Messzeilen mit Abstand seit Abheben und seit Vorspann-Ende, je A
 test("3365-K22: zweites call.answered des EL-Beins -> el_angenommen wird nur einmal gemessen", async () => {
   const callId = await angenommenerAnruf();
   await elAngenommen(callId);
-  await waitUntil(() => log(`[el-vorspann] el_angenommen ms_seit_abheben=`));
+  await warteAuf(() => log(`[el-vorspann] el_angenommen ms_seit_abheben=`));
   await elAngenommen(callId);
   await angenommenerAnruf();
   const messungen = server().stdout.split("\n").filter((zeile) => zeile.includes("el_angenommen ms_seit_abheben=") && zeile.endsWith(` call=${callId}`));
@@ -155,14 +159,14 @@ test("3365-K15: abgespielter Vorspann steht als erste Agent-Zeile im Transkript,
   assert.equal(anrufIn(callId).transcript.length, 0);
   assert.ok(!log(`offenlegung_abgespielt call=${callId}`));
   await wiedergabeEnde(callId);
-  await waitUntil(() => anrufIn(callId).transcript.length === EINMAL);
+  await warteAuf(() => anrufIn(callId).transcript.length === EINMAL);
   const [zeile] = anrufIn(callId).transcript;
   assert.equal(zeile.role, "agent");
   const gesprochen = sprachAnfragen(davor);
   assert.equal(gesprochen.length, EINMAL);
   assert.ok(zeile.text.length > 0);
   assert.equal(zeile.text, koerper(gesprochen[0]).text);
-  await waitUntil(() => log(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
+  await warteAuf(() => log(`[el-vorspann] offenlegung_abgespielt call=${callId}`));
   await wiedergabeEnde(callId);
   await angenommenerAnruf();
   assert.equal(anrufIn(callId).transcript.length, EINMAL);
@@ -171,7 +175,7 @@ test("3365-K15: abgespielter Vorspann steht als erste Agent-Zeile im Transkript,
 test("3365-K15: nicht vollstaendig abgespielter Vorspann steht nicht im Transkript", async () => {
   const callId = await angenommenerAnruf();
   await wiedergabeEnde(callId, "file_not_found");
-  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+  await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   assert.equal(anrufIn(callId).transcript.length, 0);
   assert.ok(!log(`offenlegung_abgespielt call=${callId}`));
 });
@@ -179,7 +183,7 @@ test("3365-K15: nicht vollstaendig abgespielter Vorspann steht nicht im Transkri
 test("3365-K15: Wiedergabe-Ende nach dem Abbruch -> weder Transkriptzeile noch Logzeile offenlegung_abgespielt", async () => {
   const callId = await angenommenerAnruf();
   await wiedergabeEnde(callId, "file_not_found");
-  await waitUntil(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
+  await warteAuf(() => aufleger(umgebung.attrappe, callId).join() === "1,1");
   await wiedergabeEnde(callId);
   await angenommenerAnruf();
   assert.equal(anrufIn(callId).transcript.length, 0);
