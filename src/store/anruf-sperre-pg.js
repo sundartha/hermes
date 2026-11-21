@@ -6,10 +6,13 @@ const SPERRE_GEBEN_SQL = `SELECT pg_advisory_unlock($1, hashtext($2))`;
 const ALLE_GEBEN_SQL = `SELECT pg_advisory_unlock_all()`;
 
 async function alleGeben(client, fehler) {
+  let verbleibend;
   console.error("[anruf-sperre] Sperre nicht freigegeben, Verbindungssperren werden aufgehoben:", fehler.message);
   await client.query(ALLE_GEBEN_SQL).catch((zweiter) => {
+    verbleibend = zweiter;
     console.error("[anruf-sperre] Sperren der Verbindung nicht aufgehoben, enden mit der Verbindung:", zweiter.message);
   });
+  return verbleibend;
 }
 
 async function nehmen(client, schluessel) {
@@ -29,18 +32,19 @@ async function geben(client, schluessel) {
   try {
     await client.query(SPERRE_GEBEN_SQL, schluessel);
   } catch (fehler) {
-    await alleGeben(client, fehler);
+    return alleGeben(client, fehler);
   }
 }
 
 export function mitAnrufSperre(runner, tenantId, arbeit) {
-  return runner.halten(async (client) => {
+  return runner.halten(async (client, verwerfen) => {
     const schluessel = [ANRUF_SPERRE_NAMENSRAUM, String(tenantId)];
     await nehmen(client, schluessel);
     try {
       return await arbeit();
     } finally {
-      await geben(client, schluessel);
+      const nichtGegeben = await geben(client, schluessel);
+      if (nichtGegeben) verwerfen(nichtGegeben);
     }
   });
 }
