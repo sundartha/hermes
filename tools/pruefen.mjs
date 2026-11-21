@@ -740,17 +740,17 @@ function prTextLesen(argv) {
   }
 }
 
-function gruenAufBasis(basis, neu) {
+function gruenAufBasis(basis, hinzugekommen) {
   const ordner = mkdtempSync(join(tmpdir(), "rotprobe-vorab-"));
   const arbeitsbaum = join(ordner, "basis");
   git(["worktree", "add", "--detach", arbeitsbaum, basis]);
   try {
-    for (const datei of neu) {
+    for (const datei of hinzugekommen) {
       mkdirSync(join(arbeitsbaum, dirname(datei)), { recursive: true });
       writeFileSync(join(arbeitsbaum, datei), readFileSync(datei));
     }
     if (existsSync("node_modules")) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
-    return neu.filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
+    return hinzugekommen.filter((datei) => TESTDATEI.test(datei)).filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
   } finally {
     git(["worktree", "remove", "--force", arbeitsbaum]);
     rmSync(ordner, { recursive: true, force: true });
@@ -761,13 +761,13 @@ function prTextVorab(argv) {
   const prText = prTextLesen(argv);
   if (prText === undefined) return EXIT_UNLESBAR;
   const basis = basisAus(argv);
-  const neu = git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n").filter((datei) => TESTDATEI.test(datei));
-  if (neu.length === 0 || git(["diff", "--name-only", basis, "--", "src"]) === "") {
+  const hinzugekommen = git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n");
+  if (!hinzugekommen.some((datei) => TESTDATEI.test(datei)) || git(["diff", "--name-only", basis, "--", "src"]) === "") {
     console.log("Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen.");
     return 0;
   }
   const genannt = gruenAufMaster(prText).map(({ datei }) => datei);
-  const fehlend = gruenAufBasis(basis, neu).filter((datei) => !genannt.includes(datei));
+  const fehlend = gruenAufBasis(basis, hinzugekommen).filter((datei) => !genannt.includes(datei));
   for (const datei of fehlend) console.log(`${datei} ist auf master grün; der PR-Text nennt sie nicht unter „## Überlebende Mutanten“. Eintrag: \`src/datei.js:zeile/id\` wird getötet von \`${datei}\``);
   return fehlend.length === 0 ? 0 : EXIT_ROT;
 }
