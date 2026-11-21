@@ -69,3 +69,12 @@ test("5434-4: Der eigene Spiegel wird mit seit ebenso gefiltert", async () => {
   assert.equal((await b.anrufeDesMandanten(BOOTSTRAP_TENANT_ID)).length, 3);
   assert.ok(alt.id && offen.id);
 });
+
+test("5434-5: Die Entprellung fragt mit dem Fensterbeginn 60 Minuten vor endedAt, ohne lesbares endedAt ohne Fenster", async () => {
+  const gefragt = [];
+  const store = { anrufeDesMandanten: async (...argumente) => (gefragt.push(argumente), []) };
+  const basis = { id: "c1", tenantId: "t1", direction: "outbound", failureReason: NICHT_GESTARTET };
+  await planNotPlacedMail({ store, call: { ...basis, endedAt: iso(0) }, mailer: {}, accounts: konto });
+  await planNotPlacedMail({ store, call: { ...basis, endedAt: "kaputt" }, mailer: {}, accounts: konto });
+  assert.deepEqual(gefragt, [["t1", iso(60)], ["t1", undefined]]);
+});
