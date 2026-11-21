@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
 
-import { PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { PROBE_STAGING_TEST_TOKEN, PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const COMMIT = "e".repeat(40);
 const STAGING = "https://hermes-staging-erpv.onrender.com";
@@ -75,6 +75,7 @@ async function aufrufen({ fall = {}, umgebung = {}, offene = [], ohneAdresse = f
     GITHUB_API_URL: `http://127.0.0.1:${github}`,
     STAGING_URL: STAGING,
     STAGING_PROBE_ZIEL: ZIEL,
+    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_TELNYX_KEY: PROBE_TELNYX_SCHLUESSEL,
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify(fallWerte),
