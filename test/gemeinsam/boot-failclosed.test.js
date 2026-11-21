@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BASE_ENV, startServer, startServerExpectExit } from "../helpers.js";
-import { planCapUnderivableFindings } from "../../src/boot-guard.js";
+import { planCapUnderivableFindings } from "../../src/boot-guard.ts";
 import { CATALOG_SLUGS } from "../../src/plans.ts";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

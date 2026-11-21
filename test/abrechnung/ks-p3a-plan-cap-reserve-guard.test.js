@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { planCapReserveFindings, PLAN_CAP_FINDING } from "../../src/boot-guard.js";
+import { planCapReserveFindings, PLAN_CAP_FINDING } from "../../src/boot-guard.ts";
 import { planCapCents } from "../../src/billing/plan-caps.ts";
 import { CATALOG_SLUGS } from "../../src/plans.ts";
 import { RESERVE_LEAD_MINUTES } from "../../src/begriffe/abrechnung.ts";

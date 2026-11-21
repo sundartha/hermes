@@ -10,7 +10,7 @@ import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   ZUGANG_MANGEL,
 } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { EL_INBOUND_ACCESS_FINDING } from "../../src/boot-guard.js";
+import { EL_INBOUND_ACCESS_FINDING } from "../../src/boot-guard.ts";
 import {
   BASE_ENV,
   ROOT,

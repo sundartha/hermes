@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeDurableAudit } from "../../src/durable-audit.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
-import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.js";
+import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.ts";
 import { makeDefaultState, openOutageAlert } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";

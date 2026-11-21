@@ -3,7 +3,7 @@ import { mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit, seedCall, seedState } from "../helpers.js";
 import { healBootstrapStore } from "../../src/boot.js";
-import { BOOTSTRAP_HEAL } from "../../src/boot-guard.js";
+import { BOOTSTRAP_HEAL } from "../../src/boot-guard.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const BOOTSTRAP_ENV = Object.freeze({

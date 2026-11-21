@@ -11,8 +11,8 @@ function treffer(bereich, liste, datei) {
 }
 
 test("Bereichskarte: boot-guard ist Eingang im Bereich gemeinsam", () => {
-  assert.equal(treffer("gemeinsam", "eingaenge", "src/boot-guard.js"), true);
-  assert.equal(treffer("gemeinsam", "fachlogik", "src/boot-guard.js"), false);
+  assert.equal(treffer("gemeinsam", "eingaenge", "src/boot-guard.ts"), true);
+  assert.equal(treffer("gemeinsam", "fachlogik", "src/boot-guard.ts"), false);
 });
 
 test("Bereichskarte: boot-guard.ts waere ebenso Eingang", () => {
@@ -20,7 +20,7 @@ test("Bereichskarte: boot-guard.ts waere ebenso Eingang", () => {
 });
 
 test("Bereichskarte: boot-guard ist in keinem anderen Bereich erfasst", () => {
-  const andere = karte.filter((e) => e.bereich !== "gemeinsam" && (treffer(e.bereich, "eingaenge", "src/boot-guard.js") || treffer(e.bereich, "fachlogik", "src/boot-guard.js")));
+  const andere = karte.filter((e) => e.bereich !== "gemeinsam" && (treffer(e.bereich, "eingaenge", "src/boot-guard.ts") || treffer(e.bereich, "fachlogik", "src/boot-guard.ts")));
   assert.deepEqual(andere, []);
 });
 
