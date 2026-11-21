@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
-import { config as basisKonfiguration } from "../../src/config.js";
+import { config as basisKonfiguration } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { ersatzSpurEntfernen } from "../../src/store.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
@@ -200,4 +200,26 @@ test("Scheitert das Pruefen der Nummern und das Zurueckgeben, nennt der Fehler d
   assert.deepEqual(b.load().numbers, []);
   assert.deepEqual(bestellungen, []);
   assert.deepEqual(await lesen(db, NUMMERN), []);
+});
+
+test("Ein Flush ordnet neue Nummern und Auftraege zweier Mandanten jeweils ihrem eigenen Mandanten zu", async () => {
+  const db = await aufbau();
+  const zweiter = "t_zeilen_zwei_y";
+  await db.query("INSERT INTO tenant (id, status, idp_subject, country) VALUES ($1, 'active', $1, 'US')", [zweiter]);
+  const b = await neueInstanz(db);
+  const zustand = b.load();
+  for (const [tenantId, e164] of [[MANDANT, E164], [zweiter, NEU]]) {
+    zustand.numbers.push({ id: `num_${tenantId}`, tenantId, e164, provider: "telnyx", status: "active", country: "US", language: "en" });
+    zustand.provisioningJobs.push({ id: `job_${tenantId}`, numberId: `num_${tenantId}`, tenantId, kind: "provision_number", status: "done", idempotencyKey: `key_${tenantId}`, attempts: 1, lastError: null, createdAt: "2026-11-21T10:00:00.000Z" });
+  }
+  b.save();
+  await b.drainFlushes();
+  const wert = async (mandant, text) => {
+    await db.query("SELECT set_config('app.current_tenant', $1, false)", [mandant]);
+    return (await db.query(text)).rows;
+  };
+  assert.deepEqual(await wert(MANDANT, "SELECT id, tenant_id FROM number"), [{ id: `num_${MANDANT}`, tenant_id: MANDANT }]);
+  assert.deepEqual(await wert(zweiter, "SELECT id, tenant_id FROM number"), [{ id: `num_${zweiter}`, tenant_id: zweiter }]);
+  assert.deepEqual(await wert(MANDANT, "SELECT id, tenant_id FROM provisioning_job"), [{ id: `job_${MANDANT}`, tenant_id: MANDANT }]);
+  assert.deepEqual(await wert(zweiter, "SELECT id, tenant_id FROM provisioning_job"), [{ id: `job_${zweiter}`, tenant_id: zweiter }]);
 });
