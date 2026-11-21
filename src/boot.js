@@ -112,7 +112,7 @@ function assertPricedModels(config) {
   if (!unpriced.length) return;
   console.error(
     `[boot] Start abgebrochen: Modell(e) ohne Preis in modelPricesUsd: ${unpriced.join(",")} - ` +
-      "jedes konfigurierte Modell braucht eine Staffel in MODEL_PRICE_SCHEDULES (src/config.js), " +
+      "jedes konfigurierte Modell braucht eine Staffel in MODEL_PRICE_SCHEDULES (src/config.ts), " +
       "BEVOR CLAUDE_MODEL/PRECALL_BRIEFING_MODEL darauf gestellt wird. Eine DATIERTE " +
       "Snapshot-ID ist ein ANDERER Schluessel als der Alias.",
   );
