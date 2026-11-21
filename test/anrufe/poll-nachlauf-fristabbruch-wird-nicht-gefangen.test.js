@@ -58,3 +58,28 @@ test("Fristabbruch beim Sichern des Anbieter-Ergebnisses im Nachlauf wird nicht 
   assert.equal(statusNachFrist, "active");
   assert.equal(zeilen.some((z) => z.includes("[el-nachlauf] Anbieter-Ergebnis nicht gesichert")), false, zeilen.join("\n"));
 });
+
+test("Ein Schreibfehler, dessen Text von einer Frist spricht, aber kein Fristabbruch ist, wird im Nachlauf gemeldet; Anrufende und Freigabe laufen", async () => {
+  const state = leererZustand();
+  const call = seedAusgehenderElCall(state, { answeredVorS: LAUFZEIT_S, mitGespraech: true });
+  const freigegeben = [];
+  const { el, store, gebucht } = baueHarness(state);
+  store.addActionItem = () => {
+    throw new Error("Zugriffsfrist abgelaufen, aber nur im Text");
+  };
+  store.leitungsplaetze = { freigeben: (id) => freigegeben.push(id) };
+  const zeilen = await fehlerausgabeVonAsync(() =>
+    withFetch(
+      async () => ({ ok: true, status: HTTP_OK, json: async () => GESPRAECH }),
+      async () => {
+        await el.abfrageDurchLauf(call.id);
+        await waitUntil(() => freigegeben.length > 0);
+      },
+    ),
+  );
+
+  assert.ok(zeilen.some((z) => z.includes("[el-nachlauf] Anbieter-Ergebnis nicht gesichert") && z.includes(`call=${call.id}`)), zeilen.join("\n"));
+  assert.equal(call.status, "completed");
+  assert.deepEqual(freigegeben, [call.id]);
+  assert.deepEqual(gebucht, [1]);
+});
