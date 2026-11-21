@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.js");
+const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.ts");
 const { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } = await import("../pg-helpers.js");
 
 const ABSENDER = "+4930555000330";
