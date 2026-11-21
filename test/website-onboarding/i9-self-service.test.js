@@ -5,7 +5,7 @@ import express from "express";
 import { makePgTestStore } from "../pg-helpers.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
-import { greetingTemplatesFor } from "../../src/i18n/greeting-catalog.js";
+import { greetingTemplatesFor } from "../../src/i18n/greeting-catalog.ts";
 import { PERSONA_STYLE_IDS } from "../../src/i18n/locales.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { defaultSettings } from "../../src/store.js";
