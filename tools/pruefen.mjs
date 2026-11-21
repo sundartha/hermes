@@ -751,7 +751,7 @@ function gruenAufBasis(basis, hinzugekommen) {
       mkdirSync(join(arbeitsbaum, dirname(datei)), { recursive: true });
       writeFileSync(join(arbeitsbaum, datei), readFileSync(datei));
     }
-    if (existsSync("node_modules")) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
+    if (existsSync("node_modules") && !existsSync(join(arbeitsbaum, "node_modules"))) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
     return hinzugekommen.filter((datei) => TESTDATEI.test(datei)).filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
   } finally {
     git(["worktree", "remove", "--force", arbeitsbaum]);

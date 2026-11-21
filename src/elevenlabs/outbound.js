@@ -380,6 +380,19 @@ function schreibeNeueAnbieterZeilen(store, callId, zeilen) {
   return ergebnis;
 }
 
+async function sichereErgebnisUndFelder({ store, callId, conversation, politik }) {
+  try {
+    store.recordProviderCallResult(callId, {
+      summary: providerSummaryOf(conversation, politik),
+      objectiveAchieved: objectiveAchievedOf(),
+    });
+    await persistCollectedFields({ store, callId, conversation, politik });
+    return null;
+  } catch (fehler) {
+    return { fehler };
+  }
+}
+
 async function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik, stimmenAnzahlFuer }) {
   const zeilen = spokenLines(conversation);
   const audioTagMarken = reportAudioTags(callId, zeilen);
@@ -391,11 +404,7 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
     ...(stimmenAnzahl === null ? {} : { stimmenAnzahl }),
   });
   await schreibeNeueAnbieterZeilen(store, callId, zeilen);
-  store.recordProviderCallResult(callId, {
-    summary: providerSummaryOf(conversation, politik),
-    objectiveAchieved: objectiveAchievedOf(),
-  });
-  await persistCollectedFields({ store, callId, conversation, politik });
+  const speicherFehler = await sichereErgebnisUndFelder({ store, callId, conversation, politik });
   const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
@@ -407,6 +416,7 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
     erwarteTelnyxSip: fuehrtTelnyxSip,
     jetzt: () => new Date(),
   });
+  if (speicherFehler) throw speicherFehler.fehler;
 }
 
 function ownerFirstMessage({ call, offenlegung, firstName }) {
