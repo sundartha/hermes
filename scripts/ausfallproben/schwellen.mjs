@@ -27,11 +27,11 @@ export const BEREIT_FRIST_MS = 90_000;
 export const AUFRAEUM_RESERVE_MS = 20_000;
 export const STOPP_FRIST_MS = 10_000;
 
-const KINDER = {
+const BEREIT_WARTEN = {
   "elevenlabs-aus": 2,
   "elevenlabs-langsam": 2,
   "postgres-neustart": 1,
-  "instanz-tod": 2,
+  "instanz-tod": 3,
   "deploy-bei-anruf": 1,
 };
 
@@ -53,7 +53,7 @@ const STOPPS_ZWISCHEN_KINDERN = {
 
 export function gesamtFristMs(probe) {
   return (
-    KINDER[probe] * BEREIT_FRIST_MS +
+    BEREIT_WARTEN[probe] * BEREIT_FRIST_MS +
     (STOPPS_ZWISCHEN_KINDERN[probe] ?? 0) * STOPP_FRIST_MS +
     LAUFZEIT_NACH_BEREIT_MS[probe](SCHWELLEN[probe]) +
     AUFRAEUM_RESERVE_MS
