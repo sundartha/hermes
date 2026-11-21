@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { localeFor, LOCALES } from "../i18n/locales.ts";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
-import { callLocaleFor } from "./call-locale.ts";
+import { inboundElLocaleOf as inboundElLocaleAusSprachwahl } from "./call-locale.ts";
 import { callTimeContext } from "./time-context.ts";
 import {
   OVERRIDE_ALL_LEAF_PATHS,
@@ -67,15 +67,8 @@ export function callBindingTokenOf(body) {
   return tokenAusKopfzeilen(body) || alsToken(body?.dynamic_variables?.[EL_CALL_BINDING_VARIABLE]);
 }
 
-export function inboundElLocaleOf({ store, config, call }) {
-  return callLocaleFor(store.load(), {
-    tenantId: call.tenantId,
-    numberRecord: store.numberRecordByE164(call.to),
-    ownerName: null,
-    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
-    to: null,
-    callLanguage: call.language,
-  });
+export function inboundElLocaleOf(eingabe) {
+  return inboundElLocaleAusSprachwahl(eingabe);
 }
 
 function inboundDynamicVariables({ owner, bundle, time, situation }) {

@@ -13,7 +13,7 @@ import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
-import { callLocaleFor, providerVoicemailMessage } from "./call-locale.ts";
+import { callLocaleOf as callLocaleAusSprachwahl, providerVoicemailMessage } from "./call-locale.ts";
 import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation, listConversations } from "./convai.ts";
 import { makeAnrufstartAuftrag } from "./anrufstart-auftrag.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
@@ -338,15 +338,8 @@ export function dynamicVariables({
   };
 }
 
-export function callLocaleOf({ store, config, call, ownerName }) {
-  return callLocaleFor(store.load(), {
-    tenantId: call.tenantId,
-    numberRecord: store.numberRecordByE164(call.from),
-    ownerName,
-    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
-    to: call.to,
-    callLanguage: call.language,
-  });
+export function callLocaleOf(eingabe) {
+  return callLocaleAusSprachwahl(eingabe);
 }
 
 function recordAbsenderMessung(store, callId, conversation) {

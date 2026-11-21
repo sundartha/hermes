@@ -6,7 +6,7 @@ import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-vo
 interface Sprachwahl {
   language: string;
   voiceProfile: string;
-  disclosure: (ownerName: string) => string;
+  disclosure: (ownerName: string | null) => string;
   voicemailBody: (openingLine: string) => string;
   disclosureOwnerFallback: string;
 }
@@ -30,7 +30,7 @@ const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
 
-function calleeLanguage(to: string): string | null {
+function calleeLanguage(to: string | null): string | null {
   const land = countryForE164(to);
   return (land && SPRACHE_JE_LAND[land]) ?? null;
 }
@@ -40,7 +40,7 @@ function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord,
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-function disclosureLanguageOf(state: MandantZustand, { tenantId, numberRecord, to }: Zugriff & { to: string }): string {
+function disclosureLanguageOf(state: MandantZustand, { tenantId, numberRecord, to }: Zugriff & { to: string | null }): string {
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -48,7 +48,7 @@ const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 
 const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
 
-const providerDisclosureFirst = (locale: Sprachwahl, ownerName: string): string =>
+const providerDisclosureFirst = (locale: Sprachwahl, ownerName: string | null): string =>
   [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
 
 export function providerVoicemailMessage({ locale, ownerName, openingLine }: { locale: Sprachwahl; ownerName: string; openingLine: string }): string {
@@ -57,7 +57,7 @@ export function providerVoicemailMessage({ locale, ownerName, openingLine }: { l
 
 export function callLocaleFor(
   state: MandantZustand,
-  { tenantId, numberRecord, ownerName, defaultVoiceId, to, callLanguage }: Zugriff & { ownerName: string; defaultVoiceId: string; to: string; callLanguage?: string | undefined },
+  { tenantId, numberRecord, ownerName, defaultVoiceId, to, callLanguage }: Zugriff & { ownerName: string | null; defaultVoiceId: string; to: string | null; callLanguage?: string | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
   const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to }));
@@ -71,4 +71,42 @@ export function callLocaleFor(
         : providerDisclosureFirst(offenlegung, ownerName),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
   };
+}
+
+export interface LocaleSpeicher {
+  load: () => MandantZustand;
+  numberRecordByE164: (e164: string | undefined) => Zugriff["numberRecord"];
+}
+
+export interface LocaleKonfiguration {
+  telnyx: { telnyxElevenLabs: { voiceId: string } };
+}
+
+export interface LocaleAnruf {
+  tenantId: string;
+  from?: string | undefined;
+  to: string;
+  language?: string | undefined;
+}
+
+export function callLocaleOf({ store, config, call, ownerName }: { store: LocaleSpeicher; config: LocaleKonfiguration; call: LocaleAnruf; ownerName: string | null }): AnrufSprache {
+  return callLocaleFor(store.load(), {
+    tenantId: call.tenantId,
+    numberRecord: store.numberRecordByE164(call.from),
+    ownerName,
+    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
+    to: call.to,
+    callLanguage: call.language,
+  });
+}
+
+export function inboundElLocaleOf({ store, config, call }: { store: LocaleSpeicher; config: LocaleKonfiguration; call: LocaleAnruf }): AnrufSprache {
+  return callLocaleFor(store.load(), {
+    tenantId: call.tenantId,
+    numberRecord: store.numberRecordByE164(call.to),
+    ownerName: null,
+    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
+    to: null,
+    callLanguage: call.language,
+  });
 }
