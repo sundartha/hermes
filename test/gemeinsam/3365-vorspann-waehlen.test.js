@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
@@ -8,7 +9,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil as wartebis,
+  warteAufEreignis,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -39,7 +40,7 @@ const FEHLER_DETAIL = "detail-mit-geheimnis";
 const DEPLOY_TOKEN = "3365-vorspann-deploy-token-mindestens-32";
 const TRAEGER_SID = "v3:ob-3365-h2a2";
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const beinVon = (callId) => `cc_callee_${callId}`;
 const nachPfad = (attrappe, pfad) => attrappe.anfragen.filter((anfrage) => anfrage.method === "POST" && anfrage.path === pfad);
@@ -61,6 +62,7 @@ async function antworteWahl(res, anfrage, steuerung) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const steuerung = {};
   const server = http.createServer((req, res) => {
     let roh = "";
@@ -68,6 +70,7 @@ async function starteAttrappe() {
     req.on("end", async () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       if (req.url.startsWith(TTS_PFAD)) {
         await steuerung.ttsWartet;
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
@@ -85,6 +88,7 @@ async function starteAttrappe() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     steuerung,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
@@ -184,8 +188,8 @@ test("3365-B2: Max-Dauer-Timer des Anrufs legt das Call-Control-Bein auf und bee
   const to = naechsteNummer();
   const { callId } = await (await anrufStarten(to, { max_duration_s: KURZE_MAX_DAUER_S })).json();
   assert.equal(koerper(wahlen(attrappe, callId)[0]).time_limit_secs, KURZE_MAX_DAUER_S);
-  await waitUntil(() => aufleger(attrappe, callId).length === EINMAL);
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aufleger(attrappe, callId).length === EINMAL);
+  await warteAuf(() => anrufIn(callId).status === "completed");
 });
 
 test("3365-B3: Wahl scheitert (HTTP 422) -> kein TeXML-Versuch, Anruf failed, Fehlerdetail des Anbieters nicht im Log", async () => {
@@ -233,7 +237,7 @@ test("3365-B4: cancel_call waehrend des TTS-Wartens -> keine Wahl, kein TeXML, 4
   const texmlVorher = nachPfad(attrappe, TEXML_PFAD).length;
   await mitSteuerung({ ttsWartet }, async () => {
     const start = anrufStarten(to);
-    await waitUntil(() => ttsAnfragen(attrappe).length > ttsVorher);
+    await warteAuf(() => ttsAnfragen(attrappe).length > ttsVorher);
     const call = anrufZu(to);
     assert.equal((await abbrechen(call.id)).status, HTTP_OK);
     freigeben();
@@ -265,7 +269,7 @@ test("3365-B4: Anrufpause waehrend des TTS-Wartens -> keine Wahl, kein TeXML, An
   const texmlVorher = nachPfad(attrappe, TEXML_PFAD).length;
   await mitSteuerung({ ttsWartet }, async () => {
     const start = anrufStarten(to);
-    await waitUntil(() => ttsAnfragen(attrappe).length > ttsVorher);
+    await warteAuf(() => ttsAnfragen(attrappe).length > ttsVorher);
     await setzeAnrufpause(true);
     try {
       freigeben();
@@ -290,14 +294,14 @@ test("3365-B5: Anruf waehrend der Wahl abgebrochen -> das frisch angelegte Bein 
     const to = naechsteNummer();
     await mitSteuerung({ wahlWartet, hangupFehler }, async () => {
       const start = anrufStarten(to);
-      await waitUntil(() => anrufZu(to) && gewaehlteAnfrage(attrappe, to));
+      await warteAuf(() => anrufZu(to) && gewaehlteAnfrage(attrappe, to));
       const call = anrufZu(to);
       assert.equal((await abbrechen(call.id)).status, HTTP_OK);
       assert.equal(aufleger(attrappe, call.id).length, 0);
       freigeben();
       await start;
-      await waitUntil(() => aufleger(attrappe, call.id).length >= EINMAL);
-      if (hangupFehler) await waitUntil(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${call.id}:`));
+      await warteAuf(() => aufleger(attrappe, call.id).length >= EINMAL);
+      if (hangupFehler) await warteAuf(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${call.id}:`));
       else assert.ok(!srv.stdout.includes(`auflegen fehlgeschlagen call=${call.id}`));
     });
   }
@@ -308,7 +312,7 @@ test("3365-B6: cancel_call legt das Call-Control-Bein auf", async () => {
   const { callId } = await (await anrufStarten()).json();
   assert.equal(aufleger(attrappe, callId).length, 0);
   assert.equal((await abbrechen(callId)).status, HTTP_OK);
-  await waitUntil(() => aufleger(attrappe, callId).length === EINMAL);
+  await warteAuf(() => aufleger(attrappe, callId).length === EINMAL);
 });
 
 test("3365-B7: keine Geheimnisse in Anfragepfaden, Webhook-URLs, Rufnummern und Log", async () => {

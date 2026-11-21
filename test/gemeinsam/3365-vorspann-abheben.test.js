@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 
 import {
@@ -11,7 +12,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil as wartebis,
+  warteAufEreignis,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -42,7 +43,7 @@ const FEHLER_DETAIL = "detail-mit-geheimnis";
 const READ_ONLY_DIR = 0o500;
 const WRITABLE_DIR = 0o700;
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const beinVon = (callId) => `cc_callee_${callId}`;
 const nachPfad = (attrappe, pfad) => attrappe.anfragen.filter((anfrage) => anfrage.method === "POST" && anfrage.path === pfad);
@@ -63,12 +64,14 @@ async function antworteWahl(res, anfrage, steuerung) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const steuerung = {};
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", async () => {
       anfragen.push({ method: req.method, path: req.url, roh });
+      ereignisse.emit("aenderung");
       if (req.url.startsWith(TTS_PFAD)) {
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
@@ -87,6 +90,7 @@ async function starteAttrappe() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     steuerung,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
@@ -187,7 +191,7 @@ async function neuerAnruf() {
 async function starteUndHebeAb() {
   const callId = await neuerAnruf();
   assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length === EINMAL);
   return callId;
 }
 
@@ -200,7 +204,7 @@ test("3365-C1: call.answered -> Antwort 200, playback_start mit der Vorspann-Adr
   const callId = await neuerAnruf();
   assert.equal(anrufIn(callId).answeredAt ?? null, null);
   assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => aktionen(umgebung.attrappe, beinVon(callId), "playback_start").length === EINMAL);
   assert.match(koerper(aktionen(umgebung.attrappe, beinVon(callId), "playback_start")[0]).audio_url, new RegExp(`^${PUBLIC_URL}/voice/tts/[A-Za-z0-9_-]{43}$`));
   await bis(() => anrufIn(callId).answeredAt);
 });
@@ -213,7 +217,7 @@ test("3365-C1: die 200 kommt an, solange playback_start beim Anbieter noch haeng
     const callId = await neuerAnruf();
     try {
       assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-      await waitUntil(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
+      await warteAuf(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
     } finally {
       freigeben();
     }
@@ -260,7 +264,7 @@ test("3365-C4: ungueltige Signatur -> 403 ohne Aktion; gueltige Signatur -> 200 
   await verarbeitet();
   assert.equal(aktionen(attrappe, beinVon(callId), "playback_start").length, 0);
   assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-  await waitUntil(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => aktionen(attrappe, beinVon(callId), "playback_start").length === EINMAL);
 });
 
 test("3365-C5: Vorspann-Datei ist mehrfach abrufbar bis call.playback.ended, danach 404", async () => {
@@ -325,14 +329,14 @@ test("3365-C6: scheitert die Wiedergabe -> Bein aufgelegt und Grund im Log; sche
   await mitSteuerung({ playbackFehler: true, hangupFehler: true }, async () => {
     const callId = await neuerAnruf();
     await sendeEreignis({ callId, typ: "call.answered" });
-    await waitUntil(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${callId}:`));
     assert.ok(srv.stdout.includes(`[el-vorspann] abheben fehlgeschlagen call=${callId}:`), srv.stdout);
   });
   await mitSteuerung({ playbackFehler: true }, async () => {
     const callId = await neuerAnruf();
     await sendeEreignis({ callId, typ: "call.answered" });
-    await waitUntil(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
     assert.ok(srv.stdout.includes(`[el-vorspann] abheben fehlgeschlagen call=${callId}:`), srv.stdout);
     assert.ok(!srv.stdout.includes(`[el-vorspann] auflegen fehlgeschlagen call=${callId}:`), srv.stdout);
   });
@@ -344,7 +348,7 @@ test("3365-C6: ein Fehler beim Verarbeiten eines Ereignisses wird protokolliert 
   fs.chmodSync(srv.dataDir, READ_ONLY_DIR);
   try {
     assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
   } finally {
     fs.chmodSync(srv.dataDir, WRITABLE_DIR);
   }
@@ -398,8 +402,8 @@ test("3523: scheitert das Speichern beim Abheben -> das Bein wird genau einmal a
   fs.chmodSync(srv.dataDir, READ_ONLY_DIR);
   try {
     assert.equal((await sendeEreignis({ callId, typ: "call.answered" })).status, HTTP_OK);
-    await waitUntil(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => aktionen(attrappe, beinVon(callId), "hangup").length === EINMAL);
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}:`));
   } finally {
     fs.chmodSync(srv.dataDir, WRITABLE_DIR);
   }

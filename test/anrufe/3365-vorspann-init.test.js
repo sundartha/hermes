@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
@@ -14,7 +15,7 @@ import {
   seedCall,
   seedState,
   startServer,
-  waitUntil as wartebis,
+  warteAufEreignis,
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -37,7 +38,7 @@ const ABSENDER = "+15005550006";
 const ANGERUFENER = "+491737250001";
 const KENNUNG_MENGE = 6;
 
-const waitUntil = (bedingung) => wartebis(bedingung, { timeoutMs: WARTE_FRIST_MS });
+const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
 const istEl = (anfrage) => koerper(anfrage).command_id.endsWith("-el");
 const calleeVon = (callId) => `cc_callee_${callId}`;
@@ -67,18 +68,21 @@ function beantworte({ req, res }, anfrage) {
 
 async function starteAttrappe() {
   const anfragen = [];
+  const ereignisse = new EventEmitter();
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
     req.on("end", () => {
       const anfrage = { method: req.method, path: req.url, roh };
       anfragen.push(anfrage);
+      ereignisse.emit("aenderung");
       beantworte({ req, res }, anfrage);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     anfragen,
+    ereignisse,
     url: `http://127.0.0.1:${server.address().port}`,
     close: () => {
       server.closeAllConnections();
@@ -195,8 +199,8 @@ async function init(call, extra = {}) {
 async function angenommenerAnruf(extra) {
   const callId = await neuerAnruf(extra);
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
-  await waitUntil(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
-  await waitUntil(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
+  await warteAuf(() => aktionen(umgebung.attrappe, calleeVon(callId), "playback_start").length === EINMAL);
+  await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
   return callId;
 }
 
@@ -242,9 +246,9 @@ test("3365-K20: Aufbauphase ohne Prozesszustand -> beide bekannten Beine aufgele
   const { attrappe, srv } = umgebung;
   const callId = VERWAISTE.aufbau.id;
   assert.equal((await sende(callId, ereignisse[0])).status, HTTP_OK);
-  await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
-  await waitUntil(() => srv.stdout.includes(logZeile("zustand_fehlt", callId)));
-  await waitUntil(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
+  await warteAuf(() => srv.stdout.includes(logZeile("zustand_fehlt", callId)));
+  await warteAuf(() => anrufIn(callId).status === "failed");
   assert.equal(anrufIn(callId).failureReason, "zustand_fehlt");
   assert.equal(aktionen(attrappe, calleeVon(callId), "playback_start").length, 0);
   assert.equal(bruecken(attrappe, callId).length, 0);
@@ -263,8 +267,8 @@ test("3365-K20: Aufbauphase mit nur einem bekannten Bein -> nur dieses aufgelegt
   assert.deepEqual(aufleger(attrappe, callId), [0, 0]);
   assert.equal(anrufIn(callId).status, "active");
   await sende(callId, ereignisse[0]);
-  await waitUntil(() => aufleger(attrappe, callId).join() === "1,0");
-  await waitUntil(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => aufleger(attrappe, callId).join() === "1,0");
+  await warteAuf(() => anrufIn(callId).status === "failed");
 });
 
 test("3365-K20: nach der Bruecke ohne Prozesszustand -> Antwort-Ereignisse werden ignoriert", async () => {
@@ -283,8 +287,8 @@ test("3365-K20: nach der Bruecke legt die Gegenstelle auf -> EL-Bein aufgelegt, 
   const { attrappe } = umgebung;
   const callId = VERWAISTE.bruecke2.id;
   await sende(callId, "call.hangup");
-  await waitUntil(() => aufleger(attrappe, callId).join() === "0,1");
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aufleger(attrappe, callId).join() === "0,1");
+  await warteAuf(() => anrufIn(callId).status === "completed");
   assert.ok(!anrufIn(callId).failureReason);
   assert.ok(!anrufIn(callId).elFallbackAt);
 });
@@ -293,8 +297,8 @@ test("3365-K20: nach der Bruecke legt das EL-Bein auf -> Angerufener aufgelegt, 
   const { attrappe } = umgebung;
   const callId = VERWAISTE.bruecke3.id;
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  await waitUntil(() => aufleger(attrappe, callId).join() === "1,0");
-  await waitUntil(() => anrufIn(callId).status === "completed");
+  await warteAuf(() => aufleger(attrappe, callId).join() === "1,0");
+  await warteAuf(() => anrufIn(callId).status === "completed");
   assert.ok(!anrufIn(callId).failureReason);
   assert.ok(!anrufIn(callId).elFallbackAt);
 });
@@ -332,11 +336,11 @@ test("3365-K20: scheitert das Auflegen eines Beins ohne Zustand -> Fehler im Log
   hangupFehler.add(calleeVon(callId));
   try {
     await sende(callId, ereignisse[0]);
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] nachlauf fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] nachlauf fehlgeschlagen call=${callId}:`));
   } finally {
     hangupFehler.delete(calleeVon(callId));
   }
-  await waitUntil(() => anrufIn(callId).status === "failed");
+  await warteAuf(() => anrufIn(callId).status === "failed");
 });
 
 test("3365-K20: scheitert das Speichern des Endes ohne Zustand -> Fehler im Log, beide Beine trotzdem aufgelegt", async () => {
@@ -345,8 +349,8 @@ test("3365-K20: scheitert das Speichern des Endes ohne Zustand -> Fehler im Log,
   fs.chmodSync(srv.dataDir, NUR_LESEN);
   try {
     await sende(callId, ereignisse[0]);
-    await waitUntil(() => aufleger(attrappe, callId).join() === "1,1");
-    await waitUntil(() => srv.stdout.includes(`[el-vorspann] ende fehlgeschlagen call=${callId}:`));
+    await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
+    await warteAuf(() => srv.stdout.includes(`[el-vorspann] ende fehlgeschlagen call=${callId}:`));
   } finally {
     fs.chmodSync(srv.dataDir, SCHREIBBAR);
   }
