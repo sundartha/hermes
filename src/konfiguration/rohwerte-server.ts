@@ -1,8 +1,10 @@
 import path from "path";
+import { fileURLToPath } from "url";
 import { MS_PER_HOUR, MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
+export const QUELLORDNER = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 export function rohwerteServer(
   env: {
