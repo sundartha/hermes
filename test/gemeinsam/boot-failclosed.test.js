@@ -41,13 +41,26 @@ test("OUT-05 F2: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot ve
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-test("OUT-05-EL: FAKE_ORIGINATE_ELEVENLABS=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot verweigert (exit 1)", async () => {
-  const { code, output } = await startServerExpectExit({
+test("OUT-05-EL: FAKE_ORIGINATE_ELEVENLABS=true ist kein Schalter mehr -> Boot startet ohne Abbruch wegen dieses Schluessels", async () => {
+  const srv = await startServer({
     env: { FAKE_ORIGINATE_ELEVENLABS: "true", SKIP_TWILIO_SIGNATURE_CHECK: "false" },
   });
+  try {
+    const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(srv.stdout, /FAKE_ORIGINATE_ELEVENLABS/);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("OUT-05 F2b: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK nennt die Bedingung in der Meldung", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { FAKE_ORIGINATE: "true", SKIP_TWILIO_SIGNATURE_CHECK: "false" },
+  });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
-  assert.match(output, /FAKE_ORIGINATE_ELEVENLABS/);
-  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+  assert.match(output, /FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true zulaessig/);
 });
 
 test("KS-P9: DEFAULT_TENANT_BUDGET_CENTS=5000 ueber MAX_BUDGET_EUR=30 bootet gruen", async () => {

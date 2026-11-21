@@ -36,7 +36,6 @@ export function rohwerteSafety(
     MCP_ORIGIN_ENFORCE?: string | undefined;
     SKIP_TWILIO_SIGNATURE_CHECK?: string | undefined;
     FAKE_ORIGINATE?: string | undefined;
-    FAKE_ORIGINATE_ELEVENLABS?: string | undefined;
   },
   { boolEnv, csvEnv, numEnv, textEnv }: Pick<ReturnType<typeof umgebungMit>, "boolEnv" | "csvEnv" | "numEnv" | "textEnv">,
 ): {
@@ -55,7 +54,6 @@ export function rohwerteSafety(
   mcpOriginEnforce: boolean;
   skipTwilioSignatureCheck: boolean;
   fakeOriginate: boolean;
-  fakeOriginateElevenlabs: boolean;
 } {
   return {
     outboundFrozen: boolEnv("OUTBOUND_FROZEN", env.OUTBOUND_FROZEN, { fallback: false }),
@@ -102,10 +100,5 @@ export function rohwerteSafety(
       { fallback: false },
     ),
     fakeOriginate: boolEnv("FAKE_ORIGINATE", env.FAKE_ORIGINATE, { fallback: false }),
-    fakeOriginateElevenlabs: boolEnv(
-      "FAKE_ORIGINATE_ELEVENLABS",
-      env.FAKE_ORIGINATE_ELEVENLABS,
-      { fallback: false },
-    ),
   };
 }

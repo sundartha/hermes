@@ -144,7 +144,6 @@ safety.budgetWatchdogIntervalMs
 safety.capFarewellLeadMs
 safety.csrfEnforce
 safety.fakeOriginate
-safety.fakeOriginateElevenlabs
 safety.maxCallsPerHour
 safety.mcpAllowedOrigins
 safety.mcpOriginEnforce
