@@ -31,7 +31,7 @@ import {
   voiceAttrappenOhneSignatur,
   waitForLog,
   waitForStoreState,
-  waitUntil,
+  warteAufEreignis,
   withFetch,
 } from "../helpers.js";
 import {
@@ -243,7 +243,7 @@ function rollenDerErstenZusammenfassung([zusammenfassung]) {
   return zusammenfassung.rollen.length;
 }
 
-const warteAufBuchung = (bank) => waitUntil(() => bank.harness.gebucht.length === EINMAL, WARTE);
+const warteAufBuchung = (bank) => warteAufEreignis([bank.harness.ereignisse], () => bank.harness.gebucht.length === EINMAL, WARTE);
 
 test("IEL-B5-1: hangUpForCall laesst KEIN_EL_INBOUND, WARTET und RUECKFALL unveraendert, GEBUNDEN bekommt den Bruecken-Thunk", async () => {
   const state = ops.makeDefaultState();
@@ -326,7 +326,7 @@ test("IEL-B5-5: Status -> Poll - completed setzt nur das Carrier-Ende, der Poll 
     assert.equal(call.status, "active");
     assert.equal(laufend.harness.gebucht.length, 0);
     anbieter.setzeAntwort(fertig);
-    await waitUntil(() => laufend.harness.gebucht.length === EINMAL && call.transcript.length === 0, WARTE);
+    await warteAufEreignis([laufend.harness.ereignisse], () => laufend.harness.gebucht.length === EINMAL && call.transcript.length === 0, WARTE);
     await ruhe(RUHE_TAKTE);
   });
 
@@ -346,7 +346,7 @@ test("IEL-B5-5P: Positiv-Kontrolle - derselbe Status-Callback schliesst einen Bu
 
   await mitBank({ state, anbieter }, async (bank) => {
     await bank.postStatus(call.id, "completed");
-    await waitUntil(() => Boolean(call.billedAt), WARTE);
+    await warteAufEreignis([bank.harness.ereignisse], () => Boolean(call.billedAt), WARTE);
   });
 
   assert.equal(anbieter.gets, 0);
@@ -363,7 +363,7 @@ test("IEL-B5-6: Status -> Status - die zweite Zustellung startet keine zweite Sc
     bank = await mitBank({ state, anbieter }, async (laufend) => {
       const freigeben = haltAbrufFest(anbieter);
       await laufend.postStatus(call.id, "completed");
-      await waitUntil(() => anbieter.offen === EINMAL, WARTE);
+      await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === EINMAL, WARTE);
       const marker = call.elNachlaufStartedAt;
       await laufend.postStatus(call.id, "completed");
       await ruhe(RUHE_TAKTE);
@@ -410,9 +410,9 @@ test("IEL-B5-8: laufender Re-Arm-Poll -> Status - keine zweite Schleife, genau e
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
     await laufend.harness.el.abfrageDurchLauf(call.id);
-    await waitUntil(() => anbieter.gets >= ZWEIMAL, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.gets >= ZWEIMAL, WARTE);
     const freigeben = haltAbrufFest(anbieter);
-    await waitUntil(() => anbieter.offen === EINMAL, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === EINMAL, WARTE);
     await laufend.postStatus(call.id, "completed");
     await ruhe(RUHE_TAKTE);
     assert.equal(anbieter.offen, EINMAL, "der Status-Callback startet keine zweite Schleife");
@@ -435,7 +435,7 @@ test("IEL-B5-9: Negativ-Tabelle - WARTET, RUECKFALL und Outbound-EL schliessen w
 
     await mitBank({ state, anbieter }, async (bank) => {
       await bank.postStatus(call.id, "completed");
-      await waitUntil(() => Boolean(call.billedAt), WARTE);
+      await warteAufEreignis([bank.harness.ereignisse], () => Boolean(call.billedAt), WARTE);
     });
 
     assert.equal(call.elNachlaufStartedAt, null, seed.name);
@@ -451,7 +451,7 @@ test("IEL-B5-10: Cap -> Status - Traeger aufgelegt, Ergebnis vor der Buchung per
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
     laufend.lifecycle.terminateExpiredCall(call).catch(() => undefined);
-    await waitUntil(() => anbieter.offen === EINMAL, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === EINMAL, WARTE);
     await laufend.postStatus(call.id, "completed");
     await ruhe(RUHE_TAKTE);
     freigeben(okAntwort(CONVERSATION_DONE_WITH_ANALYSIS));
@@ -490,7 +490,7 @@ test("IEL-B5-11P: Positiv-Kontrolle - Budget-Inbound mit denselben Ankern behael
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
     laufend.lifecycle.terminateExpiredCall(call).catch(() => undefined);
-    await waitUntil(() => Boolean(call.billedAt), WARTE);
+    await warteAufEreignis([laufend.harness.ereignisse], () => Boolean(call.billedAt), WARTE);
   });
 
   assert.equal(call.endedAt, new Date(Date.parse(call.answeredAt) + CAP_S * MS_PER_SECOND).toISOString());
@@ -506,12 +506,12 @@ test("IEL-B5-12: Geld-Wache -> Poll - der Beende-Thunk persistiert einmal, die S
 
   const bank = await mitBank({ state, anbieter }, async (laufend) => {
     await laufend.postStatus(call.id, "completed");
-    await waitUntil(() => anbieter.offen === EINMAL, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === EINMAL, WARTE);
     anbieter.setzeAntwort(fertig);
     laufend.lifecycle.terminateOverBudgetExpired(call).catch(() => undefined);
     await warteAufBuchung(laufend);
     freigeben(okAntwort(CONVERSATION_DONE_WITH_ANALYSIS));
-    await waitUntil(() => anbieter.offen === 0, WARTE);
+    await warteAufEreignis([anbieter.ereignisse], () => anbieter.offen === 0, WARTE);
     await ruhe(RUHE_TAKTE);
   });
 
@@ -597,7 +597,7 @@ test("IEL-B5-16: cancel_call Budget-Inbound - Kurzantwort, kein Abruf, Store-Fol
       return markBilled(id);
     };
     antwort = await laufend.postCancel(call.id);
-    await waitUntil(() => Boolean(call.billedAt), WARTE);
+    await warteAufEreignis([laufend.harness.ereignisse], () => Boolean(call.billedAt), WARTE);
   });
 
   assert.deepEqual(antwort, { status: "cancelled" });
@@ -671,7 +671,7 @@ function abstaendeMs(anfragen) {
 
 test("IEL-B5-17: Neustart waehrend GEBUNDEN - Status-Callback startet keine zweite Schleife, Abschluss am Carrier-Ende", async () => {
   await mitServer({ env: { ELEVENLABS_RESULT_POLL_MS: String(POLL_TAKT_MS) }, seed: gebundenerSeed() }, async ({ srv, attrappe }) => {
-    await waitUntil(() => attrappe.gets().length >= EINMAL, SPAWN_WARTE);
+    await warteAufEreignis([attrappe.ereignisse], () => attrappe.gets().length >= EINMAL, SPAWN_WARTE);
     await postSpawnStatus(srv, "completed");
     await waitForLog(srv, NACHLAUF_LOG_MUSTER, SPAWN_FRIST_MS);
     const nachStatus = spawnCall(srv.readStore());
@@ -679,7 +679,7 @@ test("IEL-B5-17: Neustart waehrend GEBUNDEN - Status-Callback startet keine zwei
     assert.equal(nachStatus.status, "active");
 
     const getsNachStatus = attrappe.gets().length;
-    await waitUntil(() => attrappe.gets().length >= getsNachStatus + WEITERE_TAKTE, SPAWN_WARTE);
+    await warteAufEreignis([attrappe.ereignisse], () => attrappe.gets().length >= getsNachStatus + WEITERE_TAKTE, SPAWN_WARTE);
     assert.equal(spawnCall(srv.readStore()).status, "active");
     for (const abstand of abstaendeMs(attrappe.gets().slice(getsNachStatus)))
       assert.ok(abstand >= MINDEST_ABSTAND_ANTEIL * POLL_TAKT_MS, `eine Schleife: Abstand ${abstand} ms`);
@@ -699,7 +699,7 @@ test("IEL-B5-18: Neustart waehrend RUECKFALL - Status-Callback schliesst wie heu
     await postSpawnStatus(srv, "completed");
     const erster = spawnCall(await waitForStoreState(srv, (state) => Boolean(spawnCall(state).billedAt), SPAWN_FRIST_MS));
     await postSpawnStatus(srv, "completed");
-    await waitUntil(() => zeilenMit(srv, "[voice/status]") >= ZWEIMAL, SPAWN_WARTE);
+    await warteAufEreignis([srv.ereignisse], () => zeilenMit(srv, "[voice/status]") >= ZWEIMAL, SPAWN_WARTE);
 
     const call = spawnCall(srv.readStore());
     assert.equal(attrappe.gets().length, 0);
@@ -727,7 +727,7 @@ test("IEL-B5-19: Verdrahtung Cap (server.js) - Zombie beim Boot holt das Ergebni
 test("IEL-B5-20: Verdrahtung cancel_call (app.js) - Traeger auflegen, Ergebnis holen, kein DELETE", async () => {
   const env = { FAKE_ORIGINATE: "true", ELEVENLABS_RESULT_POLL_MS: String(LANGER_TAKT_MS) };
   await mitServer({ env, seed: gebundenerSeed() }, async ({ srv, attrappe }) => {
-    await waitUntil(() => attrappe.gets().length >= EINMAL, SPAWN_WARTE);
+    await warteAufEreignis([attrappe.ereignisse], () => attrappe.gets().length >= EINMAL, SPAWN_WARTE);
     const getsNachBoot = attrappe.gets().length;
     attrappe.setzeAntwort(CONVERSATION_DONE_WITH_ANALYSIS);
 
