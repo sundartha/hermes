@@ -167,7 +167,7 @@
       "quellen": ["src/consult/", "src/conversation/consult-raised.js"],
       "eingaenge": [
         "src/consult/delivery.js",
-        "src/consult/gate.js",
+        "src/consult/gate.ts",
         "src/consult/in-call.js",
         "src/conversation/consult-raised.js"
       ],

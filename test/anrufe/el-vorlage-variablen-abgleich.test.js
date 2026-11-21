@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 
-import { consultAllowedForCall } from "../../src/consult/gate.js";
+import { consultAllowedForCall } from "../../src/consult/gate.ts";
 
 import { sendeAnrufstart } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { templatePlaceholderNames } from "../helpers/el-vorlage-variablen.mjs";

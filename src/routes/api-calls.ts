@@ -6,7 +6,7 @@ import { normNum } from "../begriffe/rufnummern.js";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
 import { validateAssistantContext } from "../i18n/anruf-eingabe-texte.ts";
-import { consultAllowedFor } from "../consult/gate.js";
+import { consultAllowedFor } from "../consult/gate.ts";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId, newId } from "../store/state-ops.js";

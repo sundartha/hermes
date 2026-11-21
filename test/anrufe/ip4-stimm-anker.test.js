@@ -8,7 +8,7 @@ import {
 } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { consultAllowedForCall } from "../../src/consult/gate.js";
+import { consultAllowedForCall } from "../../src/consult/gate.ts";
 import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
