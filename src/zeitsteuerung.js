@@ -51,7 +51,7 @@ export function starteFristenTakt({ store, lifecycle, config, fristen, abfrage, 
             beende: lifecycle.terminateOverBudgetExpired,
           }
         : undefined,
-    reserve: { freigeben: lifecycle.releaseReserve },
+    reserve: { freigeben: (call) => lifecycle.releaseReserve(call, { wirfBeiFehler: true }) },
     abfrage,
     uebergabe,
     limitJeMandant: fristen.fristenLimitJeMandant,

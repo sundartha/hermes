@@ -84,7 +84,7 @@ interface CallLifecycleDeps {
     safety: { reserveReleaseGraceMs: number };
   };
   finishCall: unknown;
-  releaseReserve: (call: Call) => unknown;
+  releaseReserve: (call: Call, optionen?: { wirfBeiFehler?: boolean }) => unknown;
   voiceControl: unknown;
   terminateAndBillCall: (request: {
     persistEnd: () => unknown;
@@ -109,7 +109,7 @@ interface CallLifecycle {
   terminateExpiredCall: (call: Call) => Promise<void>;
   terminateOverBudgetExpired: (call: Call) => Promise<void>;
   blockingAxisFor: (mandant: { tenantId: string }) => unknown;
-  releaseReserve: (call: Call) => unknown;
+  releaseReserve: (call: Call, optionen?: { wirfBeiFehler?: boolean }) => unknown;
   abgelaufeneAktive: () => Call[];
 }
 

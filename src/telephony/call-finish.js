@@ -288,11 +288,12 @@ export function makeCallFinish({
   leitungsplaetze,
   budgetReservierung,
 }) {
-  function releaseReserve(call) {
-    return store
+  function releaseReserve(call, { wirfBeiFehler = false } = {}) {
+    const freigabe = store
       .withStoreLock(() => store.releaseOutboundReserve(call))
-      .then(() => budgetReservierung?.freigeben({ callId: call.id, tenantId: call.tenantId }))
-      .catch((e) => console.error("[reserve] release:", e.message));
+      .then(() => budgetReservierung?.freigeben({ callId: call.id, tenantId: call.tenantId }));
+    if (wirfBeiFehler) return freigabe;
+    return freigabe.catch((e) => console.error("[reserve] release:", e.message));
   }
 
   async function settleBilling(call) {
