@@ -107,6 +107,7 @@
       "^src/konfiguration/standardsprache\\.[jt]s$"
     ],
     "fachlogik": [
+      "^src/boot-guard\\.[jt]s$",
       "^src/restricted-data\\.[jt]s$",
       "^src/utils/month\\.[jt]s$",
       "^src/utils/anfrage-kennung\\.[jt]s$",
