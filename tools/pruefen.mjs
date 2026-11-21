@@ -560,7 +560,9 @@ async function abdeckungMessen(plan) {
   const messen = async () => {
     for (let datei = offen.shift(); datei !== undefined && !stand.frist; datei = offen.shift()) {
       const ordner = join(mkdtempSync(join(tmpdir(), "abdeckung-")), "v8");
-      const { gruen } = await testdateiGruen(datei, { mitMutant: false }, { ...lauf, abdeckung: ordner });
+      const start = Date.now();
+      const { gruen, zeitueberschritten } = await testdateiGruen(datei, { mitMutant: false, fristMs: plan.testdateiFrist ?? MUTANT_TESTDATEI_FRIST_MS }, { ...lauf, abdeckung: ordner });
+      if (zeitueberschritten) console.error(`${datei} ${Math.round((Date.now() - start) / SEKUNDE_MS)} s`);
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
       abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
       rmSync(dirname(ordner), { recursive: true, force: true });
