@@ -40,7 +40,7 @@ concurrency:
 jobs:
   staging:
     name: Staging abwarten und prüfen
-    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.lastlauf)
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (!inputs.lastlauf || inputs.alarmprobe))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -311,3 +311,32 @@ test("Workflow: mit alarmprobe laufen weder die Anrufprobe noch das Beenden offe
     /- name: Offene Probe-Anrufe beenden\n {8}if: always\(\) && \(github\.event_name != 'workflow_dispatch' \|\| !inputs\.alarmprobe\)\n/,
   );
 });
+
+function jobBedingung(name, ereignis, eingaben) {
+  const treffer = WORKFLOW.match(new RegExp(`\\n {2}${name}:\\n(?: {4}[^\\n]*\\n)*? {4}if: ([^\\n]+)\\n`));
+  assert.ok(treffer, `Job ${name} hat eine Bedingung`);
+  const github = { event_name: ereignis };
+  return new Function("github", "inputs", `return Boolean(${treffer[1]});`)(github, eingaben);
+}
+
+const DISPATCH_TABELLE = [
+  { alarmprobe: true, lastlauf: true, staging: true, lastlauf_job: false },
+  { alarmprobe: true, lastlauf: false, staging: true, lastlauf_job: false },
+  { alarmprobe: false, lastlauf: true, staging: false, lastlauf_job: true },
+  { alarmprobe: false, lastlauf: false, staging: true, lastlauf_job: false },
+];
+
+for (const zeile of DISPATCH_TABELLE) {
+  test(`Workflow: workflow_dispatch mit alarmprobe=${zeile.alarmprobe} und lastlauf=${zeile.lastlauf} startet staging=${zeile.staging}, lastlauf=${zeile.lastlauf_job}`, () => {
+    const eingaben = { alarmprobe: zeile.alarmprobe, lastlauf: zeile.lastlauf };
+    assert.equal(jobBedingung("staging", "workflow_dispatch", eingaben), zeile.staging);
+    assert.equal(jobBedingung("lastlauf", "workflow_dispatch", eingaben), zeile.lastlauf_job);
+  });
+}
+
+test("Workflow: push und schedule starten staging, nicht lastlauf", () => {
+  for (const ereignis of ["push", "schedule"]) {
+    assert.equal(jobBedingung("staging", ereignis, {}), true);
+    assert.equal(jobBedingung("lastlauf", ereignis, {}), false);
+  }
+});
