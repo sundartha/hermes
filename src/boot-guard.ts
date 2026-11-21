@@ -8,7 +8,13 @@ import { normalisierterOrigin } from "./middleware.ts";
 import { MS_PER_DAY } from "./utils/timer.ts";
 import { fehlerText } from "./utils/fehler-text.ts";
 
-export async function guardedBoot(label, fn) {
+export interface Befund {
+  code?: string;
+  fatal: boolean;
+  message: string;
+}
+
+export async function guardedBoot(label: string, fn: () => unknown): Promise<boolean> {
   try {
     await fn();
     return true;
@@ -28,6 +34,15 @@ export const BOOTSTRAP_HEAL = Object.freeze({
   BLOCKED_PARAMS: "blocked_params",
 });
 
+interface BootstrapHealFall {
+  activeNumberPresent: boolean;
+  numberCount: number;
+  foreignTenantCount: number;
+  callCount: number;
+  e164: string;
+  provider: string;
+}
+
 export function bootstrapHealDecision({
   activeNumberPresent,
   numberCount,
@@ -35,20 +50,26 @@ export function bootstrapHealDecision({
   callCount,
   e164,
   provider,
-}) {
+}: BootstrapHealFall): string {
   if (activeNumberPresent) return BOOTSTRAP_HEAL.NOT_NEEDED;
   if (numberCount > 0 || foreignTenantCount > 0 || callCount > 0)
     return BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH;
-  if (!E164.test(normNum(e164 || "")) || !Object.values(PROVIDER).includes(provider))
+  if (!E164.test(normNum(e164 || "")) || !Object.values<string>(PROVIDER).includes(provider))
     return BOOTSTRAP_HEAL.BLOCKED_PARAMS;
   return BOOTSTRAP_HEAL.HEAL;
 }
 
-export function fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck }) {
+export function fakeOriginateBootBlocked({
+  fakeOriginate,
+  skipTwilioSignatureCheck,
+}: {
+  fakeOriginate: unknown;
+  skipTwilioSignatureCheck: unknown;
+}): boolean {
   return fakeOriginate === true && skipTwilioSignatureCheck !== true;
 }
 
-export function sttProfileFindings(sttProfile) {
+export function sttProfileFindings(sttProfile: unknown): Befund[] {
   if (isSttProfile(sttProfile)) return [];
   return [
     {
@@ -62,7 +83,13 @@ export function sttProfileFindings(sttProfile) {
 
 export const LLM_FALLBACK_FINDING = Object.freeze({ SAME_AS_PRIMARY: "llm_fallback_same_as_primary" });
 
-export function llmFallbackFindings({ provider, fallback } = {}) {
+export function llmFallbackFindings({
+  provider,
+  fallback,
+}: {
+  provider?: string | undefined;
+  fallback?: string | null | undefined;
+} = {}): Befund[] {
   if (!fallback) return [];
   if (usableFallbackProvider({ provider, fallback })) return [];
   return [
@@ -77,7 +104,7 @@ export function llmFallbackFindings({ provider, fallback } = {}) {
   ];
 }
 
-export function meterMappingGaps(usageEventKinds, meterEventNames) {
+export function meterMappingGaps(usageEventKinds: string[], meterEventNames: Record<string, unknown>): string[] {
   return usageEventKinds.filter((kind) => !meterEventNames[kind]);
 }
 
@@ -88,11 +115,19 @@ export const SPEND_CAP_FINDING = Object.freeze({
   WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable",
 });
 
-function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
+function affordableCallDurationS(tenantDefaultCents: number, maxTariffCents: number): number {
   return Math.floor(tenantDefaultCents / maxTariffCents) * SECONDS_PER_MINUTE;
 }
 
-export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTariffCents }) {
+export function spendCapCoherence({
+  tenantDefaultCents,
+  platformCapCents,
+  maxTariffCents,
+}: {
+  tenantDefaultCents: number;
+  platformCapCents: number;
+  maxTariffCents: number;
+}): Befund[] {
   if (tenantDefaultCents === 0) {
     return [
       {
@@ -123,17 +158,20 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
   return [];
 }
 
-export function unpricedModels(modelIds, modelPricesUsd) {
+export function unpricedModels(modelIds: string[], modelPricesUsd: object): string[] {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
 }
 
-export function unpricedPlanSlugs(slugs, priceIdOf) {
+export function unpricedPlanSlugs(slugs: string[], priceIdOf: (slug: string) => unknown): string[] {
   return slugs.filter((slug) => !priceIdOf(slug));
 }
 
 export const MODEL_PRICE_MAX_AGE_DAYS = 90;
 
-export function stalePriceFindings(modelPricesUsd, todayIso) {
+export function stalePriceFindings(
+  modelPricesUsd: Record<string, { asOf: string; source: string }>,
+  todayIso: string,
+): Befund[] {
   return Object.entries(modelPricesUsd)
     .filter(([, price]) => (Date.parse(todayIso) - Date.parse(price.asOf)) / MS_PER_DAY > MODEL_PRICE_MAX_AGE_DAYS)
     .map(([modelId, price]) => ({
@@ -148,7 +186,17 @@ export const VOICE_TARIFF_FLOOR_FINDING = Object.freeze({
   BELOW_FULL_COST: "voice_tariff_below_full_cost",
 });
 
-export function voiceTariffFloorFindings({ domesticTariffCents, fullCostFloorCents, coveragePercent, minCoveragePercent }) {
+export function voiceTariffFloorFindings({
+  domesticTariffCents,
+  fullCostFloorCents,
+  coveragePercent,
+  minCoveragePercent,
+}: {
+  domesticTariffCents: number;
+  fullCostFloorCents: number;
+  coveragePercent: number;
+  minCoveragePercent: number;
+}): Befund[] {
   const belowFloor = domesticTariffCents < fullCostFloorCents;
   if (!belowFloor) return [];
   return [
@@ -173,7 +221,7 @@ export const PROVIDER_RATE_FINDING = Object.freeze({
   OUT_OF_BAND: "provider_rate_out_of_band",
 });
 
-export function providerRateOutOfBand(rateMicro) {
+export function providerRateOutOfBand(rateMicro: number): Befund[] {
   const minMicro = Math.round(PROVIDER_RATE_ANCHOR_MICRO * PROVIDER_RATE_BAND_MIN_FACTOR);
   const maxMicro = Math.round(PROVIDER_RATE_ANCHOR_MICRO * PROVIDER_RATE_BAND_MAX_FACTOR);
   if (rateMicro >= minMicro && rateMicro <= maxMicro) return [];
@@ -195,11 +243,19 @@ export const PLAN_CAP_FINDING = Object.freeze({
   PLAN_CAP_WORST_CASE_UNAFFORDABLE: "plan_cap_worst_case_unaffordable",
 });
 
-function derivePlanCaps({ slugs, capForSlug }) {
-  const derived = [];
-  const underivableSlugs = [];
+interface PlanCapEingabe {
+  slugs: string[];
+  capForSlug: (slug: string) => number;
+}
+
+function derivePlanCaps({ slugs, capForSlug }: PlanCapEingabe): {
+  derived: { slug: string; capCents: number }[];
+  underivableSlugs: string[];
+} {
+  const derived: { slug: string; capCents: number }[] = [];
+  const underivableSlugs: string[] = [];
   for (const slug of slugs) {
-    let capCents;
+    let capCents: number;
     try {
       capCents = capForSlug(slug);
     } catch {
@@ -211,7 +267,7 @@ function derivePlanCaps({ slugs, capForSlug }) {
   return { derived, underivableSlugs };
 }
 
-export function planCapUnderivableFindings({ slugs, capForSlug }) {
+export function planCapUnderivableFindings({ slugs, capForSlug }: PlanCapEingabe): Befund[] {
   const { underivableSlugs } = derivePlanCaps({ slugs, capForSlug });
   if (!underivableSlugs.length) return [];
   return [
@@ -226,7 +282,11 @@ export function planCapUnderivableFindings({ slugs, capForSlug }) {
   ];
 }
 
-export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
+export function planCapReserveFindings({
+  slugs,
+  capForSlug,
+  maxTariffCents,
+}: PlanCapEingabe & { maxTariffCents: number }): Befund[] {
   const { derived } = derivePlanCaps({ slugs, capForSlug });
   if (!derived.length) return [];
   const reserveCents = outboundReserveCents(maxTariffCents);
@@ -253,20 +313,31 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
   BOTH_UNSET_WITH_OUTBOUND: "platform_alert_channels_unset_with_outbound",
 });
 
-export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
+export function mailerKonstruierbar({
+  brevoApiKey,
+  smtpHost,
+}: {
+  brevoApiKey?: unknown;
+  smtpHost?: unknown;
+} = {}): boolean {
   return Boolean(brevoApiKey) || Boolean(smtpHost);
 }
 
 export const ALARM_KANAL = Object.freeze({ MAIL: "mail", SMS: "sms", KEINE: "keine" });
 
-export function betreiberAlarmKanaele({ billing, mail }) {
-  const kanaele = [];
+export interface AlarmEingabe {
+  billing: { platformAlertSmsTo?: unknown; betterstackAlertUrl?: unknown };
+  mail: { platformAlertMailTo?: unknown; brevoApiKey?: unknown; smtpHost?: unknown };
+}
+
+export function betreiberAlarmKanaele({ billing, mail }: AlarmEingabe): string[] {
+  const kanaele: string[] = [];
   if (mail.platformAlertMailTo && mailerKonstruierbar(mail)) kanaele.push(ALARM_KANAL.MAIL);
   if (billing.platformAlertSmsTo) kanaele.push(ALARM_KANAL.SMS);
   return kanaele;
 }
 
-export function alarmKanalZeile(kanaele) {
+export function alarmKanalZeile(kanaele: string[]): string {
   return kanaele.length > 0 ? kanaele.join(",") : ALARM_KANAL.KEINE;
 }
 
@@ -274,7 +345,7 @@ export const KOSTEN_ALARM_FINDING = Object.freeze({
   NO_TARGET: "kosten_alarm_ohne_ziel",
 });
 
-export function kostenAlarmFindings({ billing, mail }) {
+export function kostenAlarmFindings({ billing, mail }: AlarmEingabe): Befund[] {
   if (billing.betterstackAlertUrl || betreiberAlarmKanaele({ billing, mail }).length > 0)
     return [];
   return [{
@@ -288,7 +359,23 @@ export function kostenAlarmFindings({ billing, mail }) {
   }];
 }
 
-export function alertChannelInputs({ billing, mail }) {
+interface AlarmKanalEingabe {
+  platformAlertSmsTo?: unknown;
+  betterstackAlertUrl?: unknown;
+  paymentEnabled?: unknown;
+  platformSpendWarnPercent?: number | null;
+  platformAlertMailTo?: unknown;
+  mailerVorhanden?: unknown;
+  outageAlertWindowMs?: number | null;
+}
+
+export function alertChannelInputs({
+  billing,
+  mail,
+}: {
+  billing: object;
+  mail: AlarmEingabe["mail"];
+}): AlarmKanalEingabe {
   return {
     ...billing,
     platformAlertMailTo: mail.platformAlertMailTo,
@@ -296,7 +383,7 @@ export function alertChannelInputs({ billing, mail }) {
   };
 }
 
-function istPositiv(wert) {
+function istPositiv(wert: number | null | undefined): boolean {
   return (wert ?? 0) > 0;
 }
 
@@ -308,7 +395,7 @@ export function alertChannelFindings({
   platformAlertMailTo,
   mailerVorhanden,
   outageAlertWindowMs,
-} = {}) {
+}: AlarmKanalEingabe = {}): Befund[] {
   if (platformAlertSmsTo || betterstackAlertUrl) return [];
   if (!(platformAlertMailTo && mailerVorhanden) && istPositiv(outageAlertWindowMs))
     return [
@@ -349,7 +436,11 @@ export const PLATFORM_ALERT_SENDER_FINDING = Object.freeze({
   UNBOUND: "alert_sms_sender_unbound",
 });
 
-export function platformAlertSenderFindings({ openBindings = [] } = {}) {
+export function platformAlertSenderFindings({
+  openBindings = [],
+}: {
+  openBindings?: { purpose: string }[];
+} = {}): Befund[] {
   const bound = openBindings.some((binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER);
   if (bound) return [];
   return [{
@@ -373,8 +464,13 @@ export function costTruingBookingFindings({
   assignableRecordTypes,
   coveragePercent,
   minCoveragePercent,
-}) {
-  const findings = [];
+}: {
+  requiredRecordTypes: string[];
+  assignableRecordTypes: readonly string[];
+  coveragePercent: number;
+  minCoveragePercent: number;
+}): Befund[] {
+  const findings: Befund[] = [];
   if (requiredRecordTypes.length === 0) {
     findings.push({
       code: COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY,
@@ -415,8 +511,11 @@ export const LATENT_COST_PATH_FINDING = Object.freeze({
 export function latentCostPathFindings({
   playTtsEnabled,
   elInboundCarrierHasCollector,
-}) {
-  const findings = [];
+}: {
+  playTtsEnabled: boolean;
+  elInboundCarrierHasCollector: boolean;
+}): Befund[] {
+  const findings: Befund[] = [];
   if (playTtsEnabled) {
     findings.push({
       code: LATENT_COST_PATH_FINDING.PLAY_TTS_UNPRICED,
@@ -451,11 +550,11 @@ export const EL_INBOUND_ACCESS_FINDING = Object.freeze({
   INCOMPLETE: "el_inbound_access_incomplete",
 });
 
-function zugangsMangelText(defekt) {
+function zugangsMangelText(defekt: { envKey: string; mangel: string | null }): string {
   return `${defekt.envKey} ${String(defekt.mangel)}`;
 }
 
-export function elInboundAccessFindings(inbound) {
+export function elInboundAccessFindings(inbound: Parameters<typeof inboundElAccessDefects>[0]): Befund[] {
   const defekte = inboundElAccessDefects(inbound);
   if (defekte.length === 0) return [];
   return [
@@ -482,15 +581,22 @@ const MCP_AUDIENCE_PFAD = "/mcp";
 const HTTPS_PROTOKOLL = "https:";
 const RAND_SCHRAEGSTRICHE = /\/+$/;
 
-export function fuerAudienceVergleich(wert) {
+export function fuerAudienceVergleich(wert: string | number | null | undefined): string {
   return String(wert ?? "").trim().replace(RAND_SCHRAEGSTRICHE, "");
 }
 
-export function kanonischeAudience(publicUrl) {
+export function kanonischeAudience(publicUrl: string | number | null | undefined): string {
   return `${fuerAudienceVergleich(publicUrl)}${MCP_AUDIENCE_PFAD}`;
 }
 
-function audienceFindings({ publicUrl, oauthAudience }) {
+interface OriginEingabe {
+  publicUrl?: string | null | undefined;
+  oauthAudience?: string | null | undefined;
+  allowedOrigins?: string[];
+  isProduction?: boolean;
+}
+
+function audienceFindings({ publicUrl, oauthAudience }: OriginEingabe): Befund[] {
   if (!oauthAudience) return [];
   const erwartet = kanonischeAudience(publicUrl);
   if (fuerAudienceVergleich(oauthAudience) === erwartet) return [];
@@ -505,10 +611,10 @@ function audienceFindings({ publicUrl, oauthAudience }) {
   ];
 }
 
-function publicUrlFindings({ publicUrl, isProduction }) {
+function publicUrlFindings({ publicUrl, isProduction }: OriginEingabe): Befund[] {
   const wert = fuerAudienceVergleich(publicUrl);
   if (!wert) return [];
-  let url;
+  let url: URL;
   try {
     url = new URL(wert);
   } catch {
@@ -521,7 +627,7 @@ function publicUrlFindings({ publicUrl, isProduction }) {
       },
     ];
   }
-  const findings = [];
+  const findings: Befund[] = [];
   if (url.pathname !== "/" || url.search || url.hash)
     findings.push({
       code: ANGEKUENDIGTER_ORIGIN_FINDING.PUBLIC_URL_MIT_PFAD,
@@ -539,7 +645,7 @@ function publicUrlFindings({ publicUrl, isProduction }) {
   return findings;
 }
 
-function allowlistFindings(allowedOrigins) {
+function allowlistFindings(allowedOrigins: string[]): Befund[] {
   return allowedOrigins
     .map((eintrag, index) => ({ eintrag, position: index + 1 }))
     .filter(({ eintrag }) => !normalisierterOrigin(eintrag))
@@ -557,7 +663,7 @@ export function angekuendigterOriginFindings({
   oauthAudience,
   allowedOrigins = [],
   isProduction = false,
-} = {}) {
+}: OriginEingabe = {}): Befund[] {
   return [
     ...audienceFindings({ publicUrl, oauthAudience }),
     ...publicUrlFindings({ publicUrl, isProduction }),

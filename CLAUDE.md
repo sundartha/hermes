@@ -33,7 +33,7 @@ Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nic
    Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`.
    Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
    `SKIP_TWILIO_SIGNATURE_CHECK` bleibt trotz des Namens: der Schalter ist der **globale**
-   `/voice`-Bypass (`routes/voice.ts`), kein Twilio-Schalter, und `boot-guard.js` haengt daran.
+   `/voice`-Bypass (`routes/voice.ts`), kein Twilio-Schalter, und `boot-guard.ts` haengt daran.
    Ein Rename ist eine eigene Entscheidung.
    **Owner-Entscheidung 2026-07-30 (E10): `MAX_BUDGET_EUR` ist KEIN geschuetztes Gate mehr.**
    Die pro-Tenant-Kostendecke sperrt weiterhin BEIDE Richtungen, Inbound eingeschlossen.
@@ -99,7 +99,7 @@ Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, darf rot sein)
 Neue Datei:   nur mit `npm run neu -- <route|fachdatei|test> <baustein oder bereich> <name>`
 Neuer Test:   in `test/<bereich>/<name>.test.js` (Bereiche in `tools/bereiche.json`), nie flach in `test/`
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
-              (ohne Alarmkanal zusätzlich OUTAGE_ALERT_WINDOW_MS=0 oder einen Alarmkanal setzen, sonst bricht der Start ab; Quelle: src/boot-guard.js#alertChannelFindings)
+              (ohne Alarmkanal zusätzlich OUTAGE_ALERT_WINDOW_MS=0 oder einen Alarmkanal setzen, sonst bricht der Start ab; Quelle: src/boot-guard.ts#alertChannelFindings)
 ```
 
 Ein Test muss rot werden, wenn sich für einen Kunden oder Angerufenen etwas falsch verhält,

@@ -18,7 +18,7 @@ Die festen Schwellen stehen in `scripts/ausfallproben/schwellen.mjs`, je Probe u
 
 ## Postgres
 
-`postgres-neustart`, `instanz-tod` und `deploy-bei-anruf` brauchen ein lokales Postgres: Adresse in `HERMES_TEST_POSTGRES_URL` (Host `127.0.0.1` oder `localhost`, wie in `test/gemeinsam/echtes-postgres.js`). Ohne sie sind genau diese Proben rot mit Grund, sie werden nie uebersprungen. Die Proben legen eine eigene Datenbank an und loeschen sie wieder; `deploy-bei-anruf` legt dazu eine Rolle ohne Superuser an, weil der Web-Login von Hermes einen Superuser ablehnt (`src/boot-guard.js`, Portal-Pool).
+`postgres-neustart`, `instanz-tod` und `deploy-bei-anruf` brauchen ein lokales Postgres: Adresse in `HERMES_TEST_POSTGRES_URL` (Host `127.0.0.1` oder `localhost`, wie in `test/gemeinsam/echtes-postgres.js`). Ohne sie sind genau diese Proben rot mit Grund, sie werden nie uebersprungen. Die Proben legen eine eigene Datenbank an und loeschen sie wieder; `deploy-bei-anruf` legt dazu eine Rolle ohne Superuser an, weil der Web-Login von Hermes einen Superuser ablehnt (`src/boot-guard.ts`, Portal-Pool).
 
 `deploy-bei-anruf` haelt ueber `GET /auth/callback` eine eingehende Anfrage offen (der Code-Tausch mit dem Login-Anbieter haengt an der Weiche), sendet SIGTERM und prueft Exit 0, die Zeile `[shutdown] Finaler Store-Flush abgeschlossen` und die Frist. Die Abschaltung wartet auf offene HTTP-Anfragen (`src/abschalten.js`), nicht auf Gespraeche beim Anbieter.
 
