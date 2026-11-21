@@ -10,6 +10,7 @@ import {
   RELEASE_VERDICT,
 } from "./store/state-ops.js";
 import { NUMBER_STATUS } from "./begriffe/nummern.js";
+import { fehlerText } from "./utils/fehler-text.ts";
 
 const PROVIDER_NOT_FOUND = 404;
 const RECONCILE_ACTOR = "system:release-reconcile";
@@ -28,16 +29,20 @@ function recordDidAudit(audit, { actor, tenantId, action, detail }) {
   return audit.record({ actorSub: actor, tenantId, action, detail });
 }
 
+function providerStatus(err) {
+  return typeof err === "object" && err !== null ? err.providerStatus : undefined;
+}
+
 async function providerReleaseOrGone(provisioner, number, logger) {
   try {
     await provisioner.releaseNumber(number.providerNumberId);
     return true;
   } catch (err) {
-    if (err.providerStatus === PROVIDER_NOT_FOUND) {
+    if (providerStatus(err) === PROVIDER_NOT_FOUND) {
       logger.warn(`[did-release] provider 404 (bereits weg) number=${number.id} -> Store nachziehen`);
       return true;
     }
-    logger.warn(`[did-release] provider-release fehlgeschlagen number=${number.id}: ${err.message}`);
+    logger.warn(`[did-release] provider-release fehlgeschlagen number=${number.id}: ${fehlerText(err)}`);
     return false;
   }
 }
@@ -88,7 +93,7 @@ export async function performNumberRelease({ store, provisioner, audit, logger, 
     await store.withStoreLock(() => {
       const state = store.load();
       const num = findNumber(state, number.id);
-      if (num && num.status === NUMBER_STATUS.ACTIVE) {
+      if (num?.status === NUMBER_STATUS.ACTIVE) {
         const closed = unbindOwnPlatformBindings(state, num);
         try {
           releaseNumber(state, num.id);
@@ -103,7 +108,7 @@ export async function performNumberRelease({ store, provisioner, audit, logger, 
     return abortRelease({
       audit, actor, number, logger,
       reason: ABORT_REASON.STORE_MUTATION_NACH_DELETE,
-      message: `[did-release] store-mutation fehlgeschlagen NACH provider-delete number=${number.id}: ${err.message}`,
+      message: `[did-release] store-mutation fehlgeschlagen NACH provider-delete number=${number.id}: ${fehlerText(err)}`,
     });
   }
   logger.log(`[did-release] freigegeben number=${number.id} tenant=${number.tenantId}`);
@@ -111,7 +116,7 @@ export async function performNumberRelease({ store, provisioner, audit, logger, 
     actor,
     tenantId: number.tenantId,
     action: AUDIT_ACTION.RELEASED,
-    detail: `number=${number.id} provider=${number.providerNumberId}`,
+    detail: `number=${number.id} provider=${String(number.providerNumberId)}`,
   });
   return true;
 }
@@ -140,11 +145,11 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
   const buckets = classifyNumbersForRelease(store.load(), { nowMs, graceMs });
   const candidates = buckets.release;
   for (const { number, reason } of buckets.hold)
-    logger.warn(`[did-release] HOLD number=${number.id} grund=${reason}`);
+    logger.warn(`[did-release] HOLD number=${number.id} grund=${String(reason)}`);
   if (graceMs === 0) {
     if (candidates.length)
       logger.warn(
-        `[did-release] OBSERVE-ONLY (RELEASE_GRACE_DAYS=0): ${candidates.length} Kandidat(en) NICHT freigegeben: ${candidates.map((num) => num.id).join(",")}`,
+        `[did-release] OBSERVE-ONLY (RELEASE_GRACE_DAYS=0): ${String(candidates.length)} Kandidat(en) NICHT freigegeben: ${candidates.map((num) => num.id).join(",")}`,
       );
     return { released: 0, aborted: 0, observed: candidates.length };
   }
