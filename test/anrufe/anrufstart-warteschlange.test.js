@@ -66,7 +66,7 @@ test("Warteschlange: der Takt ist eine Sekunde, ohne Frist-Angabe gilt kein Wart
   assert.equal(ANRUFSTART_WARTE_TAKT_MS, MS_JE_SEKUNDE);
   const bau = aufbau({ belegt: [false, true], vorher: () => ({ wartefristMs: undefined }) });
   assert.equal(await lauf(bau), ANRUFSTART_AUSGANG.ABGELAUFEN);
-  assert.deepEqual(bau.spur, ["kein-platz", `frist-ende:${CALL_ID}`]);
+  assert.deepEqual(bau.spur, [`frist-ende:${CALL_ID}`]);
 });
 
 test("Warteschlange: ist sofort ein Platz frei, wird ohne Warten genau einmal gewaehlt", async () => {
@@ -106,7 +106,7 @@ test("Warteschlange: der Marker wird erst gesetzt, wenn der Platz belegt ist", a
 });
 
 test("Warteschlange: eine Millisekunde vor Ablauf der 120 Sekunden wird noch gewartet, genau zum Ablauf endet der Anruf ohne Wahl", async () => {
-  const nochDa = aufbau({ belegt: [false, true] });
+  const nochDa = aufbau({ belegt: [true] });
   nochDa.uhr.ms = ANGELEGT_MS + WARTEFRIST_MS - 1;
   assert.equal(await lauf(nochDa), ANRUFSTART_AUSGANG.GESTARTET);
   assert.equal(starts(nochDa.spur), 1);
@@ -114,7 +114,7 @@ test("Warteschlange: eine Millisekunde vor Ablauf der 120 Sekunden wird noch gew
   const abgelaufen = aufbau({ belegt: [false, true] });
   abgelaufen.uhr.ms = ANGELEGT_MS + WARTEFRIST_MS;
   assert.equal(await lauf(abgelaufen), ANRUFSTART_AUSGANG.ABGELAUFEN);
-  assert.deepEqual(abgelaufen.spur, ["kein-platz", `frist-ende:${CALL_ID}`]);
+  assert.deepEqual(abgelaufen.spur, [`frist-ende:${CALL_ID}`]);
   assert.equal(await abgelaufen.marker.lies(CALL_ID), null);
 });
 
@@ -123,7 +123,7 @@ test("Warteschlange: ohne Platz bis zur Frist endet der Anruf ohne Wahl, ohne Ma
   assert.equal(await lauf(bau), ANRUFSTART_AUSGANG.ABGELAUFEN);
   assert.equal(starts(bau.spur), 0);
   assert.equal(bau.spur.filter((eintrag) => eintrag.startsWith("warte")).length, WARTEFRIST_MS / ANRUFSTART_WARTE_TAKT_MS);
-  assert.deepEqual(bau.spur.slice(-2), ["kein-platz", `frist-ende:${CALL_ID}`]);
+  assert.deepEqual(bau.spur.slice(-2), [`warte:${ANRUFSTART_WARTE_TAKT_MS}`, `frist-ende:${CALL_ID}`]);
   assert.equal(await bau.marker.lies(CALL_ID), null);
 });
 
