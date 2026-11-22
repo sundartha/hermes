@@ -438,7 +438,7 @@ for (const [name, , agentAntwort, erwartet] of STIMMEN_TABELLE) {
 }
 
 test("Stimmen am Anrufdatensatz: die Stimme folgt der Sprache des Anrufs", async () => {
-  const { call } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_FR, false), sprache: "fr" });
+  const { call } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_DE, false), sprache: "fr" });
   assert.equal(call.elDetectorCounts.stimmenAnzahl, 1);
 });
 

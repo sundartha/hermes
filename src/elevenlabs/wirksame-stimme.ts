@@ -51,13 +51,12 @@ interface Speicher extends LocaleSpeicher {
 }
 
 interface Konfiguration {
-  telnyx: { telnyxElevenLabs: { voiceId: string } };
   voice: { elevenLabsOutbound: ConvaiKonto & { agentId: string } };
 }
 
-function angeforderteStimme({ store, config, call }: { store: Speicher; config: Konfiguration; call: Anruf }): string {
+function angeforderteStimme({ store, call }: { store: Speicher; call: Anruf }): string {
   const wahl = call.direction === "inbound" ? inboundElLocaleOf : callLocaleOf;
-  return wahl({ store, config, call, ownerName: "" }).voiceId;
+  return wahl({ store, call, ownerName: "" }).voiceId;
 }
 
 export async function ermittleStimmenAnzahl({
@@ -74,7 +73,7 @@ export async function ermittleStimmenAnzahl({
   try {
     const call = await store.leseCall(callId);
     if (!call) return null;
-    const angefordert = angeforderteStimme({ store, config, call });
+    const angefordert = angeforderteStimme({ store, call });
     const { agentId, ...konto } = config.voice.elevenLabsOutbound;
     const agent = await fetchAgent({ fetchImpl, account: konto, agentId, timeoutMs: STIMMEN_FRIST_MS });
     return stimmenAnzahlVon({ angefordert, agent, vorspannGespielt: Boolean(call.bridgedAt) });
