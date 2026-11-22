@@ -43,9 +43,9 @@ async function kaufeErsatz({ store, deps }, number) {
   }
 }
 
-async function sichereRegistrierung({ store, bereiche, deps }, number) {
+async function sichereRegistrierung({ store, bereiche, deps }, sipRegistrar, number) {
   try {
-    const { phoneNumberId } = await deps.sipRegistrar.ensureRegistration({ e164: number.e164, numberId: number.id });
+    const { phoneNumberId } = await sipRegistrar.ensureRegistration({ e164: number.e164, numberId: number.id });
     await bereiche.nummern.registrierungAnhaengen(number.id, phoneNumberId);
     await store.drainFlushes();
     return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
@@ -58,8 +58,9 @@ async function sichereRegistrierung({ store, bereiche, deps }, number) {
 async function pruefeRegistrierung(kontext, number, ergebnis) {
   if (ergebnis !== TAUSCH_ERGEBNIS.ERSATZ_AKTIV) return ergebnis;
   if (number.providerAgentPhoneNumberId) return ergebnis;
-  if (!kontext.deps.sipRegistrar) return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
-  return sichereRegistrierung(kontext, number);
+  const { sipRegistrar } = kontext.deps;
+  if (!sipRegistrar) return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
+  return sichereRegistrierung(kontext, sipRegistrar, number);
 }
 
 function ersatzBereit({ store }, neu) {
