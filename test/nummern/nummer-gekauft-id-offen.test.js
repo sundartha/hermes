@@ -9,7 +9,7 @@ process.env.TELNYX_API_BASE = "https://telnyx.test";
 process.env.TELNYX_API_KEY = "KEYtest-gekauft-id-offen";
 
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
-const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
+const { handleProvisionJob } = await import("../../src/worker/provisioning.ts");
 const { speicher } = await jsonSpeicherImDatenordner("gekauft-id-offen-");
 const { NUMBER_STATUS } = speicher;
 

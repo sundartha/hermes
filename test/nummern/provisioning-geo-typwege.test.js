@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
-import { handleProvisionJob } from "../../src/worker/provisioning.js";
+import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { fakeProvisioner } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
