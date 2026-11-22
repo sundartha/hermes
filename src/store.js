@@ -178,7 +178,7 @@ export const budgetReservierung = {
   freigeben: (anfrage) => aktiveBudgetReservierung().freigeben(anfrage),
 };
 
-export const makePostgresFristen = (runner) => macheFristenSql({ runner, einreihen: (arbeit) => runner.withClient(arbeit) });
+export const makePostgresFristen = (runner) => macheFristenSql({ runner, einreihen: (arbeit) => runner.withClient(arbeit), besitzLage: () => besitzLageVon(runner) });
 
 function setzeBackend(neu) {
   offenesBackend = neu;

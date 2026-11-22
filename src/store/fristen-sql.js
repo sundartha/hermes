@@ -51,6 +51,7 @@ const FRISTEN = Object.freeze({
     offen: (call) => istAktiv(call) && Boolean(call.fristAbfrageAt),
     faelligUm: "frist_abfrage_at",
     parameter: [],
+    nurOhneLebendenBesitzer: true,
   },
   uebergabe: {
     feld: "fristUebergabeAt",
@@ -62,6 +63,7 @@ const FRISTEN = Object.freeze({
     offen: (call) => istAktiv(call) && Boolean(call.fristUebergabeAt),
     faelligUm: "frist_uebergabe_at",
     parameter: [],
+    nurOhneLebendenBesitzer: true,
   },
 });
 const SETZEN_SQL = "UPDATE call SET frist_hoechstdauer_at = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
@@ -77,9 +79,16 @@ const SETZEN_UEBERGABE_SQL = `UPDATE call SET frist_uebergabe_versuche = 0,
 const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
 const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
-const holenSql = ({ bedingung, faelligUm, leaseSpalte, versucheSpalte }) => `WITH faellig AS (
+const ohneLebendenBesitzer = (eintrag) =>
+  eintrag.nurOhneLebendenBesitzer
+    ? ` AND NOT COALESCE(instanz = ANY($${4 + eintrag.parameter.length}::text[]), false)`
+    : "";
+
+const holenSql = (eintrag) => {
+  const { bedingung, faelligUm, leaseSpalte, versucheSpalte } = eintrag;
+  return `WITH faellig AS (
   SELECT id, ${faelligUm} AS faellig_um FROM call
-  WHERE tenant_id = $1 AND ${bedingung} AND ${faelligUm} <= now()
+  WHERE tenant_id = $1 AND ${bedingung}${ohneLebendenBesitzer(eintrag)} AND ${faelligUm} <= now()
     AND (${leaseSpalte} IS NULL OR ${leaseSpalte} <= now())
   ORDER BY ${faelligUm}, id
   LIMIT $2
@@ -90,6 +99,12 @@ SET ${leaseSpalte} = now() + $3::double precision * interval '1 millisecond',
 FROM faellig
 WHERE call.id = faellig.id AND call.tenant_id = $1
 RETURNING call.id, call.tenant_id, faellig.faellig_um, call.${versucheSpalte}::int AS versuche`;
+};
+
+async function fremdeLebende(besitzLage) {
+  const { eigene, lebende } = await besitzLage();
+  return (lebende ?? []).filter((kennung) => kennung !== eigene);
+}
 
 function frist(art) {
   const eintrag = FRISTEN[art];
@@ -120,7 +135,7 @@ async function imMandanten(client, tenantId, anweisung) {
 const alsTreffer = (zeile) =>
   treffer({ callId: zeile.id, tenantId: zeile.tenant_id, faelligUm: zeile.faellig_um, versuche: zeile.versuche });
 
-export function macheFristenSql({ runner, einreihen }) {
+export function macheFristenSql({ runner, einreihen, besitzLage }) {
   return {
     setzeHoechstdauer: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_SQL, [tenantId, callId, faelligAt]])),
@@ -135,12 +150,13 @@ export function macheFristenSql({ runner, einreihen }) {
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
       const eintrag = frist(art);
       const sql = holenSql(eintrag);
+      const fremde = eintrag.nurOhneLebendenBesitzer ? [await fremdeLebende(besitzLage)] : [];
       try {
         return await runner.withClient(async (client) => {
           const { rows: mandanten } = await client.query(MANDANTEN_SQL);
           const gefunden = [];
           for (const { id } of mandanten) {
-            const zeilen = await imMandanten(client, id, [sql, [id, limitJeMandant, leaseMs, ...eintrag.parameter]]);
+            const zeilen = await imMandanten(client, id, [sql, [id, limitJeMandant, leaseMs, ...eintrag.parameter, ...fremde]]);
             gefunden.push(...zeilen.map(alsTreffer));
           }
           return gefunden;
