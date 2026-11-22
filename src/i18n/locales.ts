@@ -156,7 +156,7 @@ export const LOCALES = Object.freeze({
     summaryEvidenceClause:
       ' Ergaenze ausserdem "evidence": hoechstens 2 kurze, WOERTLICHE Zitate aus dem Transkript, die das Ergebnis belegen. Nur woertlich Gesagtes, nichts Zusammengefasstes.',
     summaryNextStepsClause:
-      ' Ergaenze ausserdem "next_steps": eine Liste mit hoechstens 3 Eintraegen der Form {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Nimm nur Schritte auf, die im Transkript ausdruecklich belegt sind (vereinbarter Termin, zugesagter Rueckruf, zu erledigende Aufgabe); "at" nur, wenn Datum bzw. Uhrzeit im Transkript genannt wurden, sonst null. Erfinde nichts: gab es keine Schritte, ist die Liste leer. Hermes traegt nichts in einen Kalender ein; next_steps ist reine Information.',
+      ' Ergaenze ausserdem "next_steps": eine Liste mit hoechstens 3 Eintraegen der Form {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Nimm nur Schritte auf, die im Transkript ausdruecklich belegt sind (vereinbarter Termin, zugesagter Rueckruf, zu erledigende Aufgabe). Bittet die Gegenseite um einen Rueckruf, ist das ein Schritt vom Typ "callback"; der Zeitpunkt der Bitte kommt nach "at", sobald er genannt wurde. "at" nur, wenn Datum bzw. Uhrzeit im Transkript genannt wurden, sonst null. Erfinde nichts: gab es keine Schritte, ist die Liste leer. Hermes traegt nichts in einen Kalender ein; next_steps ist reine Information.',
     llmDegradedSpeech:
       "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder möglich ist. Auf Wiederhören.",
     turnErrorSpeech:
@@ -243,7 +243,7 @@ export const LOCALES = Object.freeze({
     summaryEvidenceClause:
       ' Ajoute aussi "evidence" : au maximum 2 courtes citations LITTÉRALES du transcript qui étayent le résultat. Uniquement des propos littéraux, rien de résumé.',
     summaryNextStepsClause:
-      ' Ajoute aussi "next_steps" : une liste d\'au maximum 3 éléments de la forme {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Ne retiens que les étapes expressément étayées par le transcript (rendez-vous convenu, rappel promis, tâche à faire) ; "at" uniquement si une date ou une heure figure dans le transcript, sinon null. N\'invente rien : s\'il n\'y a pas d\'étape, la liste reste vide. Hermes n\'inscrit rien dans un agenda ; next_steps est une simple information.',
+      ' Ajoute aussi "next_steps" : une liste d\'au maximum 3 éléments de la forme {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Ne retiens que les étapes expressément étayées par le transcript (rendez-vous convenu, rappel promis, tâche à faire). Si l\'interlocuteur demande à être rappelé, c\'est une étape de type "callback" ; le moment demandé va dans "at" dès qu\'il est indiqué. "at" uniquement si une date ou une heure figure dans le transcript, sinon null. N\'invente rien : s\'il n\'y a pas d\'étape, la liste reste vide. Hermes n\'inscrit rien dans un agenda ; next_steps est une simple information.',
     llmDegradedSpeech:
       "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
     turnErrorSpeech: "Désolé, un problème technique est survenu. Veuillez réessayer plus tard.",
@@ -330,7 +330,7 @@ export const LOCALES = Object.freeze({
     summaryEvidenceClause:
       ' Also add "evidence": at most 2 short, VERBATIM quotes from the transcript that support the outcome. Only verbatim wording, nothing summarised.',
     summaryNextStepsClause:
-      ' Also add "next_steps": a list of at most 3 entries of the form {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Only include steps that are explicitly supported by the transcript (an agreed appointment, a promised callback, a task to do); "at" only if a date or time was stated in the transcript, otherwise null. Invent nothing: if there were no steps, the list is empty. Hermes does not enter anything into a calendar; next_steps is plain information.',
+      ' Also add "next_steps": a list of at most 3 entries of the form {"type": "appointment"|"callback"|"task"|"other", "text": "...", "at": "YYYY-MM-DDTHH:MM"|"YYYY-MM-DD"|null}. Only include steps that are explicitly supported by the transcript (an agreed appointment, a promised callback, a task to do). If the other party asks to be called back, that is a step of type "callback"; the requested time goes into "at" as soon as it was stated. "at" only if a date or time was stated in the transcript, otherwise null. Invent nothing: if there were no steps, the list is empty. Hermes does not enter anything into a calendar; next_steps is plain information.',
     llmDegradedSpeech:
       "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
     turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
