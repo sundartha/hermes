@@ -195,7 +195,7 @@ export function makeVorspannAblauf({
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
     if (call.status === "active") {
-      const token = ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
+      const token = await ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
       const zustand = { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() };
       zustaende.set(call.id, zustand);
       armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, zustand, store, voiceControl, abgehobeneAnrufe, beiAufgelegt }) });

@@ -154,8 +154,10 @@ export const anrufstartMarker = {
 export { makeAnrufstartMarker, makePostgresAnrufstartMarker, makePostgresLeitungsplaetze };
 
 export const ttsAblage = {
-  ablegen: (token, audio) => offenesBackend.ttsAblage.ablegen(token, audio),
+  ablegen: (token, audio, optionen) => offenesBackend.ttsAblage.ablegen(token, audio, optionen),
   holen: (token) => offenesBackend.ttsAblage.holen(token),
+  lesen: (token) => offenesBackend.ttsAblage.lesen(token),
+  freigeben: (token) => offenesBackend.ttsAblage.freigeben(token),
 };
 
 const aktiveKonsultPlaetze = () => offenesBackend?.konsultPlaetze ?? speicherKonsultPlaetze;
