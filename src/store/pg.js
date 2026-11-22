@@ -138,7 +138,7 @@ export function mandantSperreGelesenVon(zustand, tenantId) {
   return mandantJeZustand.get(zustand).sperreLesen(tenantId);
 }
 
-export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs } = {}) {
+export function makePgStore(runner, { prepareSchema = migrate, einstellungenFristMs, kennung } = {}) {
   let state = null;
   let flushChain = Promise.resolve();
   let lastFlushError = null;
@@ -192,7 +192,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
   const profil = macheProfilSql({ ...optionen, innerhalbFrist });
   const ausfallSql = macheAusfallSql(optionen);
-  const nummernSql = macheNummernSql({ ...optionen, zeileZuNummer: rowToNumber });
+  const nummernSql = macheNummernSql({ ...optionen, zeileZuNummer: rowToNumber, kennung });
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -1271,7 +1271,7 @@ async function loadTenantRows(client, tenantId) {
   ).rows;
   const jobRows = (
     await client.query(
-      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
+      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz
        FROM provisioning_job WHERE tenant_id = $1`,
       [tenantId],
     )
@@ -2032,6 +2032,7 @@ function rowToProvisioningJob(zeile) {
     lastError: zeile.last_error ?? null,
     createdAt:
       zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
+    instanz: zeile.instanz ?? null,
   };
 }
 

@@ -43,6 +43,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "28", name: "0028_plattform_absender_bindung_geschlossen" },
   { version: "29", name: "0029_provisioning_job_eindeutig" },
   { version: "30", name: "0030_nummer_schluessel" },
+  { version: "31", name: "0031_provisioning_job_instanz" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -157,6 +158,7 @@ test(
         "0028_plattform_absender_bindung_geschlossen",
         "0029_provisioning_job_eindeutig",
         "0030_nummer_schluessel",
+        "0031_provisioning_job_instanz",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
