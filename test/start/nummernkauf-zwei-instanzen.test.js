@@ -263,3 +263,41 @@ test("Nummernkauf: der Abgleich von B schreibt den Kauf der lebenden A nicht in 
   await abgleichenUndAbarbeiten(b);
   assert.deepEqual(umgebung.bestellungen, [KENNUNG_A]);
 });
+
+test("Nummernkauf: ein offener fremder Auftrag ohne Nummernzeile loest weder Fehler noch Bestellung aus und bleibt bei A", async (t) => {
+  const umgebung = await aufbau();
+  const logs = meldungen(t);
+  const b = await instanz(umgebung, KENNUNG_B);
+  await auftragVonA(umgebung);
+  await lebt(umgebung.db, KENNUNG_B);
+  await stirbt(umgebung.db, KENNUNG_A);
+  await kontext(umgebung.db);
+  await umgebung.db.query("ALTER TABLE provisioning_job DROP CONSTRAINT provisioning_job_number_id_fkey");
+  await umgebung.db.query("UPDATE provisioning_job SET number_id = $1", ["num_fehlt"]);
+  await abgleichenUndAbarbeiten(b);
+  assert.deepEqual(umgebung.bestellungen, []);
+  assert.equal(b.einreihungen.mock.callCount(), 0);
+  assert.equal(await besitzerDesAuftrags(umgebung.db), KENNUNG_A);
+  assert.deepEqual(logs.filter((zeile) => zeile.includes("fehlgeschlagen")), [], logs.join("|"));
+});
+
+test("Nummernkauf: scheitert der Abgleich, meldet der Takt genau diese Meldung, bestellt nichts und der naechste Takt laeuft weiter", async (t) => {
+  const umgebung = await aufbau();
+  const fehler = t.mock.method(console, "error", () => {});
+  const b = await instanz(umgebung, KENNUNG_B);
+  await auftragVonA(umgebung);
+  await lebt(umgebung.db, KENNUNG_B);
+  await stirbt(umgebung.db, KENNUNG_A);
+  const lesbar = b.store.besitzLage;
+  b.store.besitzLage = async () => {
+    throw new Error("lebenszeichen kaputt");
+  };
+  await b.orchestrator.reconcileOrphanedProvisioning();
+  await b.orchestrator.runProvisioningDrainExclusive();
+  assert.deepEqual(fehler.mock.calls.map((aufruf) => aufruf.arguments), [["[provision-reconcile] Abgleich der offenen Auftraege fehlgeschlagen"]]);
+  assert.deepEqual(umgebung.bestellungen, []);
+  b.store.besitzLage = lesbar;
+  await abgleichenUndAbarbeiten(b);
+  assert.deepEqual(umgebung.bestellungen, [KENNUNG_B]);
+  assert.equal(fehler.mock.callCount(), EINMAL);
+});
