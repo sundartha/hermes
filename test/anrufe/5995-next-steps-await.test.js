@@ -111,4 +111,5 @@ test("await_call_event: die Beschreibung nennt next_steps als Teil der done-Antw
   const { config } = await awaitDone(endedCall(karte()));
   assert.match(config.description, /next_steps \(a list of \{type, text, at\}/);
   assert.match(config.description, /Hermes enters nothing into any calendar/);
+  assert.match(config.description, /answer carries the complete result \(summary, whether the objective was achieved, the result card and next_steps \(a list of/);
 });
