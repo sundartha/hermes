@@ -27,7 +27,9 @@ export const AWAIT_CALL_EVENT_DESCRIPTION =
   "Waits briefly (up to ~20 seconds) for the next event of a running call and returns " +
   "either a question from the agent, the final result, or nothing. Call this REPEATEDLY " +
   'right after place_call and keep going until it returns event="done" - that final ' +
-  "answer carries the complete result (summary and whether the objective was achieved), " +
+  "answer carries the complete result (summary, whether the objective was achieved, the result card and " +
+  "next_steps (a list of {type, text, at} follow-ups agreed in the call, such as a requested callback; " +
+  "\"at\" is an optional date or date-time; Hermes enters nothing into any calendar)), " +
   'so there is no need to call get_call_result separately. event="none" simply means ' +
   "nothing happened yet: call it again. This tool NEVER returns audio. Each call also " +
   "writes to the call record: it notes that you polled and marks a pending question as " +
