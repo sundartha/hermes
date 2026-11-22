@@ -5,7 +5,7 @@ import { fruehwarnung } from "./routes/intern-anrufe-laufend.js";
 import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
-import { makeAblageBisFreigabe } from "./tts/ablage-bis-freigabe.js";
+import { makeAblageBisFreigabe } from "./tts/ablage-bis-freigabe.ts";
 import { createTtsStore } from "./tts/store.ts";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
