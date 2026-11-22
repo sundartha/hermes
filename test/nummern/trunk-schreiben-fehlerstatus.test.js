@@ -2,17 +2,22 @@ import assert from "node:assert/strict";
 import { afterEach, mock, test } from "node:test";
 
 import { elevenlabsNummern } from "../../src/elevenlabs/nummern-port.ts";
+import {
+  ELEVENLABS_FEHLERSTATUS_SCHLUESSEL,
+  INIT_WEBHOOK_FEHLERSTATUS_TOKEN,
+  SIP_FEHLERSTATUS_PASSWORT,
+} from "../gemeinsam/erfundene-geheimnisse.js";
 
 const NUMMER = { id: "n_fehlerstatus", e164: "+12025550101", providerAgentPhoneNumberId: "phnum_fehlerstatus" };
 const CONFIG = {
   provisioning: { provisioningEnabled: true },
   voice: {
-    elevenLabsOutbound: { apiKey: "xi_fehlerstatus_key", apiBase: "https://el.invalid", agentId: "agent_fehlerstatus" },
+    elevenLabsOutbound: { apiKey: ELEVENLABS_FEHLERSTATUS_SCHLUESSEL, apiBase: "https://el.invalid", agentId: "agent_fehlerstatus" },
     elevenLabsInbound: {
       enabled: true,
       sipUser: "fehlerstatus-benutzer",
-      sipPassword: "fehlerstatus-passwort-".padEnd(40, "x"),
-      initWebhookToken: "t".repeat(40),
+      sipPassword: SIP_FEHLERSTATUS_PASSWORT,
+      initWebhookToken: INIT_WEBHOOK_FEHLERSTATUS_TOKEN,
     },
   },
 };
