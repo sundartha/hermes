@@ -152,11 +152,11 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.ts und im Inbound-Trunk-S
     "src/config.ts",
     "src/elevenlabs/inbound-path-decision.ts",
     "src/elevenlabs/inbound-trunk-beleg.ts",
-    "src/elevenlabs/nummern-registrierung.js",
+    "src/elevenlabs/nummern-registrierung.ts",
     "src/routes/voice.ts",
   ]);
   assert.equal(dateien["src/routes/voice.ts"], EINMAL);
-  assert.equal(dateien["src/elevenlabs/nummern-registrierung.js"], EINMAL);
+  assert.equal(dateien["src/elevenlabs/nummern-registrierung.ts"], EINMAL);
   assert.equal(dateien["src/elevenlabs/inbound-trunk-beleg.ts"], EINMAL);
 });
 

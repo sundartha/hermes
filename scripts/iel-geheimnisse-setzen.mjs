@@ -15,7 +15,7 @@ import {
   inboundTrunkKoerper,
   inventarUrteil,
   registrierungenMitNummer,
-} from "../src/elevenlabs/nummern-registrierung.js";
+} from "../src/elevenlabs/nummern-registrierung.ts";
 import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.ts";
 import {
   EXIT,

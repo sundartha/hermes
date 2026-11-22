@@ -11,7 +11,7 @@ const EINGANG_MIT_EINZIGEM_IMPORTEUR_INNERHALB_ELEVENLABS = "src/elevenlabs/conv
 const GESPERRTE_ADAPTER = [
   "src/elevenlabs/outbound.js",
   "src/elevenlabs/outbound-vorspann.js",
-  "src/elevenlabs/nummern-registrierung.js",
+  "src/elevenlabs/nummern-registrierung.ts",
 ];
 
 const alleEingaenge = karte.bausteine.flatMap((baustein) =>

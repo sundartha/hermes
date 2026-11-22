@@ -36,7 +36,7 @@ function verstoesse(von, ziel) {
 for (const [datei, ziel] of [
   ["src/routes/probe.ts", "src/elevenlabs/outbound.js"],
   ["src/telephony/probe.js", "src/elevenlabs/outbound-vorspann.js"],
-  ["src/worker/probe.js", "src/elevenlabs/nummern-registrierung.js"],
+  ["src/worker/probe.js", "src/elevenlabs/nummern-registrierung.ts"],
 ]) {
   test(`SG-ELEVENLABS-PORT Import von ${ziel} aus ${datei} ist ein Verstoß gegen elevenlabs-nur-ueber-port`, () => {
     assert.deepEqual(verstoesse(datei, ziel), [`${REGEL}: ${datei} → ${ziel}`]);
