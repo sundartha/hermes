@@ -53,7 +53,10 @@ function signierterEreignisKoerper(signer, callId, eventType) {
 }
 
 const senden = (srv, { pfad, optionen }) => abrufMitFrist(`${srv.localUrl}${pfad}`, optionen);
-const abrufen = (srv, token) => abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
+const abrufen = (srv, token) => {
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  return abrufMitFrist(new URL(`/voice/tts/${encodeURIComponent(token)}`, srv.localUrl).href);
+};
 
 test("Vorspann-Audio eines auf Instanz A gestarteten Anrufs ist ueber Instanz B abrufbar, bis der Anruf aufgelegt wird", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
