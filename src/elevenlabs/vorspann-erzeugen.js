@@ -19,7 +19,7 @@ const STATUS_LAENGE_MAX = 48;
 export const statusUrsache = (status) =>
   `status_${String(status ?? "null").replace(STATUS_ZEICHEN_UNGUELTIG, "_").slice(0, STATUS_LAENGE_MAX)}`;
 
-export function meldeVorspannRueckfall({ callId, grund, ursache }) {
+export function meldeVorspannRueckfall({ callId, grund, ursache = "" }) {
   console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}${ursache ? ` ursache=${ursache}` : ""}`);
 }
 
