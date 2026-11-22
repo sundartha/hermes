@@ -62,6 +62,7 @@ export type WaehleAnruf = (call: Anruf, bestanden: GatesBestanden) => Promise<Wa
 
 type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
+const STARTSPRACHE = "de";
 const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
 const sprachtexteFuer: (language: string) => unknown = localeFor;
 const gateTexteFuer: (language: string) => { gates: { queueUnavailable: string } } = localeFor;
@@ -212,7 +213,6 @@ interface Bereiche {
     noteConsultPoll: (callId: string) => Promise<unknown>;
     markConsultAskDelivered: (callId: string, eventId: string) => Promise<unknown>;
   };
-  anrufe: { resolveCallLanguage: (anfrage: { tenantId: string | undefined; numberRecord: unknown }) => Promise<string> };
   konto: { tenantPrivateNumberLesen: (tenantId: string | undefined) => Promise<string | null | undefined> };
   mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
   einstellungen: {
@@ -872,9 +872,7 @@ export function makeCallRoutes({
       if (vorab?.denial) return await antwortOhneAnruf({ claim: vorab, ctx, req, res, store, budgetReservierung, audit, config });
       wartet = vorab?.wartet === true;
       await store.einstellungenNachladen?.(ctx.tenantId);
-      const language =
-        requestedLanguage ??
-        (await bereiche.anrufe.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord }));
+      const language = requestedLanguage ?? STARTSPRACHE;
       const { diagnostic, calleeIsOwnerOfThisCall } = await resolveCallPrivacyFlags({
         bereiche,
         audit,
