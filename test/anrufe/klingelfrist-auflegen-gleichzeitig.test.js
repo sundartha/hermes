@@ -32,6 +32,9 @@ function meldeAufgelegt(callId) {
   });
 }
 
+const anrufe = () => umgebung.srv.readStore().calls;
+const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
+
 beforeEach(async () => {
   gemeldet = false;
   umgebung.attrappe = await starteAttrappe(undefined, null, async (url) => {
@@ -55,10 +58,11 @@ afterEach(async () => {
 
 test("6005: trifft das Auflegen des Beins waehrend der Klingelfrist ein, endet der Anruf als no-answer und nicht als zustand_fehlt", async () => {
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(10));
-  await waitUntil(() => umgebung.srv.stdout.includes("klingelfrist-fertig"), { timeoutMs: WARTE_FRIST_MS });
-  await waitUntil(() => umgebung.srv.readStore().calls.find((e) => e.id === callId).status !== "active", { timeoutMs: WARTE_FRIST_MS });
+  const ausgabe = () => umgebung.srv.stdout;
+  await waitUntil(() => ausgabe().includes("klingelfrist-fertig"), { timeoutMs: WARTE_FRIST_MS });
+  await waitUntil(() => anrufIn(callId).status !== "active", { timeoutMs: WARTE_FRIST_MS });
 
-  const call = umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === callId);
+  const call = anrufIn(callId);
   assert.equal(call.status, "failed");
   assert.equal(call.failureReason, "no-answer");
   assert.equal(gemeldet, true);

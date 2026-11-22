@@ -19,6 +19,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnun
   const waehlbefehle = [];
   const waehlaufrufe = [];
   const rohkoerper = [];
+  const vorAntwort = (url) => (url.endsWith("/actions/hangup") ? vorAuflegenAntwort(url) : undefined);
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
@@ -30,7 +31,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnun
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
-      if (req.url.endsWith("/actions/hangup")) await vorAuflegenAntwort(req.url);
+      await vorAntwort(req.url);
       const waehlaufruf = req.url === "/v2/calls" ? JSON.parse(roh) : null;
       if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
       const befehl = waehlaufruf ? waehlaufruf.command_id : "";
