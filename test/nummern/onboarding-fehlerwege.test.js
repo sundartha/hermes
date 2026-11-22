@@ -61,7 +61,7 @@ test("Registrierung wirft einen Text: Warnung nennt den Text, die Nummer bleibt 
     },
   };
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar, opts: ARGS });
 
   assert.equal(nummer(state).status, NUMBER_STATUS.ACTIVE);
   assert.equal(
@@ -81,7 +81,7 @@ test("Registrierung wirft einen Error: Warnung nennt dessen Meldung", async () =
     },
   };
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar, opts: ARGS });
 
   assert.equal(zeilen.warn.length, 1);
   assert.match(zeilen.warn[0], new RegExp(`number=${numberId}: registrierung-meldung - DID`));
@@ -92,7 +92,7 @@ test("Registrierung gelingt neu angelegt: Log nennt angelegt=true", async () => 
   const { zeilen, logger } = protokoll();
   const sipRegistrar = { ensureRegistration: async () => ({ phoneNumberId: "phnum_a", angelegt: true }) };
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar, opts: ARGS });
 
   assert.deepEqual(zeilen.log, [`[el-registrierung] number=${numberId} angelegt=true`]);
   assert.equal(nummer(state).providerAgentPhoneNumberId, "phnum_a");
@@ -103,7 +103,7 @@ test("Registrierung gelingt schon vorhanden: Log nennt angelegt=false", async ()
   const { zeilen, logger } = protokoll();
   const sipRegistrar = { ensureRegistration: async () => ({ phoneNumberId: "phnum_b", angelegt: false }) };
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), logger, sipRegistrar, opts: ARGS });
 
   assert.deepEqual(zeilen.log, [`[el-registrierung] number=${numberId} angelegt=false`]);
 });
@@ -123,7 +123,7 @@ test("Freigabe nach gescheitertem Einzug wirft einen Text: Warnung nennt Nummer,
   });
 
   await assert.rejects(
-    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger }, ARGS),
+    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger, opts: ARGS }),
     /Einzug gescheitert/,
   );
 
@@ -151,7 +151,7 @@ test("Freigabe nach gescheitertem Einzug wirft einen Error: Warnung nennt dessen
   });
 
   await assert.rejects(
-    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger }, ARGS),
+    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger, opts: ARGS }),
     /Einzug gescheitert/,
   );
 
@@ -171,7 +171,7 @@ test("Kauf gekauft, ID offen: Warnung nennt Nummer, E164 und Ursache, die Nummer
   const billing = fakeBilling();
 
   await assert.rejects(
-    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger }, ARGS),
+    handleProvisionJob(state, auftrag(numberId), { provisioner, billing, logger, opts: ARGS }),
     NummerGekauftIdOffen,
   );
 
@@ -190,7 +190,7 @@ test("Einzugs-Hold nutzt Kunde und Zahlungsmittel des Mandanten", async () => {
   const { state, numberId } = await angelegt();
   const billing = fakeBilling();
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing, opts: ARGS });
 
   const [name, hold] = billing.log[0];
   assert.equal(name, "placeHold");
@@ -205,7 +205,7 @@ test("Mandant ohne Einrichtungsgebühr: der Hold wird freigegeben statt eingezog
   const { state, numberId } = await angelegt({ stripeNumberSetupFeeExempt: true });
   const billing = fakeBilling();
 
-  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing }, ARGS);
+  await handleProvisionJob(state, auftrag(numberId), { provisioner: fakeProvisioner(), billing, opts: ARGS });
 
   assert.deepEqual(
     billing.log.map((eintrag) => eintrag[0]),
@@ -219,7 +219,7 @@ test("Mandant ohne Zahlungsmittel: Kauf bricht ab, Nummer scheitert, kein Anbiet
   const billing = fakeBilling();
 
   await assert.rejects(
-    handleProvisionJob(state, auftrag(NUMMER), { provisioner, billing }, ARGS),
+    handleProvisionJob(state, auftrag(NUMMER), { provisioner, billing, opts: ARGS }),
     /kein hinterlegtes Zahlungsmittel/,
   );
 
@@ -231,7 +231,7 @@ test("Mandant ohne Zahlungsmittel: Kauf bricht ab, Nummer scheitert, kein Anbiet
 test("Kauf ohne Abrechnung braucht kein Zahlungsmittel: Nummer wird aktiv", async () => {
   const state = await mitNummer();
 
-  await handleProvisionJob(state, auftrag(NUMMER), { provisioner: fakeProvisioner() }, ARGS);
+  await handleProvisionJob(state, auftrag(NUMMER), { provisioner: fakeProvisioner(), opts: ARGS });
 
   assert.equal(nummer(state).status, NUMBER_STATUS.ACTIVE);
 });

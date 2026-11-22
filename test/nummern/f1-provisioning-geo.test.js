@@ -45,7 +45,7 @@ function drainWithGeo(queue, s, deps, defaultHoldCents, onHold) {
     if (onHold) onHold(holdAmountCents);
     const opts = { ...geo, ...(holdAmountCents !== undefined ? { holdAmountCents } : {}) };
     try {
-      await handleProvisionJob(s, queuedJob, deps, opts);
+      await handleProvisionJob(s, queuedJob, { ...deps, opts: opts });
       if (record) record.status = PROVISIONING_JOB_STATUS.DONE;
     } catch (err) {
       if (record) record.status = PROVISIONING_JOB_STATUS.FAILED;

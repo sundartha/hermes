@@ -94,8 +94,8 @@ test("Auftrag: Kauf ohne Antwort -> Status provisioning, Hold bleibt, kein zweit
   let fehler;
   await mitKurzerFrist(() =>
     withFetch(telnyx.fetchImpl, async () => {
-      fehler = await handleProvisionJob(state, job, deps, ARGS).catch((err) => err);
-      await handleProvisionJob(state, job, deps, ARGS);
+      fehler = await handleProvisionJob(state, job, { ...deps, opts: ARGS }).catch((err) => err);
+      await handleProvisionJob(state, job, { ...deps, opts: ARGS });
     }),
   );
   assert.equal(fehler.name, "NummerGekauftIdOffen");

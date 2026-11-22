@@ -74,7 +74,7 @@ function localNumberSearch(countryCode) {
 }
 
 function recordedCalls(handler) {
-  return handler.mock.calls.map(({ arguments: [, queuedJob, deps, opts] }) => ({
+  return handler.mock.calls.map(({ arguments: [, queuedJob, { opts, ...deps }] }) => ({
     numberId: queuedJob.payload.numberId,
     deps,
     opts,

@@ -162,12 +162,7 @@ test("Kaufauftrag ueber den Worker mit countryCode DE: Meldung nennt das Land, k
   const abrechnung = abrechnungsAttrappe();
 
   await assert.rejects(
-    handleProvisionJob(
-      state,
-      { payload: { numberId } },
-      { provisioner: anbieter, billing: abrechnung },
-      { ...KAUF_ARGUMENTE, countryCode: NICHT_KAUFBAR.land },
-    ),
+    handleProvisionJob(state, { payload: { numberId } }, { provisioner: anbieter, billing: abrechnung, opts: { ...KAUF_ARGUMENTE, countryCode: NICHT_KAUFBAR.land } }),
     /DE/,
   );
 
@@ -187,12 +182,7 @@ test("US-Suche liefert +49-Treffer: nichts wird bestellt, kein Hold, Nummer fail
   const abrechnung = abrechnungsAttrappe();
 
   await assert.rejects(
-    handleProvisionJob(
-      state,
-      { payload: { numberId } },
-      { provisioner: anbieter, billing: abrechnung },
-      { ...KAUF_ARGUMENTE, countryCode: KAUFLAND },
-    ),
+    handleProvisionJob(state, { payload: { numberId } }, { provisioner: anbieter, billing: abrechnung, opts: { ...KAUF_ARGUMENTE, countryCode: KAUFLAND } }),
     /DE/,
   );
 

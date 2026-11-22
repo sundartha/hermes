@@ -34,12 +34,7 @@ test("Nummernkauf: verschwindet die Nummer beim Kauf aus dem Zustand, meldet mar
   };
   const logger = { warn() {}, error() {}, info() {} };
   await assert.rejects(
-    handleProvisionJob(
-      zustand,
-      { payload: { numberId: "num_1" } },
-      { provisioner, billing: null, logger },
-      { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" },
-    ),
+    handleProvisionJob(zustand, { payload: { numberId: "num_1" } }, { provisioner, billing: null, logger, opts: { countryCode: "US", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" } }),
     new Error("markNumberGekauft: Nummer num_1 nicht gefunden"),
   );
 });
