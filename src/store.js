@@ -22,6 +22,7 @@ import {
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 import { makeAnrufstartMarker, makePostgresAnrufstartMarker } from "./store/anrufstart-marker.js";
 import { makePostgresLeitungsplaetze } from "./store/leitungsplaetze-pg.js";
+import { macheVorspannFristenSql, macheSpeicherVorspannFristen } from "./store/vorspann-fristen-sql.js";
 import { makePostgresVorspannZustand, makeSpeicherVorspannZustand } from "./store/vorspann-zustand.js";
 
 async function createPgBackend() {
@@ -85,7 +86,10 @@ async function createPgBackend() {
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
     vorspannZustand: makePostgresVorspannZustand(runner),
-    faelligeFristen: makePostgresFristen(runner).faellige,
+    faelligeFristen: (anfrage) =>
+      anfrage.art === "vorspann" ? macheVorspannFristenSql({ runner }).faellige(anfrage) : makePostgresFristen(runner).faellige(anfrage),
+    setzeVorspannFrist: (anfrage) => macheVorspannFristenSql({ runner }).setze(anfrage),
+    leereVorspannFrist: (anfrage) => macheVorspannFristenSql({ runner }).leere(anfrage),
     setzeHoechstdauerFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeHoechstdauer(anfrage);
@@ -164,6 +168,8 @@ export const ttsAblage = {
 
 const speicherVorspannZustand = makeSpeicherVorspannZustand();
 
+const speicherVorspannFristen = macheSpeicherVorspannFristen({ zustand: speicherVorspannZustand });
+
 const aktiverVorspannZustand = () => offenesBackend?.vorspannZustand ?? speicherVorspannZustand;
 
 export const vorspannZustand = {
@@ -215,7 +221,10 @@ function jsonBackendAufbauen() {
     beanspruecheInboundElNachlauf: async (callId, nowIso) => jsonBackend.markInboundElNachlaufStarted(callId, nowIso),
     stripeEreignisRegister: null,
     ttsAblage: null,
-    faelligeFristen: async (anfrage) => faelligeAusSpiegel(jsonBackend.load(), { jetztMs: Date.now(), ...anfrage }),
+    faelligeFristen: async (anfrage) =>
+      anfrage.art === "vorspann" ? speicherVorspannFristen.faellige(anfrage) : faelligeAusSpiegel(jsonBackend.load(), { jetztMs: Date.now(), ...anfrage }),
+    setzeVorspannFrist: (anfrage) => speicherVorspannFristen.setze(anfrage),
+    leereVorspannFrist: (anfrage) => speicherVorspannFristen.leere(anfrage),
     setzeHoechstdauerFrist: async (anfrage) => {
       setzeHoechstdauerImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
@@ -313,6 +322,8 @@ export const {
   setzeReserveFrist,
   setzeAbfrageFrist,
   setzeUebergabeFrist,
+  setzeVorspannFrist,
+  leereVorspannFrist,
   mitStartSperre,
   mitAnrufSperre,
   nummernVorhanden,

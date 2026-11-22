@@ -77,7 +77,7 @@ const SETZEN_ABFRAGE_SQL =
 const SETZEN_UEBERGABE_SQL = `UPDATE call SET frist_uebergabe_versuche = 0,
   frist_uebergabe_at = CASE WHEN $3::timestamptz IS NULL THEN NULL ELSE LEAST(COALESCE(frist_uebergabe_at, $3::timestamptz), $3::timestamptz) END
   WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
-const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
+export const MANDANTEN_SQL = "SELECT id FROM tenant ORDER BY id";
 const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
 const ohneLebendenBesitzer = (eintrag) =>
@@ -120,7 +120,7 @@ const treffer = ({ callId, tenantId, faelligUm, versuche }) => ({
   versuche,
 });
 
-async function imMandanten(client, tenantId, anweisung) {
+export async function imMandanten(client, tenantId, anweisung) {
   await client.query("BEGIN");
   try {
     await client.query(KONTEXT_SQL, [tenantId]);
