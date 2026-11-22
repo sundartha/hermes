@@ -198,7 +198,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     },
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
-        to: nummer,
+        to: normalisiert(nummer),
         objective: ZIEL_OBJECTIVE,
         max_duration_s: DAUER_GRENZE_S,
         language: SPRACHE,
