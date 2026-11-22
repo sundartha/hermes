@@ -36,7 +36,7 @@ const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
 const { starteTelemetrie } = await import("../../src/utils/telemetrie.js");
 const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
-const { handleProvisionJob } = await import("../../src/worker/provisioning.js");
+const { handleProvisionJob } = await import("../../src/worker/provisioning.ts");
 const { voiceControl, messaging, numberProvisioning, providerConfigRead } = await import(
   "../../src/telephony/registry.js"
 );
