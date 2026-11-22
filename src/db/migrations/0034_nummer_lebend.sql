@@ -2,8 +2,8 @@ SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '30s';
 
 CREATE TABLE IF NOT EXISTS nummer_lebend_zahl (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  anzahl INTEGER NOT NULL DEFAULT 0
+  id BIGINT PRIMARY KEY CHECK (id = 1),
+  anzahl BIGINT NOT NULL DEFAULT 0
 );
 
 ALTER TABLE nummer_lebend_zahl ENABLE ROW LEVEL SECURITY;
@@ -14,13 +14,13 @@ CREATE POLICY nummer_lebend_zahl_global ON nummer_lebend_zahl USING (true) WITH 
 
 INSERT INTO nummer_lebend_zahl (id, anzahl) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
 
-CREATE OR REPLACE FUNCTION nummern_lebend_gesamt() RETURNS integer SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE OR REPLACE FUNCTION nummern_lebend_gesamt() RETURNS bigint SECURITY DEFINER SET search_path = public, pg_temp AS $$
   SELECT anzahl FROM nummer_lebend_zahl WHERE id = 1;
 $$ LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION nummer_lebend_pflegen() RETURNS trigger SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
-  aenderung INTEGER := 0;
+  aenderung BIGINT := 0;
 BEGIN
   IF TG_OP IN ('INSERT', 'UPDATE') AND NEW.status NOT IN ('released', 'failed') THEN
     aenderung := aenderung + 1;
@@ -42,8 +42,8 @@ CREATE TRIGGER nummer_lebend_pflegen AFTER INSERT OR UPDATE OF status OR DELETE 
 DO $$
 DECLARE
   mandant TEXT;
-  gezaehlt INTEGER;
-  summe INTEGER := 0;
+  gezaehlt BIGINT;
+  summe BIGINT := 0;
 BEGIN
   FOR mandant IN SELECT id FROM tenant LOOP
     PERFORM set_config('app.current_tenant', mandant, true);
