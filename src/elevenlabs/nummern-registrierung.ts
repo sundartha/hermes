@@ -1,10 +1,11 @@
 import { anfrage } from "../utils/anfrage.js";
-import type { ConvaiKonto } from "./convai.ts";
 import { elevenlabsNummernKonto } from "./nummern-konto-port.ts";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";
 
 const KEINE_NUMMER = "(keine Nummer)";
+
+type ConvaiKonto = Parameters<ReturnType<typeof elevenlabsNummernKonto>["listPhoneNumbers"]>[0]["account"];
 
 interface ElZugang extends ConvaiKonto {
   agentId: string;
