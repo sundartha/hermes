@@ -112,7 +112,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "numberRecordByE164", "nummerNachladen", "nummernSql", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
   "persistCall",
   "planMinutesExceeded", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
-  "recordAnsweredUnclearReason", "recordCallCostEvidence", "recordCallCostTruingResult",
+  "recordAnsweredUnclearReason", "recordBridgedAt", "recordCallCostEvidence", "recordCallCostTruingResult",
   "recordCallEstimatedCostCents", "recordCallLookup", "recordCalleeConfirmedTimezone", "recordCostProfile",
   "recordElDetectorCounts", "recordElevenlabsConversationId", "recordFailureReason",
   "recordProviderCallResult", "recordProviderCollectedFields",
