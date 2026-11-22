@@ -13,7 +13,7 @@ export const STAND = Object.freeze({
 export const messeSeit = ({ callId, messung, bezug, stand, seit, jetzt }) =>
   meldeVorspannMessung({ callId, messung, bezug, ms: jetzt - stand.get(seit) });
 
-export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, logFehler, now }) {
+export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBeineAuf, vermerkeElFehler, vermerkeNichtAbgespielt, logFehler, now }) {
   async function bruecke({ call, zustand }) {
     const { stand } = zustand;
     if (!stand.has(STAND.WIEDERGABE) || !stand.has(STAND.EL_BEIN) || stand.has(STAND.BRUECKE) || stand.has(STAND.ABGEBROCHEN)) return;
@@ -46,6 +46,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
     if (ereignis.wiedergabeStatus !== WIEDERGABE_VOLLSTAENDIG) {
       logFehler("wiedergabe", call.id, new Error(`Status ${ereignis.wiedergabeStatus}`));
       meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: statusUrsache(ereignis.wiedergabeStatus) });
+      vermerkeNichtAbgespielt(call);
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     }
     if (zustand.stand.has(STAND.WIEDERGABE)) return;
