@@ -37,7 +37,7 @@ import {
   classifyCallTime,
   cappedEndedAtMs,
 } from "./store/state-ops.js";
-import { handleProvisionJob } from "./worker/provisioning.js";
+import { handleProvisionJob } from "./worker/provisioning.ts";
 import { makeProvisioningOrchestrator } from "./worker/provisioning-orchestrator.js";
 import { resolveProvisionRetry } from "./billing/provision-trigger.ts";
 import { createQueue } from "./queue/registry.js";

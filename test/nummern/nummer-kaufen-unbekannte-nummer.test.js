@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handleProvisionJob } from "../../src/worker/provisioning.js";
+import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { NummerGekauftIdOffen } from "../../src/begriffe/nummern-vergabe.js";
 

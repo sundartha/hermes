@@ -6,7 +6,7 @@ import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helpe
 import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
-import { handleProvisionJob } from "../../src/worker/provisioning.js";
+import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);

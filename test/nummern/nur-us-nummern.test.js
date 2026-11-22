@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
-import { handleProvisionJob } from "../../src/worker/provisioning.js";
+import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { numberProvisioning } from "../../src/telephony/registry.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { config } from "../../src/config.ts";
