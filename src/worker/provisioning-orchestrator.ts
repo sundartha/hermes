@@ -1,7 +1,6 @@
 import { makeSingleFlight } from "../single-flight.ts";
 import type { Lauf, LaufMitMeldung } from "../utils/zeitplan-im-prozess.ts";
 import type { handleProvisionJob as HandleProvisionJob } from "./provisioning.ts";
-import type { markProvisioningJob as MarkProvisioningJob } from "../store/state-ops.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import {
   PROVIDER,
@@ -136,7 +135,7 @@ interface Abhaengigkeiten {
   ) => Wiederaufnahme;
   audit: (aktion: string, kennung: string | null, detail: string) => unknown;
   recordProvisioningJob: (zustand: Zustand, eingabe: JobEingabe) => Bereitstellung;
-  markProvisioningJob: typeof MarkProvisioningJob;
+  markProvisioningJob: (zustand: Zustand, jobId: string, ...ergebnis: [status: string, lastError?: unknown]) => unknown;
   classifyQueuedProvisioningJobs: (
     zustand: Zustand,
     eingabe: { nowMs: number; maxAgeMs: number; kycMinLevel: string },
