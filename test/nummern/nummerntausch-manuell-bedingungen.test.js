@@ -88,3 +88,99 @@ test("Ersatznummer requested und nicht released -> wird erneut gekauft", async (
 
   assert.equal(telnyx.spur.bestellungen, 2);
 });
+
+const { starteNummerntausch } = await import("../../src/worker/nummerntausch.js");
+
+function konfiguration() {
+  return withConfigNamespaces({ provisioningEnabled: true, maxNumbers: 50, maxNumbersPerTenant: 1, paymentEnabled: true });
+}
+
+async function protokollierterLauf({ store, telnyx, sipRegistrar, config = konfiguration() }) {
+  const log = [];
+  const fehler = [];
+  await runNummerntausch({
+    store,
+    config,
+    numberProvisioning: () => telnyx,
+    sipRegistrar,
+    inboundTrunkSchreiber: null,
+    logger: { log: (zeile) => log.push(zeile), warn() {}, error: (zeile) => fehler.push(zeile) },
+  });
+  return { log, fehler };
+}
+
+test("Scheitert der Kauf, steht der Grund des Anbieters im Fehlerprotokoll und die Kandidatenzahl im Bestandsprotokoll", async () => {
+  const { store } = await makePgTestStore();
+  const state = store.load();
+  state.tenants.push({ id: TENANT, status: "active" });
+  state.numbers.push({
+    id: ALT,
+    tenantId: TENANT,
+    e164: "+4915799990088",
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: "pnum_alt",
+    country: "DE",
+    language: "de",
+    paymentIntentId: null,
+  });
+
+  const { log, fehler } = await protokollierterLauf({ store, telnyx: anbieter() });
+
+  assert.ok(log.includes("[kundennummern] aktive_ausserhalb_plus1=1"));
+  assert.equal(fehler.length, 1);
+  assert.match(fehler[0], /^\[nummerntausch\] Kauf fehlgeschlagen number=\S+: Telnyx lehnt ab$/);
+});
+
+test("Scheitert die Registrierung der Ersatznummer, steht der Grund im Fehlerprotokoll", async () => {
+  const { store, state, telnyx } = await nachErstemFehlschlag();
+  state.numbers.find((nummer) => nummer.id !== ALT).status = "released";
+  const ersatz = state.numbers.find((nummer) => nummer.id !== ALT);
+  ersatz.status = "requested";
+  const bestellt = { e164: NEU, providerNumberId: "pnum_neu" };
+  telnyx.orderNumber = async () => bestellt;
+  const sipRegistrar = {
+    ensureRegistration: async () => {
+      throw new Error("Registrierer abgelehnt");
+    },
+  };
+
+  const { fehler } = await protokollierterLauf({ store, telnyx, sipRegistrar });
+
+  assert.ok(fehler.some((zeile) => /Registrierung fehlgeschlagen number=\S+: Registrierer abgelehnt$/.test(zeile)));
+});
+
+test("Bricht der Tausch einer Nummer ab, steht der Grund mit der Mandanten-Kennung im Fehlerprotokoll", async () => {
+  const { store } = await nachErstemFehlschlag();
+  const config = {
+    ...konfiguration(),
+    provisioning: {
+      get provisioningEnabled() {
+        throw new Error("Sperre kaputt");
+      },
+    },
+  };
+
+  const { fehler } = await protokollierterLauf({ store, telnyx: anbieter(), config, sipRegistrar: null });
+
+  assert.deepEqual(fehler, [`[nummerntausch] Fehler tenant=${TENANT}: Sperre kaputt`]);
+});
+
+test("Bricht der Gesamtlauf ab, steht der Grund im Fehlerprotokoll", async () => {
+  const { store } = await nachErstemFehlschlag();
+  store.load = () => {
+    throw new Error("Speicher kaputt");
+  };
+  const fehler = [];
+
+  await starteNummerntausch({
+    store,
+    config: withConfigNamespaces({ provisioningEnabled: true, maxNumbers: 50, maxNumbersPerTenant: 1 }),
+    numberProvisioning: () => anbieter(),
+    sipRegistrar: null,
+    inboundTrunkSchreiber: null,
+    logger: { log() {}, warn() {}, error: (zeile) => fehler.push(zeile) },
+  });
+
+  assert.deepEqual(fehler, ["[nummerntausch] Lauf abgebrochen: Speicher kaputt"]);
+});

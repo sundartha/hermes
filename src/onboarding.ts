@@ -36,7 +36,7 @@ interface Kandidat {
 }
 
 interface OnboardingProvisioner {
-  searchNumbers: (suche: { countryCode: string; type: string | undefined; limit: number }) => Promise<Kandidat[]>;
+  searchNumbers: (suche: { countryCode: string | undefined; type: string | undefined; limit: number }) => Promise<Kandidat[]>;
   orderNumber: (bestellung: {
     e164: string;
     connectionId: string | undefined;
@@ -48,13 +48,13 @@ interface OnboardingProvisioner {
 interface OnboardingBilling {
   placeHold: (hold: {
     tenantRef: string;
-    amountCents: number;
+    amountCents: number | undefined;
     currency: string | undefined;
     customerId: string | null;
     paymentMethodId: string | null;
     idempotencyKey: string;
   }) => Promise<{ paymentIntentId: string }>;
-  captureHold: (paymentIntentId: string | null, amountCents: number) => Promise<unknown>;
+  captureHold: (paymentIntentId: string | null, amountCents: number | undefined) => Promise<unknown>;
   cancelHold: (paymentIntentId: string | null) => Promise<unknown>;
 }
 
@@ -82,10 +82,10 @@ interface OnboardingDeps {
 
 interface ProvisionAuftrag {
   numberId: string;
-  countryCode: string;
+  countryCode: string | undefined;
   connectionId?: string | undefined;
   type?: string | undefined;
-  holdAmountCents: number;
+  holdAmountCents?: number | undefined;
   currency?: string | undefined;
 }
 
@@ -224,7 +224,7 @@ async function findPurchasableNumber(
     provisioner,
     countryCode,
     type,
-  }: { provisioner: OnboardingProvisioner; countryCode: string; type: string | undefined },
+  }: { provisioner: OnboardingProvisioner; countryCode: string | undefined; type: string | undefined },
 ) {
   try {
     assertKaufbaresLand(countryCode, "provisionNumber");
@@ -235,7 +235,7 @@ async function findPurchasableNumber(
     });
     const candidate = candidates[0];
     if (!candidate)
-      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
+      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${String(countryCode)} verfuegbar`);
     assertKaufbareRufnummer(candidate.e164, "provisionNumber");
     return candidate;
   } catch (err) {
@@ -276,7 +276,7 @@ async function placeSetupFeeHold(
     billing,
     holdAmountCents,
     currency,
-  }: { tenantId: string; billing: OnboardingBilling; holdAmountCents: number; currency: string | undefined },
+  }: { tenantId: string; billing: OnboardingBilling; holdAmountCents: number | undefined; currency: string | undefined },
 ) {
   const { numberSetupFeeExempt: exempt } = tenantSubscription(state, tenantId);
   const { customerId, paymentMethodId } = tenantStripe(state, tenantId);
@@ -307,7 +307,7 @@ async function settleSetupFeeHold(
     paymentIntentId,
     holdAmountCents,
     exempt,
-  }: { billing: OnboardingBilling; paymentIntentId: string | null; holdAmountCents: number; exempt: unknown },
+  }: { billing: OnboardingBilling; paymentIntentId: string | null; holdAmountCents: number | undefined; exempt: unknown },
 ) {
   beginCapturing(state, numberId);
   if (exempt) return billing.cancelHold(paymentIntentId);

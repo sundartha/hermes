@@ -43,3 +43,29 @@ test("Nummernliste: Antwort mit leerer Liste legt die Nummer an", async () => {
   const ergebnis = await withFetch(antwortMit([]), () => sipRegistrar().ensureRegistration({ e164: E164, numberId: NUMMER }));
   assert.deepEqual(ergebnis, { phoneNumberId: "phnum_new", angelegt: true });
 });
+
+test("Liefert ElevenLabs beim Anlegen eine phone_number_id, die keine Zeichenkette ist, schlägt die Registrierung mit ‚lieferte keine phone_number_id‘ fehl", async () => {
+  const antwort = async (_url, init = {}) => ({
+    ok: true,
+    status: HTTP_OK,
+    json: async () => (init.method === "POST" ? { phone_number_id: 4711 } : []),
+  });
+  await withFetch(antwort, () =>
+    assert.rejects(
+      sipRegistrar().ensureRegistration({ e164: E164, numberId: NUMMER }),
+      (fehler) =>
+        fehler instanceof Error && fehler.message === "ElevenLabs-Nummernregistrierung lieferte keine phone_number_id",
+    ),
+  );
+});
+
+test("Steht die Nummer schon mit einer phone_number_id, die keine Zeichenkette ist, in der Liste, schlägt die Registrierung fehl, statt die ID zu übernehmen", async () => {
+  const liste = [{ phone_number: E164, phone_number_id: 4711 }];
+  await withFetch(antwortMit(liste), () =>
+    assert.rejects(
+      sipRegistrar().ensureRegistration({ e164: E164, numberId: NUMMER }),
+      (fehler) =>
+        fehler instanceof Error && fehler.message === "ElevenLabs-Nummernregistrierung lieferte keine phone_number_id",
+    ),
+  );
+});
