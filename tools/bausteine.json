@@ -192,7 +192,7 @@
         "src/plans.ts",
         "src/budget-gate.js",
         "src/llm-usage.js",
-        "src/elevenlabs/kosten-beleg.js",
+        "src/elevenlabs/kosten-beleg.ts",
         "src/routes/api-billing.ts",
         "src/routes/stripe-webhook.ts"
       ],
@@ -216,7 +216,7 @@
         "src/billing/subscribe.ts",
         "src/billing/subscription-cancellation.ts",
         "src/budget-gate.js",
-        "src/elevenlabs/kosten-beleg.js",
+        "src/elevenlabs/kosten-beleg.ts",
         "src/llm-usage.js",
         "src/plans.ts",
         "src/routes/stripe-webhook.ts"
