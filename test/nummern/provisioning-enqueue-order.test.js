@@ -532,3 +532,53 @@ test("Ist die Warteschlange beim Abarbeiten nach dem Einreihen nicht erreichbar,
   assert.deepEqual(loggedErrors(errors), ["[provision-drain] Warteschlange nicht erreichbar"]);
   assert.equal(jobOf(s, "num1").status, PROVISIONING_JOB_STATUS.QUEUED);
 });
+
+function makeOrchestratorMitSchliessen(store, erledigt) {
+  const orchestrator = makeProvisioningOrchestrator({
+    store,
+    config: withConfigNamespaces({ ...OHNE_EL_ZUGANG, ...REDRIVE_KONFIG }),
+    queue: makeMemoryQueue(),
+    billing: {},
+    metering: meteringStub(),
+    numberProvisioning: () => ({}),
+    handleProvisionJob: fakeHandleProvisionJob,
+    resolveProvisionRetry: () => ({ ok: false }),
+    audit: () => {},
+    recordProvisioningJob,
+    markProvisioningJob: () => {
+      throw new Error("Store nicht schreibbar");
+    },
+    classifyQueuedProvisioningJobs: () => ({ close: [erledigt], hold: [], redrive: [] }),
+    findNumber,
+  });
+  return { orchestrator };
+}
+
+test("Scheitert das Abschliessen erledigter Nummernauftraege beim Start, wird die Meldung mit [provision-reconcile] close: geloggt", async (t) => {
+  const errors = silenceErrors(t);
+  const store = makeFakeStore(withNumbers(makeNumber("num1", "t1")));
+  const erledigt = { id: "job1", numberId: "num1", tenantId: "t1", idempotencyKey: "provision_num1" };
+  const { orchestrator } = makeOrchestratorMitSchliessen(store, erledigt);
+
+  orchestrator.reconcileOrphanedProvisioning();
+  await abwarten();
+
+  assert.deepEqual(loggedErrors(errors), ["[provision-reconcile] close: Store nicht schreibbar"]);
+});
+
+test("Scheitert die Monatsbuchung der Nummern, wird die Meldung mit [number-month] Buchung fehlgeschlagen: geloggt und nichts gebucht", async (t) => {
+  const errors = silenceErrors(t);
+  const metering = meteringStub();
+  metering.recordDueNumberMonthMeters = () => {
+    throw new Error("Store nicht schreibbar");
+  };
+  const { orchestrator } = makeOrchestrator(makeFakeStore(makeDefaultState()), {
+    paymentEnabled: true,
+    metering,
+  });
+
+  const res = await orchestrator.settleDueNumberMonthMeters();
+
+  assert.deepEqual(res, { gebucht: 0 });
+  assert.deepEqual(loggedErrors(errors), ["[number-month] Buchung fehlgeschlagen: Store nicht schreibbar"]);
+});
