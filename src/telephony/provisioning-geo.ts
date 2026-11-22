@@ -73,7 +73,10 @@ function bucketCentsFromProviderPrice(price: ProviderPrice | null | undefined, p
   );
 }
 
-export function holdAmountForProviderPrice(price: ProviderPrice | null | undefined, defaultHoldCents: number): number {
+export function holdAmountForProviderPrice<Standard extends number | undefined>(
+  price: ProviderPrice | null | undefined,
+  defaultHoldCents: Standard,
+): number | Standard {
   const cents = bucketCentsFromProviderPrice(price, price?.upfrontMicroCents);
   return cents !== null && cents > 0 ? cents : defaultHoldCents;
 }

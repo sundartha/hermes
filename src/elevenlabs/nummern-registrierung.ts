@@ -45,7 +45,7 @@ interface SchreibNummer {
 type TrunkSweepVoice = Parameters<typeof trunkSweepHindernis>[0];
 
 interface SipRegistrar {
-  ensureRegistration: (nummer: { e164: string; numberId: string }) => Promise<{ phoneNumberId: unknown; angelegt: boolean }>;
+  ensureRegistration: (nummer: { e164: string | null; numberId: string }) => Promise<{ phoneNumberId: string; angelegt: boolean }>;
   removeRegistration: (phoneNumberId: string) => Promise<{ accepted: boolean; status: number | null }>;
 }
 
@@ -88,8 +88,8 @@ export const REGISTRIERUNG_KLASSE = Object.freeze({
   OHNE_INBOUND: "ohne_inbound",
 });
 
-export function registrierungsKoerper({ e164, numberId, agentId }: { e164: string; numberId: string; agentId: string }): {
-  phone_number: string;
+export function registrierungsKoerper({ e164, numberId, agentId }: { e164: string | null; numberId: string; agentId: string }): {
+  phone_number: string | null;
   label: string;
   provider: string;
   agent_id: string;
@@ -108,6 +108,11 @@ export function fehlendeZugangsdaten({ el }: { el?: ElZugangsangaben | undefined
   return null;
 }
 
+function alsKennung(wert: unknown): string {
+  if (typeof wert !== "string") throw new Error("ElevenLabs-Nummernregistrierung lieferte keine phone_number_id");
+  return wert;
+}
+
 export function makeElSipRegistrar({
   el,
   fetchImpl = anfrage,
@@ -117,13 +122,13 @@ export function makeElSipRegistrar({
   fetchImpl?: FetchImpl;
   logger?: Protokoll;
 }): SipRegistrar {
-  async function ensureRegistration({ e164, numberId }: { e164: string; numberId: string }) {
+  async function ensureRegistration({ e164, numberId }: { e164: string | null; numberId: string }) {
     const grund = fehlendeZugangsdaten({ el });
     if (grund) throw new Error(`ElevenLabs-Nummernregistrierung: ${grund}`);
     const bestand = (await elevenlabsNummernKonto().listPhoneNumbers({ fetchImpl, account: el })).find(
       (eintrag) => eintrag.phone_number === e164,
     );
-    if (bestand?.phone_number_id) return { phoneNumberId: bestand.phone_number_id, angelegt: false };
+    if (bestand?.phone_number_id) return { phoneNumberId: alsKennung(bestand.phone_number_id), angelegt: false };
     const { phoneNumberId } = await elevenlabsNummernKonto().createPhoneNumber({
       fetchImpl,
       account: el,
@@ -131,7 +136,7 @@ export function makeElSipRegistrar({
     });
     if (!phoneNumberId)
       throw new Error("ElevenLabs-Nummernregistrierung lieferte keine phone_number_id");
-    return { phoneNumberId, angelegt: true };
+    return { phoneNumberId: alsKennung(phoneNumberId), angelegt: true };
   }
 
   async function removeRegistration(phoneNumberId: string) {

@@ -63,3 +63,16 @@ test("order wirft -> failed, KEIN Release (Kauf nicht zustande gekommen)", async
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(!prov.log.some((l) => l.startsWith("release")));
 });
+
+test("search liefert nichts -> die Fehlermeldung nennt das gesuchte Land", async () => {
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner({
+    async searchNumbers() {
+      return [];
+    },
+  });
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS }),
+    { message: "provisionNumber: keine kaufbare Nummer fuer US verfuegbar" },
+  );
+});
