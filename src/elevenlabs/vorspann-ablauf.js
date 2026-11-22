@@ -1,3 +1,4 @@
+import { meldeAuftragBisKlingeln } from "./anrufstart-messung.ts";
 import { maxDurationSOf } from "../call-duration.ts";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
@@ -306,5 +307,5 @@ export function makeVorspannAblauf({
     }
   }
 
-  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle: (args) => (args.ereignis.ereignis === CALL_CONTROL_EREIGNIS.KLINGELT ? meldeAuftragBisKlingeln({ ...args, jetzt: now() }) : behandle(args)), gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
 }
