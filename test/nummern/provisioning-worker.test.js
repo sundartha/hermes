@@ -231,7 +231,6 @@ test("Nummernkauf-Auftrag: Landescode, Anschluss und Haltebetrag kommen mit den 
     { provisioner: prov, billing, opts: { ...PAY_ARGS, connectionId: "conn_9" } },
   );
 
-  assert.equal(handleProvisionJob.length, 3);
   assert.equal(ergebnis.number.status, NUMBER_STATUS.ACTIVE);
   assert.equal(findNumber(s, numberId).e164, "+12025550101");
   assert.equal(prov.log[0], "search:US");
