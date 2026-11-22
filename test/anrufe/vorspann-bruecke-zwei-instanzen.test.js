@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { vorspannZustand } from "../../src/store.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makeTelnyxSigner, nowSeconds } from "../helpers.js";
 import { starteAttrappe } from "./attrappen-server.js";
@@ -150,4 +151,14 @@ test("Das Auflegen auf einer Instanz ohne eigenen Zustand beendet den Anruf einm
     assert.equal((await abrufen(srv.b, token)).status, HTTP_NOT_FOUND);
     assert.equal(await zaehle(srv.sql, ABLAGE_SQL), 0);
   });
+});
+
+test("Ohne Datenbank gewinnt beim Auflegen genau einer: der erste Entnehmer bekommt die Zeile samt Marken, der zweite nichts", async () => {
+  const anruf = { tenantId: "t_bruecke_speicher", callId: "call_bruecke_speicher" };
+  await vorspannZustand.anlegen({ ...anruf, token: "tok", text: "Satz", ttlMs: ZEITGRENZE_MS });
+  assert.deepEqual(await vorspannZustand.beanspruecheMarke({ ...anruf, marke: "WIEDERGABE", ms: 4 }), { WIEDERGABE: 4 });
+  assert.equal(await vorspannZustand.beanspruecheMarke({ ...anruf, marke: "WIEDERGABE", ms: 6 }), undefined);
+  const erster = await vorspannZustand.entnimm(anruf);
+  assert.deepEqual(erster.stand, { WIEDERGABE: 4 });
+  assert.equal(await vorspannZustand.entnimm(anruf), undefined);
 });
