@@ -262,10 +262,16 @@ export function makeProvisioningOrchestrator({
 
   async function reconcileOrphanedJobs() {
     const lage = (await store.besitzLage?.()) ?? KEINE_LAGE;
-    const geladen = await bereiche.nummernkauf.ladeFremdeOffeneAuftraege(lage.eigene);
+    const kandidaten = await bereiche.nummernkauf.ladeFremdeOffeneAuftraege(lage.eigene);
     const zustand = store.load();
     const buckets = classifyQueuedProvisioningJobs(
-      geladen ? { ...zustand, provisioningJobs: zustand.provisioningJobs.filter((job) => geladen.has(job.id)) } : zustand,
+      kandidaten
+        ? {
+            ...zustand,
+            provisioningJobs: kandidaten.map(({ job }) => job),
+            numbers: kandidaten.flatMap(({ nummer }) => (nummer ? [nummer] : [])),
+          }
+        : zustand,
       {
         nowMs: Date.now(),
         maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
