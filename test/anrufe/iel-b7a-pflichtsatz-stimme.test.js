@@ -4,7 +4,6 @@ import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { createTtsStore } from "../../src/tts/store.ts";
 import { say, gather, sayWithVoiceId, DIRECTIVE, VOICE_PROFILE } from "../../src/telephony/directives.ts";
 import { renderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
-import { EINE_STIMME_ID } from "../../src/elevenlabs/stimme-festlegen.ts";
 import { runPlayTtsProbe, playTtsSynthConfig } from "../helpers/play-tts-stimm-probe.mjs";
 
 const AGENT_STIMME = "v_agent";
@@ -12,6 +11,7 @@ const AGENT_STIMME_B = "v_agent_b";
 const AGENT_SATZ = "Pflichtsatz-Testtext";
 const TURN_ACTION = "https://agent.test/voice/turn?callId=c1";
 const TTS_TOKEN_TTL_MS = 60000;
+const EINE_STIMME = "cqPdIo76zSHFDcSZpFov";
 const QUOTA = 10;
 const CYCLE_KEY = "2026-09";
 const DREI_VERSCHIEDENE_STIMMEN = 3;
@@ -21,11 +21,6 @@ test("IEL-B7a-1: gesetzte voiceId an say gewinnt gegen die Profil-Stimme", async
     sayWithVoiceId({ text: AGENT_SATZ, voiceProfile: VOICE_PROFILE.DE_FEMALE_NEURAL, voiceId: AGENT_STIMME }),
   ]);
   assert.deepEqual(voiceIds, [AGENT_STIMME]);
-  assert.notEqual(
-    EINE_STIMME_ID,
-    AGENT_STIMME,
-    "Positiv-Kontrolle: das Profil hat eine eigene Stimme, verschieden von der Agent-Stimme",
-  );
   assert.ok(out[0].audioUrl);
 });
 
@@ -66,7 +61,7 @@ test('IEL-B7a-5: voiceId "" am Builder -> kein Feld, Direktive formgleich zum Be
 test('IEL-B7a-6: voiceId "" an der Direktive -> heutige Aufloesung in der Synthese', async () => {
   const directive = { ...say(AGENT_SATZ, VOICE_PROFILE.DE_FEMALE_NEURAL), voiceId: "" };
   const { voiceIds } = await runPlayTtsProbe([directive]);
-  assert.deepEqual(voiceIds, [EINE_STIMME_ID]);
+  assert.deepEqual(voiceIds, [EINE_STIMME]);
 });
 
 test("IEL-B7a-7: Kontingent erschoepft -> kein Anbieter-Aufruf, Azure-<Say> wie heute", async () => {
@@ -103,7 +98,7 @@ test("IEL-B7a-8: gleicher Text, verschiedene Stimmen -> zwei Synthesen, zwei Aud
   assert.deepEqual(voiceIds, [
     AGENT_STIMME,
     AGENT_STIMME_B,
-    EINE_STIMME_ID,
+    EINE_STIMME,
   ]);
   assert.equal(new Set(out.map((directive) => directive.audioUrl)).size, DREI_VERSCHIEDENE_STIMMEN);
 });
