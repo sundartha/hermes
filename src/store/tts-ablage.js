@@ -11,6 +11,7 @@ const VERWERFEN_SQL = `DELETE FROM tts_ablage WHERE token_hash = $1`;
 const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM tts_ablage WHERE expires_at <= now()`;
 const ENTNEHMEN_SQL = `DELETE FROM tts_ablage WHERE token_hash = $1 AND expires_at > now() AND bytes IS NOT NULL
   RETURNING bytes, content_type AS "contentType"`;
+const LESEN_SQL = `SELECT bytes, content_type AS "contentType" FROM tts_ablage WHERE token_hash = $1 AND expires_at > now() AND bytes IS NOT NULL`;
 const NOCH_GUELTIG_SQL = `SELECT 1 FROM tts_ablage WHERE token_hash = $1 AND expires_at > now()`;
 
 const hashVon = (token) => createHash("sha256").update(token).digest("hex");
@@ -57,29 +58,29 @@ export function makePostgresTtsAblage(runner, { ttlMs }) {
     }
   }
 
-  async function ablegen(token, audio) {
+  async function ablegen(token, audio, { ttlMs: eigeneTtlMs = ttlMs } = {}) {
     const synthese = Promise.resolve(audio.bytes).then(
       (bytes) => ({ bytes }),
       (fehler) => ({ fehler }),
     );
-    await inTransaktion((client) => client.query(RESERVIEREN_SQL, [hashVon(token), ttlMs / MS_PER_SECOND]));
+    await inTransaktion((client) => client.query(RESERVIEREN_SQL, [hashVon(token), eigeneTtlMs / MS_PER_SECOND]));
     return { fertig: fuellenOderVerwerfen(token, audio.contentType, synthese) };
   }
 
-  async function entnehmenOderPruefen(token) {
+  async function entnehmenOderPruefen(token, abrufSql) {
     return inTransaktion(async (client) => {
       await client.query(ABGELAUFENE_LOESCHEN_SQL);
-      const { rows } = await client.query(ENTNEHMEN_SQL, [hashVon(token)]);
+      const { rows } = await client.query(abrufSql, [hashVon(token)]);
       if (rows.length === 1) return { audio: rows[0] };
       const gueltig = await client.query(NOCH_GUELTIG_SQL, [hashVon(token)]);
       return { wartet: gueltig.rows.length === 1 };
     });
   }
 
-  async function holen(token) {
+  async function abrufen(token, abrufSql) {
     try {
       for (;;) {
-        const { audio, wartet } = await entnehmenOderPruefen(token);
+        const { audio, wartet } = await entnehmenOderPruefen(token, abrufSql);
         if (audio) return audio;
         if (!wartet) return null;
         await sleep(TTS_ABLAGE_TAKT_MS);
@@ -90,5 +91,10 @@ export function makePostgresTtsAblage(runner, { ttlMs }) {
     }
   }
 
-  return { ablegen, holen };
+  return {
+    ablegen,
+    holen: (token) => abrufen(token, ENTNEHMEN_SQL),
+    lesen: (token) => abrufen(token, LESEN_SQL),
+    freigeben: verwerfen,
+  };
 }

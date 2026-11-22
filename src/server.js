@@ -5,6 +5,7 @@ import { fruehwarnung } from "./routes/intern-anrufe-laufend.js";
 import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
+import { makeAblageBisFreigabe } from "./tts/ablage-bis-freigabe.js";
 import { createTtsStore } from "./tts/store.ts";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { makeVorspannAblauf } from "./elevenlabs/vorspann-ablauf.js";
@@ -223,6 +224,7 @@ const provisionRetryWatch = makeProvisionRetryWatch({
 const ttsStore = createTtsStore({
   ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs,
   ablage: config.store.storeBackend === "pg" ? store.ttsAblage : null,
+  bisFreigabeAblage: config.store.storeBackend === "pg" ? makeAblageBisFreigabe(store.ttsAblage) : null,
 });
 
 const TTS_QUOTA_WARN_EVENT = "tts_quota_warning";
