@@ -7,16 +7,18 @@ const A = "t_vfs_a";
 const B = "t_vfs_b";
 const LEASE_MS = 30_000;
 const ANFRAGE = { art: "vorspann", limitJeMandant: 10, leaseMs: LEASE_MS };
-const VOR = () => new Date(Date.now() - 60_000).toISOString();
-const NACH = () => new Date(Date.now() + 3_600_000).toISOString();
+const VOR = () => "2020-01-01T00:00:00.000Z";
+const NACH = () => "2999-01-01T00:00:00.000Z";
 
 const { speicher } = await jsonSpeicherImDatenordner("hermes-vorspann-fristen-");
 await speicher.oeffneSpeicher();
 
 const anlegen = (tenantId, callId) =>
   speicher.vorspannZustand.anlegen({ tenantId, callId, token: "tok", text: "satz", ttlMs: 60_000 });
-const kurz = (treffer, vorsatz) =>
-  treffer.filter((eintrag) => eintrag.callId.startsWith(vorsatz)).map((eintrag) => `${eintrag.callId}:${eintrag.frist}`).sort();
+const kurz = (treffer, vorsatz) => {
+  const eigene = treffer.filter((eintrag) => eintrag.callId.startsWith(vorsatz));
+  return eigene.map((eintrag) => `${eintrag.callId}:${eintrag.frist}`).sort();
+};
 
 test("Vorspann-Fristen im JSON-Speicher: faellige Fristen mit Art, nicht kuenftige, nicht gesetzte, nicht ohne Zeile", async () => {
   await anlegen(A, "s_a");
