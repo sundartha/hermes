@@ -452,6 +452,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
     trueUpAnsweredAt: (callId, answeredAtIso) => anrufe.trueUpAnsweredAt(requireState(), callId, answeredAtIso),
     recordAnsweredUnclearReason: (callId, reason) => anrufe.recordAnsweredUnclearReason(requireState(), callId, reason),
     recordElDetectorCounts: (callId, zaehlung) => anrufe.recordElDetectorCounts(requireState(), callId, zaehlung),
+    recordBridgedAt: (callId, bridgedAtIso) => anrufe.recordBridgedAt(requireState(), callId, bridgedAtIso),
     endCallRecord: (callId, status = "completed") => loesen(gebunden, callId, anrufe.endCallRecord(requireState(), callId, status)),
     setCallEndedAt: (callId, status, endedAtIso) =>
       loesen(gebunden, callId, anrufe.setCallEndedAt(requireState(), callId, status, endedAtIso)),

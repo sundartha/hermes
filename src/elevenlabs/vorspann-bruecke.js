@@ -46,9 +46,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, vorspannZus
       return legeBeideBeineAuf({ call, zustand, steuerung });
     }
     messeSeit({ callId: call.id, messung: "bridge", bezug: "ms_seit_vorspann_ende", stand, seit: STAND.WIEDERGABE, jetzt: now() });
-    const aufzeichnung = await store.leseCall(call.id);
-    aufzeichnung.bridgedAt = new Date(now()).toISOString();
-    store.save();
+    await store.recordBridgedAt(call.id, new Date(now()).toISOString());
   }
 
   async function beiElAngenommen({ call, zustand }) {

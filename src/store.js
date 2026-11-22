@@ -372,6 +372,7 @@ export const {
   callCostEvidence,
   recordActualSender,
   recordElDetectorCounts,
+  recordBridgedAt,
   recordProviderCallResult,
   recordProviderCollectedFields,
   recordCalleeConfirmedTimezone,
