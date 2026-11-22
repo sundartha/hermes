@@ -7,7 +7,7 @@ import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeMemoryQueue } from "../../src/queue/adapters/memory/queue.ts";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { resolveProvisionRetry } from "../../src/billing/provision-trigger.ts";
 import { numberProvisioning } from "../../src/telephony/registry.js";

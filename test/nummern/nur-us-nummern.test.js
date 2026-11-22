@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
 import { createQueue } from "../../src/queue/registry.ts";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { numberProvisioning } from "../../src/telephony/registry.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";

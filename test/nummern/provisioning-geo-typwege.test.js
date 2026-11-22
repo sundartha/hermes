@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { config } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.ts";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { fakeProvisioner } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";

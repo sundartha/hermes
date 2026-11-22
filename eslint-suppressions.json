@@ -690,7 +690,7 @@
       "count": 4
     }
   },
-  "src/worker/provisioning-orchestrator.js": {
+  "src/worker/provisioning-orchestrator.ts": {
     "max-lines-per-function": {
       "count": 1
     }
