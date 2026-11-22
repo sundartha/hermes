@@ -17,7 +17,7 @@ import {
   elBelegBetrag,
   EL_BELEG_ABLEHNUNG,
   EL_BELEG_QUELLE,
-} from "../../src/elevenlabs/kosten-beleg.js";
+} from "../../src/elevenlabs/kosten-beleg.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import {
   CONVERSATION_DONE_MIT_KOSTEN,

@@ -7,7 +7,7 @@ import path from "node:path";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { legRefOfCall } from "../../src/billing/call-leg-ref.ts";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
-import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "../../src/elevenlabs/kosten-beleg.js";
+import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "../../src/elevenlabs/kosten-beleg.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { CONVERSATION_DONE_MIT_KOSTEN } from "../fixtures/elevenlabs-conversations.js";
 import { waitUntil, withFetch } from "../helpers.js";
