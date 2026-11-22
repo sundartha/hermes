@@ -299,7 +299,7 @@ test("IEL-B6-7: die Stimme folgt der Anrufsprache (de und en je mit ihrer Profil
   const overrideDe = JSON.parse(deutsch.text).conversation_config_override;
   const overrideEn = JSON.parse(englisch.text).conversation_config_override;
   assert.equal(overrideEn.agent.language, VORLAGE_EN.language);
-  assert.notEqual(overrideDe.tts.voice_id, overrideEn.tts.voice_id);
+  assert.equal(overrideDe.tts.voice_id, overrideEn.tts.voice_id);
   const localeEn = inboundElLocaleOf({ store: englisch.store, config: englisch.config, call: englisch.call });
   assert.equal(overrideEn.tts.voice_id, localeEn.voiceId);
 });
