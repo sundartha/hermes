@@ -4,7 +4,7 @@ import { env } from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { zielErlaubt } from "../last/ziel.mjs";
-import { probeLaufen } from "./wiederholung.mjs";
+import { normalisiert, probeLaufen } from "./wiederholung.mjs";
 
 const MAX_ERSTVERSUCHE = 5;
 const MAX_ANRUFE = 10;
@@ -87,12 +87,7 @@ async function tagesStandOk(anrufer) {
   return stand.erstversuche < MAX_ERSTVERSUCHE && stand.anrufe <= MAX_ANRUFE - ANRUFE_JE_PROBE;
 }
 
-const SCHREIBWEISE = /[\s\-().]/g;
 const LETZTE_ZIFFERN = 4;
-
-function normalisiert(nummer) {
-  return String(nummer).replace(SCHREIBWEISE, "");
-}
 
 function endziffern(nummer) {
   return normalisiert(nummer).replace(/\D/g, "").slice(-LETZTE_ZIFFERN);
