@@ -197,9 +197,9 @@ function gleicheAn(liste, neu) {
 
 async function ladeFremdeOffeneAuftraege(speicher, sql, eigene) {
   const kandidaten = [];
-  for (const { job, nummer } of await sql.offene()) {
-    if (job.instanz === eigene || !(await speicher.ensureTenant(job.tenantId))) continue;
-    kandidaten.push({ job, nummer });
+  for (const { job, nummer, instanz } of await sql.offene()) {
+    if (instanz === eigene || !(await speicher.ensureTenant(job.tenantId))) continue;
+    kandidaten.push({ job, nummer, instanz });
   }
   return kandidaten;
 }

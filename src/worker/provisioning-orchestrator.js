@@ -236,10 +236,11 @@ export function makeProvisioningOrchestrator({
     );
   }
 
-  async function uebernehmbareAuftraege(jobs, lage) {
+  async function uebernehmbareAuftraege(jobs, lage, besitzer) {
     const frei = [];
     for (const job of jobs) {
-      const grund = auftragHaltGrund(job.instanz, lage);
+      const alt = besitzer.get(job.id) ?? null;
+      const grund = auftragHaltGrund(alt, lage);
       if (grund === FREMDER_AUFTRAG) {
         console.log(`[provision-reconcile] fremd job=${job.id}`);
         continue;
@@ -251,7 +252,7 @@ export function makeProvisioningOrchestrator({
       const gewonnen = await bereiche.nummernkauf.uebernimmAuftrag({
         tenantId: job.tenantId,
         jobId: job.id,
-        alt: job.instanz ?? null,
+        alt,
         neu: lage.eigene,
       });
       if (!gewonnen) continue;
@@ -280,7 +281,8 @@ export function makeProvisioningOrchestrator({
     );
     closeSettledProvisioningJobs(buckets.close);
     for (const { job, reason } of buckets.hold) meldeHalt(job, reason);
-    redriveProvisioningJobs(await uebernehmbareAuftraege(buckets.redrive, lage));
+    const besitzer = new Map((kandidaten ?? []).map(({ job, instanz }) => [job.id, instanz]));
+    redriveProvisioningJobs(await uebernehmbareAuftraege(buckets.redrive, lage, besitzer));
   }
 
   const reconcileOrphanedProvisioning = makeSingleFlight(async () => {

@@ -1271,7 +1271,7 @@ async function loadTenantRows(client, tenantId) {
   ).rows;
   const jobRows = (
     await client.query(
-      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz
+      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
        FROM provisioning_job WHERE tenant_id = $1`,
       [tenantId],
     )
@@ -2032,7 +2032,6 @@ function rowToProvisioningJob(zeile) {
     lastError: zeile.last_error ?? null,
     createdAt:
       zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
-    instanz: zeile.instanz ?? null,
   };
 }
 

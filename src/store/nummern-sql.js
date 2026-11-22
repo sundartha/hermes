@@ -37,7 +37,6 @@ function alsAuftrag(zeile) {
     attempts: zeile.attempts,
     lastError: zeile.last_error ?? null,
     createdAt: zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
-    instanz: zeile.instanz ?? null,
   };
 }
 
@@ -117,7 +116,7 @@ async function offeneLesen(client, zeileZuNummer) {
       await client.query("COMMIT");
       for (const zeile of rows) {
         const nummer = nummern.find((eine) => eine.id === zeile.number_id);
-        gefunden.push({ job: alsAuftrag(zeile), nummer: nummer ? zeileZuNummer(nummer) : null });
+        gefunden.push({ job: alsAuftrag(zeile), nummer: nummer ? zeileZuNummer(nummer) : null, instanz: zeile.instanz ?? null });
       }
     } catch (fehler) {
       await client.query("ROLLBACK").catch(() => {});
