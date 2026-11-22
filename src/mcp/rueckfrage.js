@@ -14,6 +14,7 @@ import { callOutcomeView, pickTranscript, maskedResultCard, maskedNextSteps } fr
 
 function awaitEventView({ callId, event, finished, texts }) {
   const done = finished ? pickTranscript(callId, finished, texts) : null;
+  const result = finished?.result;
   const outcome = finished ? callOutcomeView(finished) : { status: null, failure_reason: null };
   return {
     event: event.event,
@@ -22,8 +23,8 @@ function awaitEventView({ callId, event, finished, texts }) {
     ...outcome,
     result_summary: done?.result_summary ?? null,
     objective_achieved: done?.objective_achieved ?? null,
-    ...maskedResultCard(finished?.result),
-    next_steps: maskedNextSteps(finished?.result),
+    ...maskedResultCard(result),
+    next_steps: maskedNextSteps(result),
   };
 }
 
