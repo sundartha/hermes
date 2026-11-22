@@ -125,7 +125,8 @@ export async function letzterStagingLauf({ github }) {
   const laeufe = Array.isArray(daten?.workflow_runs) ? daten.workflow_runs : [];
   const zaehlend = laeufe.filter((lauf) => zaehltAlsLetzter(lauf, github.repository));
   const letzter = zaehlend.reduce((neu, lauf) => (neuerAls(lauf, neu) ? lauf : neu), zaehlend[0]);
-  if (letzter === undefined || letzter.conclusion === ERFOLG) return [];
+  if (letzter === undefined) return [grund("rot_staging_kein_lauf")];
+  if (letzter.conclusion === ERFOLG) return [];
   return [grund("rot_staging_letzter_rot", { status: statusWort(letzter.conclusion) })];
 }
 

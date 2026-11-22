@@ -195,3 +195,22 @@ test("keine Antwort der Lauf-Abfrage ist rot und nie grün", async () => {
     true,
   );
 });
+
+const KEIN_LAUF_TEXT = "Rot: auf master gibt es keinen zählenden Staging-Lauf";
+
+test("leere Lauf-Liste ist rot und sperrt den Lauf-Start", async () => {
+  const { ergebnis, zeilen } = await laufen([], lauf_ereignis());
+  assert.equal(ergebnis.ok, false);
+  assert.equal(ergebnis.deploy, false);
+  assert.equal(enthalten(zeilen, KEIN_LAUF_TEXT), true);
+});
+
+test("Liste nur mit Läufen, die nicht zählen, ist rot", async () => {
+  const laeufe = [
+    lauf("cancelled", { zeit: "2026-11-03T03:00:00Z" }),
+    lauf("failure", { event: "workflow_dispatch", zeit: "2026-11-04T03:00:00Z" }),
+  ];
+  const { ergebnis, zeilen } = await laufen(laeufe, lauf_ereignis());
+  assert.equal(ergebnis.deploy, false);
+  assert.equal(enthalten(zeilen, KEIN_LAUF_TEXT), true);
+});
