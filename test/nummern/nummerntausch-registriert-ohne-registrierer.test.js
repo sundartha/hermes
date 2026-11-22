@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
+import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const TENANT = "t_ohne_registrierer";

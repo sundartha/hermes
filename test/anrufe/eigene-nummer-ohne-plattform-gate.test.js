@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
+import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";

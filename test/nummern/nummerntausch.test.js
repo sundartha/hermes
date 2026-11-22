@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
-import { starteNummerntausch } from "../../src/worker/nummerntausch.js";
+import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
+import { starteNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const TENANT_A = "t_tausch_a";

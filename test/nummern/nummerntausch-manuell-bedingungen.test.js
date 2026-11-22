@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
-const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { runNummerntausch } = await import("../../src/worker/nummerntausch.ts");
 
 const TENANT = "t_tausch_manuell";
 const ALT = `num_${TENANT}`;
@@ -89,7 +89,7 @@ test("Ersatznummer requested und nicht released -> wird erneut gekauft", async (
   assert.equal(telnyx.spur.bestellungen, 2);
 });
 
-const { starteNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { starteNummerntausch } = await import("../../src/worker/nummerntausch.ts");
 
 function konfiguration() {
   return withConfigNamespaces({ provisioningEnabled: true, maxNumbers: 50, maxNumbersPerTenant: 1, paymentEnabled: true });

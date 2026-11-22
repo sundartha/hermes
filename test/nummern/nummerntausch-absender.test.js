@@ -18,7 +18,7 @@ process.env.OUTAGE_ALERT_WINDOW_MS = "0";
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "", vorspannWahlAbgelehnt: true, anrufwegWaermen: true });
 const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
-const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { runNummerntausch } = await import("../../src/worker/nummerntausch.ts");
 
 const hermes = laufendesHermes();
 const { sessionCookie } = await hermes.anmelden();
