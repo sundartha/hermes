@@ -786,7 +786,11 @@ export async function bootServer({
   const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
   starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf } });
 
-  const instanzTakt = await store.starteInstanzTakt({ nachMeldung: () => expireOrphanedConsults(store) });
+  const uebernimmVerwaisteArbeit = async () => {
+    await provisioning.reconcileOrphanedProvisioning();
+    await expireOrphanedConsults(store);
+  };
+  const instanzTakt = await store.starteInstanzTakt({ nachMeldung: uebernimmVerwaisteArbeit });
 
   if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 
