@@ -670,15 +670,27 @@ export function derivePlatformNumberBindings({ store }) {
   return open;
 }
 
+async function uebernimmAnrufVonAusgefallenem(store, call) {
+  try {
+    return await store.uebernimmAnruf({ callId: call.id, tenantId: call.tenantId, alt: call.instanz });
+  } catch (err) {
+    console.error(`[boot] Uebernahme fehlgeschlagen call=${call.id}: ${err.message}`);
+    return false;
+  }
+}
+
 async function expireOrphanedConsults(store) {
   const nowMs = Date.now();
   const lage = await store.besitzLage();
-  const orphaned = (await anrufeAllerInstanzen(store)).filter(
+  const fremde = (await anrufeAllerInstanzen(store)).filter(
     (call) =>
       call.status === "active" &&
-      pendingConsult({ calls: [call] }, call.id) &&
+      call.instanz !== lage.eigene &&
       !arbeitGehoertLebenderFremder(call.instanz, lage),
   );
+  const uebernommen = [];
+  for (const call of fremde) if (await uebernimmAnrufVonAusgefallenem(store, call)) uebernommen.push(call);
+  const orphaned = uebernommen.filter((call) => pendingConsult({ calls: [call] }, call.id));
   if (!orphaned.length) return;
   for (const call of orphaned) await store.leseCall(call.id);
   const state = store.load();
@@ -774,7 +786,7 @@ export async function bootServer({
   const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
   starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf } });
 
-  const instanzTakt = await store.starteInstanzTakt();
+  const instanzTakt = await store.starteInstanzTakt({ nachMeldung: () => expireOrphanedConsults(store) });
 
   if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 

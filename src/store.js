@@ -9,7 +9,7 @@ import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplae
 import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.js";
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
 import { starteLauf } from "./store/kennzahlen.js";
-import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt } from "./store/instanz-besitz.js";
+import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt, uebernimmAnruf as uebernimmAnrufVon } from "./store/instanz-besitz.js";
 import {
   faelligeAusSpiegel,
   macheFristenSql,
@@ -62,8 +62,9 @@ async function createPgBackend() {
   const mitAnrufSperre = (tenantId, arbeit) => anrufSperre.mitAnrufSperre(runner, tenantId, arbeit);
   const nummernVorhanden = () => startSperre.nummernVorhanden(runner);
   const besitzLage = () => besitzLageVon(runner);
-  const starteInstanzTakt = async () => {
-    const takt = makeInstanzTakt(runner);
+  const uebernimmAnruf = (anfrage) => uebernimmAnrufVon(runner, anfrage);
+  const starteInstanzTakt = async (optionen) => {
+    const takt = makeInstanzTakt(runner, optionen);
     await takt.starten();
     return { stoppen: takt.stoppen, abmelden: takt.abmelden };
   };
@@ -109,6 +110,7 @@ async function createPgBackend() {
     mitAnrufSperre,
     nummernVorhanden,
     besitzLage,
+    uebernimmAnruf,
     starteInstanzTakt,
     rolleVorhanden,
     zustandNachladen,
@@ -219,6 +221,13 @@ function jsonBackendAufbauen() {
     mitAnrufSperre: (_tenantId, arbeit) => arbeit(),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
     besitzLage: async () => ({ eigene: EIGENE_KENNUNG, lebende: [EIGENE_KENNUNG] }),
+    uebernimmAnruf: async ({ callId, alt }) => {
+      const call = jsonBackend.getCall(callId);
+      if (call?.status !== "active" || (call.instanz ?? null) !== (alt ?? null)) return false;
+      call.instanz = EIGENE_KENNUNG;
+      jsonBackend.save();
+      return true;
+    },
     starteInstanzTakt: async () => ({ stoppen: async () => {}, abmelden: async () => {} }),
     rolleVorhanden: async () => false,
     zustandNachladen: async () => {},
@@ -288,6 +297,7 @@ export const {
   mitAnrufSperre,
   nummernVorhanden,
   besitzLage,
+  uebernimmAnruf,
   starteInstanzTakt,
   rolleVorhanden,
   zustandNachladen,
