@@ -220,6 +220,31 @@ test(
 );
 
 test(
+  "zwei Prozesse: wartet ein Anruf des einen Mandanten auf dessen gehaltene Sperre, antwortet place_call eines anderen Mandanten auf derselben Instanz sofort",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitZweiProzessen(t, async ({ a, sql }) => {
+      await sql(MANDANT_SPERRE_NEHMEN_SQL, [ANRUF_SPERRE_NAMENSRAUM, MANDANTEN[0].id]);
+      let wartender;
+      try {
+        wartender = rufeAn(a, MANDANTEN[0], ZIEL_A);
+        await zeilenBis(() => wartendeNachArt(sql), (wartende) => wartende.advisory === 1);
+        const anderer = await rufeAn(a, MANDANTEN[1], ZIEL_B);
+        assert.equal(anderer.status, HTTP_OK);
+        assert.equal(anderer.body.deduplicated, false);
+        assert.equal((await wartendeNachArt(sql)).advisory, 1, "der erste Mandant wartet noch, als der andere antwortet");
+      } finally {
+        await sql(MANDANT_SPERRE_GEBEN_SQL, [ANRUF_SPERRE_NAMENSRAUM, MANDANTEN[0].id]);
+      }
+      const erster = await wartender;
+      assert.equal(erster.status, HTTP_OK);
+      assert.equal(erster.body.deduplicated, false);
+    });
+  },
+);
+
+test(
   "zwei Prozesse: bricht die Verbindung mit der Sperre ab, antwortet place_call 503, legt nichts an und waehlt nicht, der Fehler wird gemeldet und der naechste Anruf laeuft",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
