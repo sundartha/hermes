@@ -261,7 +261,7 @@
         "src/auth.js",
         "src/request-tenant.js",
         "src/routes/_tenant.js",
-        "src/wiring/internal-only.js",
+        "src/wiring/internal-only.ts",
         "src/wiring/operator-routes.js"
       ],
       "nutzt": []

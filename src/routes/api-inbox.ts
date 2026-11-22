@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { internalOnly } from "../wiring/internal-only.js";
+import { internalOnly } from "../wiring/internal-only.ts";
 import { z } from "zod";
 import { lehneEingabeAb } from "../utils/http.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
