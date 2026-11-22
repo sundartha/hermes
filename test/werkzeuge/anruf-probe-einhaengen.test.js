@@ -166,10 +166,10 @@ test("Zeitplan-Lauf mit fehlendem Probe-Zugang oder Alarmweg ist rot, ohne Anruf
   }
 });
 
-test("Push- und Handstart-Lauf mit fehlendem Probe-Zugang bleibt grün", async () => {
+test("Push- und Handstart-Lauf mit fehlendem Probe-Zugang ist rot", async () => {
   for (const ereignis of ["push", "workflow_dispatch"]) {
     const ergebnis = await aufrufen({ umgebung: { GITHUB_EVENT_NAME: ereignis, STAGING_PROBE_ZIEL: "" } });
-    assert.equal(ergebnis.code, 0);
+    assert.equal(ergebnis.code, 1);
     assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_probe_ziel_fehlt/);
   }
 });

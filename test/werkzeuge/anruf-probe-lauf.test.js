@@ -167,17 +167,17 @@ test("Gerissener Wert steht im Protokoll: Offenlegung weicht ab", async () => {
   assert.match(sichtbar, /Probe rot: offenlegung/);
 });
 
-test("Fehlende Adresse des Alarmwegs: nichts gewählt, Lauf grün, Name im Protokoll", async () => {
+test("Fehlende Adresse des Alarmwegs: nichts gewählt, Lauf rot, Name im Protokoll", async () => {
   const { sichtbar, code } = await aufrufen({ ohneAdresse: true });
-  assert.equal(code, 0);
+  assert.equal(code, 1);
   assert.equal(anrufe(sichtbar), 0);
   assert.match(sichtbar, /probe_uebersprungen_better_stack_alert_url_fehlt/);
 });
 
 for (const name of ["STAGING_PROBE_ZIEL"]) {
-  test(`Fehlt ${name}: nichts gewählt, Lauf grün, Name im Protokoll`, async () => {
+  test(`Fehlt ${name}: nichts gewählt, Lauf rot, Name im Protokoll`, async () => {
     const { sichtbar, code } = await aufrufen({ umgebung: { [name]: "" } });
-    assert.equal(code, 0);
+    assert.equal(code, 1);
     assert.equal(anrufe(sichtbar), 0);
     assert.match(sichtbar, new RegExp(`probe_uebersprungen_${name.toLowerCase()}_fehlt`));
   });

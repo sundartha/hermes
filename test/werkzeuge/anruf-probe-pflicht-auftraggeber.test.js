@@ -40,9 +40,9 @@ function aufrufen(umgebung) {
 for (const name of ["STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"]) {
   const meldung = `probe_uebersprungen_${name.toLowerCase()}_fehlt`;
 
-  test(`Fehlt ${name}: Push-Lauf übersprungen und grün, ohne Anruf`, async () => {
+  test(`Fehlt ${name}: Push-Lauf übersprungen und rot, ohne Anruf`, async () => {
     const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "push", [name]: "" });
-    assert.equal(ergebnis.code, 0);
+    assert.equal(ergebnis.code, 1);
     assert.ok(ergebnis.ausgabe.includes(meldung));
     assert.ok(!ergebnis.ausgabe.includes("ANRUF"));
     assert.ok(!ergebnis.ausgabe.includes("offenlegung"));

@@ -30,8 +30,12 @@ function zeile(text) {
   process.stdout.write(`${text}\n`);
 }
 
-function uebersprungen(name) {
-  const text = `probe_uebersprungen_${name.toLowerCase()}_fehlt`;
+function uebersprungenText(name) {
+  return `probe_uebersprungen_${name.toLowerCase()}_fehlt`;
+}
+
+function aufraeumenUebersprungen(name) {
+  const text = uebersprungenText(name);
   if (env.GITHUB_EVENT_NAME === "schedule") ende(text);
   zeile(text);
 }
@@ -124,7 +128,7 @@ async function ausgangMelden(ergebnis) {
 
 async function auflegen() {
   const fehlt = PFLICHT_AUFLEGEN.find((name) => !env[name]);
-  if (fehlt !== undefined) return uebersprungen(fehlt);
+  if (fehlt !== undefined) return aufraeumenUebersprungen(fehlt);
   const modul = await modulLaden();
   if (modul === null) {
     ende("probe_anrufer_fehlt");
@@ -136,7 +140,7 @@ async function auflegen() {
 async function hauptprogramm() {
   if (process.argv[2] === "auflegen") return auflegen();
   const fehlt = fehlenderName();
-  if (fehlt !== undefined) return uebersprungen(fehlt);
+  if (fehlt !== undefined) ende(uebersprungenText(fehlt));
   for (const name of PFLICHT) zeile(`::add-mask::${env[name]}`);
   if (!COMMIT.test(env.GITHUB_SHA ?? "")) {
     ende("probe_commit_unklar");
