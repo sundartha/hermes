@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { neueUhr, pgBossUmgebung, wackeligeWarteschlange } from "../gemeinsam/pgboss-umgebung.js";
 import { config } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { makeConfigOverrides } from "../helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);

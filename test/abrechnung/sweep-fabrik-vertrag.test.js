@@ -99,7 +99,7 @@ test("Z-A8: runSweepTick laeuft mit den echten Rueckgaben aller vier Wachen-Fabr
 import { mock } from "node:test";
 import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { starteSweepTakt } from "../../src/boot.js";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { config } from "../../src/config.ts";
 import { makeConfigOverrides } from "../helpers.js";
 

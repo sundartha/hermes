@@ -7,11 +7,11 @@ const QUEUE_KONFIG = z.object({
   store: z.object({ queueBackend: z.string(), databaseUrl: z.string() }),
 });
 
-function queueKonfig() {
+function queueKonfig(): z.infer<typeof QUEUE_KONFIG> {
   return QUEUE_KONFIG.parse(config);
 }
 
-export function createQueue(options = {}) {
+export function createQueue(options: Parameters<typeof makePgBossQueue>[0] = {}) {
   const { store: speicher } = queueKonfig();
   if (speicher.queueBackend === "pgboss")
     return makePgBossQueue({ connectionString: speicher.databaseUrl, ...options });

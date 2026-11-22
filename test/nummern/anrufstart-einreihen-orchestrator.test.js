@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeConfigOverrides } from "../helpers.js";
 import { config } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { numberProvisioning } from "../../src/telephony/registry.js";
