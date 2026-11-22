@@ -184,7 +184,6 @@ telephony.telnyxApiKey
 telephony.telnyxConnectionId
 telephony.telnyxCallControlAppId
 telephony.telnyxPublicKey
-telnyx.telnyxElevenLabs
 tenancy.assistantContextEnabled
 tenancy.consultEnabled
 tenancy.consultOpenMs
@@ -226,7 +225,6 @@ billing.voiceTariffGrundbetragCentsJeRoute
 llm.modelPricesUsd
 safety.allowedCountryCodes
 safety.mcpAllowedOrigins
-telnyx.telnyxElevenLabs
 voice.elevenLabsInbound
 voice.elevenLabsOutbound
 voice.elevenLabsPlayTts
