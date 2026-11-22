@@ -7,7 +7,7 @@ export const armiereKlingelfrist = ({ setTimer, beiFrist }) => setTimer(beiFrist
 
 export function armiereVorspannFristen({
   call,
-  zustand,
+  ladeStand,
   store,
   config,
   beineAuf,
@@ -16,10 +16,10 @@ export function armiereVorspannFristen({
   setTimer,
 }) {
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
-  const { stand } = zustand;
   async function beiFrist(erledigt, melde) {
     if ((await store.leseCall(call.id)).status !== "active") return;
-    if (stand.has(erledigt) || stand.has(STAND.ABGEBROCHEN) || stand.has(STAND.BRUECKE)) return;
+    const stand = await ladeStand();
+    if (!stand || stand.has(erledigt) || stand.has(STAND.ABGEBROCHEN) || stand.has(STAND.BRUECKE)) return;
     await melde();
     await beineAuf();
   }

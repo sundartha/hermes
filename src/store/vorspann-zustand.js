@@ -6,6 +6,12 @@ const ANLEGEN_SQL = `INSERT INTO vorspann_zustand (call_id, tenant_id, token, te
   VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`;
 const TEXT_SQL = `SELECT text FROM vorspann_zustand WHERE call_id = $1 AND expires_at > now()`;
 const LOESCHEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1`;
+const LADEN_SQL = `SELECT callee_id, token, text, stand, aufgelegt, abgehoben FROM vorspann_zustand WHERE call_id = $1`;
+const CALLEE_SQL = `UPDATE vorspann_zustand SET callee_id = COALESCE(callee_id, $2) WHERE call_id = $1 RETURNING callee_id`;
+const ABGEHOBEN_SQL = `UPDATE vorspann_zustand SET abgehoben = true WHERE call_id = $1 AND NOT abgehoben RETURNING call_id`;
+const SPEICHERN_SQL = `UPDATE vorspann_zustand SET stand = $2::jsonb || stand, aufgelegt = $3::jsonb WHERE call_id = $1`;
+
+const zeileVon = (zeile) => zeile && { calleeId: zeile.callee_id, token: zeile.token, text: zeile.text, stand: zeile.stand, aufgelegt: zeile.aufgelegt, abgehoben: zeile.abgehoben };
 
 export function makePostgresVorspannZustand(runner) {
   const imMandanten = (tenantId, anweisungen) =>
@@ -34,19 +40,45 @@ export function makePostgresVorspannZustand(runner) {
     loesche: async ({ tenantId, callId }) => {
       await imMandanten(tenantId, [[LOESCHEN_SQL, [callId]]]);
     },
+    lade: async ({ tenantId, callId }) => zeileVon((await imMandanten(tenantId, [[LADEN_SQL, [callId]]]))[0]),
+    setzeCallee: async ({ tenantId, callId, calleeId }) => (await imMandanten(tenantId, [[CALLEE_SQL, [callId, calleeId]]]))[0]?.callee_id,
+    beanspruecheAbgehoben: async ({ tenantId, callId }) => (await imMandanten(tenantId, [[ABGEHOBEN_SQL, [callId]]])).length === 1,
+    speichere: async ({ tenantId, callId, stand, aufgelegt }) => {
+      await imMandanten(tenantId, [[SPEICHERN_SQL, [callId, JSON.stringify(stand), JSON.stringify(aufgelegt)]]]);
+    },
   };
 }
 
 export function makeSpeicherVorspannZustand() {
-  const texte = new Map();
+  const zeilen = new Map();
   const schluessel = ({ tenantId, callId }) => `${tenantId}/${callId}`;
+  const ersetze = (anfrage, aenderung) => {
+    const zeile = zeilen.get(schluessel(anfrage));
+    if (!zeile) return undefined;
+    const neu = { ...zeile, ...aenderung(zeile) };
+    zeilen.set(schluessel(anfrage), neu);
+    return neu;
+  };
   return {
-    anlegen: async ({ tenantId, callId, text }) => {
-      texte.set(schluessel({ tenantId, callId }), text);
+    anlegen: async ({ tenantId, callId, token, text }) => {
+      zeilen.set(schluessel({ tenantId, callId }), { calleeId: null, token, text, stand: {}, aufgelegt: [], abgehoben: false });
     },
-    leseText: async (anfrage) => texte.get(schluessel(anfrage)),
+    leseText: async (anfrage) => zeilen.get(schluessel(anfrage))?.text,
     loesche: async (anfrage) => {
-      texte.delete(schluessel(anfrage));
+      zeilen.delete(schluessel(anfrage));
+    },
+    lade: async (anfrage) => {
+      const zeile = zeilen.get(schluessel(anfrage));
+      return zeile && structuredClone(zeile);
+    },
+    setzeCallee: async (anfrage) => ersetze(anfrage, (zeile) => ({ calleeId: zeile.calleeId ?? anfrage.calleeId }))?.calleeId,
+    beanspruecheAbgehoben: async (anfrage) => {
+      if (zeilen.get(schluessel(anfrage))?.abgehoben !== false) return false;
+      ersetze(anfrage, () => ({ abgehoben: true }));
+      return true;
+    },
+    speichere: async (anfrage) => {
+      ersetze(anfrage, (zeile) => ({ stand: { ...anfrage.stand, ...zeile.stand }, aufgelegt: [...anfrage.aufgelegt] }));
     },
   };
 }

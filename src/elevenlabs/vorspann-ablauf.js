@@ -5,7 +5,7 @@ import { hangUpForCall, persistEndWithReason } from "../telephony/call-terminati
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.ts";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
-import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
+import { STAND, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
 import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { armiereKlingelfrist, armiereVorspannFristen } from "./vorspann-fristen.js";
@@ -75,15 +75,26 @@ async function legeBeinAuf(steuerung, callId, callControlId) {
   }
 }
 
-async function legeBeideBeineAuf({ call, zustand, steuerung, now }) {
+const zustandsRef = (call) => ({ tenantId: call.tenantId, callId: call.id });
+
+const zustandVon = (zeile) => zeile && { ...zeile, stand: standAusObjekt(zeile.stand), aufgelegt: new Set(zeile.aufgelegt) };
+
+const speichereZustand = ({ vorspannZustand, call, zustand }) =>
+  vorspannZustand
+    .speichere({ ...zustandsRef(call), stand: standNachObjekt(zustand.stand), aufgelegt: [...zustand.aufgelegt] })
+    .catch((fehler) => logFehler("zustand", call.id, fehler));
+
+async function legeBeideBeineAuf({ call, zustand, steuerung, now, vorspannZustand }) {
   zustand.stand.set(STAND.ABGEBROCHEN, now());
   const beine = [zustand.calleeId, call.elCallControlId].filter(Boolean);
   beine.forEach((bein) => zustand.aufgelegt.add(bein));
+  await speichereZustand({ vorspannZustand, call, zustand });
   await Promise.all(
     beine.map(async (bein) => {
       if (!(await legeBeinAuf(steuerung, call.id, bein))) zustand.aufgelegt.delete(bein);
     }),
   );
+  await speichereZustand({ vorspannZustand, call, zustand });
 }
 
 function speichereElBein(callId, store) {
@@ -164,14 +175,13 @@ async function pruefeWahl({ call, ausgehendGesperrt }) {
   return { grund };
 }
 
-async function beiKlingelfrist({ callId, zustand, store, voiceControl, abgehobeneAnrufe, beiAufgelegt }) {
+async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAufgelegt }) {
   const call = await store.leseCall(callId);
-  if (call.status !== "active" || abgehobeneAnrufe.has(callId)) return;
+  const zustand = call.status === "active" ? await ladeZustand(call) : undefined;
+  if (!zustand || zustand.abgehoben) return;
   await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
   await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
 }
-
-const zustandsRef = (call) => ({ tenantId: call.tenantId, callId: call.id });
 
 async function waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand }) {
   try {
@@ -207,25 +217,22 @@ export function makeVorspannAblauf({
   now, setTimer,
 }) {
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
-  const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now });
-  const zustaende = new Map();
-  const abgehobeneAnrufe = new Set();
+  const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now, vorspannZustand });
+  const ladeZustand = async (call) => zustandVon(await vorspannZustand.lade(zustandsRef(call)));
 
   async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
     const token = await ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
     const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
-      const zustand = { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() };
-      zustaende.set(call.id, zustand);
-      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, zustand, store, voiceControl, abgehobeneAnrufe, beiAufgelegt }) });
+      await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: callControlId });
+      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt }) });
     } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
 
   async function beiAbgehoben({ call, zustand, zugang }) {
-    if (abgehobeneAnrufe.has(call.id) || call.status !== "active") return;
-    abgehobeneAnrufe.add(call.id);
+    if (call.status !== "active" || !(await vorspannZustand.beanspruecheAbgehoben(zustandsRef(call)))) return;
     try {
       await store.markAnswered(call.id);
       store.save();
@@ -234,8 +241,9 @@ export function makeVorspannAblauf({
       return legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
     }
     zustand.stand.set(STAND.ABGEHOBEN, now());
+    await speichereZustand({ vorspannZustand, call, zustand });
     const beineAuf = () => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
-    armiereVorspannFristen({ call, zustand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }), setTimer });
+    armiereVorspannFristen({ call, ladeStand: async () => (await ladeZustand(call))?.stand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }), setTimer });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([
@@ -259,8 +267,7 @@ export function makeVorspannAblauf({
     now,
   });
 
-  async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
-    zustaende.delete(call.id);
+  async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben }) {
     ttsStore.release(zustand.token);
     await vorspannZustand.loesche(zustandsRef(call)).catch((fehler) => logFehler("zustand", call.id, fehler));
     if (call.status !== "active") return;
@@ -286,16 +293,18 @@ export function makeVorspannAblauf({
   });
 
   async function behandle({ call, ereignis, zugang }) {
-    const zustand = zustaende.get(call.id);
     const vomElBein = ereignis.callControlId === call.elCallControlId;
     try {
+      const zustand = await ladeZustand(call);
       if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein, now });
+      zustand.calleeId ??= await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: ereignis.callControlId });
       if (!vomElBein && ereignis.callControlId !== zustand.calleeId) return;
       await BEHANDLER[ereignis.ereignis]?.({ call, zustand, zugang, ereignis, vomElBein });
+      await speichereZustand({ vorspannZustand, call, zustand });
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
     }
   }
 
-  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: async (callId, tenantId) => zustaende.get(callId)?.text ?? (await vorspannZustand.leseText({ tenantId, callId })) };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
 }
