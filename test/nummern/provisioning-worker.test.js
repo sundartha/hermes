@@ -219,3 +219,38 @@ test("K1-8: ein erneutes enqueue nach erledigtem Auftrag kauft keine zweite Numm
 
   assert.equal(prov.orderCalls.length, 1, "Nummernkauf genau einmal");
 });
+
+test("Nummernkauf-Auftrag: Landescode, Anschluss und Haltebetrag kommen mit den Abhaengigkeiten in einem dritten Argument", async () => {
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner();
+  const billing = fakeBilling();
+
+  const ergebnis = await handleProvisionJob(
+    s,
+    { payload: { numberId } },
+    { provisioner: prov, billing, opts: { ...PAY_ARGS, connectionId: "conn_9" } },
+  );
+
+  assert.equal(handleProvisionJob.length, 3);
+  assert.equal(ergebnis.number.status, NUMBER_STATUS.ACTIVE);
+  assert.equal(findNumber(s, numberId).e164, "+12025550101");
+  assert.equal(prov.log[0], "search:US");
+  assert.equal(prov.orderCalls[0].connectionId, "conn_9");
+  const [aufruf, halt] = billing.log[0];
+  assert.equal(aufruf, "placeHold");
+  assert.equal(halt.amountCents, 500);
+});
+
+test("Nummernkauf-Auftrag: unbekannte Nummer wird uebersprungen, ohne Anbieteraufruf", async () => {
+  const { s } = seedRequested();
+  const prov = fakeProvisioner();
+
+  const ergebnis = await handleProvisionJob(
+    s,
+    { payload: { numberId: "num_gibt_es_nicht" } },
+    { provisioner: prov, opts: ARGS },
+  );
+
+  assert.deepEqual(ergebnis, { skipped: true, status: null });
+  assert.deepEqual(prov.log, []);
+});
