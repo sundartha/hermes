@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { holeRegistrierungen } from "../../src/elevenlabs/nummern-registrierung.ts";
+import { trunkInventar } from "../../scripts/el-nummern-registrierung.mjs";
 
 const HTTP_OK = 200;
 const NUMERISCHE_ID = 12345;
@@ -17,8 +17,8 @@ test("Anbieterliste mit numerischer phone_number_id: Einzelabruf geht auf die Id
     if (urls.length === 1) return antwort([{ phone_number: "+12025550101", phone_number_id: NUMERISCHE_ID }]);
     return antwort({ phone_number: "+12025550101", phone_number_id: String(NUMERISCHE_ID) });
   };
-  const registrierungen = await holeRegistrierungen({ fetchImpl, account: KONTO });
+  const exitCode = await trunkInventar({ el: KONTO, fetchImpl });
   assert.equal(urls.length, 2);
   assert.equal(urls[1], "https://el-liste.test/v1/convai/phone-numbers/12345");
-  assert.equal(registrierungen[0]?.phone_number, "+12025550101");
+  assert.equal(exitCode, 0);
 });
