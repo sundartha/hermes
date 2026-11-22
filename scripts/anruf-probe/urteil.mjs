@@ -49,6 +49,14 @@ function ergebnisGerissen(messung) {
   return messung.ergebnisVorgetragen === true ? [] : ["ergebnis_fehlt"];
 }
 
+function mindestdauerGerissen(messung) {
+  return messung.dauerSekunden < MINDESTDAUER_S ? ["zu_kurz"] : [];
+}
+
+function antwortGerissen(messung) {
+  return messung.begruessungAntwort === false ? ["keine_antwort"] : [];
+}
+
 export function urteilen(messung) {
   if (messung === null || typeof messung !== "object") return { gruen: false, gerissen: ["messung"] };
   const gerissen = [];
@@ -57,9 +65,9 @@ export function urteilen(messung) {
   else if (!offenlegungStimmt(messung)) gerissen.push("offenlegung");
   if (eroeffnungenZaehlen(messung) > 1) gerissen.push("eroeffnung_doppelt");
   if (!(messung.dauerSekunden <= DAUER_GRENZE_S)) gerissen.push("dauer");
-  if (messung.dauerSekunden < MINDESTDAUER_S) gerissen.push("zu_kurz");
+  gerissen.push(...mindestdauerGerissen(messung));
   if (messung.stillstandSekunden > STILLSTAND_GRENZE_S) gerissen.push("stillstand");
-  if (messung.begruessungAntwort === false) gerissen.push("keine_antwort");
+  gerissen.push(...antwortGerissen(messung));
   gerissen.push(...stimmeGerissen(messung));
   gerissen.push(...ergebnisGerissen(messung));
   if (messung.status !== STATUS_BEENDET) gerissen.push("status");
