@@ -28,7 +28,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, vorspannZus
       marke: standName(marke),
       ms: now(),
     });
-    if (stand) zustand.stand = standAusObjekt(stand);
+    if (stand) standAusObjekt(stand).forEach((ms, name) => zustand.stand.set(name, ms));
     return Boolean(stand);
   }
 

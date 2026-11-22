@@ -98,6 +98,8 @@ async function platziereUndHebeAb({ a, b, sql, signer, aufrufe }) {
   return { callId, token: zeile[0].token };
 }
 
+const zaehle = async (sql, abfrage, parameter) => (await sql(abfrage, parameter)).rows[0].anzahl;
+
 const elAuflegen = (aufrufe) => aufrufe.auflegen.filter((url) => url.includes(EL_BEIN));
 
 test("Endet die Wiedergabe auf Instanz B ohne Auflegen, ist das Audio auf beiden Instanzen weg und die Ablage leer", { timeout: ZEITGRENZE_MS }, async (t) => {
@@ -108,7 +110,7 @@ test("Endet die Wiedergabe auf Instanz B ohne Auflegen, ist das Audio auf beiden
     assert.equal((await ereignis(srv.signer, srv.b, { callId, art: "call.playback.ended", status: "completed" })).status, HTTP_OK);
     await zeilenBis(async () => (await abrufen(srv.a, token)).status, (status) => status === HTTP_NOT_FOUND);
     assert.equal((await abrufen(srv.b, token)).status, HTTP_NOT_FOUND);
-    assert.equal((await srv.sql(ABLAGE_SQL)).rows[0].anzahl, 0);
+    assert.equal(await zaehle(srv.sql, ABLAGE_SQL), 0);
     assert.deepEqual(srv.aufrufe.auflegen, []);
     assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
   });
@@ -124,9 +126,9 @@ test("Treffen Wiedergabe-Ende auf B und EL-Bein-Abheben auf A gleichzeitig ein, 
     ]);
     assert.deepEqual(antworten.map((antwort) => antwort.status), [HTTP_OK, HTTP_OK]);
     await zeilenBis(async () => srv.aufrufe.bruecken, (liste) => liste.length >= 1);
-    await zeilenBis(async () => (await srv.sql(TRANSKRIPT_SQL, [callId])).rows[0].anzahl, (anzahl) => anzahl >= 1);
+    await zeilenBis(async () => await zaehle(srv.sql, TRANSKRIPT_SQL, [callId]), (anzahl) => anzahl >= 1);
     assert.equal(srv.aufrufe.bruecken.length, 1);
-    assert.equal((await srv.sql(TRANSKRIPT_SQL, [callId])).rows[0].anzahl, 1);
+    assert.equal(await zaehle(srv.sql, TRANSKRIPT_SQL, [callId]), 1);
     assert.equal(zaehleMarke([srv.a, srv.b], "offenlegung_abgespielt"), 1);
     assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
   });
@@ -144,8 +146,8 @@ test("Das Auflegen auf einer Instanz ohne eigenen Zustand beendet den Anruf einm
     await zeilenBis(async () => (await srv.sql(STATUS_SQL, [callId])).rows, (zeilen) => zeilen[0].status !== "active");
     await zeilenBis(async () => elAuflegen(srv.aufrufe), (liste) => liste.length >= 1);
     assert.equal(elAuflegen(srv.aufrufe).length, 1);
-    assert.equal((await srv.sql(ZEILEN_SQL)).rows[0].anzahl, 0);
+    assert.equal(await zaehle(srv.sql, ZEILEN_SQL), 0);
     assert.equal((await abrufen(srv.b, token)).status, HTTP_NOT_FOUND);
-    assert.equal((await srv.sql(ABLAGE_SQL)).rows[0].anzahl, 0);
+    assert.equal(await zaehle(srv.sql, ABLAGE_SQL), 0);
   });
 });
