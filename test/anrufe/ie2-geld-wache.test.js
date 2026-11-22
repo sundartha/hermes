@@ -863,3 +863,37 @@ test("Frist-Ende: hat ein anderer Prozess den Anruf mit anderem Status und Grund
   assert.equal(spiegel.failureReason, "budget-exhausted");
   assert.deepEqual(betrieb.hangups, []);
 });
+
+import { CAP_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
+
+test("IE2-Hoechstdauer: beendet das Auflegen den Anruf schon, steht der Grund der Hoechstdauer beim ersten beendeten Stand fest", async () => {
+  const grundBeimEnde = [];
+  const harness = makeHarness({ budgetExhausted: false });
+  const { call } = harness;
+  call.provider = "elevenlabs";
+  call.costProfile = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
+  call.twilioSid = "";
+  call.elevenlabsConversationId = "conv_ie2_hoechstdauer";
+  call.direction = "outbound";
+  const lifecycle = makeCallLifecycle({
+    store: harness.store,
+    config: withConfigNamespaces({ billing: {} }),
+    finishCall: () => {},
+    releaseReserve: () => {},
+    voiceControl: () => ({ async endCall() {} }),
+    terminateAndBillCall,
+    hangUpAction,
+    billThunk,
+    endActiveCall: async () => {
+      grundBeimEnde.push(call.failureReason ?? null);
+      harness.store.setCallEndedAt(call.id, "completed", new Date().toISOString());
+    },
+    reattachActiveCallCore,
+    cappedEndedAtMs,
+    classifyCallTime,
+    blockingBudgetAxis,
+  });
+  await lifecycle.terminateExpiredCall(call);
+  assert.deepEqual(grundBeimEnde, [CAP_FAILURE_REASON]);
+  assert.equal(call.failureReason, CAP_FAILURE_REASON);
+});
