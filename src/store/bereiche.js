@@ -196,15 +196,22 @@ function gleicheAn(liste, neu) {
 }
 
 async function ladeFremdeOffeneAuftraege(speicher, sql, eigene) {
-  const geladen = new Set();
+  const kandidaten = [];
   for (const { job, nummer } of await sql.offene()) {
     if (job.instanz === eigene || !(await speicher.ensureTenant(job.tenantId))) continue;
-    const zustand = speicher.load();
-    if (nummer) gleicheAn(zustand.numbers, nummer);
-    gleicheAn(zustand.provisioningJobs, job);
-    geladen.add(job.id);
+    kandidaten.push({ job, nummer });
   }
-  return geladen;
+  return kandidaten;
+}
+
+async function uebernimmAuftrag(speicher, sql, eingabe) {
+  if (!(await sql.auftragUebernehmen(eingabe))) return false;
+  const gefunden = (await sql.offene()).find(({ job }) => job.id === eingabe.jobId);
+  if (!gefunden) return true;
+  const zustand = speicher.load();
+  if (gefunden.nummer) gleicheAn(zustand.numbers, gefunden.nummer);
+  gleicheAn(zustand.provisioningJobs, gefunden.job);
+  return true;
 }
 
 function nummernkaufBereich(speicher) {
@@ -226,7 +233,7 @@ function nummernkaufBereich(speicher) {
     },
     uebernimmAuftrag: async (eingabe) => {
       const sql = speicher.nummernSql?.();
-      return sql ? sql.auftragUebernehmen(eingabe) : true;
+      return sql ? uebernimmAuftrag(speicher, sql, eingabe) : true;
     },
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {

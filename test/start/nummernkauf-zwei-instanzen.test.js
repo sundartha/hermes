@@ -242,3 +242,24 @@ test("Nummernkauf: der Auftrag wechselt nur aus dem erwarteten Zustand und nur e
   assert.equal(await besitzerDesAuftrags(umgebung.db), KENNUNG_B);
   assert.equal(await uebernehmen({ alt: KENNUNG_A }), false);
 });
+
+test("Nummernkauf: der Abgleich von B schreibt den Kauf der lebenden A nicht in den Spiegel zurueck, nach As Ausfall gibt es keine zweite Bestellung", async () => {
+  const umgebung = await aufbau();
+  const b = await instanz(umgebung, KENNUNG_B);
+  const spiegel = b.store.load();
+  spiegel.numbers.splice(0, spiegel.numbers.length, ...spiegel.numbers.filter((nummer) => nummer.id !== NUMMER_ID));
+  const a = await auftragVonA(umgebung);
+  await lebt(umgebung.db, KENNUNG_B);
+  await b.orchestrator.reconcileOrphanedProvisioning();
+  await a.orchestrator.runProvisioningDrainExclusive();
+  await a.store.drainFlushes();
+  b.store.save();
+  await b.store.drainFlushes();
+  const [auftrag] = await lesen(umgebung.db, "SELECT status, instanz FROM provisioning_job");
+  const [nummer] = await lesen(umgebung.db, "SELECT status, e164, provider_number_id FROM number WHERE id = $1", [NUMMER_ID]);
+  assert.deepEqual({ ...auftrag }, { status: "done", instanz: KENNUNG_A });
+  assert.deepEqual({ ...nummer }, { status: "active", e164: E164, provider_number_id: "pn_besitz" });
+  await stirbt(umgebung.db, KENNUNG_A);
+  await abgleichenUndAbarbeiten(b);
+  assert.deepEqual(umgebung.bestellungen, [KENNUNG_A]);
+});
