@@ -159,7 +159,7 @@ async function neuerAnruf() {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren" }),
+    body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren", language: "en" }),
   });
   return (await antwort.json()).callId;
 }

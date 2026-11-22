@@ -164,7 +164,7 @@ test("3395-R5: franzoesisches Ziel bei deutschem Mandanten - Pflichtsatz franzoe
 });
 
 test("3395-R5: Sprachwunsch und Mandantensprache bestimmen Gespraechssprache und Stimme getrennt vom Ziel", async () => {
-  const mandant = await einAnruf({ sprache: "fr" }, { objective: "Réserver une table" });
+  const mandant = await einAnruf({ sprache: "fr" }, { objective: "Réserver une table", language: "fr" });
   const wunsch = await einAnruf({ sprache: "fr" }, { objective: "Book a table", language: "en" });
   assert.equal(ueberVon(mandant.start).agent.language, "fr");
   assert.equal(ueberVon(wunsch.start).agent.language, "en");

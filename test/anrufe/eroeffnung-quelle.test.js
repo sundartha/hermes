@@ -64,7 +64,7 @@ async function anrufstart({ sprache, ziel, auftrag }, firstName) {
     const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: ziel, objective: auftrag }),
+      body: JSON.stringify({ to: ziel, objective: auftrag, language: sprache }),
     });
     const antwort = await res.text();
     assert.equal(res.status, HTTP_OK, antwort);

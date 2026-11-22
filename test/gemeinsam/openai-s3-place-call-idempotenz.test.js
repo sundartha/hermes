@@ -341,7 +341,7 @@ test("B2: createCall wirft (Wurf NACH der Gate-Kette) -> 503, Reserve 0, kein Wa
   }
 });
 
-test("B3: ein Werfer VOR createCall (resolveCallLanguage, nach NICHT_KETTEN_QUELLEN erst nach der Kette gelesen) -> 503, Reserve 0", async () => {
+test("B3: ein Werfer VOR createCall (tenantContext, nach NICHT_KETTEN_QUELLEN erst nach der Kette gelesen) -> 503, Reserve 0", async () => {
   process.env.PRECALL_BRIEFING_ENABLED = "false";
   process.env.ASSISTANT_CONTEXT_ENABLED = "false";
   process.env.IN_CALL_CONSULT_ENABLED = "false";
@@ -350,7 +350,7 @@ test("B3: ein Werfer VOR createCall (resolveCallLanguage, nach NICHT_KETTEN_QUEL
 
   const state = makeDefaultState();
   const basis = kettenStoreTeilB(state);
-  const { store } = zaehlenderStore(basis, "resolveCallLanguage");
+  const { store } = zaehlenderStore(basis, "tenantContext");
   const ergebnis = await postCallTeilB({ store, config: testConfig() });
 
   assert.equal(ergebnis.status, HTTP_SERVICE_UNAVAILABLE);

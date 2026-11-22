@@ -2,7 +2,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
+import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 
@@ -88,7 +88,7 @@ test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.
   const srv = await startServer({ env: ENV_VORSPANN, seed: ownerSeed({ numberLanguage: "fr" }) });
   try {
     assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR, "Gates passiert -> Offline-Originate (500)");
-    assert.equal(outboundCall(srv).language, "fr", "Outbound-Sprache aus number.language (FR)");
+    assert.equal(outboundCall(srv).language, "de", "ohne language startet der Anruf auf de, die Nummer-Sprache (FR) zaehlt nicht");
   } finally {
     await srv.stop();
   }
@@ -103,8 +103,8 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
     assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
     assert.equal(
       outboundCall(srv).language,
-      "en",
-      "Owner-Override (settings.language=en) schlaegt die FR-Nummer",
+      "de",
+      "ohne language startet der Anruf auf de, weder Owner-Einstellung (en) noch FR-Nummer zaehlen",
     );
   } finally {
     await srv.stop();
@@ -117,8 +117,8 @@ test("Letzte Praezedenz-Stufe: Nummer ohne language -> call.language = Weltdefau
     assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
     assert.equal(
       outboundCall(srv).language,
-      DEFAULT_LANGUAGE,
-      "ohne Geo-Anker faellt die Praezedenz auf den Weltdefault durch",
+      "de",
+      "ohne language startet der Anruf auf de, auch ohne Nummer-Sprache",
     );
   } finally {
     await srv.stop();

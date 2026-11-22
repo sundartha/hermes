@@ -24,7 +24,7 @@ const OFFENLEGUNG = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jon
 const WEG_SPUR = "/v2/calls";
 const SPRACHSYNTHESE_SPUR = "/v1/text-to-speech/";
 
-const anrufBody = () => JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren" });
+const anrufBody = () => JSON.stringify({ to: ZIEL, objective: "Termin vereinbaren", language: "en" });
 const post = (url) =>
   abrufMitFrist(`${url}/api/calls`, { method: "POST", headers: { "content-type": "application/json" }, body: anrufBody() });
 

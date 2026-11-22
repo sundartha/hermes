@@ -139,7 +139,7 @@ const anrufStarten = (srv, wartezeitMs = 0, to = TELNYX_TEST_PEER_NUMBER) =>
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ to, objective: OBJECTIVE }),
+      body: JSON.stringify({ to, objective: OBJECTIVE, language: "en" }),
     },
     { wartezeitMs },
   );
