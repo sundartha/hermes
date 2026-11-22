@@ -691,9 +691,6 @@
     }
   },
   "src/worker/provisioning-orchestrator.js": {
-    "id-length": {
-      "count": 8
-    },
     "max-lines-per-function": {
       "count": 1
     }

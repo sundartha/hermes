@@ -493,3 +493,42 @@ test("K1-25: scheitert das Einreihen eines neuen Nummernauftrags, meldet queuePr
   assert.equal(spur.status, PROVISIONING_JOB_STATUS.QUEUED);
   assert.equal(spur.idempotencyKey, "provision_num1");
 });
+
+test("Ist die Warteschlange beim Abarbeiten nach dem Einreihen nicht erreichbar, wird der Fehler mit [provision-drain] geloggt und der Kauf bleibt eingereiht", async (t) => {
+  const errors = silenceErrors(t);
+  const s = withNumbers(makeNumber("num1", "t1"));
+  const store = makeFakeStore(s);
+  store.ensureTenant = async () => {};
+  const queue = makeMemoryQueue();
+  t.mock.method(queue, "drain", async () => {
+    throw new Error("Warteschlange nicht erreichbar");
+  });
+  const orchestrator = makeProvisioningOrchestrator({
+    store,
+    config: withConfigNamespaces({
+      ...OHNE_EL_ZUGANG,
+      paymentEnabled: false,
+      provisioningEnabled: true,
+      maxNumbersPerTenant: 5,
+    }),
+    queue,
+    billing: {},
+    metering: meteringStub(),
+    numberProvisioning: () => ({}),
+    handleProvisionJob: fakeHandleProvisionJob,
+    resolveProvisionRetry: () => ({ ok: true, number: findNumber(s, "num1") }),
+    audit: () => {},
+    recordProvisioningJob,
+    markProvisioningJob,
+    classifyQueuedProvisioningJobs: () => ({ close: [], hold: [], redrive: [] }),
+    findNumber,
+  });
+
+  const res = await orchestrator.triggerTenantProvisioning("t1");
+  await abwarten();
+
+  assert.equal(res.ok, true);
+  assert.equal(res.reason, "queued");
+  assert.deepEqual(loggedErrors(errors), ["[provision-drain] Warteschlange nicht erreichbar"]);
+  assert.equal(jobOf(s, "num1").status, PROVISIONING_JOB_STATUS.QUEUED);
+});
