@@ -257,7 +257,7 @@ export function makeCallLifecycle({
   const prozessStartMs = Date.now();
 
   async function terminateExpiredCall(call: Call): Promise<void> {
-    await ohneWeg(call);
+    await ohneWeg(call, CAP_FAILURE_REASON);
     const zombie = classifyCallTime(call, prozessStartMs, MAX_CALL_DURATION_CAP_S).expired;
     await terminateCappedCall(call.id, call.twilioSid, zombie ? "failed" : "completed");
   }
