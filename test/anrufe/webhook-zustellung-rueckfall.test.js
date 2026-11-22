@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
+import { waitForLog } from "../helpers.js";
 import { kriteriumLauf } from "../gemeinsam/kriterium-lauf.mjs";
 import {
   antwortVon,
@@ -15,6 +16,8 @@ const WIEDERHOLUNG_FRIST_MS = 1_000;
 const ABLAGE_TABELLE = "webhook_zustellung";
 const KRITERIUM_NAME = "S4-K1";
 const RUECKFALL_QUELLE = "dial_ende";
+const EIGENE_VERARBEITUNG_LOG = /\[el-rueckfall\] \{"callId":"call_s4b"/;
+const WIEDERHOLT_LOG = /\[webhook-idempotenz\] wiederholte_zustellung weg=el-rueckfall art=antwort_wiederholt/;
 const LEER_ODER_AUFLEGEN = /^\s*(<\?xml[^>]*\?>\s*)?<Response(\s*\/>|>\s*(<Hangup\s*\/>\s*)?<\/Response>)\s*$/;
 
 const rueckfall = (signer, { callId, callSid, quelle = RUECKFALL_QUELLE, zusatz = {} }) =>
@@ -71,7 +74,10 @@ test("S4-K2b: Rückfall mit gültiger Signatur, aber fremdem CallSid bekommt nic
       const vonB = await antwortVon(b, rueckfall(signer, { callId: "call_s4b", callSid: "CArueck99" }));
       assert.equal(vonB.status, HTTP_OK);
       assert.match(vonB.xml, LEER_ODER_AUFLEGEN);
-      assert.equal((await zeilenMitAntwort(sql)).length, 1, "fremder CallSid legt keine Antwort unter der Kennung von A ab");
+      await waitForLog(b, EIGENE_VERARBEITUNG_LOG);
+      assert.doesNotMatch(b.stdout, WIEDERHOLT_LOG, "B hat keine Antwort aus der Ablage von A ausgeliefert");
+      const zeilen = await zeilenBis(() => zeilenMitAntwort(sql), (gelesen) => gelesen.length === 1);
+      assert.equal(zeilen.length, 1, "fremder CallSid legt keine Antwort unter der Kennung von A ab");
     },
   );
 });
