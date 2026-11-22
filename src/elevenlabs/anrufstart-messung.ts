@@ -25,7 +25,7 @@ export function beginneAnrufstartMessung(jetztMs: () => number): {
     },
     melde(call: Messbarer): void {
       const ms = msSeitStart({ call, jetzt: jetztMs() });
-      const teilzeiten = TEILE.map((name) => `${name}=${String(teile[name] ?? 0)}`).join(" ");
+      const teilzeiten = TEILE.map((name) => `${name}=${String(teile[name])}`).join(" ");
       console.log(`${LOG_TAG} auftrag_bis_wahl ms=${ms} ${teilzeiten} call=${call.id}`);
     },
   };
