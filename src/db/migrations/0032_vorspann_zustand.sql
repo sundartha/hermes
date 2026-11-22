@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS vorspann_zustand_expires_at_idx ON vorspann_zustand (
 ALTER TABLE vorspann_zustand ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vorspann_zustand FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS tenant_isolation ON vorspann_zustand;
-CREATE POLICY tenant_isolation ON vorspann_zustand
+DROP POLICY IF EXISTS vorspann_zustand_mandant ON vorspann_zustand;
+CREATE POLICY vorspann_zustand_mandant ON vorspann_zustand
   USING (tenant_id = current_setting('app.current_tenant', true))
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
