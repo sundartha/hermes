@@ -116,14 +116,27 @@ function wiederholungen(starts) {
   }).length;
 }
 
-async function gegenStimmenAnzahl(ruf, probeStartMs) {
+async function gegenAnruf(ruf, probeStartMs) {
   const { calls } = await ruf("list_calls", {});
   for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
     const gegen = await ruf("get_call_status", { call_id: anruf.id });
     const nach = Date.parse(gegen.started_at) - probeStartMs;
-    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen._meta?.[STIMMEN_ANZAHL_META_KEY];
+    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen;
   }
   return undefined;
+}
+
+const stimmenAnzahlVon = (gegen) => gegen?._meta?.[STIMMEN_ANZAHL_META_KEY];
+
+const klingelnSekundenVon = (gegen, probeStartMs) =>
+  gegen === undefined ? undefined : (Date.parse(gegen.started_at) - probeStartMs) / MS_JE_SEKUNDE;
+
+async function gegenLesen({ ruf, uhr, probeStartMs, lesen }) {
+  for (let gewartetMs = 0; ; gewartetMs += TAKT_MS) {
+    const wert = lesen(await gegenAnruf(ruf, probeStartMs), probeStartMs);
+    if (wert !== undefined || gewartetMs >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
+    await uhr.warte(TAKT_MS);
+  }
 }
 
 export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
@@ -189,13 +202,8 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       return offene.length;
     },
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
-    stimmenAnzahl: async () => {
-      for (let gewartetMs = 0; ; gewartetMs += TAKT_MS) {
-        const wert = await gegenStimmenAnzahl(ruf, probeStartMs);
-        if (wert !== undefined || gewartetMs >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
-        await uhr.warte(TAKT_MS);
-      }
-    },
+    stimmenAnzahl: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: stimmenAnzahlVon }),
+    klingelnSekunden: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: klingelnSekundenVon }),
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
         to: normalisiert(nummer),

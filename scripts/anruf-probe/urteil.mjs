@@ -4,6 +4,7 @@ export const ANNAHME_GRENZE_S = 15;
 export const DAUER_GRENZE_S = 60;
 export const STILLSTAND_GRENZE_S = 20;
 export const MINDESTDAUER_S = 20;
+export const KLINGELN_GRENZE_S = 10;
 const STATUS_BEENDET = "completed";
 const RICHTUNG_STANDARD = "ausgehend";
 const SOLL_SAETZE = Object.freeze({
@@ -49,6 +50,13 @@ function ergebnisGerissen(messung) {
   return messung.ergebnisVorgetragen === true ? [] : ["ergebnis_fehlt"];
 }
 
+function klingelnGerissen(messung) {
+  if (!Object.hasOwn(messung, "klingelnSekunden")) return [];
+  const sekunden = messung.klingelnSekunden;
+  if (typeof sekunden !== "number" || !Number.isFinite(sekunden) || sekunden < 0) return ["klingeln_fehlt"];
+  return sekunden > KLINGELN_GRENZE_S ? ["klingeln_zu_spaet"] : [];
+}
+
 function mindestdauerGerissen(messung) {
   return messung.dauerSekunden < MINDESTDAUER_S ? ["zu_kurz"] : [];
 }
@@ -70,6 +78,7 @@ export function urteilen(messung) {
   gerissen.push(...antwortGerissen(messung));
   gerissen.push(...stimmeGerissen(messung));
   gerissen.push(...ergebnisGerissen(messung));
+  gerissen.push(...klingelnGerissen(messung));
   if (messung.status !== STATUS_BEENDET) gerissen.push("status");
   return { gruen: gerissen.length === 0, gerissen };
 }
