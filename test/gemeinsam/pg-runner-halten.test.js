@@ -201,7 +201,7 @@ test("die Verbindung ist nach der Sperre wieder frei und der Pool nimmt neue Arb
   await store.mitAnrufSperre(MANDANT, async () => {});
   await store.pruefeVerbindung();
   assert.equal(verbindungen, 2);
-  const { rows } = await db.query("SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory'");
+  const { rows } = await db.query("SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())");
   assert.equal(rows[0].anzahl, 0);
 });
 
