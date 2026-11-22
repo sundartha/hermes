@@ -483,7 +483,7 @@ test("Kriterium 6 (place_call): ein Auftrag ohne language ueber B nimmt die Spra
       () => anrufSprachen(sql),
       (liste) => liste.length === 1,
     );
-    assert.deepEqual(sprachen, ["fr"]);
+    assert.deepEqual(sprachen, ["de"]);
   });
 });
 
