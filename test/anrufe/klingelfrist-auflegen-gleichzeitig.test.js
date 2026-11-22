@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test } from "node:test";
 
 import { OWNER_TEST_FIRST_NAME, nowSeconds, seedCall, seedState, startServer, waitUntil } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { calleeVon, legeAnruf, makeTelnyxSigner, neueAnrufNummer, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
+import { calleeVon, legeAnruf, makeTelnyxSigner, neueAnrufNummer, setzeVorAuflegenHaken, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 
 const TENANT_ID = seedCall().tenantId;
 const WARTE_FRIST_MS = 5_000;
@@ -37,11 +37,12 @@ const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
 
 beforeEach(async () => {
   gemeldet = false;
-  umgebung.attrappe = await starteAttrappe(undefined, null, async (url) => {
+  setzeVorAuflegenHaken(async (url) => {
     if (gemeldet) return;
     gemeldet = true;
     await meldeAufgelegt(url.split("/")[3].replace("cc_callee_", ""));
   });
+  umgebung.attrappe = await starteAttrappe();
   umgebung.signer = makeTelnyxSigner();
   const env = {
     ...vorspannUmgebung({ attrappe: umgebung.attrappe, signer: umgebung.signer, publicUrl: "https://agent.test", kennung: "6005-klingel" }),
@@ -52,6 +53,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  setzeVorAuflegenHaken(async () => {});
   await umgebung.srv.stop();
   await umgebung.attrappe.close();
 });
