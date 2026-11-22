@@ -173,8 +173,10 @@ const MANDANT_SPERRE_GEBEN_SQL = "SELECT pg_advisory_unlock($1, hashtext($2))";
 const SPERRE_HALTER_SQL = "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted";
 const WARTENDE_MANDANT_SPERREN_SQL =
   "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = $1 AND objid = hashtext($2)::oid";
-const wartendeAufMandantSperre = async (sql, mandant) =>
-  (await sql(WARTENDE_MANDANT_SPERREN_SQL, [ANRUF_SPERRE_NAMENSRAUM, mandant.id])).rows[0].anzahl;
+const wartendeAufMandantSperre = async (sql, mandant) => {
+  const { rows } = await sql(WARTENDE_MANDANT_SPERREN_SQL, [ANRUF_SPERRE_NAMENSRAUM, mandant.id]);
+  return rows[0].anzahl;
+};
 const HTTP_UNAVAILABLE = 503;
 const UHR_SQL = "SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS ms";
 const datenbankUhr = async (sql) => (await sql(UHR_SQL)).rows[0].ms;
