@@ -161,7 +161,7 @@ export async function holeRegistrierungen({ fetchImpl, account }: { fetchImpl: F
   const liste = await elevenlabsNummernKonto().listPhoneNumbers({ fetchImpl, account });
   const registrierungen = [];
   for (const eintrag of liste) {
-    registrierungen.push(await elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account, phoneNumberId: eintrag.phone_number_id }));
+    registrierungen.push(await elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account, phoneNumberId: String(eintrag.phone_number_id) }));
   }
   return registrierungen;
 }

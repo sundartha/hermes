@@ -27,7 +27,7 @@ interface ConvaiDaten {
 
 export interface ConvaiNummer {
   phone_number?: unknown;
-  phone_number_id: string;
+  phone_number_id?: unknown;
   [schluessel: string]: unknown;
 }
 
