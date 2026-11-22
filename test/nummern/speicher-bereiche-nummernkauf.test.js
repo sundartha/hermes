@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { speicherBereiche } from "../../src/store.js";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 

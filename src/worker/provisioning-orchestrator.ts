@@ -1,4 +1,7 @@
 import { makeSingleFlight } from "../single-flight.ts";
+import type { Lauf, LaufMitMeldung } from "../utils/zeitplan-im-prozess.ts";
+import type { handleProvisionJob as HandleProvisionJob } from "./provisioning.ts";
+import type { markProvisioningJob as MarkProvisioningJob } from "../store/state-ops.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import {
   PROVIDER,
@@ -17,7 +20,159 @@ const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
 const ABGESCHALTET_MELDUNG = "Warteschlange gestoppt - Auftrag wird zurueckgestellt";
 
-function jobOptionsFor(number, billingConfig) {
+type ProvisionZustand = Parameters<typeof HandleProvisionJob>[0];
+type JobDeps = Parameters<typeof HandleProvisionJob> extends [unknown, unknown, infer Deps] ? Deps : never;
+interface JobErgebnis {
+  skipped?: boolean;
+  status?: string | null;
+  number?: Nummer;
+}
+type NummernPort = ReturnType<typeof elevenlabsNummern>;
+type SipRegistrar = ReturnType<NummernPort["sipRegistrarWennAktiv"]>;
+type TrunkSchreiber = ReturnType<NummernPort["inboundTrunkSchreiberWennErlaubt"]>;
+
+interface LaufDeps {
+  provisioner: JobDeps["provisioner"];
+  billing?: JobDeps["billing"];
+  sipRegistrar?: SipRegistrar;
+  inboundTrunkSchreiber?: TrunkSchreiber;
+}
+type JobOptionen = ReturnType<typeof jobOptionsFor>;
+type Taktgeber = ReturnType<typeof setInterval>;
+
+type ElevenlabsKonfig = Parameters<ReturnType<typeof elevenlabsNummern>["sipRegistrarWennAktiv"]>[0] &
+  Parameters<ReturnType<typeof elevenlabsNummern>["inboundTrunkSchreiberWennErlaubt"]>[0];
+
+interface BillingKonfig {
+  paymentEnabled: boolean;
+  numberSetupFeeCents: number;
+  paymentCurrency: string | undefined;
+}
+
+type Konfiguration = ElevenlabsKonfig & {
+  billing: BillingKonfig;
+  provisioning: {
+    maxNumbers: number;
+    maxNumbersPerTenant: number;
+    provisioningEnabled: boolean;
+    provisioningRedriveMaxAgeMs: number;
+  };
+};
+
+interface Auftrag {
+  kind: string;
+  payload: unknown;
+  idempotencyKey: string;
+}
+
+type Nummer = ProvisionZustand["numbers"][number];
+
+interface Zustand extends ProvisionZustand {
+  provisioningJobs: Bereitstellung[];
+}
+
+interface Speicher {
+  withStoreLock: <T>(arbeit: () => Promise<T> | T) => Promise<T>;
+  load: () => Zustand;
+  save: () => void;
+  stammdatenSchreiben?: (tenantId: string, schluessel: readonly string[]) => void;
+}
+
+type Wiederaufnahme =
+  | Ablehnung
+  | { ok: true; reason: "redrive"; numberId: string; jobId: string; job: Bereitstellung }
+  | { ok: true; reason?: undefined; number: Nummer };
+
+type JobSpur = { ok: true; jobId: string } | { ok: false };
+interface Ablehnung {
+  ok: false;
+  reason: string;
+}
+
+interface Triggerergebnis {
+  ok: boolean;
+  reason: string;
+  numberId?: string;
+  jobId?: string;
+}
+
+interface NummernkaufBereich {
+  ensureTenant: (tenantId: string) => Promise<unknown>;
+  legeNummerAn: (eingabe: { tenantId: string; number: Nummer; hoechstens: number }) => Promise<{ ok: boolean } | null>;
+  entferneNummer: (eingabe: { tenantId: string; numberId: string }) => Promise<unknown>;
+  legeAuftragAn: (eingabe: JobEingabe & { number: Nummer; jetztIso: string }) => Promise<Bereitstellung | null>;
+}
+
+interface Orchestrator {
+  startQueue: () => Promise<void>;
+  stopQueue: () => Promise<boolean>;
+  reiheAnrufstartEin: (callId: string) => unknown;
+  plane: (name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung) => Promise<void>;
+  ueberfaelligeZeitplaene: () => Promise<string[]>;
+  queueProvisioning: (numberId: string, tenantId: string) => Promise<JobSpur>;
+  triggerTenantProvisioning: (tenantId: string) => Promise<Triggerergebnis>;
+  runProvisioningDrainExclusive: () => Promise<void>;
+  reconcileOrphanedProvisioning: () => void;
+  settleDueNumberMonthMeters: (optionen?: { tenantId?: string | null }) => Promise<{ gebucht: number }>;
+}
+
+interface Abhaengigkeiten {
+  store: Speicher;
+  config: Konfiguration;
+  queue: Warteschlange;
+  billing: NonNullable<JobDeps["billing"]>;
+  metering: {
+    recordNumberMonthMeter: (nummer: Nummer | undefined, jetztIso: string) => unknown;
+    recordDueNumberMonthMeters: (
+      zustand: Zustand,
+      eingabe: { nowIso: string; tenantId: string | null },
+    ) => Promise<{ faellig: number; gebucht: number; ohnePreis: number; fehler: number }>;
+  };
+  numberProvisioning: (anbieter: string) => JobDeps["provisioner"];
+  handleProvisionJob: (zustand: Zustand, job: WarteschlangenJob, deps: LaufDeps & { opts: JobOptionen }) => Promise<JobErgebnis>;
+  resolveProvisionRetry: (
+    zustand: Zustand,
+    eingabe: { tenantId: string; nowMs: number; maxAgeMs: number; maxNumbers: number; maxNumbersPerTenant: number },
+  ) => Wiederaufnahme;
+  audit: (aktion: string, kennung: string | null, detail: string) => unknown;
+  recordProvisioningJob: (zustand: Zustand, eingabe: JobEingabe) => Bereitstellung;
+  markProvisioningJob: typeof MarkProvisioningJob;
+  classifyQueuedProvisioningJobs: (
+    zustand: Zustand,
+    eingabe: { nowMs: number; maxAgeMs: number; kycMinLevel: string },
+  ) => { close: Bereitstellung[]; hold: { job: Bereitstellung; reason: string }[]; redrive: Bereitstellung[] };
+  findNumber: (zustand: Zustand, numberId: string) => Nummer | null;
+  anrufstartHandler?: ((job: WarteschlangenJob) => unknown) | null;
+}
+
+interface JobEingabe {
+  numberId: string;
+  tenantId: string;
+  idempotencyKey: string;
+}
+
+interface Bereitstellung {
+  id: string;
+  numberId: string;
+  tenantId: string;
+  idempotencyKey: string;
+}
+
+interface WarteschlangenJob {
+  idempotencyKey: string;
+  payload: { numberId: string };
+}
+
+interface Warteschlange {
+  enqueue: (auftrag: Auftrag) => unknown;
+  drain: (handler: ((job: WarteschlangenJob) => unknown) | null, art?: string) => Promise<unknown>;
+  start?: () => Promise<unknown>;
+  stop?: () => Promise<unknown>;
+  plane: (name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung) => Promise<void>;
+  ueberfaellige: () => Promise<string[]>;
+}
+
+function jobOptionsFor(number: Nummer | null, billingConfig: BillingKonfig) {
   const country = number?.country;
   const geo = searchParamsForCountry(country);
   if (!billingConfig.paymentEnabled) return geo;
@@ -28,15 +183,15 @@ function jobOptionsFor(number, billingConfig) {
   };
 }
 
-function skippedOverFailedNumber(result) {
+function skippedOverFailedNumber(result: JobErgebnis) {
   return Boolean(result.skipped && result.status === NUMBER_STATUS.FAILED);
 }
 
-function isNewPaidNumber(result, billingConfig) {
+function isNewPaidNumber(result: JobErgebnis, billingConfig: BillingKonfig) {
   return Boolean(billingConfig.paymentEnabled && result.number);
 }
 
-function enqueueProvisioningJob(einreihen, job) {
+function enqueueProvisioningJob(einreihen: (auftrag: Auftrag) => unknown, job: Bereitstellung) {
   return einreihen({
     kind: PROVISION_NUMBER_JOB,
     payload: { numberId: job.numberId },
@@ -59,16 +214,16 @@ export function makeProvisioningOrchestrator({
   classifyQueuedProvisioningJobs,
   findNumber,
   anrufstartHandler = null,
-}) {
-  const bereiche = speicherBereiche(store);
+}: Abhaengigkeiten): Orchestrator {
+  const bereiche: { nummernkauf: NummernkaufBereich } = speicherBereiche(store);
   let gestoppt = false;
 
-  function einreihen(auftrag) {
+  function einreihen(auftrag: Auftrag) {
     if (gestoppt) return Promise.resolve(null);
     return queue.enqueue(auftrag);
   }
 
-  async function jobAnlegen(zustand, eingabe) {
+  async function jobAnlegen(zustand: Zustand, eingabe: JobEingabe) {
     const number = findNumber(zustand, eingabe.numberId);
     if (!number) return recordProvisioningJob(zustand, eingabe);
     const inDatenbank = await bereiche.nummernkauf.legeAuftragAn({
@@ -83,7 +238,7 @@ export function makeProvisioningOrchestrator({
     return inDatenbank;
   }
 
-  async function nummerUnterSperre(zustand, ergebnis, tenantId) {
+  async function nummerUnterSperre(zustand: Zustand, ergebnis: Wiederaufnahme, tenantId: string): Promise<Ablehnung | null> {
     if (!ergebnis.ok || ergebnis.reason === PROVISION_REASON.REDRIVE) return null;
     const zurueck = async () => {
       zustand.numbers.splice(zustand.numbers.indexOf(ergebnis.number), 1);
@@ -105,10 +260,10 @@ export function makeProvisioningOrchestrator({
     return { ok: false, reason: PROVISION_REASON.ALREADY_PROVISIONED };
   }
 
-  async function queueProvisioning(numberId, tenantId) {
+  async function queueProvisioning(numberId: string, tenantId: string): Promise<JobSpur> {
     const idempotencyKey = `provision_${numberId}`;
     return store
-      .withStoreLock(async () => {
+      .withStoreLock(async (): Promise<JobSpur> => {
         const zustand = store.load();
         const job = await jobAnlegen(zustand, { numberId, tenantId, idempotencyKey });
         store.save();
@@ -118,13 +273,13 @@ export function makeProvisioningOrchestrator({
         await einreihen({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
         return res;
       })
-      .catch((fehler) => {
+      .catch((fehler: unknown): JobSpur => {
         console.error("[provision] Job-Spur fehlgeschlagen:", Reflect.get(Object(fehler), "message"));
         return { ok: false };
       });
   }
 
-  async function triggerTenantProvisioning(tenantId) {
+  async function triggerTenantProvisioning(tenantId: string) {
     await bereiche.nummernkauf.ensureTenant(tenantId);
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
@@ -145,7 +300,7 @@ export function makeProvisioningOrchestrator({
         }
         return retry;
       })
-      .catch((fehler) => {
+      .catch((fehler: unknown): Ablehnung => {
         console.error(
           "[webhook-provision] Persistenz fehlgeschlagen:",
           Reflect.get(Object(fehler), "message"),
@@ -166,13 +321,13 @@ export function makeProvisioningOrchestrator({
     }
     const jobRes = await queueProvisioning(numberId, tenantId);
     if (!jobRes.ok) return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
-    runProvisioningDrainExclusive().catch((fehler) => {
+    runProvisioningDrainExclusive().catch((fehler: unknown) => {
       console.error("[provision-drain]", Reflect.get(Object(fehler), "message"));
     });
     return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.jobId };
   }
 
-  async function runQueuedJob(state, queuedJob, deps) {
+  async function runQueuedJob(state: Zustand, queuedJob: WarteschlangenJob, deps: LaufDeps) {
     if (gestoppt) throw new Error(ABGESCHALTET_MELDUNG);
     const record = state.provisioningJobs.find(
       (eintrag) => eintrag.idempotencyKey === queuedJob.idempotencyKey,
@@ -199,7 +354,7 @@ export function makeProvisioningOrchestrator({
     meterNewNumber(result);
   }
 
-  function meterNewNumber(result) {
+  function meterNewNumber(result: JobErgebnis) {
     if (!isNewPaidNumber(result, config.billing)) return;
     try {
       metering.recordNumberMonthMeter(result.number, new Date().toISOString());
@@ -214,7 +369,7 @@ export function makeProvisioningOrchestrator({
   async function runProvisioningDrain() {
     if (gestoppt) return;
     const state = store.load();
-    const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
+    const deps: LaufDeps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
     deps.sipRegistrar = elevenlabsNummern().sipRegistrarWennAktiv(config);
     deps.inboundTrunkSchreiber = elevenlabsNummern().inboundTrunkSchreiberWennErlaubt(config);
     if (config.billing.paymentEnabled) deps.billing = billing;
@@ -223,16 +378,16 @@ export function makeProvisioningOrchestrator({
 
   const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
 
-  function redriveProvisioningJobs(jobs) {
+  function redriveProvisioningJobs(jobs: Bereitstellung[]) {
     if (!jobs.length) return;
     Promise.all(jobs.map((job) => enqueueProvisioningJob(einreihen, job)))
       .then(() => runProvisioningDrainExclusive())
-      .catch((fehler) => {
+      .catch((fehler: unknown) => {
         console.error("[provision-redrive]", Reflect.get(Object(fehler), "message"));
       });
   }
 
-  function closeSettledProvisioningJobs(jobs) {
+  function closeSettledProvisioningJobs(jobs: Bereitstellung[]) {
     if (!jobs.length) return;
     store
       .withStoreLock(() => {
@@ -241,7 +396,7 @@ export function makeProvisioningOrchestrator({
           markProvisioningJob(zustand, eintrag.id, PROVISIONING_JOB_STATUS.DONE);
         store.save();
       })
-      .catch((fehler) => {
+      .catch((fehler: unknown) => {
         console.error("[provision-reconcile] close:", Reflect.get(Object(fehler), "message"));
       });
   }
@@ -270,13 +425,13 @@ export function makeProvisioningOrchestrator({
 
   const runAnrufstartDrainExclusive = makeSingleFlight(runAnrufstartDrain);
 
-  function macheTakt(abruf, praefix) {
+  function macheTakt(abruf: () => Promise<void>, praefix: string) {
     let laeuft = false;
     return function beginneTaktAbruf() {
       if (laeuft) return;
       laeuft = true;
       abruf()
-        .catch((fehler) => {
+        .catch((fehler: unknown) => {
           console.error(praefix, Reflect.get(Object(fehler), "message"));
         })
         .finally(() => {
@@ -285,8 +440,8 @@ export function makeProvisioningOrchestrator({
     };
   }
 
-  let takt;
-  let anrufstartTakt;
+  let takt: Taktgeber | undefined;
+  let anrufstartTakt: Taktgeber | undefined;
 
   async function startQueue() {
     if (anrufstartHandler)
@@ -315,10 +470,10 @@ export function makeProvisioningOrchestrator({
     return true;
   }
 
-  const plane = (name, intervallMs, lauf) => queue.plane(name, intervallMs, lauf);
+  const plane = (name: string, intervallMs: number, lauf: Lauf | LaufMitMeldung) => queue.plane(name, intervallMs, lauf);
   const ueberfaelligeZeitplaene = () => queue.ueberfaellige();
 
-  async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
+  async function settleDueNumberMonthMeters({ tenantId = null }: { tenantId?: string | null } = {}) {
     if (!config.billing.paymentEnabled) return { gebucht: 0 };
     try {
       const bilanz = await store.withStoreLock(() =>
@@ -339,7 +494,7 @@ export function makeProvisioningOrchestrator({
     }
   }
 
-  const reiheAnrufstartEin = (callId) =>
+  const reiheAnrufstartEin = (callId: string) =>
     einreihen({ kind: ANRUFSTART_JOB, payload: { callId }, idempotencyKey: `${ANRUFSTART_JOB}_${callId}` });
 
   return {
