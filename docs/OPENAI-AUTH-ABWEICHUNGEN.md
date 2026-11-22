@@ -37,7 +37,7 @@ authentifizierter Request abgelehnt wird:
   Re-Auth-Challenge in `_meta["mcp/www_authenticate"]` traegt. Beide Faelle auditieren
   `auth_failed` (Befund B-1, Abschnitt 7).
 - **Der interne REST-Hop der Tools** (`src/mcp-tools.js#api`): liefert der Gateway
-  dort 403 (z. B. `src/wiring/internal-only.js#internalOnly`, ebenfalls auditiert als
+  dort 403 (z. B. `src/wiring/internal-only.ts#internalOnly`, ebenfalls auditiert als
   `auth_failed`), kommt das beim Client als Tool-Ergebnis mit `isError: true` an
   (`src/mcp-tools.js#wrapHandler`). Aufzaehlung der Faelle unter T-14.
 
@@ -110,7 +110,7 @@ Gespraech einen Tool-Aufruf ausloesen, beobachten ob die Verknuepfungs-UI ersche
    sperrt mit 403 nur noch im Token-/Legacy-/off-Modus, d. h. wenn `req.auth` fehlt).
 2. **REST-Hop-403 als `isError`-Tool-Ergebnis** (`api()`, `src/mcp-tools.js`, gefangen in
    `wrapHandler`). Quellen eines 403 dort:
-   - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.js`);
+   - `internalOnly` — Request nicht vertrauenswuerdig lokal (`src/wiring/internal-only.ts`);
      ein interner Konfigurations-/Programmierfehler;
    - `requireTenant` REJECT (z. B. `src/routes/api-calls.ts`) und das
      Tenant-REJECT-Gate der Outbound-Kette (`src/telephony/outbound-gates.js`) —
@@ -384,7 +384,7 @@ Cases that still carry no `_meta` field (deliberately):
    `registerNoTenantStubs`, `src/mcp-no-tenant.js`; `rejectIfNoTenant`, `src/routes/mcp.js`,
    now answers 403 only in token/legacy/off mode, i.e. when `req.auth` is absent).
 2. **403 from the internal REST hop, arriving as an `isError` tool result.** Sources: the
-   `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.js`) — an
+   `internalOnly` guard (request not trusted-local, `src/wiring/internal-only.ts`) — an
    internal configuration/programming fault; a tenant REJECT in `requireTenant`
    (`src/routes/api-calls.ts`) or in the outbound gate chain
    (`src/telephony/outbound-gates.js`) — defence in depth, since `rejectIfNoTenant` no longer
