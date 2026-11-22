@@ -69,7 +69,7 @@ async function ausgehenderAnruf({ sprache, nummer, auftrag }, allowlist, vorname
     const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: nummer, objective: auftrag }),
+      body: JSON.stringify({ to: nummer, objective: auftrag, language: sprache }),
     });
     const antwort = await res.text();
     assert.equal(res.status, HTTP_OK, antwort);

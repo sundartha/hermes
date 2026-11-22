@@ -206,7 +206,7 @@ async function angenommenerAnruf(extra) {
 
 
 test("3365-K21: Init eines Vorspann-Anrufs -> first_message leer, eroeffnung_gesagt = gesprochener Vorspann-Text", async () => {
-  const callId = await angenommenerAnruf();
+  const callId = await angenommenerAnruf({ language: "en" });
   const { text: gesprochen } = koerper(sprachAnfragen().at(-1));
   assert.ok(gesprochen.includes("KI"), gesprochen);
   const antwort = await init(anrufIn(callId));

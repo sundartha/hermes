@@ -240,9 +240,8 @@ export function placeCallRequestSchema(begriffe) {
       .optional()
       .describe(
         `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
-          "The language the call STARTS in. Default: de. Name it BEFORE the call when the person " +
-          "called speaks another language; during the call the agent may switch language when " +
-          "needed, with the same voice. An unsupported code is REJECTED with an " +
+          "Start language, default de; set it first if the person called speaks another. " +
+          "The agent may switch during the call. An unsupported code is REJECTED with an " +
           "error instead of being ignored. This does NOT change the language of the mandatory " +
           "AI disclosure - that always follows the person being called.",
       ),

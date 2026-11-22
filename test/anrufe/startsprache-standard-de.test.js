@@ -73,6 +73,6 @@ test("5986-H3: place_call beschreibt language mit Standard de und Sprachwechsel 
   const { tools } = await stdioSnapshot({});
   const { properties } = tools.find((werkzeug) => werkzeug.name === "place_call").inputSchema;
   const beschreibung = properties.language.description;
-  assert.match(beschreibung, /Default: de\./);
-  assert.match(beschreibung, /switch language/);
+  assert.match(beschreibung, /default de;/);
+  assert.match(beschreibung, /may switch during the call/);
 });
