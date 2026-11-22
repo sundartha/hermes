@@ -87,7 +87,7 @@ test("Vorspann-Audio eines auf Instanz A gestarteten Anrufs ist ueber Instanz B 
       (liste) => liste.length === 1,
     );
     const token = audioUrl.split("/voice/tts/")[1];
-    assert.ok(token);
+    assert.match(token, /^[A-Za-z0-9_-]{43}$/);
     for (const srv of [b, a, b]) {
       const antwort = await abrufen(srv, token);
       assert.equal(antwort.status, HTTP_OK);
