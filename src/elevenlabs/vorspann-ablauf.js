@@ -6,7 +6,7 @@ import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.ts";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, makeVorspannBruecke, messeSeit } from "./vorspann-bruecke.js";
-import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
+import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { armiereKlingelfrist, armiereVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
@@ -31,7 +31,7 @@ const logFehler = (aktion, callId, fehler) =>
 
 function meldeWiedergabeStartFehler(callId, fehler) {
   logFehler("abheben", callId, fehler);
-  meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
+  meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.START_ABGELEHNT });
 }
 
 function calleeAnfrage({ call, config }) {

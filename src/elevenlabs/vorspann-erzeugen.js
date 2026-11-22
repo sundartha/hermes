@@ -8,8 +8,19 @@ import {
 
 const LOG_TAG = "[el-vorspann]";
 
-export function meldeVorspannRueckfall({ callId, grund }) {
-  console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}`);
+export const NICHT_ABGESPIELT_URSACHE = Object.freeze({
+  START_ABGELEHNT: "start_abgelehnt",
+  KEIN_ENDE_EREIGNIS: "kein_ende_ereignis",
+});
+
+const STATUS_ZEICHEN_UNGUELTIG = /[^A-Za-z0-9_.:-]/g;
+const STATUS_LAENGE_MAX = 48;
+
+export const statusUrsache = (status) =>
+  `status_${String(status ?? "null").replace(STATUS_ZEICHEN_UNGUELTIG, "_").slice(0, STATUS_LAENGE_MAX)}`;
+
+export function meldeVorspannRueckfall({ callId, grund, ursache }) {
+  console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}${ursache ? ` ursache=${ursache}` : ""}`);
 }
 
 export function meldeVorspannMessung({ callId, messung, bezug, ms }) {
