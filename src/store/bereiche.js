@@ -189,6 +189,31 @@ function kuendigungBereich(speicher) {
   };
 }
 
+function gleicheAn(liste, neu) {
+  const vorhanden = liste.find((eintrag) => eintrag.id === neu.id);
+  if (vorhanden) Object.assign(vorhanden, neu);
+  else liste.push(neu);
+}
+
+async function ladeFremdeOffeneAuftraege(speicher, sql, eigene) {
+  const kandidaten = [];
+  for (const { job, nummer, instanz } of await sql.offene()) {
+    if (instanz === eigene || !(await speicher.ensureTenant(job.tenantId))) continue;
+    kandidaten.push({ job, nummer, instanz });
+  }
+  return kandidaten;
+}
+
+async function uebernimmAuftrag(speicher, sql, eingabe) {
+  if (!(await sql.auftragUebernehmen(eingabe))) return false;
+  const gefunden = (await sql.offene()).find(({ job }) => job.id === eingabe.jobId);
+  if (!gefunden) return true;
+  const zustand = speicher.load();
+  if (gefunden.nummer) gleicheAn(zustand.numbers, gefunden.nummer);
+  gleicheAn(zustand.provisioningJobs, gefunden.job);
+  return true;
+}
+
 function nummernkaufBereich(speicher) {
   return {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
@@ -201,6 +226,14 @@ function nummernkaufBereich(speicher) {
       speicher.save();
       await speicher.drainFlushes();
       return sql.auftragAnlegen(eingabe);
+    },
+    ladeFremdeOffeneAuftraege: async (eigene) => {
+      const sql = speicher.nummernSql?.();
+      return sql ? ladeFremdeOffeneAuftraege(speicher, sql, eigene) : null;
+    },
+    uebernimmAuftrag: async (eingabe) => {
+      const sql = speicher.nummernSql?.();
+      return sql ? uebernimmAuftrag(speicher, sql, eingabe) : true;
     },
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {
