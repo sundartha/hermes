@@ -115,3 +115,4 @@ export const RESTRICTED_TOKEN_MIT_ANHANG = "AKIAABCDEFGHIJKLMNOPQRS";
 export const ELEVENLABS_TOOL_TOKEN_ERSTE_RUECKFRAGE = "el-tool-token-erste-rueckfrage";
 export const TELNYX_KAUF_ECHT_SCHLUESSEL = "KEYtest-kauf-echt-schluessel";
 export const OIDC_KAUF_ECHT_GEHEIMNIS = "kauf-echt-oidc-geheimnis-erfunden";
+export const EL_LISTE_SCHLUESSEL = "xi_liste_key";

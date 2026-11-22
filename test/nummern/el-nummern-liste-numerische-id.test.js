@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { trunkInventar } from "../../scripts/el-nummern-registrierung.mjs";
+import { EL_LISTE_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const HTTP_OK = 200;
 const NUMERISCHE_ID = 12345;
-const KONTO = Object.freeze({ apiKey: "xi_liste_key", apiBase: "https://el-liste.test" });
+const KONTO = Object.freeze({ apiKey: EL_LISTE_SCHLUESSEL, apiBase: "https://el-liste.test" });
 
 function antwort(daten) {
   return { ok: true, status: HTTP_OK, json: async () => daten, text: async () => JSON.stringify(daten) };
