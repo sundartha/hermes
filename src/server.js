@@ -244,6 +244,7 @@ const vorspannAblauf = makeVorspannAblauf({
   store,
   config,
   ttsStore,
+  vorspannZustand: store.vorspannZustand,
   inboundBridges,
   terminateAndBillCall,
   awaitAndPersistInboundElResult: elevenLabsOutbound.awaitAndPersistInboundElResult,

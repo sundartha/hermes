@@ -44,6 +44,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "29", name: "0029_provisioning_job_eindeutig" },
   { version: "30", name: "0030_nummer_schluessel" },
   { version: "31", name: "0031_provisioning_job_instanz" },
+  { version: "32", name: "0032_vorspann_zustand" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -159,6 +160,7 @@ test(
         "0029_provisioning_job_eindeutig",
         "0030_nummer_schluessel",
         "0031_provisioning_job_instanz",
+        "0032_vorspann_zustand",
       ],
       "ein Name je Datei: 0001_ausgang",
     );

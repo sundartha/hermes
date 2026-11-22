@@ -40,6 +40,7 @@ const PLATTFORM_ABSENDER_BINDUNG_GESCHLOSSEN_NAME = "0028_plattform_absender_bin
 const PROVISIONING_JOB_EINDEUTIG_NAME = "0029_provisioning_job_eindeutig.sql";
 const NUMMER_SCHLUESSEL_NAME = "0030_nummer_schluessel.sql";
 const PROVISIONING_JOB_INSTANZ_NAME = "0031_provisioning_job_instanz.sql";
+const VORSPANN_ZUSTAND_NAME = "0032_vorspann_zustand.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -183,6 +184,10 @@ const MIGRATION_READERS = [
   {
     name: PROVISIONING_JOB_INSTANZ_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", PROVISIONING_JOB_INSTANZ_NAME), "utf8"),
+  },
+  {
+    name: VORSPANN_ZUSTAND_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", VORSPANN_ZUSTAND_NAME), "utf8"),
   },
 ];
 
