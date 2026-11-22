@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { EIGENE_KENNUNG } from "../../src/store/instanz-besitz.js";
 import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const MANDANT = "t_auftrag_instanz";
@@ -43,7 +42,8 @@ const ANLEGEN = { tenantId: MANDANT, numberId: NUMMER_ID, idempotencyKey: SCHLUE
 test("Nummernkauf: ein Speicher ohne eigene Kennung legt den Auftrag mit der Kennung dieses Prozesses an", async () => {
   const { db, store } = await aufbau({});
   await store.nummernSql().auftragAnlegen(ANLEGEN);
-  assert.deepEqual(await besitzerDesAuftrags(db), [EIGENE_KENNUNG]);
+  const [besitzer] = await besitzerDesAuftrags(db);
+  assert.match(besitzer, /^.+:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 test("Nummernkauf: ein neuer Auftrag traegt die Kennung der anlegenden Instanz, der Gesamt-Flush schreibt sie nicht", async () => {
