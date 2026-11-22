@@ -124,33 +124,29 @@ test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt 
   );
 });
 
-test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (DE/FR/EN), nicht der globalen Plattform-Stimme", async () => {
+test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese ist fuer DE/FR/EN die eine Stimme, nicht die globale Plattform-Stimme", async () => {
   const [fr, en, de] = await playTtsVoiceIdsFor([
     VOICE_PROFILE.FR_FEMALE_NEURAL,
     VOICE_PROFILE.EN_FEMALE_NEURAL,
     VOICE_PROFILE.DE_FEMALE_NEURAL,
   ]);
-  assert.equal(fr, "WeAAwKYcS06VmXw086yZ", "FR folgt der bindenden FR-ID");
-  assert.equal(en, "ZSNL4hPqCnqoMPaI4jGX", "EN folgt der bindenden EN-ID");
-  assert.equal(de, "cqPdIo76zSHFDcSZpFov", "DE folgt der bindenden DE-ID");
+  assert.equal(fr, "cqPdIo76zSHFDcSZpFov", "FR spricht die eine Stimme");
+  assert.equal(en, "cqPdIo76zSHFDcSZpFov", "EN spricht die eine Stimme");
+  assert.equal(de, "cqPdIo76zSHFDcSZpFov", "DE spricht die eine Stimme");
   assert.ok(
     ![fr, en, de].includes(PROBE_PLATTFORM_STIMME),
     "keine Sprache faellt mehr auf die globale Plattform-Stimme zurueck (Anruf-7-Defekt)",
   );
 });
 
-test("VOICE-12 (gruen) - TTS-Stimme loest pro Sprache auf statt einer globalen ID (Messpunkt: Play-TTS-Vorabsynthese)", async () => {
+test("VOICE-12 - TTS-Stimme ist fuer alle Sprachen dieselbe eine ID (Messpunkt: Play-TTS-Vorabsynthese)", async () => {
   const profiles = [
     VOICE_PROFILE.DE_FEMALE_NEURAL,
     VOICE_PROFILE.FR_FEMALE_NEURAL,
     VOICE_PROFILE.EN_FEMALE_NEURAL,
   ];
   const ids = await playTtsVoiceIdsFor(profiles);
-  assert.equal(
-    new Set(ids).size,
-    profiles.length,
-    `DE/FR/EN muessen drei verschiedene Voice-IDs liefern, gefunden: ${ids.join(", ")}`,
-  );
+  assert.deepEqual(ids, ["cqPdIo76zSHFDcSZpFov", "cqPdIo76zSHFDcSZpFov", "cqPdIo76zSHFDcSZpFov"]);
 });
 
 test("Telnyx + Flag AN + Synth-FAIL -> Liste unveraendert (Fail-safe -> Azure-Say), kein put", async () => {
