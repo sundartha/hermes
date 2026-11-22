@@ -17,15 +17,15 @@ function jobText(name) {
   return WORKFLOW.jobs[name].if;
 }
 
-function laeuft(job, ereignis, aktion, aenderungen) {
+function laeuft(job, ereignis) {
   const bedingung = jobText(job);
   if (bedingung === undefined) return true;
-  const github = { event_name: ereignis, event: { action: aktion, changes: aenderungen } };
+  const github = { event_name: ereignis.name, event: { action: ereignis.aktion, changes: ereignis.aenderungen } };
   return Boolean(new Function("github", "always", `return ${bedingung};`)(github, () => true));
 }
 
 test("ci-text-edited: Textänderung am PR startet genau Rotprobe, Abdeckung und Mutation, die schweren Prüfungen nicht", () => {
-  const edited = (job) => laeuft(job, "pull_request", "edited", { body: { from: "alt" } });
+  const edited = (job) => laeuft(job, { name: "pull_request", aktion: "edited", aenderungen: { body: { from: "alt" } } });
   for (const job of TEXTLESER) assert.equal(edited(job), true, job);
   for (const job of PRUEFUNGEN) assert.equal(edited(job), false, job);
   assert.equal(edited("ci"), true);
@@ -33,22 +33,22 @@ test("ci-text-edited: Textänderung am PR startet genau Rotprobe, Abdeckung und 
 
 test("ci-text-edited: Titeländerung ohne Textänderung startet keine Arbeit", () => {
   for (const job of [...TEXTLESER, ...PRUEFUNGEN]) {
-    assert.equal(laeuft(job, "pull_request", "edited", { title: { from: "alt" } }), false, job);
+    assert.equal(laeuft(job, { name: "pull_request", aktion: "edited", aenderungen: { title: { from: "alt" } } }), false, job);
   }
 });
 
 test("ci-text-edited: opened, synchronize, reopened und Merge-Queue starten wie zuvor", () => {
   for (const aktion of ["opened", "synchronize", "reopened"]) {
     for (const job of [...TEXTLESER, "pruefungen", "semgrep", "tests", "webtests", "codeql"]) {
-      assert.equal(laeuft(job, "pull_request", aktion, undefined), true, `${job} ${aktion}`);
+      assert.equal(laeuft(job, { name: "pull_request", aktion }), true, `${job} ${aktion}`);
     }
-    assert.equal(laeuft("lastlauf", "pull_request", aktion, undefined), false, aktion);
+    assert.equal(laeuft("lastlauf", { name: "pull_request", aktion }), false, aktion);
   }
   for (const job of ["pruefungen", "semgrep", "tests", "webtests", "lastlauf"]) {
-    assert.equal(laeuft(job, "merge_group", "checks_requested", undefined), true, job);
+    assert.equal(laeuft(job, { name: "merge_group", aktion: "checks_requested" }), true, job);
   }
-  for (const job of TEXTLESER) assert.equal(laeuft(job, "merge_group", "checks_requested", undefined), false, job);
-  assert.equal(laeuft("codeql", "merge_group", "checks_requested", undefined), false);
+  for (const job of TEXTLESER) assert.equal(laeuft(job, { name: "merge_group", aktion: "checks_requested" }), false, job);
+  assert.equal(laeuft("codeql", { name: "merge_group", aktion: "checks_requested" }), false);
 });
 
 test("ci-text-edited: ein Textlauf bricht laufende Läufe nicht ab, ein neuer Push bricht ihn ab", () => {
@@ -62,7 +62,8 @@ test("ci-text-edited: ein Textlauf bricht laufende Läufe nicht ab, ein neuer Pu
 function schrittRun(name) {
   const start = CI.indexOf(`- name: ${name}\n`);
   assert.ok(start >= 0, `Schritt ${name} fehlt`);
-  const zeilen = CI.slice(start).split("\n\n")[0].split("\n");
+  const schritt = CI.slice(start).split("\n\n")[0];
+  const zeilen = schritt.split("\n");
   const i = zeilen.findIndex((z) => z.trim() === "run: |");
   return zeilen.slice(i + 1).map((z) => z.slice(10)).join("\n");
 }
@@ -86,7 +87,7 @@ function ghMitLaeufen(laeufe) {
   return `while [ $# -gt 0 ]; do [ "$1" = "--jq" ] && jq -r "$2" <<'J'\n${json}\nJ\nshift; done`;
 }
 
-const lauf = (titel, status, ergebnis, zeit) => ({ display_title: titel, status, conclusion: ergebnis, created_at: zeit });
+const lauf = (titel, zeit, [status, ergebnis]) => ({ display_title: titel, status, conclusion: ergebnis, created_at: zeit });
 
 test("ci-text-edited: Sammel-Job im Textlauf lässt übersprungene schwere Jobs zu, sonst nicht", () => {
   const needs = JSON.stringify({ pruefungen: { result: "skipped" }, tests: { result: "skipped" }, rotprobe: { result: "success" } });
@@ -100,15 +101,15 @@ test("ci-text-edited: Sammel-Job im Textlauf lässt übersprungene schwere Jobs 
 
 test("ci-text-edited: Textlauf ist nur grün, wenn der letzte Hauptlauf des Kopf-Commits grün abgeschlossen ist", () => {
   const schritt = "Hauptlauf des Kopf-Commits ist grün";
-  const gruen = lauf("Titel", "completed", "success", "2026-11-22T10:00:00Z");
+  const gruen = lauf("Titel", "2026-11-22T10:00:00Z", ["completed", "success"]);
   assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([gruen])).status, 0);
-  const rot = fuehreAus(schritt, {}, ghMitLaeufen([lauf("Titel", "completed", "failure", "2026-11-22T10:00:00Z")]));
+  const rot = fuehreAus(schritt, {}, ghMitLaeufen([lauf("Titel", "2026-11-22T10:00:00Z", ["completed", "failure"])]));
   assert.equal(rot.status, 1);
   assert.match(rot.stdout, /Hauptlauf/);
-  assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([lauf("Titel", "in_progress", null, "2026-11-22T10:00:00Z")])).status, 1);
+  assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([lauf("Titel", "2026-11-22T10:00:00Z", ["in_progress", null])])).status, 1);
   assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([])).status, 1);
-  assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([lauf("CI-Text-Lauf", "completed", "success", "2026-11-22T11:00:00Z")])).status, 1);
-  const neuerRot = [gruen, lauf("Titel", "completed", "failure", "2026-11-22T11:00:00Z")];
+  assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([lauf("CI-Text-Lauf", "2026-11-22T11:00:00Z", ["completed", "success"])])).status, 1);
+  const neuerRot = [gruen, lauf("Titel", "2026-11-22T11:00:00Z", ["completed", "failure"])];
   assert.equal(fuehreAus(schritt, {}, ghMitLaeufen(neuerRot)).status, 1);
   assert.equal(fuehreAus(schritt, {}, ghMitLaeufen([...neuerRot].reverse())).status, 1);
   assert.equal(fuehreAus(schritt, {}, "exit 1").status, 1);
