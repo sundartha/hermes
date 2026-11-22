@@ -3,8 +3,9 @@ import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testdatenbank.js";
 
 export const MANDANT = "t_start_h7b";
-const ANRUFE_LESEN = "SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC";
+const ANRUFE_LESEN = "SELECT * FROM call WHERE tenant_id = $1";
 const ZAEHLER = { gelesen: 0 };
+export const GELESENE_ANFRAGEN = [];
 
 export const BEENDETER_ANRUF = "call_h7b_beendet";
 export const BEANTWORTETER_ANRUF = "call_h7b_beantwortet";
@@ -21,6 +22,7 @@ function zaehlendeDatenbank(db, scheiterndAb, nachNeuemAnruf) {
       return async (text, params) => {
         if (String(text).startsWith(ANRUFE_LESEN)) {
           ZAEHLER.gelesen += 1;
+          GELESENE_ANFRAGEN.push(String(text));
           if (ZAEHLER.gelesen === nachNeuemAnruf) await anrufNurInDerDatenbank(ziel);
           if (ZAEHLER.gelesen > scheiterndAb) throw new Error(LESEFEHLER);
         }
