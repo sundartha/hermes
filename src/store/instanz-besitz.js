@@ -50,7 +50,9 @@ export async function besitzLage(runner) {
 
 export function makeInstanzTakt(runner, { nachMeldung = async () => {} } = {}) {
   let timer = null;
-  let laufend = Promise.resolve();
+  let meldeLauf = Promise.resolve();
+  let uebernahmeLauf = Promise.resolve();
+  let uebernahmeLaeuft = false;
 
   const melden = async () => {
     try {
@@ -69,25 +71,26 @@ export function makeInstanzTakt(runner, { nachMeldung = async () => {} } = {}) {
       console.error("[instanz] Uebernahme verwaister Arbeit fehlgeschlagen:", fehler.message);
     }
   };
-  const einreihen = (arbeit) => {
-    laufend = laufend.then(arbeit);
-    return laufend;
-  };
-  const takt = () =>
-    einreihen(async () => {
-      await melden();
-      await uebernehmen();
+  const takt = () => {
+    const gemeldet = meldeLauf.then(melden);
+    meldeLauf = gemeldet;
+    if (uebernahmeLaeuft) return;
+    uebernahmeLaeuft = true;
+    uebernahmeLauf = gemeldet.then(uebernehmen).finally(() => {
+      uebernahmeLaeuft = false;
     });
+  };
 
   return {
     async starten() {
-      await einreihen(melden);
+      meldeLauf = melden();
+      await meldeLauf;
       timer = setInterval(takt, LEBENSZEICHEN_TAKT_MS);
       timer.unref();
     },
     async stoppen() {
       clearInterval(timer);
-      await laufend;
+      await Promise.all([meldeLauf, uebernahmeLauf]);
     },
     async abmelden() {
       try {
