@@ -73,7 +73,8 @@ test("await_call_event: done traegt den Rueckrufwunsch morgen um 10 Uhr als next
   const schritte = [{ type: "callback", text: "Rueckruf morgen um 10 Uhr", at: "2026-11-23T10:00" }];
   const { reply } = await awaitDone(endedCall(karte({ nextSteps: schritte })));
   assert.deepEqual(reply.structuredContent.next_steps, schritte);
-  assert.deepEqual(JSON.parse(reply.content[0].text).next_steps, schritte);
+  const text = JSON.parse(reply.content[0].text);
+  assert.deepEqual(text.next_steps, schritte);
 });
 
 test("await_call_event: ohne Schritte, ohne Feld und ohne Karte ist next_steps leer", async () => {
