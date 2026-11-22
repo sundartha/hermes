@@ -14,6 +14,7 @@ interface Speicher {
   usageOf: (tenantId: string) => { inputTokens: number; outputTokens: number; calls: number };
   getCall: (id: string | undefined) => unknown;
   leseCallUngebunden: (id: string) => Promise<AnrufSicht | null | undefined>;
+  leseCallFuerAnzeige?: (id: string) => Promise<AnrufSicht | null | undefined>;
   einstellungenNachladen?: (tenantId: string) => unknown;
   leitungsplaetze?: { belegteAnrufe: (callIds: string[]) => Promise<Set<string>> };
 }
@@ -151,7 +152,7 @@ async function zeigeAnruf({
   tenantId: string;
   res: Response;
 }): Promise<void> {
-  const call = await store.leseCallUngebunden(callId);
+  const call = await (store.leseCallFuerAnzeige ? store.leseCallFuerAnzeige(callId) : store.leseCallUngebunden(callId));
   if (!call || !tenant.tenantOwnsCall(call, tenantId)) {
     antworteFehler(res, HTTP_NOT_FOUND, "not found");
     return;

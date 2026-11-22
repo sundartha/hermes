@@ -340,6 +340,7 @@ export const {
   anrufHierBewacht,
   leseCall,
   leseCallUngebunden,
+  leseCallFuerAnzeige,
   attachActiveCall,
   addTranscript,
   purgeTranscript,
