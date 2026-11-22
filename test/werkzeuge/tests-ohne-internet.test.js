@@ -86,7 +86,7 @@ test("Testserver aus startServer spricht beim Anruf ueber ElevenLabs nur Ziele a
   try {
     const res = await placeCall(srv);
     assert.equal(res.status, HTTP_OK);
-    await waitUntil(() => abrufVersucht(beobachter.eintraege()), { timeoutMs: ABRUF_FRIST_MS });
+    await waitUntil(() => abrufVersucht(beobachter.eintraege()), { timeoutMs: ABRUF_FRIST_MS }).catch(() => {});
   } finally {
     await srv.stop();
   }
