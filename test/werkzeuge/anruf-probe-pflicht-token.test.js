@@ -37,9 +37,9 @@ function aufrufen(umgebung) {
   return new Promise((fertig) => kind.on("close", (code) => fertig({ code, ausgabe })));
 }
 
-test("Fehlt STAGING_TEST_TOKEN: Push-Lauf übersprungen und grün, ohne Anruf", async () => {
+test("Fehlt STAGING_TEST_TOKEN: Push-Lauf übersprungen und rot, ohne Anruf", async () => {
   const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "push", STAGING_TEST_TOKEN: "" });
-  assert.equal(ergebnis.code, 0);
+  assert.equal(ergebnis.code, 1);
   assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_test_token_fehlt/);
   assert.ok(!ergebnis.ausgabe.includes("probe_ziel_unerlaubt"));
   assert.ok(!ergebnis.ausgabe.includes("ANRUF"));
