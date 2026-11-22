@@ -5,7 +5,6 @@ import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { tenantGeoForCountry } from "../../src/geo/resolve.js";
 import { LOCALES, localeFor } from "../../src/i18n/locales.ts";
 import { resolveCallLanguage } from "../../src/store/state-ops.js";
-import { EINE_STIMME_ID } from "../../src/elevenlabs/stimme-festlegen.ts";
 
 const OWNER_NAME = "Owen Barrett";
 
@@ -87,11 +86,7 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
 
     const locale = localeFor(language);
     assert.equal(locale.voiceProfile, kase.voiceProfile, `Stimmprofil im Fall "${kase.name}"`);
-    assert.equal(
-      EINE_STIMME_ID,
-      kase.voiceId,
-      `ElevenLabs-Stimme im Fall "${kase.name}"`,
-    );
+    assert.equal(kase.voiceId, VOICE_ID_DE, `eine Stimme fuer alle Sprachen im Fall "${kase.name}"`);
 
     const disclosure = disclosureFor(language);
     assert.ok(
@@ -106,7 +101,6 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
   }
 
   assertUnterscheidbar(merkmalJeFall(bestandsSpracheFor), "die Sprache");
-  assert.equal(EINE_STIMME_ID, VOICE_ID_DE, "eine Stimme fuer alle Sprachen");
   assertUnterscheidbar(
     merkmalJeFall((kase) => disclosureFor(kase.language)),
     "der Offenlegungssatz",
@@ -141,7 +135,6 @@ async function callLocaleSeam() {
 test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
   for (const kase of CASES)
     assert.equal(bestandsSpracheFor(kase), kase.language, `Bestands-Aufloesung "${kase.name}"`);
-  assert.equal(EINE_STIMME_ID, VOICE_ID_DE, "eine Stimme fuer alle Sprachen");
   assertUnterscheidbar(
     merkmalJeFall((kase) => disclosureFor(kase.language)),
     "der Offenlegungssatz",
@@ -164,8 +157,7 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     assert.equal(
       gewaehlt?.voiceId,
       VOICE_ID_DE,
-      `Fall "${kase.name}": die Stimme folgt der Sprache (eine Stimme fuer alle Sprachen, ` +
-        "EINE_STIMME_ID) - sonst spricht der Agent Deutsch mit " +
+      `Fall "${kase.name}": die Stimme folgt der Sprache (eine Stimme fuer alle Sprachen) - sonst spricht der Agent Deutsch mit ` +
         "amerikanischer Stimme.",
     );
     assert.equal(
