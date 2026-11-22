@@ -18,7 +18,7 @@ import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
 const FREMDER_AUFTRAG = "fremd";
-const KEINE_LAGE = { eigene: null, lebende: [] };
+const KEINE_LAGE: Besitzlage = { eigene: null, lebende: [] };
 const ABGESCHALTET_MELDUNG = "Warteschlange gestoppt - Auftrag wird zurueckgestellt";
 
 type ProvisionZustand = Parameters<typeof HandleProvisionJob>[0];
@@ -77,6 +77,18 @@ interface Speicher {
   load: () => Zustand;
   save: () => void;
   stammdatenSchreiben?: (tenantId: string, schluessel: readonly string[]) => void;
+  besitzLage?: () => Promise<Besitzlage>;
+}
+
+interface Besitzlage {
+  eigene: string | null;
+  lebende: unknown[];
+}
+
+interface FremderAuftrag {
+  job: Bereitstellung;
+  nummer: Nummer | null;
+  instanz: string | null;
 }
 
 type Wiederaufnahme =
@@ -102,6 +114,8 @@ interface NummernkaufBereich {
   legeNummerAn: (eingabe: { tenantId: string; number: Nummer; hoechstens: number }) => Promise<{ ok: boolean } | null>;
   entferneNummer: (eingabe: { tenantId: string; numberId: string }) => Promise<unknown>;
   legeAuftragAn: (eingabe: JobEingabe & { number: Nummer; jetztIso: string }) => Promise<Bereitstellung | null>;
+  ladeFremdeOffeneAuftraege: (eigene: string | null) => Promise<FremderAuftrag[] | null>;
+  uebernimmAuftrag: (eingabe: { tenantId: string; jobId: string; alt: string | null; neu: string | null }) => Promise<boolean>;
 }
 
 interface Orchestrator {
@@ -113,7 +127,7 @@ interface Orchestrator {
   queueProvisioning: (numberId: string, tenantId: string) => Promise<JobSpur>;
   triggerTenantProvisioning: (tenantId: string) => Promise<Triggerergebnis>;
   runProvisioningDrainExclusive: () => Promise<void>;
-  reconcileOrphanedProvisioning: () => void;
+  reconcileOrphanedProvisioning: () => Promise<void>;
   settleDueNumberMonthMeters: (optionen?: { tenantId?: string | null }) => Promise<{ gebucht: number }>;
 }
 
@@ -402,13 +416,13 @@ export function makeProvisioningOrchestrator({
       });
   }
 
-  function meldeHalt(job, grund) {
+  function meldeHalt(job: Bereitstellung, grund: string) {
     console.warn(
       `[provision-reconcile] hold job=${job.id} number=${job.numberId} tenant=${job.tenantId} grund=${grund}`,
     );
   }
 
-  async function versuchtUebernahme(job, alt, lage) {
+  async function versuchtUebernahme(job: Bereitstellung, alt: string | null, lage: Besitzlage) {
     try {
       return await bereiche.nummernkauf.uebernimmAuftrag({ tenantId: job.tenantId, jobId: job.id, alt, neu: lage.eigene });
     } catch {
@@ -417,8 +431,8 @@ export function makeProvisioningOrchestrator({
     }
   }
 
-  async function uebernehmbareAuftraege(jobs, lage, besitzer) {
-    const frei = [];
+  async function uebernehmbareAuftraege(jobs: Bereitstellung[], lage: Besitzlage, besitzer: Map<string, string | null>) {
+    const frei: Bereitstellung[] = [];
     for (const job of jobs) {
       const alt = besitzer.get(job.id) ?? null;
       const grund = auftragHaltGrund(alt, lage);
