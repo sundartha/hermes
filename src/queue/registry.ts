@@ -11,7 +11,9 @@ function queueKonfig(): z.infer<typeof QUEUE_KONFIG> {
   return QUEUE_KONFIG.parse(config);
 }
 
-export function createQueue(options: Parameters<typeof makePgBossQueue>[0] = {}) {
+export function createQueue(
+  options: Parameters<typeof makePgBossQueue>[0] = {},
+): ReturnType<typeof makePgBossQueue> | ReturnType<typeof makeMemoryQueue> {
   const { store: speicher } = queueKonfig();
   if (speicher.queueBackend === "pgboss")
     return makePgBossQueue({ connectionString: speicher.databaseUrl, ...options });
