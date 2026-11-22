@@ -4,7 +4,7 @@ import test from "node:test";
 import pg from "pg";
 
 import { config as basisKonfiguration } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { speicherBereiche } from "../../src/store.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
@@ -152,11 +152,36 @@ async function ausloesenUndAbarbeiten(instanz, mandant) {
 }
 
 const ABGELEHNT = { ok: false, reason: "already_provisioned" };
+const WARTENDE_SPERREN = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
+const SCHRANKE_VERSUCHE = 20_000;
+
+function schrankeVorDemEinfuegen(beobachter) {
+  const gezaehlt = [false, false];
+  const instanzMit = (nummer) => async (text) => {
+    if (text.includes("nummern_lebend_gesamt")) {
+      gezaehlt[nummer] = true;
+      return;
+    }
+    if (!text.startsWith("INSERT INTO number")) return;
+    for (let versuch = 0; versuch < SCHRANKE_VERSUCHE; versuch += 1) {
+      if (gezaehlt[1 - nummer]) return;
+      const { rows } = await beobachter.query(WARTENDE_SPERREN);
+      if (rows[0].anzahl > 0) return;
+    }
+    throw new Error("Schranke vor dem Einfuegen lief ab");
+  };
+  return [instanzMit(0), instanzMit(1)];
+}
 
 test("Zwei Mandanten auf zwei Instanzen kaufen bei Plattformgrenze 1 genau eine Nummer", { timeout: ZEITGRENZE_MS }, async (t) => {
   const umgebung = await aufbau(t);
   if (!umgebung) return;
-  const [a, b] = [await umgebung.instanz(konfig()), await umgebung.instanz(konfig())];
+  const beobachter = new pg.Client({ connectionString: umgebung.db.adresse });
+  beobachter.on("error", () => {});
+  await beobachter.connect();
+  t.after(() => beobachter.end());
+  const [vorA, vorB] = schrankeVorDemEinfuegen(beobachter);
+  const [a, b] = [await umgebung.instanz(konfig(), vorA), await umgebung.instanz(konfig(), vorB)];
   const ergebnisse = await Promise.all([ausloesenUndAbarbeiten(a, A), ausloesenUndAbarbeiten(b, B)]);
   assert.deepEqual(ergebnisse.map((e) => e.ok).sort(), [false, true]);
   assert.deepEqual(ergebnisse.find((e) => !e.ok), ABGELEHNT);
