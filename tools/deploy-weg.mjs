@@ -62,6 +62,12 @@ function zeitpunktLesen(wert) {
   return ZEITPUNKT.test(wert) ? wert : null;
 }
 
+const GRUND_MUSTER = /^probe_uebersprungen_[a-z0-9_]+_fehlt$/;
+
+function grundLesen(wert) {
+  return GRUND_MUSTER.test(wert) ? wert : null;
+}
+
 const ARGUMENTE = new Map([
   ["--name", anlassLesen],
   ["--commit", commitLesen],
@@ -71,6 +77,7 @@ const ARGUMENTE = new Map([
   ["--an", jaNeinLesen],
   ["--anlass", anlassLesen],
   ["--seit", zeitpunktLesen],
+  ["--grund", grundLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -102,7 +109,7 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       argumente: ["--commit", "--teile"],
-      freiwillig: ["--anlass", "--seit"],
+      freiwillig: ["--anlass", "--seit", "--grund"],
       ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
         await hoertestIssueAnlegenOderErsetzen({
           einstellungen,
@@ -110,6 +117,7 @@ const BEFEHLE = new Map([
           commit: werte.get("--commit"),
           teile: werte.get("--teile"),
           seit: werte.get("--seit"),
+          grund: werte.get("--grund"),
           ausgabe,
         });
         return true;
