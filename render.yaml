@@ -28,8 +28,6 @@ services:
         value: ""
       - key: TELNYX_ACCOUNT_SID
         sync: false
-      - key: TELNYX_ELEVENLABS_VOICE_ID
-        sync: false
       - key: ELEVENLABS_PLAY_TTS_ENABLED
         value: "false"
       - key: ELEVENLABS_API_KEY

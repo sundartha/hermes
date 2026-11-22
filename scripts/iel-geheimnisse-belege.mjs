@@ -22,7 +22,6 @@ const PROBE_GESAMT_MS = 10000;
 const KEIN_HTTP_STATUS = 0;
 const HTTP_GRUND_MUSTER = /^http_(\d+)$/;
 const STIMMEN_SCHLUESSEL = Object.freeze([
-  RENDER_SCHLUESSEL.TELNYX_VOICE,
   RENDER_SCHLUESSEL.PLAY_VOICE,
   RENDER_SCHLUESSEL.MODEL,
 ]);
@@ -99,17 +98,14 @@ export async function stimmenBeleg(abh) {
   for (const voiceId of Object.values(ELEVENLABS_VOICE_ID_BY_PROFILE)) {
     profilProben.push({ voiceId, status: await probeSynthese({ abh, voiceId, model: quellen.agentModel }) });
   }
-  const telnyxProbe = quellen.telnyxVoice
-    ? await probeSynthese({ abh, voiceId: quellen.telnyxVoice, model: quellen.agentModel })
-    : null;
-  const urteil = stimmenUrteil({ profilProben, telnyxProbe, ...quellen });
-  meldeStimmenBeleg({ waechter: abh.waechter, quellen, profilProben, telnyxProbe, urteil });
+  const urteil = stimmenUrteil({ profilProben, ...quellen });
+  meldeStimmenBeleg({ waechter: abh.waechter, quellen, profilProben, urteil });
   return { gruen: urteil.gruen };
 }
 
-export function stimmenUrteil({ profilProben, telnyxVoice, telnyxProbe, agentVoice, playVoice }) {
+export function stimmenUrteil({ profilProben, agentVoice, playVoice }) {
   const profilGruen = profilProben.length > 0 && profilProben.every((probe) => probe.status === HTTP.OK);
-  const defaultGruen = telnyxVoice ? telnyxProbe === HTTP.OK : Boolean(agentVoice) && agentVoice === playVoice;
+  const defaultGruen = Boolean(agentVoice) && agentVoice === playVoice;
   return { gruen: profilGruen && defaultGruen, profilGruen, defaultGruen };
 }
 
@@ -121,7 +117,6 @@ async function leseStimmenQuellen(abh) {
   const tts = agent?.conversation_config?.tts ?? {};
   if (!tts.model_id) return { fehler: "Agent traegt kein tts.model_id" };
   return {
-    telnyxVoice: render.werte[RENDER_SCHLUESSEL.TELNYX_VOICE],
     playVoice: render.werte[RENDER_SCHLUESSEL.PLAY_VOICE],
     renderModel: render.werte[RENDER_SCHLUESSEL.MODEL],
     agentVoice: tts.voice_id ?? "",
@@ -162,17 +157,15 @@ function statusAusGrund(grund) {
   return treffer ? Number(treffer[1]) : KEIN_HTTP_STATUS;
 }
 
-function meldeStimmenBeleg({ waechter, quellen, profilProben, telnyxProbe, urteil }) {
+function meldeStimmenBeleg({ waechter, quellen, profilProben, urteil }) {
   for (const probe of profilProben) {
     meldeNachUrteil(waechter, {
       gruen: probe.status === HTTP.OK,
       zeile: `STIMMEN (a) Profil-Stimme ${probe.voiceId}: Probe-Synthese Status ${probe.status}`,
     });
   }
-  const zeileB = quellen.telnyxVoice
-    ? `STIMMEN (b) ${RENDER_SCHLUESSEL.TELNYX_VOICE}=${quellen.telnyxVoice}: Probe-Synthese Status ${telnyxProbe}`
-    : `STIMMEN (b) ${RENDER_SCHLUESSEL.TELNYX_VOICE} leer: Agent tts.voice_id=${quellen.agentVoice || OHNE_WERT}, ` +
-      `${RENDER_SCHLUESSEL.PLAY_VOICE}=${quellen.playVoice || OHNE_WERT}, gleich ${jaNein(urteil.defaultGruen)}`;
+  const zeileB = `STIMMEN (b) Agent tts.voice_id=${quellen.agentVoice || OHNE_WERT}, ` +
+    `${RENDER_SCHLUESSEL.PLAY_VOICE}=${quellen.playVoice || OHNE_WERT}, gleich ${jaNein(urteil.defaultGruen)}`;
   meldeNachUrteil(waechter, { gruen: urteil.defaultGruen, zeile: zeileB });
   waechter.info(
     `HINWEIS Modell (kein Blocker): Agent tts.model_id=${quellen.agentModel}, Render ${RENDER_SCHLUESSEL.MODEL}=${quellen.renderModel || OHNE_WERT}, ` +

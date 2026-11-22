@@ -708,7 +708,7 @@ test("Oberflaeche: angehaengte Namensraeume sind am Ziel nicht aufzaehlbar und s
   assert.equal(Object.getOwnPropertyDescriptor(ziel, "eins").enumerable, false);
 });
 
-const ROHWERT_NAMENSRAEUME = ["research", "metrics", "telnyx", "werkzeug", "store", "privacy", "mail", "server"];
+const ROHWERT_NAMENSRAEUME = ["research", "metrics", "werkzeug", "store", "privacy", "mail", "server"];
 
 function ladeRohwerte(umgebung) {
   const script = [
@@ -737,7 +737,6 @@ test("Rohwerte kleine Namensraeume: ohne Umgebung gelten die Standardwerte", () 
     exaApiBase: "https://api.exa.ai",
   });
   assert.deepEqual(ist.metrics, { metricsEnabled: false, logRequestId: false });
-  assert.deepEqual(ist.telnyx, { telnyxElevenLabs: { voiceId: "" } });
   assert.deepEqual(ist.werkzeug, { renderApiKey: "" });
   assert.deepEqual(ist.store, {
     storeBackend: "json",
@@ -785,7 +784,6 @@ test("Rohwerte kleine Namensraeume: gesetzte Werte werden gelesen, gekuerzt und 
     EXA_API_BASE: " https://exa.test/ ",
     METRICS_ENABLED: "true",
     LOG_REQUEST_ID: "true",
-    TELNYX_ELEVENLABS_VOICE_ID: "stimme-1",
     RENDER_API_KEY: "  render-key ",
     STORE_BACKEND: "Postgres",
     DATABASE_URL: "postgres://db.test/x",
@@ -826,7 +824,6 @@ test("Rohwerte kleine Namensraeume: gesetzte Werte werden gelesen, gekuerzt und 
     exaApiBase: "https://exa.test",
   });
   assert.deepEqual(ist.metrics, { metricsEnabled: true, logRequestId: true });
-  assert.deepEqual(ist.telnyx, { telnyxElevenLabs: { voiceId: "stimme-1" } });
   assert.deepEqual(ist.werkzeug, { renderApiKey: "render-key" });
   assert.deepEqual(ist.store, {
     storeBackend: "postgres",
