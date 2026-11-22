@@ -239,7 +239,9 @@ test("scheitert das Freigeben in der Ablage, wird es gemeldet und release wirft 
   const bisFreigabe = { ...aufzeichnendeAblage().bisFreigabe, freigeben: async () => { throw new Error("db weg"); } };
   createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe }).release("tok");
   await new Promise((fertig) => setImmediate(fertig));
-  assert.equal(fehlerAus.mock.calls.length, 1);
+  const texte = fehlerAus.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
+  const meldungen = texte.filter((text) => text.includes("[tts-store]"));
+  assert.deepEqual(meldungen, ["[tts-store] Vorspann-Audio nicht in der Ablage: db weg"]);
 });
 
 test("takeOnce faellt ohne Eintrag auf die Ablage bis Freigabe zurueck, nachdem die einmalige Ablage nichts hat", async () => {
