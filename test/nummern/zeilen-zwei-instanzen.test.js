@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
 import { config as basisKonfiguration } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { ersatzSpurEntfernen } from "../../src/store.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";

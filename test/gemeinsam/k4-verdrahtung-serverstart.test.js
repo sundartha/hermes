@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { makeConfigOverrides, startServer } from "../helpers.js";
 import { config } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "./erfundene-geheimnisse.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 import { startEmpfaenger, warteAufExport, wert } from "./otlp-empfaenger.js";

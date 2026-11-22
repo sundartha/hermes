@@ -1,6 +1,6 @@
 import { TestClock, fromPglite } from "pg-boss";
 import { config } from "../../src/config.ts";
-import { createQueue } from "../../src/queue/registry.js";
+import { createQueue } from "../../src/queue/registry.ts";
 import { makeConfigOverrides } from "../helpers.js";
 import { neuePglite } from "../pglite-helfer.js";
 import { POSTGRES_VARIABLE, echteDatenbank } from "./echtes-postgres.js";

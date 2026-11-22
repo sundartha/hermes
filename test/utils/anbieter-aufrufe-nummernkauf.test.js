@@ -39,7 +39,7 @@ const { makeOnboardRoutes } = await import("../../src/routes/api-onboard.js");
 const { makeProvisioningOrchestrator } = await import("../../src/worker/provisioning-orchestrator.js");
 const { handleProvisionJob } = await import("../../src/worker/provisioning.ts");
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
-const { createQueue } = await import("../../src/queue/registry.js");
+const { createQueue } = await import("../../src/queue/registry.ts");
 const { PAYMENT_METHOD_TYPE_CARD } = await import("../../src/billing/payment-method-eligibility.ts");
 const { NUMBER_STATUS } = await import("../../src/store.js");
 
