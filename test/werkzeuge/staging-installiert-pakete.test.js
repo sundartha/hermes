@@ -8,6 +8,11 @@ function jobBlock(job) {
   return WORKFLOW.match(new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [a-z]+:\\n|(?![\\s\\S]))`, "m"))[1];
 }
 
+function jobNamen() {
+  const ab = WORKFLOW.split(/^jobs:\n/m)[1];
+  return [...ab.matchAll(/^ {2}([a-z]+):\n/gm)].map((m) => m[1]);
+}
+
 function schrittNamen(job) {
   return [...jobBlock(job).matchAll(/^      - name: (.+)$/gm)].map((m) => m[1]);
 }
@@ -27,6 +32,5 @@ test("Staging-Job installiert die Pakete vor der Anrufprobe im selben Job", () =
 
 test("Staging-Job nutzt kein einzelnes setup-node, und es gibt genau die Jobs staging und lastlauf", () => {
   assert.doesNotMatch(jobBlock("staging"), /actions\/setup-node/);
-  const jobs = [...WORKFLOW.split(/^jobs:\n/m)[1].matchAll(/^  ([a-z]+):\n/gm)].map((m) => m[1]);
-  assert.deepEqual(jobs, ["staging", "lastlauf"]);
+  assert.deepEqual(jobNamen(), ["staging", "lastlauf"]);
 });
