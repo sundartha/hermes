@@ -653,6 +653,8 @@ export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnc
 
 export const recordElDetectorCounts = recordProviderHandleOnce("elDetectorCounts");
 
+export const recordBridgedAt = recordProviderHandleOnce("bridgedAt");
+
 export const FROM_SOURCE = Object.freeze({
   TENANT_DID: "tenant_did",
   PROVIDER_MEASURED: "provider_measured",

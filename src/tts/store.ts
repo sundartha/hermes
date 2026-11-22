@@ -61,7 +61,11 @@ export function createTtsStore({ ttlMs, ablage = null, bisFreigabeAblage = null 
     entries.set(token, { audio, timer, bisFreigabe });
     if (!bisFreigabeAblage || !bisFreigabe) return token;
     return bisFreigabeAblage.ablegen(token, audio, { ttlMs: eigeneTtlMs }).then(
-      () => token,
+      () => {
+        clearTimeout(timer);
+        entries.delete(token);
+        return token;
+      },
       (fehler: unknown) => {
         meldeAblageFehler(fehler);
         return token;

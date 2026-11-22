@@ -346,6 +346,12 @@ export function recordElDetectorCounts(callId, zaehlung) {
   return call;
 }
 
+export function recordBridgedAt(callId, bridgedAtIso) {
+  const { call, changed } = ops.recordBridgedAt(load(), callId, bridgedAtIso);
+  if (changed) save();
+  return call;
+}
+
 export async function endCallRecord(callId, status = "completed") {
   const { call, changed } = ops.endCallRecord(load(), callId, status);
   if (changed) save();

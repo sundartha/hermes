@@ -124,6 +124,7 @@ const FELDER = {
     werte: (call) => [call.costTruingAttempts, call.actualCostMicroCents ?? null, call.costTruedSource, call.costTruedAt ?? null],
     aendern: ops.recordCallCostTruingResult,
   },
+  bruecke: EINMAL_MARKE("bridged_at", "bridgedAt", ops.recordBridgedAt),
   detektorZaehlung: {
     felder: ["elDetectorCounts"],
     sql: `UPDATE call SET el_detector_counts = $3 WHERE tenant_id = $1 AND id = $2 AND el_detector_counts IS NULL`,
@@ -186,6 +187,7 @@ export function macheAnrufeSql({ runner, einreihen, lese, anhaengen }) {
     recordCallEstimatedCostCents: feld("geschaetzteKosten"),
     recordCallCostTruingResult: feld("kostenAbgleich"),
     recordElDetectorCounts: feld("detektorZaehlung"),
+    recordBridgedAt: feld("bruecke"),
     ...macheZaehlerSql({ einreihen, lese }),
     markAnswered: lebenslauf("answered"),
     trueUpAnsweredAt: lebenslauf("answeredNachziehen"),

@@ -6,7 +6,8 @@ const ANLEGEN_SQL = `INSERT INTO vorspann_zustand (call_id, tenant_id, token, te
   VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`;
 const TEXT_SQL = `SELECT text FROM vorspann_zustand WHERE call_id = $1 AND expires_at > now()`;
 const LOESCHEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1`;
-const LADEN_SQL = `SELECT callee_id, token, text, stand, aufgelegt, abgehoben FROM vorspann_zustand WHERE call_id = $1`;
+const LADEN_SQL = `SELECT callee_id, token, text, stand, aufgelegt, abgehoben,
+  (SELECT el_call_control_id FROM call WHERE id = $1) AS el_bein_id FROM vorspann_zustand WHERE call_id = $1`;
 const CALLEE_SQL = `UPDATE vorspann_zustand SET callee_id = COALESCE(callee_id, $2) WHERE call_id = $1 RETURNING callee_id`;
 const ABGEHOBEN_SQL = `UPDATE vorspann_zustand SET abgehoben = true WHERE call_id = $1 AND NOT abgehoben RETURNING call_id`;
 const MARKE_SQL = `UPDATE vorspann_zustand SET stand = stand || jsonb_build_object($2::text, $3::bigint)
@@ -14,7 +15,7 @@ const MARKE_SQL = `UPDATE vorspann_zustand SET stand = stand || jsonb_build_obje
 const ENTNEHMEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1 RETURNING callee_id, token, text, stand, aufgelegt, abgehoben`;
 const SPEICHERN_SQL = `UPDATE vorspann_zustand SET stand = $2::jsonb || stand, aufgelegt = $3::jsonb WHERE call_id = $1`;
 
-const zeileVon = (zeile) => zeile && { calleeId: zeile.callee_id, token: zeile.token, text: zeile.text, stand: zeile.stand, aufgelegt: zeile.aufgelegt, abgehoben: zeile.abgehoben };
+const zeileVon = (zeile) => zeile && { calleeId: zeile.callee_id, token: zeile.token, text: zeile.text, stand: zeile.stand, aufgelegt: zeile.aufgelegt, abgehoben: zeile.abgehoben, elBeinId: zeile.el_bein_id };
 
 export function makePostgresVorspannZustand(runner) {
   const imMandanten = (tenantId, anweisungen) =>
