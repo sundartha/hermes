@@ -348,11 +348,21 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
   const leseAnruf = (id) => leseAnrufMitClient(id);
   const leseAnrufUngebunden = async (id) => {
     const bekannt = ops.getCall(requireState(), id);
-    if (!bekannt || !eigene.has(bekannt.id)) return leseAusDatenbank(id, (_state, gelesen) => gelesen);
-    const gelesen = await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true }).catch(() => null);
-    return gelesen?.elNachlaufStartedAt && !bekannt.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
+    if (bekannt && eigene.has(bekannt.id)) return bekannt;
+    return leseAusDatenbank(id, (_state, gelesen) => gelesen);
   };
-  return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden };
+  const leseAnrufFuerAnzeige = async (id) => {
+    const bekannt = await leseAnrufUngebunden(id);
+    if (!bekannt || bekannt.elNachlaufStartedAt || !eigene.has(bekannt.id)) return bekannt;
+    try {
+      const gelesen = await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
+      return gelesen?.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
+    } catch (err) {
+      console.error("[pg] leseCall fehlgeschlagen:", err.message);
+      return bekannt;
+    }
+  };
+  return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden, leseAnrufFuerAnzeige };
 }
 
 async function loesen(gebunden, callId, schreiben) {
@@ -411,7 +421,7 @@ function nummerMethoden({ requireState, runner, nummernSql }) {
   };
 }
 
-function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe, posteingang, posteingangAnrufe }) {
+function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, leseAnrufFuerAnzeige, einreihen, anrufe, posteingang, posteingangAnrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -442,6 +452,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
     anrufHierBewacht: (id) => gebunden.has(id),
     leseCall: leseAnruf,
     leseCallUngebunden: leseAnrufUngebunden,
+    leseCallFuerAnzeige: leseAnrufFuerAnzeige,
     attachActiveCall(wert, { schluessel, mandant } = {}) {
       if (schluessel) return attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert);
       return mandant ? attachActiveCallImMandanten(wert, mandant) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert);
