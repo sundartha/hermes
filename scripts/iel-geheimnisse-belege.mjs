@@ -8,7 +8,7 @@ import {
 import { fetchAgent } from "../src/elevenlabs/convai.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.ts";
 import { INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.ts";
-import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
+import { EINE_STIMME_ID } from "../src/elevenlabs/stimme-festlegen.ts";
 import { synthesizeSpeechStream } from "../src/tts/synth.ts";
 import { exitVon, jaNein, meldeNachUrteil, urteilText } from "./iel-geheimnisse-ausgabe.mjs";
 import { HTTP, RENDER_SCHLUESSEL, dienstLesbar, leseDienstEnv } from "./iel-geheimnisse-render.mjs";
@@ -95,7 +95,7 @@ export async function stimmenBeleg(abh) {
     return { gruen: false };
   }
   const profilProben = [];
-  for (const voiceId of Object.values(ELEVENLABS_VOICE_ID_BY_PROFILE)) {
+  for (const voiceId of [EINE_STIMME_ID]) {
     profilProben.push({ voiceId, status: await probeSynthese({ abh, voiceId, model: quellen.agentModel }) });
   }
   const urteil = stimmenUrteil({ profilProben, ...quellen });
