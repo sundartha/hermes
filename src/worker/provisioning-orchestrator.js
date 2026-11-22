@@ -285,8 +285,8 @@ export function makeProvisioningOrchestrator({
     };
   }
 
-  let takt = null;
-  let anrufstartTakt = null;
+  let takt;
+  let anrufstartTakt;
 
   async function startQueue() {
     if (anrufstartHandler)
