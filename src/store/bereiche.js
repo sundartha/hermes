@@ -189,6 +189,24 @@ function kuendigungBereich(speicher) {
   };
 }
 
+function gleicheAn(liste, neu) {
+  const vorhanden = liste.find((eintrag) => eintrag.id === neu.id);
+  if (vorhanden) Object.assign(vorhanden, neu);
+  else liste.push(neu);
+}
+
+async function ladeFremdeOffeneAuftraege(speicher, sql, eigene) {
+  const geladen = new Set();
+  for (const { job, nummer } of await sql.offene()) {
+    if (job.instanz === eigene || !(await speicher.ensureTenant(job.tenantId))) continue;
+    const zustand = speicher.load();
+    if (nummer) gleicheAn(zustand.numbers, nummer);
+    gleicheAn(zustand.provisioningJobs, job);
+    geladen.add(job.id);
+  }
+  return geladen;
+}
+
 function nummernkaufBereich(speicher) {
   return {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
@@ -201,6 +219,14 @@ function nummernkaufBereich(speicher) {
       speicher.save();
       await speicher.drainFlushes();
       return sql.auftragAnlegen(eingabe);
+    },
+    ladeFremdeOffeneAuftraege: async (eigene) => {
+      const sql = speicher.nummernSql?.();
+      return sql ? ladeFremdeOffeneAuftraege(speicher, sql, eigene) : null;
+    },
+    uebernimmAuftrag: async (eingabe) => {
+      const sql = speicher.nummernSql?.();
+      return sql ? sql.auftragUebernehmen(eingabe) : true;
     },
     markTenantNeedsManualReconcile: async (tenantId) =>
       speicher.withStoreLock(() => {

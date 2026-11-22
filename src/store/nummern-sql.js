@@ -2,6 +2,7 @@ import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
 import { PROVISION_NUMBER_JOB } from "../begriffe/nummern-vergabe.js";
 import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
 import { innerhalbFrist } from "./einstellungen-sql.js";
+import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 
 const FEHLER = "[pg] nummernkauf fehlgeschlagen:";
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
@@ -9,10 +10,15 @@ const SPERRE_SQL = `SELECT id FROM tenant WHERE id = $1 FOR UPDATE`;
 const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2) AND id <> $3`;
 const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country, language)
   VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`;
-const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
-  VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7) ON CONFLICT DO NOTHING`;
-const AUFTRAG_LESEN_SQL = `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
-  FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
+const AUFTRAG_SPALTEN = "id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz";
+const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz)
+  VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7, $8) ON CONFLICT DO NOTHING`;
+const AUFTRAG_LESEN_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
+const MANDANTEN_SQL = `SELECT id FROM tenant ORDER BY id`;
+const OFFENE_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND status = $2 ORDER BY id`;
+const NUMMERN_ZU_AUFTRAEGEN_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND id = ANY($2)`;
+const UEBERNEHMEN_SQL = `UPDATE provisioning_job SET instanz = $1
+  WHERE tenant_id = $2 AND id = $3 AND status = $4 AND instanz IS NOT DISTINCT FROM $5`;
 const NUMMER_ENTFERNEN_SQL = `DELETE FROM number WHERE tenant_id = $1 AND id = $2`;
 const AUFTRAG_ENTFERNEN_SQL = `DELETE FROM provisioning_job WHERE tenant_id = $1 AND id = $2`;
 const NACHLADEN_FEHLER = "[pg] nummer nachladen fehlgeschlagen:";
@@ -31,6 +37,7 @@ function alsAuftrag(zeile) {
     attempts: zeile.attempts,
     lastError: zeile.last_error ?? null,
     createdAt: zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
+    instanz: zeile.instanz ?? null,
   };
 }
 
@@ -67,7 +74,7 @@ async function nummerAnlegen(client, { tenantId, number, hoechstens }) {
   return { ok: true };
 }
 
-async function auftragAnlegen(client, { tenantId, numberId, idempotencyKey, number, jetztIso }) {
+async function auftragAnlegen(client, kennung, { tenantId, numberId, idempotencyKey, number, jetztIso }) {
   await nummerEinfuegen(client, tenantId, number);
   await client.query(AUFTRAG_SQL, [
     `job_${numberId}`,
@@ -77,6 +84,7 @@ async function auftragAnlegen(client, { tenantId, numberId, idempotencyKey, numb
     PROVISIONING_JOB_STATUS.QUEUED,
     idempotencyKey,
     jetztIso,
+    kennung,
   ]);
   const { rows } = await client.query(AUFTRAG_LESEN_SQL, [tenantId, idempotencyKey]);
   return alsAuftrag(rows[0]);
@@ -91,6 +99,43 @@ async function imMandanten(client, tenantId, arbeit) {
   } catch (fehler) {
     await client.query("ROLLBACK").catch(() => {});
     console.error(FEHLER, fehler.message);
+    throw fehler;
+  }
+}
+
+async function offeneLesen(client, zeileZuNummer) {
+  const { rows: mandanten } = await client.query(MANDANTEN_SQL);
+  const gefunden = [];
+  for (const { id } of mandanten) {
+    await client.query("BEGIN");
+    try {
+      await client.query(KONTEXT_SQL, [id]);
+      const { rows } = await client.query(OFFENE_SQL, [id, PROVISIONING_JOB_STATUS.QUEUED]);
+      const nummern = rows.length
+        ? (await client.query(NUMMERN_ZU_AUFTRAEGEN_SQL, [id, rows.map((zeile) => zeile.number_id)])).rows
+        : [];
+      await client.query("COMMIT");
+      for (const zeile of rows) {
+        const nummer = nummern.find((eine) => eine.id === zeile.number_id);
+        gefunden.push({ job: alsAuftrag(zeile), nummer: nummer ? zeileZuNummer(nummer) : null });
+      }
+    } catch (fehler) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw fehler;
+    }
+  }
+  return gefunden;
+}
+
+async function auftragUebernehmen(client, { tenantId, jobId, alt, neu }) {
+  await client.query("BEGIN");
+  try {
+    await client.query(KONTEXT_SQL, [tenantId]);
+    const { rowCount } = await client.query(UEBERNEHMEN_SQL, [neu, tenantId, jobId, PROVISIONING_JOB_STATUS.QUEUED, alt ?? null]);
+    await client.query("COMMIT");
+    return rowCount === 1;
+  } catch (fehler) {
+    await client.query("ROLLBACK").catch(() => {});
     throw fehler;
   }
 }
@@ -127,13 +172,15 @@ function macheNachladen({ runner, zeileZuNummer, fristMs }) {
   };
 }
 
-export function macheNummernSql({ einreihen, runner, zeileZuNummer, fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS }) {
+export function macheNummernSql({ einreihen, runner, zeileZuNummer, kennung = EIGENE_KENNUNG, fristMs = EINSTELLUNGEN_NACHLADEN_FRIST_MS }) {
   const unterSperre = (tenantId, arbeit) =>
     einreihen((client) => unterMandantenSperre(client, tenantId, () => arbeit(client)));
   return {
     nachladen: macheNachladen({ runner, zeileZuNummer, fristMs }),
     nummerAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => nummerAnlegen(client, eingabe)),
-    auftragAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => auftragAnlegen(client, eingabe)),
+    auftragAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => auftragAnlegen(client, kennung, eingabe)),
+    offene: () => runner.withClient((client) => offeneLesen(client, zeileZuNummer)),
+    auftragUebernehmen: (eingabe) => runner.withClient((client) => auftragUebernehmen(client, eingabe)),
     nummerEntfernen: ({ tenantId, numberId }) =>
       einreihen((client) => imMandanten(client, tenantId, () => client.query(NUMMER_ENTFERNEN_SQL, [tenantId, numberId]))),
     auftragEntfernen: ({ tenantId, jobId }) =>
