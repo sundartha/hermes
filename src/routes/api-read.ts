@@ -156,7 +156,8 @@ async function zeigeAnruf({
     antworteFehler(res, HTTP_NOT_FOUND, "not found");
     return;
   }
-  res.json((await markiereWartende(store, [publicCall(call)]))[0]);
+  const sichtbar = call["status"] === "active" && call["elNachlaufStartedAt"] ? { ...call, status: "completed" } : call;
+  res.json((await markiereWartende(store, [publicCall(sichtbar)]))[0]);
 }
 
 async function zeigeExport({
