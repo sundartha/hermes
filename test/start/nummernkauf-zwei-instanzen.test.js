@@ -301,3 +301,15 @@ test("Nummernkauf: scheitert der Abgleich, meldet der Takt genau diese Meldung, 
   assert.deepEqual(umgebung.bestellungen, [KENNUNG_B]);
   assert.equal(fehler.mock.callCount(), EINMAL);
 });
+
+test("Nummernkauf: ohne Auskunft ueber die Lebenszeichen gilt der Auftrag eines nicht lebenden Besitzers als uebernehmbar und wird nicht angehalten", async (t) => {
+  const umgebung = await aufbau();
+  const logs = meldungen(t);
+  const b = await instanz(umgebung, KENNUNG_B);
+  await auftragVonA(umgebung);
+  await stirbt(umgebung.db, KENNUNG_A);
+  b.store.besitzLage = undefined;
+  await abgleichenUndAbarbeiten(b);
+  assert.equal(b.einreihungen.mock.callCount(), EINMAL);
+  assert.deepEqual(logs.filter((zeile) => zeile.includes("provision-reconcile")), [], logs.join("|"));
+});
