@@ -173,6 +173,8 @@ export const vorspannZustand = {
   lade: (anfrage) => aktiverVorspannZustand().lade(anfrage),
   setzeCallee: (anfrage) => aktiverVorspannZustand().setzeCallee(anfrage),
   beanspruecheAbgehoben: (anfrage) => aktiverVorspannZustand().beanspruecheAbgehoben(anfrage),
+  beanspruecheMarke: (anfrage) => aktiverVorspannZustand().beanspruecheMarke(anfrage),
+  entnimm: (anfrage) => aktiverVorspannZustand().entnimm(anfrage),
   speichere: (anfrage) => aktiverVorspannZustand().speichere(anfrage),
 };
 

@@ -176,10 +176,11 @@ async function pruefeWahl({ call, ausgehendGesperrt }) {
   return { grund };
 }
 
-async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAufgelegt }) {
+async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand }) {
   const call = await store.leseCall(callId);
   const zustand = call.status === "active" ? await ladeZustand(call) : undefined;
   if (!zustand || zustand.abgehoben) return;
+  await vorspannZustand.entnimm(zustandsRef(call));
   await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
   await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
 }
@@ -227,7 +228,7 @@ export function makeVorspannAblauf({
     const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
       await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: callControlId });
-      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt }) });
+      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand }) });
     } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
@@ -262,6 +263,7 @@ export function makeVorspannAblauf({
     voiceControl,
     store,
     ttsStore,
+    vorspannZustand,
     legeBeideBeineAuf: legeBeideBeineAufMitUhr,
     vermerkeElFehler: vermerkeElFehlerFuer, vermerkeNichtAbgespielt: (call) => vermerkeNichtAbgespielt({ call, store }),
     logFehler,
@@ -270,7 +272,6 @@ export function makeVorspannAblauf({
 
   async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben }) {
     ttsStore.release(zustand.token);
-    await vorspannZustand.loesche(zustandsRef(call)).catch((fehler) => logFehler("zustand", call.id, fehler));
     if (call.status !== "active") return;
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis });
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
@@ -289,7 +290,7 @@ export function makeVorspannAblauf({
 
   const BEHANDLER = Object.freeze({
     [CALL_CONTROL_EREIGNIS.ABGEHOBEN]: (args) => (args.vomElBein ? beiElAngenommen(args) : beiAbgehoben(args)),
-    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: beiAufgelegt,
+    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: async (args) => (await vorspannZustand.entnimm(zustandsRef(args.call))) && beiAufgelegt(args),
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: (args) => (args.vomElBein ? undefined : beiWiedergabeEnde(args)),
   });
 
