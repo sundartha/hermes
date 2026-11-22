@@ -1,7 +1,7 @@
 import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
-import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";
+import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
 
 interface Sprachwahl {
   language: string;
@@ -57,14 +57,14 @@ export function providerVoicemailMessage({ locale, ownerName, openingLine }: { l
 
 export function callLocaleFor(
   state: MandantZustand,
-  { tenantId, numberRecord, ownerName, defaultVoiceId, to, callLanguage }: Zugriff & { ownerName: string | null; defaultVoiceId: string; to: string | null; callLanguage?: string | undefined },
+  { tenantId, numberRecord, ownerName, to, callLanguage }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
   const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to }));
   return {
     language: gespraech.language,
     disclosureLanguage: offenlegung.language,
-    voiceId: elevenLabsVoiceIdFor(defaultVoiceId, gespraech.voiceProfile),
+    voiceId: EINE_STIMME_ID,
     firstMessage:
       gespraech.language === offenlegung.language
         ? EROEFFNUNG_PLATZHALTER
@@ -78,10 +78,6 @@ export interface LocaleSpeicher {
   numberRecordByE164: (e164: string | undefined) => Zugriff["numberRecord"];
 }
 
-export interface LocaleKonfiguration {
-  telnyx: { telnyxElevenLabs: { voiceId: string } };
-}
-
 export interface LocaleAnruf {
   tenantId: string;
   from?: string | undefined;
@@ -89,23 +85,21 @@ export interface LocaleAnruf {
   language?: string | undefined;
 }
 
-export function callLocaleOf({ store, config, call, ownerName }: { store: LocaleSpeicher; config: LocaleKonfiguration; call: LocaleAnruf; ownerName: string | null }): AnrufSprache {
+export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher; call: LocaleAnruf; ownerName: string | null }): AnrufSprache {
   return callLocaleFor(store.load(), {
     tenantId: call.tenantId,
     numberRecord: store.numberRecordByE164(call.from),
     ownerName,
-    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
     to: call.to,
     callLanguage: call.language,
   });
 }
 
-export function inboundElLocaleOf({ store, config, call }: { store: LocaleSpeicher; config: LocaleKonfiguration; call: LocaleAnruf }): AnrufSprache {
+export function inboundElLocaleOf({ store, call }: { store: LocaleSpeicher; call: LocaleAnruf }): AnrufSprache {
   return callLocaleFor(store.load(), {
     tenantId: call.tenantId,
     numberRecord: store.numberRecordByE164(call.to),
     ownerName: null,
-    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
     to: null,
     callLanguage: call.language,
   });

@@ -38,7 +38,7 @@ const EL_KEY = "test-key-3365";
 const AUDIO_BYTES_PLAUSIBEL = 200_000;
 const AUDIO_BYTES_ZU_KURZ = 10;
 const UEBER_TELNYX = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
-const EN_STIMME = "ZSNL4hPqCnqoMPaI4jGX";
+const EN_STIMME = "cqPdIo76zSHFDcSZpFov";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
 const dritteroeffnung = (auftraggeber, openingLine) =>
   `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${auftraggeber}. Das Gespräch wird für meinen Auftraggeber zusammengefasst. ${openingLine}`;

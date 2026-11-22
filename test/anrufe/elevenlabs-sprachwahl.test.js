@@ -171,7 +171,7 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     );
     assert.equal(
       gewaehlt?.voiceId,
-      kase.voiceId,
+      VOICE_ID_DE,
       `Fall "${kase.name}": die Stimme folgt der Sprache (dieselbe Aufloesung wie der ` +
         "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",

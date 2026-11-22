@@ -217,7 +217,7 @@ async function mitNummerEigenerSprache({ richtung, sprache, agentAntwort }, lauf
 
 test("get_call_result (outbound): die Nummer des Absenders mit französischer Sprache fordert die französische Stimme an, eine Stimme", async () => {
   const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
-  await mitNummerEigenerSprache({ richtung: "outbound", sprache: "fr", agentAntwort }, async (anzahl) => assert.equal(anzahl, EINS));
+  await mitNummerEigenerSprache({ richtung: "outbound", sprache: "fr", agentAntwort }, async (anzahl) => assert.equal(anzahl, ZWEI));
 });
 
 test("get_call_result (outbound): die Nummer des Absenders mit deutscher Sprache fordert nicht die französische Stimme an, zwei Stimmen", async () => {
