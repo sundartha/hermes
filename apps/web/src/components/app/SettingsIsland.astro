@@ -1,62 +1,7 @@
 ---
-// SettingsIsland (W5): der EINZIGE existierende Schreibpfad des Frontends.
-// POST /api/self-service/settings mit der bekannten ENGEN Whitelist
-// (src/self-service.js, NUR-Lese-Vertrag). Settings-Redesign (Aug 2026): der
-// Bereich fokussiert sich auf die Sprachwahl -- die UI bietet nur noch:
-//   - language   ("" automatisch / de / fr / en) -- das Hauptelement der Karte,
-//                als Auswahlkacheln im Radiobutton-Stil (Dashboard-Design-Spec §9)
-//   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
-// Agent-Name (Freitext), Agent-Stil (Dropdown, agentStyle) und die Begruessungs-
-// Vorlagenauswahl (greeting) sind aus der UI entfernt. Die SERVER-WHITELIST
-// BLEIBT UNVERAENDERT (SELF_SERVICE_FREE_FIELDS traegt weiterhin agentName/
-// agentStyle, src/self-service.js) -- der Client bietet die Felder nur nicht
-// mehr an. buildSettingsPatch (lib/api.js) sendet ein Feld nur, wenn das
-// Formular es ueberhaupt liefert; da readForm() unten kein agentName/agentStyle/
-// greeting mehr liefert, reisen diese Keys gar nicht erst im POST-Body mit --
-// kein Serverabgleich noetig, keine Aenderung an /src.
-// allowCalendar/allowBooking, allowSummaries, Disclosure-Felder und alles
-// Unbekannte fehlten schon vorher bewusst -- der Self-Service-Pfad lehnt sie
-// ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
+// SettingsIsland: nur noch die eigene Nummer (Spracheinstellung entfaellt, Issue #5986:
+// eingehende Anrufe starten auf der Startsprache des Servers).
 //
-// DASHBOARD-DESIGN-SPEC §9: die Sprachkacheln ersetzen das fruehere <select>-
-// aehnliche Pillen-Markup (lang-pill). DIE SPRACHLISTE KOMMT UNVERAENDERT AUS
-// SETTINGS_LANGUAGES (lib/api.js) -- keine Sprache hinzugefuegt/entfernt, nur
-// die Kachel-Optik ist neu. Echte input[type=radio] pro Kachel, optisch
-// versteckt via opacity:0; position:absolute (NICHT display:none) -- der
-// Fokusring bleibt sichtbar (Tastaturbedienung/Screenreader-Semantik echter
-// Radios, kein nachgebautes ARIA-Widget). Optik lebt in styles/app/panels.css
-// (Trupp-C-Stylesheet, Muster shell.css/calls.css) -- kein inline-Style-Block
-// mehr hier.
-//
-// Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
-// abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
-// AUTH_EVENT neu dispatchen, damit ALLE Inseln auf den frischen Server-Stand
-// gehen). Der Bestaetigungstext blendet 2600ms nach dem Speichern aus (§9) --
-// nur bei Erfolg (ok===true), Fehlermeldungen bleiben stehen. Der restriktivere
-// Permission-Toggle greift ueber die Server-Semantik: ein false->true-Versuch
-// auf allowPersonalData/allowBankData kommt als rejected zurueck (der
-// gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
-//
-// KEIN eigener Auth-/state-Fetch im Normalfall: die Auth-Insel ermittelt den
-// Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
-// das Formular. Tenant-Werte gehen NUR ueber [checked]/textContent in den DOM
-// (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
-//
-// Feedback-Runde 2 (Befund 4, Aug 2026) hatte den "Summary SMS number"-Block
-// (privates Zweit-Formular, eigener Endpunkt /api/self-service/private-number)
-// aus der UI entfernt -- Zusammenfassungen liefen seitdem ueber den Newsletter
-// (NewsletterIsland). Das Feld selbst blieb unangetastet server- und lib-seitig
-// (savePrivateNumber/privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER).
-//
-// OC-P2/OC-P3 (PLAN-OWNER-CALL, 2026-08-20): das Feld hat seitdem eine ZWEITE,
-// gewichtigere Wirkung -- tenant.privateNumber entscheidet (zusammen mit der
-// server-seitig gepinnten Tenant-Allowlist, s. CLAUDE.md Regel 2) mit darueber,
-// ob der gesetzliche Offenlegungssatz bei einem Outbound-Call entfaellt (Anruf
-// an genau diese Nummer = Anruf an dich selbst). Deshalb kommt der Block hier
-// als "Eigene Nummer"-Feld ZURUECK, NEU gerahmt um die Owner-Erkennung (nicht
-// mehr um die Summary-SMS): Erklaertext/Titel sagen NIE, dass die KI-Kennzeichnung
-// entfaellt -- die bleibt in JEDEM Fall fest verdrahtet (Backend, claude.js).
-// Was entfaellt, ist NUR die lange Drittpersonen-Vorstellung. Wortlaut zweisprachig
 // ueber lib/i18n.js STRINGS (privateNumberTitle/privateNumberHint/-Save/-Remove),
 // Statuszeile/Fehlertexte dynamisch ueber lib/api.js (privateNumberStatusText,
 // privateNumberMessage) -- gleiche Aufteilung wie der Rest dieser Insel (s.u.).
@@ -65,56 +10,11 @@
 // privateNumberStatusText); der volle Wert wird nie ins Eingabefeld zurueckgeschrieben
 // (kein PII-Echo). Eigener Endpunkt, eigenes <form> -- NICHT der settings-Patch
 // (buildSettingsPatch/saveSettings bleiben unangetastet, s.u.).
-import { SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
 <section id="settings-card" class="card" hidden>
   <h2 data-i18n="settingsTitle">My agent settings</h2>
   <p class="muted" data-i18n="settingsHint">Takes effect on the next call.</p>
-
-  <form id="settings-form" class="settings-form">
-    <fieldset class="settings-lang">
-      <legend class="field-label" data-i18n="agentLanguage">Agent language</legend>
-      <p class="muted settings-lang__hint" data-i18n="agentLanguageHint">
-        Choose the language your agent speaks on calls, or leave it automatic.
-      </p>
-      <div
-        class="lang-picker"
-        role="radiogroup"
-        aria-label="Agent language"
-        data-i18n-attr="aria-label:agentLanguage"
-      >
-        {
-          SETTINGS_LANGUAGES.map(({ value, label }) => (
-            <label class="lang-tile">
-              <input type="radio" name="settings-language" class="lang-tile__input" value={value} />
-              <span class="lang-tile__fill" aria-hidden="true" />
-              <span class="lang-tile__ring" aria-hidden="true">
-                <span class="lang-tile__dot" aria-hidden="true" />
-              </span>
-              <span class="lang-tile__label">
-                <span data-lang-value={value}>{label}</span>
-                {value === "" && (
-                  <span class="lang-tile__qualifier" data-lang-qualifier={value}>(by number)</span>
-                )}
-              </span>
-              <span class="lang-tile__code" aria-hidden="true">{value ? value.toUpperCase() : "AUTO"}</span>
-            </label>
-          ))
-        }
-      </div>
-    </fieldset>
-
-    <!-- Owner-Entscheidung 2026-08-14: der Permissions-Block (Personal data /
-         Bank details) ist aus der Oberflaeche entfernt. Die Settings-Felder
-         existieren serverseitig weiter; buildSettingsPatch laesst nicht
-         gerenderte Toggles aus dem Patch (kein stilles Zuruecksetzen). -->
-
-    <div class="settings-actions">
-      <button id="settings-save" class="btn" type="submit" data-i18n="save">Save</button>
-      <span id="settings-msg" class="settings-msg" hidden></span>
-    </div>
-  </form>
 
   <!-- OC-P2/OC-P3: eigene Naht (eigener Endpunkt, PII am Tenant-Record) -- deshalb
        ein EIGENES <form> neben dem Settings-Formular (Muster vor Feedback-Runde 2).
@@ -163,23 +63,14 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
     ERROR_INVALID_PRIVATE_NUMBER,
-    buildSettingsPatch,
     fetchTenantState,
     privateNumberMessage,
     privateNumberStatusText,
-    saveSettings,
     savePrivateNumber,
-    settingsFrom,
-    settingsOutcome,
-    settingsLanguageLabel,
-    settingsLanguageQualifier,
   } from "../../lib/api.js";
   import { t } from "../../lib/i18n.js";
 
   const cardEl = document.getElementById("settings-card");
-  const formEl = document.getElementById("settings-form");
-  const saveBtn = document.getElementById("settings-save");
-  const msgEl = document.getElementById("settings-msg");
 
   const privateFormEl = document.getElementById("private-number-form");
   const privateInputEl = document.getElementById("private-number-input");
@@ -213,66 +104,6 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
         }, CONFIRM_HIDE_MS),
       );
     }
-  }
-
-  // Sprachkacheln-Beschriftungen sind serverseitig/englisch aus
-  // SETTINGS_LANGUAGES gerendert (Astro-Frontmatter, laeuft nur einmal, ohne
-  // Sprachkontext) -- diese Funktion bringt sie auf die aktuelle Sprache. Aufgerufen von fillForm() (jedes AUTH_EVENT, inkl. des vom
-  // Sprachumschalter re-dispatchten -- s. AuthIsland.astro), kein eigener
-  // LANG_EVENT-Listener noetig.
-  function syncSettingsLabels() {
-    for (const node of formEl.querySelectorAll("[data-lang-value]")) {
-      node.textContent = settingsLanguageLabel(node.dataset.langValue);
-    }
-    // Der Klammerzusatz der Auto-Kachel ist ein eigener Knoten (nur ab 620px sichtbar,
-    // panels.css) und braucht darum seinen eigenen Durchlauf.
-    for (const node of formEl.querySelectorAll("[data-lang-qualifier]")) {
-      node.textContent = settingsLanguageQualifier(node.dataset.langQualifier);
-    }
-  }
-
-  // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
-  // -> "Automatic", die erste Kachel mit value=""). Kein clientseitiger DOM-Bau
-  // mehr; der Permissions-Block ist entfernt (Owner-Entscheidung 2026-08-14).
-  // Knopf-Audit 18.09.2026: jede erneute Verteilung von AUTH_EVENT setzte die Auswahl auf
-  // den Serverstand zurueck -- und solche Verteilungen gibt es viele, die nichts mit dieser
-  // Karte zu tun haben: die Pending-Watch der Newsletter-Insel alle 15 s, solange ein
-  // Zusatzempfaenger unbestaetigt ist, die Rueckkehr in den Tab, der Sprachumschalter,
-  // jede Aktion einer anderen Insel. Gemessen: "French" angeklickt, nach 12 s stand wieder
-  // "Automatic" da; ein Klick auf "Save" speicherte dann den ALTEN Wert, und "Save" wirkte
-  // kaputt. Eine ungespeicherte Auswahl bleibt darum stehen, bis gespeichert (submit) oder
-  // abgemeldet wird; die Beschriftungen folgen weiter der Sprache.
-  let formDirty = false;
-  formEl.addEventListener("change", () => {
-    formDirty = true;
-  });
-
-  function fillForm(data) {
-    syncSettingsLabels();
-    if (formDirty) return;
-    const { settings } = settingsFrom(data);
-    const language = settings.language || "";
-    for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
-      input.checked = input.value === language;
-    }
-  }
-
-  // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
-  // dort, nicht hier). Sprache aus der gecheckten Kachel (keine Auswahl -> "",
-  // sollte praktisch nicht vorkommen, da immer genau eine Kachel checked ist).
-  function readForm() {
-    const checkedLang = formEl.querySelector('input[name="settings-language"]:checked');
-    return { language: checkedLang ? checkedLang.value : "" };
-  }
-
-  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte
-  // -- die Feldnamen selbst sind technische Bezeichner, keine natuersprachlichen
-  // Strings, darum unuebersetzt; nur die umgebenden Praefixe kommen aus t()).
-  function outcomeText({ changed, rejected }) {
-    const applied = changed.length ? changed.join(", ") : t("settingsAppliedEmpty");
-    const parts = [`${t("settingsAppliedPrefix")} ${applied}`];
-    if (rejected.length) parts.push(`${t("settingsRejectedPrefix")} ${rejected.join(", ")}`);
-    return parts.join(" · ");
   }
 
   // Re-Fetch nach dem Speichern: den State neu laden und per AUTH_EVENT an ALLE
@@ -319,24 +150,6 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     }
   }
 
-  async function submit(event) {
-    event.preventDefault();
-    saveBtn.disabled = true;
-    const patch = buildSettingsPatch(readForm());
-    try {
-      const saved = await saveSettings(patch);
-      showMessage(msgEl, outcomeText(settingsOutcome(patch, saved)), true);
-      formDirty = false; // gespeichert -> ab jetzt zeigt das Formular wieder den Serverstand
-      await refetchState(); // frischen Stand ziehen + an alle Inseln verteilen
-    } catch (err) {
-      showMessage(msgEl, saveErrorText(err), false);
-    } finally {
-      saveBtn.disabled = false;
-    }
-  }
-
-  formEl.addEventListener("submit", submit);
-
   privateFormEl.addEventListener("submit", (event) => {
     event.preventDefault();
     const value = privateInputEl.value.trim();
@@ -358,11 +171,9 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
   document.addEventListener(AUTH_EVENT, (event) => {
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
-      fillForm(data);
       privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
-      formDirty = false;
       cardEl.hidden = true;
     }
   });

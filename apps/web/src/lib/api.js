@@ -313,7 +313,7 @@ export function callSummary(call) {
   return typeof summary === "string" ? summary : "";
 }
 
-export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "language", "agentStyle"]);
+export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "agentStyle"]);
 
 export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
 

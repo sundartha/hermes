@@ -442,7 +442,7 @@ async function initAntwortFuerEingang(instanzProzess, signer, nr) {
   return (await init.json()).conversation_config_override.agent;
 }
 
-test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks tragen die Sprache, die A gesetzt hat", async (t) => {
+test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks tragen die Startsprache, auch wenn A eine andere Sprache in die Datenbank schreibt", async (t) => {
   await mitDatenbankVorDemStart(t, { env: EL_ZUGANG }, async ({ sql, signer, starte }) => {
     await sql(`UPDATE tenant SET owner_name = $2, first_name = $3 WHERE id = $1`, [
       BOOTSTRAP_TENANT_ID,
@@ -455,19 +455,19 @@ test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks trag
     ]);
     await setzeSprache(sql, "fr");
     const b = await starte();
-    const franzoesisch = await initAntwortFuerEingang(b, signer, 1);
-    assert.equal(franzoesisch.language, "fr", "Ausgangslage: B spricht, was in der Datenbank steht");
+    const erste = await initAntwortFuerEingang(b, signer, 1);
+    assert.equal(erste.language, "de", "Startsprache, die Einstellung fr wirkt nicht");
 
-    await setzeSprache(sql, "de");
-    const deutsch = await initAntwortFuerEingang(b, signer, 2);
+    await setzeSprache(sql, "en");
+    const zweite = await initAntwortFuerEingang(b, signer, 2);
 
-    assert.equal(deutsch.language, "de");
-    assert.notEqual(deutsch.first_message, franzoesisch.first_message);
+    assert.equal(zweite.language, "de");
+    assert.equal(zweite.first_message, erste.first_message);
     const sprachen = await zeilenBis(
       () => anrufSprachen(sql),
       (liste) => liste.length === 2,
     );
-    assert.deepEqual(sprachen, ["fr", "de"]);
+    assert.deepEqual(sprachen, ["de", "de"]);
   });
 });
 
@@ -487,15 +487,15 @@ test("Kriterium 6 (place_call): ein Auftrag ohne language ueber B nimmt die Spra
   });
 });
 
-test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im normalen Pfad mit der Sprache des alten Stands", async (t) => {
+test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im normalen Pfad, meldet es im Log und der naechste Eingang heilt", async (t) => {
   await mitInstanzHinterRelais(t, { env: GEPINNTER_TENANT }, async ({ a, sql, signer, relais }) => {
     const erster = await eingangAuf(a, signer, "CAlesen_basis");
     assert.equal(erster.status, HTTP_OK);
-    const [grundsprache] = await zeilenBis(
+    await zeilenBis(
       () => anrufSprachen(sql),
       (liste) => liste.length === 1,
     );
-    assert.notEqual(grundsprache, "fr", "Ausgangslage: die Grundsprache ist nicht die neue");
+    assert.doesNotMatch(a.stdout, /\[pg\] einstellungen nachladen fehlgeschlagen/);
     await setzeSprache(sql, "fr");
 
     relais.anhalten();
@@ -514,14 +514,17 @@ test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im 
       () => anrufSprachen(sql),
       (liste) => liste.length === 2,
     );
-    assert.equal(sprachen[1], grundsprache, "Sprache des alten Stands");
+    assert.deepEqual(sprachen, ["de", "de"], "Startsprache, die Einstellung fr wirkt nicht");
 
-    await eingangAuf(a, signer, "CAlesen_danach");
+    const meldungen = a.stdout.match(/\[pg\] einstellungen nachladen fehlgeschlagen/g).length;
+    const dritter = await eingangAuf(a, signer, "CAlesen_danach");
+    assert.equal(dritter.status, HTTP_OK);
     const danach = await zeilenBis(
       () => anrufSprachen(sql),
       (liste) => liste.length === 3,
     );
-    assert.equal(danach[2], "fr", "der naechste Eingang heilt");
+    assert.deepEqual(danach, ["de", "de", "de"]);
+    assert.equal(a.stdout.match(/\[pg\] einstellungen nachladen fehlgeschlagen/g).length, meldungen, "der naechste Eingang heilt: keine neue Fehlermeldung");
   });
 });
 
