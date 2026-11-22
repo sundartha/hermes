@@ -6,6 +6,7 @@ import pg from "pg";
 import { config as basisKonfiguration } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { speicherBereiche } from "../../src/store.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
@@ -195,6 +196,7 @@ test("Freigegebene und fehlgeschlagene Nummern anderer Mandanten zaehlen nicht g
   await umgebung.sql(C, FREMDE_NUMMER, ["num_fremd_fehl", C, "failed"]);
   assert.equal((await ausloesenUndAbarbeiten(a, A)).ok, true);
   assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
+  assert.equal(await umgebung.gesamt(), 3);
 });
 
 test("Eine fremde Nummer im Status requested zaehlt gegen die Plattformgrenze", { timeout: ZEITGRENZE_MS }, async (t) => {
@@ -204,6 +206,7 @@ test("Eine fremde Nummer im Status requested zaehlt gegen die Plattformgrenze", 
   await umgebung.sql(B, FREMDE_NUMMER, ["num_fremd_req", B, "requested"]);
   assert.deepEqual(await ausloesenUndAbarbeiten(a, A), ABGELEHNT);
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
+  assert.equal(await umgebung.gesamt(), 1);
 });
 
 test("Eine freigegebene Nummer gibt den Platz unter der Plattformgrenze wieder frei", { timeout: ZEITGRENZE_MS }, async (t) => {
@@ -244,4 +247,26 @@ test("Die Plattformzaehlung gibt einem Mandanten nur eine Anzahl, keine fremden 
   assert.deepEqual(zeilen, [{ id: 1, anzahl: 2 }]);
   assert.equal(JSON.stringify(zeilen).includes("num_fremd"), false);
   assert.equal(JSON.stringify(zeilen).includes(B), false);
+});
+
+const nummerEingabe = (id, plattformHoechstens) => ({
+  tenantId: A,
+  number: { id, provider: "telnyx", status: "requested", country: "US", language: "en" },
+  hoechstens: 1,
+  plattformHoechstens,
+});
+
+test("Die eigene schon gespeicherte Nummer zaehlt nicht gegen die Plattformgrenze, eine freigegebene eigene nie als Abzug", { timeout: ZEITGRENZE_MS }, async (t) => {
+  const umgebung = await aufbau(t);
+  if (!umgebung) return;
+  const { store } = await umgebung.instanz(konfig());
+  const legeNummerAn = (eingabe) => speicherBereiche(store).nummernkauf.legeNummerAn(eingabe);
+  await umgebung.sql(B, FREMDE_NUMMER, ["num_fremd_x", B, "active"]);
+  await umgebung.sql(A, FREMDE_NUMMER, ["num_eigen", A, "requested"]);
+  assert.deepEqual(await legeNummerAn(nummerEingabe("num_eigen", 2)), { ok: true });
+  assert.deepEqual(await legeNummerAn(nummerEingabe("num_neu", 2)), { ok: false });
+  await umgebung.sql(A, STATUS_SETZEN, ["num_eigen", "released"]);
+  assert.deepEqual(await legeNummerAn(nummerEingabe("num_eigen", 1)), { ok: false });
+  assert.deepEqual(await legeNummerAn(nummerEingabe("num_eigen", 2)), { ok: true });
+  await umgebung.gesamt();
 });
