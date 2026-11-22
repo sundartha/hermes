@@ -151,7 +151,7 @@ export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = anfrage, log
       await elevenlabsNummernKonto().patchPhoneNumber({ fetchImpl, account: el, phoneNumberId: number.providerAgentPhoneNumberId, body });
     } catch (fehler) {
       logger.warn(
-        `[el-trunk] schreiben_fehlgeschlagen nummer_id=${number.id} status=${fehler?.providerStatus ?? STATUS_UNBEKANNT}`,
+        `[el-trunk] schreiben_fehlgeschlagen nummer_id=${number.id} status=${String(Reflect.get(Object(fehler), "providerStatus") ?? STATUS_UNBEKANNT)}`,
       );
     }
   }
