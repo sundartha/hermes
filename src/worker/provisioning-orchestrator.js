@@ -175,7 +175,7 @@ export function makeProvisioningOrchestrator({
     const opts = jobOptionsFor(findNumber(state, queuedJob.payload.numberId), config.billing);
     let result;
     try {
-      result = await handleProvisionJob(state, queuedJob, deps, opts);
+      result = await handleProvisionJob(state, queuedJob, { ...deps, opts });
       if (skippedOverFailedNumber(result)) return;
       if (record) markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.DONE);
       store.save();

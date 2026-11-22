@@ -80,7 +80,7 @@ async function provisioniere(telnyx, { state, numberId }, billing) {
   await mitKurzerFrist(() =>
     withFetch(telnyx.fetchImpl, async () => {
       try {
-        await handleProvisionJob(state, { payload: { numberId } }, { provisioner: numberProvisioning(), billing, logger }, ARGS);
+        await handleProvisionJob(state, { payload: { numberId } }, { provisioner: numberProvisioning(), billing, logger, opts: ARGS });
       } catch (err) {
         fehler = err;
       }
@@ -125,12 +125,7 @@ test("erneuter Auftrag fuer die Nummer mit offener ID loest keinen zweiten Kauf 
   const telnyx = telnyxMitBestellung(bestellungOk);
   await provisioniere(telnyx, seed, fakeBilling());
 
-  const ergebnis = await handleProvisionJob(
-    seed.state,
-    { payload: { numberId: seed.numberId } },
-    { provisioner: numberProvisioning() },
-    ARGS,
-  );
+  const ergebnis = await handleProvisionJob(seed.state, { payload: { numberId: seed.numberId } }, { provisioner: numberProvisioning(), opts: ARGS });
   assert.deepEqual(ergebnis, { skipped: true, status: NUMBER_STATUS.PROVISIONING });
   assert.equal(telnyx.bestellungen.length, 1);
 });

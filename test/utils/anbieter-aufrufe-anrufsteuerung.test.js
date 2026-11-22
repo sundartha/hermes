@@ -181,7 +181,7 @@ function einrichtungOhneHold(speicher) {
       const state = speicher.load();
       const nummer = state.numbers.find((n) => n.status === "requested");
       const optionen = { countryCode: "US", holdAmountCents: 0, currency: "EUR" };
-      await handleProvisionJob(state, { payload: { numberId: nummer.id } }, { provisioner: numberProvisioning() }, optionen).catch(() => {});
+      await handleProvisionJob(state, { payload: { numberId: nummer.id } }, { provisioner: numberProvisioning(), opts: optionen }).catch(() => {});
       lauf.fertig();
     },
   };

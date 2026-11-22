@@ -2,7 +2,7 @@ import { findNumber } from "../store/state-ops.js";
 import { provisionNumber } from "../onboarding.ts";
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 
-export async function handleProvisionJob(s, job, deps, opts) {
+export async function handleProvisionJob(s, job, { opts, ...deps }) {
   const { numberId } = job.payload;
   const number = findNumber(s, numberId);
   if (!number || number.status !== NUMBER_STATUS.REQUESTED)

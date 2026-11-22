@@ -701,9 +701,6 @@
   "src/worker/provisioning.js": {
     "id-length": {
       "count": 1
-    },
-    "max-params": {
-      "count": 1
     }
   },
   "test/_outbound-harness.js": {

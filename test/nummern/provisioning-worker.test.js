@@ -35,7 +35,7 @@ function drainWith(queue, s, deps, opts) {
   return queue.drain(async (queuedJob) => {
     const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
     try {
-      await handleProvisionJob(s, queuedJob, deps, opts);
+      await handleProvisionJob(s, queuedJob, { ...deps, opts: opts });
       if (record) record.status = PROVISIONING_JOB_STATUS.DONE;
     } catch (err) {
       if (record) record.status = PROVISIONING_JOB_STATUS.FAILED;
@@ -82,15 +82,10 @@ test("enqueue -> drain -> active: Number aktiv, e164 gesetzt, assignment + Job '
 test("Worker nur fuer 'requested': andere Zustaende -> skipped, KEIN Provider-Call", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov }, ARGS);
+  await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov, opts: ARGS });
   prov.log.length = 0;
 
-  const result = await handleProvisionJob(
-    s,
-    { payload: { numberId } },
-    { provisioner: prov },
-    ARGS,
-  );
+  const result = await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov, opts: ARGS });
 
   assert.deepEqual(result, { skipped: true, status: NUMBER_STATUS.ACTIVE });
   assert.deepEqual(prov.log, [], "kein Provider-Call fuer eine nicht-requested Number");
@@ -188,7 +183,7 @@ test("K1-7: nach Absturz nach dem Kauf stellt pg-boss den Auftrag erneut zu, der
   });
   recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
   const kaufen = (job) =>
-    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling() }, PAY_ARGS);
+    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling(), opts: PAY_ARGS });
 
   await queue.drain(kaufen);
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.ACTIVE);
@@ -215,7 +210,7 @@ test("K1-8: ein erneutes enqueue nach erledigtem Auftrag kauft keine zweite Numm
   recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
   const auftrag = { kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey };
   const kaufen = (job) =>
-    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling() }, PAY_ARGS);
+    handleProvisionJob(s, job, { provisioner: prov, billing: fakeBilling(), opts: PAY_ARGS });
 
   await queue.enqueue(auftrag);
   await queue.drain(kaufen);

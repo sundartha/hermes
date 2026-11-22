@@ -107,7 +107,7 @@ function einrichtungOhneHold(store) {
       const nummer = state.numbers.find((n) => n.status === "requested");
       const auftrag = { payload: { numberId: nummer.id } };
       const optionen = { countryCode: "US", holdAmountCents: 0, currency: "EUR" };
-      await handleProvisionJob(state, auftrag, { provisioner: numberProvisioning() }, optionen).catch(() => {});
+      await handleProvisionJob(state, auftrag, { provisioner: numberProvisioning(), opts: optionen }).catch(() => {});
       lauf.fertig();
     },
   };
