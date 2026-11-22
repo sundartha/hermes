@@ -1,3 +1,4 @@
+import { NEWSLETTER_LISTEN_LESEN_SQL } from "./newsletter-liste-sql.js";
 import {
   billingHoldActive,
   findTenant,
@@ -76,6 +77,14 @@ const schreiberFuer = (spalten) => async (client, tenantId, werte) => {
 
 export const sperreSchreiben = schreiberFuer(SPALTE_JE_SCHLUESSEL);
 
+const LISTEN_SCHLUESSEL = ["newsletterRecipients", "newsletterConfirmMailLog"];
+
+async function listeSchreiben(client, tenantId, sql, werte) {
+  const { rows } = await client.query(sql, [tenantId, ...werte]);
+  if (rows.length === 0) throw new Error("Mandant nicht in der Datenbank");
+  return rows[0];
+}
+
 const sperreZeile = async (client, tenantId) =>
   (await client.query(LESEN_SQL, [tenantId])).rows[0] ?? null;
 
@@ -86,6 +95,13 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
   const letzte = new Map();
   const unbestaetigt = new Set();
   const eintrag = (tenantId, key) => `${tenantId}/${key}`;
+
+  function listenUebernehmen(tenantId, zeile) {
+    const tenant = findTenant(requireState(), tenantId);
+    if (!tenant || offen.has(tenantId)) return;
+    tenant.newsletterRecipients = zeile.newsletter_recipients;
+    tenant.newsletterConfirmMailLog = zeile.newsletter_confirm_mail_log;
+  }
 
   function uebernehmen(tenantId, zeile) {
     const tenant = findTenant(requireState(), tenantId);
@@ -115,11 +131,11 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     else offen.delete(tenantId);
   }
 
-  async function ablauf(tenantId, werte) {
-    const eintraege = Object.keys(werte).map((key) => eintrag(tenantId, key));
+  async function ablauf(tenantId, schluessel, aktion, uebernahme) {
+    const eintraege = schluessel.map((key) => eintrag(tenantId, key));
     let zeile;
     try {
-      zeile = await einreihen((client) => schreibenMitSpalten(client, tenantId, werte));
+      zeile = await einreihen(aktion);
     } catch (err) {
       protokoll.error(SCHREIBFEHLER, err.message);
       eintraege.forEach((wert) => unbestaetigt.add(wert));
@@ -128,7 +144,7 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
       zurueckzaehlen(tenantId);
     }
     eintraege.forEach((wert) => unbestaetigt.delete(wert));
-    uebernehmen(tenantId, zeile);
+    uebernahme(tenantId, zeile);
     return true;
   }
 
@@ -139,14 +155,37 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     if (!tenant) return Promise.resolve(true);
     const werte = Object.fromEntries(schluessel.map((key) => [key, tenant[key] ?? null]));
     offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
-    const vorgang = ablauf(tenantId, werte);
+    const vorgang = ablauf(
+      tenantId,
+      Object.keys(werte),
+      (client) => schreibenMitSpalten(client, tenantId, werte),
+      uebernehmen,
+    );
     letzte.set(tenantId, vorgang);
     return vorgang;
+  }
+
+  function listeAendern(tenantId, { sql, werte }) {
+    offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
+    const vorgang = ablauf(
+      tenantId,
+      LISTEN_SCHLUESSEL,
+      (client) => listeSchreiben(client, tenantId, sql, werte),
+      listenUebernehmen,
+    );
+    letzte.set(tenantId, vorgang);
+    return vorgang;
+  }
+
+  async function listenAbgleichen() {
+    await Promise.all([...letzte.values()]);
+    const { rows } = await runner.withClient((client) => client.query(NEWSLETTER_LISTEN_LESEN_SQL));
+    rows.forEach((zeile) => listenUebernehmen(zeile.id, zeile));
   }
 
   async function schreibenPflicht(tenantId, schluessel) {
     if (!(await schreiben(tenantId, schluessel))) throw new Error(NICHT_GESCHRIEBEN);
   }
 
-  return { schreiben, schreibenPflicht, sperreLesen, privateNumberLesen, nichtBestaetigt };
+  return { schreiben, schreibenPflicht, listeAendern, listenAbgleichen, sperreLesen, privateNumberLesen, nichtBestaetigt };
 }

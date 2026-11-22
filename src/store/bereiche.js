@@ -278,12 +278,18 @@ export function speicherBereiche(speicher) {
         speicher.confirmedNewsletterRecipients(tenantId),
       setNewsletterConsent: async (tenantId, consent) =>
         speicher.setNewsletterConsent(tenantId, consent),
-      removeNewsletterRecipient: async (tenantId, email) =>
-        speicher.removeNewsletterRecipient(tenantId, email),
-      confirmNewsletterRecipientByToken: async (tokenHash, nowIso) =>
-        speicher.confirmNewsletterRecipientByToken(tokenHash, nowIso),
-      unsubscribeNewsletterRecipientByToken: async (token) =>
-        speicher.unsubscribeNewsletterRecipientByToken(token),
+      removeNewsletterRecipient: async (tenantId, email) => {
+        await speicher.newsletterAbgleichen?.();
+        return speicher.removeNewsletterRecipient(tenantId, email);
+      },
+      confirmNewsletterRecipientByToken: async (tokenHash, nowIso) => {
+        await speicher.newsletterAbgleichen?.();
+        return speicher.confirmNewsletterRecipientByToken(tokenHash, nowIso);
+      },
+      unsubscribeNewsletterRecipientByToken: async (token) => {
+        await speicher.newsletterAbgleichen?.();
+        return speicher.unsubscribeNewsletterRecipientByToken(token);
+      },
     },
     rueckfrage: {
       ackConsult: async (callId, eingabe) => speicher.ackConsult(callId, eingabe),

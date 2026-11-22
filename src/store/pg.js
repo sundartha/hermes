@@ -38,6 +38,7 @@ import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheTtsZaehlerSql } from "./tts-zaehler-sql.js";
+import { empfaengerAbmelden, empfaengerAnhaengen, empfaengerBestaetigen, empfaengerEntfernen } from "./newsletter-liste-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
@@ -120,8 +121,6 @@ const STAMMDATEN_SPALTEN = Object.freeze({
   privateNumber: "private_number",
   newsletterConsent: "newsletter_consent",
   newsletterConsentAt: "newsletter_consent_at",
-  newsletterRecipients: "newsletter_recipients",
-  newsletterConfirmMailLog: "newsletter_confirm_mail_log",
 });
 
 function anbinden(zustand, { einstellungen, profil, anrufpause, mandant, nutzung }) {
@@ -923,30 +922,31 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
     addNewsletterRecipient(tenantId, recipientInput) {
       const recipient = ops.addNewsletterRecipient(requireState(), tenantId, recipientInput);
       save();
-      mandant.schreiben(tenantId, ["newsletterRecipients", "newsletterConfirmMailLog"]);
+      mandant.listeAendern(tenantId, empfaengerAnhaengen(recipient, recipient.createdAt));
       return recipient;
     },
     removeNewsletterRecipient(tenantId, email) {
       const changed = ops.removeNewsletterRecipient(requireState(), tenantId, email);
       if (!changed) return changed;
       save();
-      mandant.schreiben(tenantId, ["newsletterRecipients"]);
+      mandant.listeAendern(tenantId, empfaengerEntfernen(email));
       return changed;
     },
     confirmNewsletterRecipientByToken(tokenHash, nowIso) {
       const result = ops.confirmNewsletterRecipientByToken(requireState(), tokenHash, nowIso);
       if (!result) return result;
       save();
-      mandant.schreiben(result.tenantId, ["newsletterRecipients"]);
+      mandant.listeAendern(result.tenantId, empfaengerBestaetigen(tokenHash, nowIso));
       return result;
     },
     unsubscribeNewsletterRecipientByToken(token) {
       const result = ops.unsubscribeNewsletterRecipientByToken(requireState(), token);
       if (!result) return result;
       save();
-      mandant.schreiben(result.tenantId, ["newsletterRecipients"]);
+      mandant.listeAendern(result.tenantId, empfaengerAbmelden(token));
       return result;
     },
+    newsletterAbgleichen: () => mandant.listenAbgleichen(),
 
     addNotification(title, body, callId) {
       const state = requireState();
