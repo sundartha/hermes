@@ -109,7 +109,7 @@ const anrufIn = (id) => {
 };
 const zeile = (callId, ursache) => `[el-vorspann] rueckfall grund=${GRUND} call=${callId} ursache=${ursache}`;
 
-function sende(callId, typ, status, bein = calleeVon(callId)) {
+function sende(callId, typ, { status, bein = calleeVon(callId) } = {}) {
   const payload = { call_control_id: bein, ...(status === undefined ? {} : { status }) };
   const roh = JSON.stringify({ data: { id: `evt-5902-${(zaehler += 1)}`, event_type: typ, payload } });
   const zeit = String(nowSeconds());
@@ -163,7 +163,7 @@ for (const [name, status, ursache] of [
     await warteAuf(() => aktionen(calleeVon(callId), "playback_start").length === 1);
     await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && anfrage.roh.includes(`vorspann-${callId}-el`)));
     await verarbeitet();
-    await sende(callId, "call.playback.ended", status);
+    await sende(callId, "call.playback.ended", { status });
     await pruefeRueckfall(callId, ursache);
   });
 }
@@ -172,7 +172,7 @@ test("5902-K4: Rueckfall ohne Ursache (EL-Bein nicht angenommen) bleibt ohne urs
   const callId = await abgehobenerAnruf();
   await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && anfrage.roh.includes(`vorspann-${callId}-el`)));
   await verarbeitet();
-  await sende(callId, "call.hangup", undefined, elVon(callId));
+  await sende(callId, "call.hangup", { bein: elVon(callId) });
   const zeileOhne = `[el-vorspann] rueckfall grund=el_nicht_angenommen call=${callId}\n`;
   await warteAuf(() => umgebung.srv.stdout.includes(zeileOhne));
   assert.ok(umgebung.srv.stdout.includes(zeileOhne));
