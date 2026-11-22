@@ -505,7 +505,6 @@ const vorWahlAbgebrochenBody = (callId: string) => ({
   callId,
 });
 
-const ANSPRUCH_SCHLUESSEL = "anspruch";
 const CLAIM_ERROR_MESSAGE =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
 
@@ -695,7 +694,6 @@ export function makeCallRoutes({
 }: Abhaengigkeiten): Router {
   const router = Router();
   const jeSchluessel: <T>(schluessel: string, arbeit: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
-  const einAnspruchJeProzess = <T>(arbeit: () => Promise<T>): Promise<T> => jeSchluessel(ANSPRUCH_SCHLUESSEL, arbeit);
   const bereiche: Bereiche = speicherBereiche(store);
   const { einreihen, macheAuftrag, verdrahtung, uhr, abschaltend } = { ...ANRUFSTART_UNVERDRAHTET, ...anrufstart };
 
@@ -932,7 +930,7 @@ export function makeCallRoutes({
         diagnostic,
         calleeIsOwner: calleeIsOwnerOfThisCall,
       };
-      const claim = await einAnspruchJeProzess(() =>
+      const claim = await jeSchluessel(String(ctx.tenantId), () =>
         mitAnrufSperre(ctx.tenantId, () =>
           claimCallRecord({ store, leitungsplaetze, ctx, felder, nowMs: Date.now(), callQuotaDenial, wartet }),
         ),
