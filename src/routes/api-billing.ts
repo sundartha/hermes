@@ -11,7 +11,7 @@ import { speicherBereiche } from "../store.js";
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
 import { createRateLimiter } from "../middleware.ts";
-import { internalOnly } from "../wiring/internal-only.js";
+import { internalOnly } from "../wiring/internal-only.ts";
 import { pruefeAbfrage } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_SERVER_ERROR, antworteFehler } from "../utils/http.ts";
 
