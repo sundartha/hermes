@@ -95,6 +95,7 @@ export function makeProvisioningOrchestrator({
         tenantId,
         number: ergebnis.number,
         hoechstens: Math.min(1, config.provisioning.maxNumbersPerTenant),
+        plattformHoechstens: config.provisioning.maxNumbers,
       });
     } catch (fehler) {
       await zurueck().catch(() => {});

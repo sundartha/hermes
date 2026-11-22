@@ -8,6 +8,8 @@ const FEHLER = "[pg] nummernkauf fehlgeschlagen:";
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 const SPERRE_SQL = `SELECT id FROM tenant WHERE id = $1 FOR UPDATE`;
 const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2) AND id <> $3`;
+const GLOBALE_SPERRE_SQL = `SELECT set_config('lock_timeout', '5s', true), pg_advisory_xact_lock(2987, 1)`;
+const PLATTFORM_SQL = `SELECT nummern_lebend_gesamt($1) AS anzahl`;
 const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country, language)
   VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`;
 const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz)
@@ -61,9 +63,12 @@ const nummerEinfuegen = (client, tenantId, number) =>
     number.language ?? null,
   ]);
 
-async function nummerAnlegen(client, { tenantId, number, hoechstens }) {
+async function nummerAnlegen(client, { tenantId, number, hoechstens, plattformHoechstens }) {
   const { rows } = await client.query(LEBENDE_SQL, [tenantId, NICHT_ZAEHLEND, number.id]);
   if (rows[0].anzahl >= hoechstens) return { ok: false };
+  await client.query(GLOBALE_SPERRE_SQL);
+  const { rows: plattform } = await client.query(PLATTFORM_SQL, [number.id]);
+  if (plattform[0].anzahl >= plattformHoechstens) return { ok: false };
   await nummerEinfuegen(client, tenantId, number);
   return { ok: true };
 }

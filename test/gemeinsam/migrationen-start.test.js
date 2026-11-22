@@ -44,6 +44,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "29", name: "0029_provisioning_job_eindeutig" },
   { version: "30", name: "0030_nummer_schluessel" },
   { version: "31", name: "0031_provisioning_job_instanz" },
+  { version: "32", name: "0032_nummer_lebend" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -159,6 +160,7 @@ test(
         "0029_provisioning_job_eindeutig",
         "0030_nummer_schluessel",
         "0031_provisioning_job_instanz",
+        "0032_nummer_lebend",
       ],
       "ein Name je Datei: 0001_ausgang",
     );
@@ -182,7 +184,7 @@ test(
     const versionen = (await eingetragen(verbindung)).map((zeile) => zeile.version);
     assert.deepEqual(
       versionen,
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31"],
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"],
       "Version 1, 2 und 3 müssen eingetragen sein (0001_ausgang)",
     );
     assert.equal(await kontenZaehlen(verbindung), kontenVorher);
