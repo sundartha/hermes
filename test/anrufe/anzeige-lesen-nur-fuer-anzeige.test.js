@@ -9,13 +9,24 @@ const KUNDE = "t_anzeige_lesen";
 const ZIEL = "+4915112349966";
 const JETZT = "2026-11-22T18:50:00.000Z";
 
+function neuerZustand() {
+  const zustand = {
+    abfragen: 0,
+    fehler: false,
+    zaehlen: () => {
+      zustand.abfragen += 1;
+    },
+  };
+  return zustand;
+}
+
 function zaehlenderRunner(db, zustand) {
   return {
     withClient: (fn) => {
       if (zustand.fehler) throw new Error("db weg");
       return fn({
         query: (text, params) => {
-          zustand.abfragen += 1;
+          zustand.zaehlen();
           return db.query(text, params);
         },
         exec: (sql) => db.exec(sql),
@@ -24,7 +35,7 @@ function zaehlenderRunner(db, zustand) {
   };
 }
 
-async function neueInstanz(db, zustand = { abfragen: 0, fehler: false }) {
+async function neueInstanz(db, zustand = neuerZustand()) {
   const store = makePgStore(zaehlenderRunner(db, zustand));
   await store.init();
   return store;
@@ -58,7 +69,7 @@ async function abfrage(store, callId) {
 async function zweiInstanzen() {
   const db = await pgliteAlsRolleOhneSuperuser();
   await anrufAnlegen(db);
-  const zustand = { abfragen: 0, fehler: false };
+  const zustand = neuerZustand();
   const a = await neueInstanz(db, zustand);
   const b = await neueInstanz(db);
   const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
@@ -99,7 +110,7 @@ test("leseCallUngebunden liest einen fremden Anruf aus der Datenbank", async () 
   const db = await pgliteAlsRolleOhneSuperuser();
   await anrufAnlegen(db);
   const a = await neueInstanz(db);
-  const zustand = { abfragen: 0, fehler: false };
+  const zustand = neuerZustand();
   const b = await neueInstanz(db, zustand);
   const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
   await a.persistCall(call.id);
