@@ -137,10 +137,18 @@ async function auflegen() {
   zeile(`probe_aufgelegt_${await modul.anrufer.offeneBeenden()}`);
 }
 
+async function fehlendMelden(fehlt) {
+  zeile(uebersprungenText(fehlt));
+  if (ALARMWEGE.some((name) => env[name]) && COMMIT.test(env.GITHUB_SHA ?? "")) {
+    await alarmSenden(new Date().toISOString());
+  }
+  throw new Ende(uebersprungenText(fehlt));
+}
+
 async function hauptprogramm() {
   if (process.argv[2] === "auflegen") return auflegen();
   const fehlt = fehlenderName();
-  if (fehlt !== undefined) ende(uebersprungenText(fehlt));
+  if (fehlt !== undefined) return fehlendMelden(fehlt);
   for (const name of PFLICHT) zeile(`::add-mask::${env[name]}`);
   if (!COMMIT.test(env.GITHUB_SHA ?? "")) {
     ende("probe_commit_unklar");

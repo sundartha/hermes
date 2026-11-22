@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
@@ -67,3 +68,48 @@ test("auflegen ohne STAGING_PROBE_ZIEL bleibt grün übersprungen", async () => 
   assert.equal(code, 0);
   assert.match(ausgabe, /probe_uebersprungen_staging_probe_ziel_fehlt/);
 });
+
+function stubStarten(empfangen) {
+  const dienst = createServer((anfrage, rueckgabe) => {
+    const teile = [];
+    anfrage.on("data", (stueck) => teile.push(stueck));
+    anfrage.on("end", () => {
+      const roh = Buffer.concat(teile).toString();
+      if (anfrage.method === "GET") {
+        rueckgabe.writeHead(200, { "content-type": "application/json" });
+        return rueckgabe.end("[]");
+      }
+      empfangen.push(JSON.parse(roh));
+      rueckgabe.writeHead(201, { "content-type": "application/json" });
+      rueckgabe.end(JSON.stringify({ number: 7 }));
+    });
+  });
+  return new Promise((fertig) => dienst.listen(0, "127.0.0.1", () => fertig(dienst)));
+}
+
+for (const name of VARIABLEN) {
+  test(`Fehlt ${name}: der Alarm geht an Slack, Lauf rot`, async () => {
+    const slackEmpfangen = [];
+    const githubEmpfangen = [];
+    const slack = await stubStarten(slackEmpfangen);
+    const github = await stubStarten(githubEmpfangen);
+    try {
+      const ergebnis = await aufrufen({
+        GITHUB_EVENT_NAME: "schedule",
+        [name]: "",
+        SLACK_ALERT_URL: `http://127.0.0.1:${slack.address().port}/s`,
+        GITHUB_TOKEN: "t",
+        GITHUB_REPOSITORY: "sundartha/hermes",
+        GITHUB_RUN_ID: "88",
+        GITHUB_API_URL: `http://127.0.0.1:${github.address().port}`,
+      });
+      assert.equal(ergebnis.code, 1);
+      assert.equal(slackEmpfangen.length, 1);
+      assert.match(slackEmpfangen[0].text, /Staging-Anrufprobe rot/);
+      assert.equal(githubEmpfangen.length, 1);
+    } finally {
+      slack.close();
+      github.close();
+    }
+  });
+}
