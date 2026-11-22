@@ -142,10 +142,13 @@ async function loescheElKonversation(call: Call, endActiveCall: CallLifecycleDep
 
 async function loescheOhneAuflegeweg(
   call: Call,
-  { hangUpAction, voiceControl, endActiveCall }: Pick<CallLifecycleDeps, "hangUpAction" | "voiceControl" | "endActiveCall">,
+  { store, hangUpAction, voiceControl, endActiveCall }: Pick<CallLifecycleDeps, "store" | "hangUpAction" | "voiceControl" | "endActiveCall">,
+  grund?: string,
 ): Promise<void> {
   const weg = hangUpAction(voiceControl, call, call.twilioSid) ?? elevenLabsHangUpAction(endActiveCall, call);
-  if (!weg) await loescheElKonversation(call, endActiveCall);
+  if (weg) return;
+  if (grund) store.recordFailureReason(call.id, grund);
+  await loescheElKonversation(call, endActiveCall);
 }
 
 function activeCallsOf(store: Store): Call[] {
@@ -191,10 +194,10 @@ function makeBudgetAxisSeam({
 
 async function beendeUeberBudgetOhneWeg(
   call: Call,
-  ohneWeg: (call: Call) => Promise<void>,
+  ohneWeg: (call: Call, grund?: string) => Promise<void>,
   { terminateOverBudgetCall }: Pick<ReturnType<typeof makeBudgetAxisSeam>, "terminateOverBudgetCall">,
 ): Promise<void> {
-  await ohneWeg(call);
+  await ohneWeg(call, BUDGET_FAILURE_REASON);
   const { id: callId, twilioSid: providerCallSid } = call;
   await terminateOverBudgetCall({ callId, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG });
 }
@@ -248,7 +251,8 @@ export function makeCallLifecycle({
     store, billing: config.billing, blockingBudgetAxis, terminateActiveCall,
   });
 
-  const ohneWeg = (call: Call) => loescheOhneAuflegeweg(call, { hangUpAction, voiceControl, endActiveCall });
+  const ohneWeg = (call: Call, grund?: string) =>
+    loescheOhneAuflegeweg(call, { store, hangUpAction, voiceControl, endActiveCall }, grund);
 
   const prozessStartMs = Date.now();
 

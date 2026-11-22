@@ -39,8 +39,8 @@ const AUFBEWAHREN_MELDUNGEN_SQL = `DELETE FROM notification WHERE tenant_id = $1
 const GRENZE = (tage) => new Date(Date.now() - Math.max(tage, 0) * MS_PER_DAY).toISOString();
 
 const ENDE_FELDER = ["status", "endedAt", "consults"];
-const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
-const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null];
+const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5, failure_reason = COALESCE(failure_reason, $6) WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null, call.failureReason ?? null];
 
 const ZAEHLER = {
   noSpeech: {
