@@ -1,7 +1,8 @@
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
-const FEHLER = "[fristen] faellige Fristen lesen fehlgeschlagen:";
+const ERSTER_PLATZ_NACH_LEASE = 4;
+const FEHLER ="[fristen] faellige Fristen lesen fehlgeschlagen:";
 const ABGEHOBEN_PLUS_DAUER = `(answered_at::timestamptz + COALESCE(NULLIF(max_duration_s, 0), $4::int) * interval '1 second')`;
 const AKTIV_SQL = "status = 'active'";
 const istAktiv = (call) => call.status === "active";
@@ -81,7 +82,7 @@ const KONTEXT_SQL = "SELECT set_config('app.current_tenant', $1, true)";
 
 const ohneLebendenBesitzer = (eintrag) =>
   eintrag.nurOhneLebendenBesitzer
-    ? ` AND NOT COALESCE(instanz = ANY($${4 + eintrag.parameter.length}::text[]), false)`
+    ? ` AND NOT COALESCE(instanz = ANY($${ERSTER_PLATZ_NACH_LEASE + eintrag.parameter.length}::text[]), false)`
     : "";
 
 const holenSql = (eintrag) => {
