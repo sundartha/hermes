@@ -4,7 +4,7 @@ import { neueUhr, pgBossUmgebung } from "../gemeinsam/pgboss-umgebung.js";
 import { fakeProvisioner } from "../helpers.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeGracefulShutdown } from "../../src/abschalten.js";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 
 const KIND = "provision_number";

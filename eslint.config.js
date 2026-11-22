@@ -93,7 +93,7 @@ const UHR_QUELLEN_BESTAND = [
   "src/store/zustand/listen.js",
   "src/store/zustand/nummern.ts",
   "src/store/zustand/nutzung.js",
-  "src/worker/provisioning-orchestrator.js",
+  "src/worker/provisioning-orchestrator.ts",
 ];
 const UHR_DATUM_REGEL = { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: UHR_MELDUNG };
 const QUELL_DATEIEN = `src/**/*.${ENDUNGEN}`;
