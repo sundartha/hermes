@@ -5,7 +5,7 @@ import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { tenantGeoForCountry } from "../../src/geo/resolve.js";
 import { LOCALES, localeFor } from "../../src/i18n/locales.ts";
 import { resolveCallLanguage } from "../../src/store/state-ops.js";
-import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
+import { EINE_STIMME_ID } from "../../src/elevenlabs/stimme-festlegen.ts";
 
 const OWNER_NAME = "Owen Barrett";
 
@@ -19,8 +19,6 @@ const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";
 const VOICE_PROFILE_EN = "en-female-neural";
 const VOICE_ID_DE = "cqPdIo76zSHFDcSZpFov";
-const VOICE_ID_FR = "WeAAwKYcS06VmXw086yZ";
-const VOICE_ID_EN = "ZSNL4hPqCnqoMPaI4jGX";
 
 const CASES = Object.freeze([
   {
@@ -44,7 +42,7 @@ const CASES = Object.freeze([
     }),
     language: "fr",
     voiceProfile: VOICE_PROFILE_FR,
-    voiceId: VOICE_ID_FR,
+    voiceId: VOICE_ID_DE,
     disclosureStart: "Bonjour,",
   },
   {
@@ -53,7 +51,7 @@ const CASES = Object.freeze([
     stateOf: () => ({ tenants: [{ id: TENANT_OHNE_SPRACHE }], settings: {} }),
     language: "en",
     voiceProfile: VOICE_PROFILE_EN,
-    voiceId: VOICE_ID_EN,
+    voiceId: VOICE_ID_DE,
     disclosureStart: "Hello,",
   },
 ]);
@@ -90,7 +88,7 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
     const locale = localeFor(language);
     assert.equal(locale.voiceProfile, kase.voiceProfile, `Stimmprofil im Fall "${kase.name}"`);
     assert.equal(
-      elevenLabsVoiceIdFor(PLATFORM_VOICE_ID, locale.voiceProfile),
+      EINE_STIMME_ID,
       kase.voiceId,
       `ElevenLabs-Stimme im Fall "${kase.name}"`,
     );
@@ -108,10 +106,7 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
   }
 
   assertUnterscheidbar(merkmalJeFall(bestandsSpracheFor), "die Sprache");
-  assertUnterscheidbar(
-    merkmalJeFall((kase) => elevenLabsVoiceIdFor(PLATFORM_VOICE_ID, kase.voiceProfile)),
-    "die ElevenLabs-Stimme",
-  );
+  assert.equal(EINE_STIMME_ID, VOICE_ID_DE, "eine Stimme fuer alle Sprachen");
   assertUnterscheidbar(
     merkmalJeFall((kase) => disclosureFor(kase.language)),
     "der Offenlegungssatz",
@@ -146,10 +141,7 @@ async function callLocaleSeam() {
 test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
   for (const kase of CASES)
     assert.equal(bestandsSpracheFor(kase), kase.language, `Bestands-Aufloesung "${kase.name}"`);
-  assertUnterscheidbar(
-    merkmalJeFall((kase) => elevenLabsVoiceIdFor(PLATFORM_VOICE_ID, kase.voiceProfile)),
-    "die ElevenLabs-Stimme",
-  );
+  assert.equal(EINE_STIMME_ID, VOICE_ID_DE, "eine Stimme fuer alle Sprachen");
   assertUnterscheidbar(
     merkmalJeFall((kase) => disclosureFor(kase.language)),
     "der Offenlegungssatz",
@@ -172,8 +164,8 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     assert.equal(
       gewaehlt?.voiceId,
       VOICE_ID_DE,
-      `Fall "${kase.name}": die Stimme folgt der Sprache (dieselbe Aufloesung wie der ` +
-        "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
+      `Fall "${kase.name}": die Stimme folgt der Sprache (eine Stimme fuer alle Sprachen, ` +
+        "EINE_STIMME_ID) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",
     );
     assert.equal(

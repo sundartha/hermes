@@ -29,7 +29,6 @@ const PFADE = Object.freeze({
   eingangsstart: "src/elevenlabs/inbound-initiation.js",
   prompts: "src/i18n/prompts",
   locales: "src/i18n/locales.js",
-  stimmen: "src/telephony/adapters/telnyx/elevenlabs-voice.ts",
   vorlage: "elevenlabs/agent_configs/outbound-agent.template.json",
 });
 
@@ -204,16 +203,6 @@ async function localeTeile(wurzel, bekannt) {
   }
 }
 
-async function stimmenTeile(wurzel) {
-  return {
-    stimmen: await sicher(async () => {
-      const { ELEVENLABS_VOICE_ID_BY_PROFILE: tabelle } = await import(modulAdresse(wurzel, PFADE.stimmen));
-      if (!istEinfachesObjekt(tabelle)) throw new TypeError("Stimmen-Tabelle fehlt");
-      return tabelle;
-    }),
-  };
-}
-
 function wertAnPfad(wurzel, pfad) {
   let aktuell = wurzel;
   for (const segment of String(pfad).split(".")) {
@@ -259,7 +248,6 @@ async function abdruck(wurzel) {
   return {
     ...prompts,
     ...(await localeTeile(wurzel, bekannt)),
-    ...(await stimmenTeile(wurzel)),
     ...vorlageTeile(wurzel),
     ...(await anrufstartTeile(wurzel)),
     ...(await eingangsTeile(wurzel)),
