@@ -190,16 +190,29 @@ export function makeVorspannAblauf({
   const zustaende = new Map();
   const abgehobeneAnrufe = new Set();
 
+  async function waehleBein({ steuerung, call, token }) {
+    try {
+      const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
+      if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
+      return callControlId;
+    } catch (fehler) {
+      ttsStore.release(token);
+      throw fehler;
+    }
+  }
+
   async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
-    const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
-    if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
+    const token = await ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
+    const callControlId = await waehleBein({ steuerung, call, token });
     if (call.status === "active") {
-      const token = await ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
       const zustand = { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() };
       zustaende.set(call.id, zustand);
       armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, zustand, store, voiceControl, abgehobeneAnrufe, beiAufgelegt }) });
-    } else await legeBeinAuf(steuerung, call.id, callControlId);
+    } else {
+      ttsStore.release(token);
+      await legeBeinAuf(steuerung, call.id, callControlId);
+    }
     return { callControlId };
   }
 

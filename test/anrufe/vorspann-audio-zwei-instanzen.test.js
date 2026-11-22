@@ -109,3 +109,35 @@ test("Vorspann-Audio eines auf Instanz A gestarteten Anrufs ist ueber Instanz B 
     assert.equal(uebrig.rows[0].anzahl, 0);
   });
 });
+
+test("Liefert der Anbieter fuer das Vorspann-Bein keine Kennung, bleibt kein Vorspann-Audio in der Ablage", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  const anbieter = await starteAttrappe((anfrage, antwort) => {
+    anfrage.resume();
+    anfrage.on("end", () => {
+      if (anfrage.url.startsWith(TTS_PFAD)) {
+        antwort.writeHead(HTTP_OK, { "content-type": TYP });
+        return antwort.end(AUDIO);
+      }
+      antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
+      antwort.end(JSON.stringify({ data: {} }));
+    });
+  });
+  t.after(() => anbieter.close());
+  const env = {
+    ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+    ELEVENLABS_OUTBOUND_VORSPANN: "true",
+    ELEVENLABS_API_BASE: anbieter.url,
+    TELNYX_API_BASE: anbieter.url,
+  };
+  await mitZweiHermesAufPostgres(t, { env }, async ({ a, sql }) => {
+    const start = await abrufMitFrist(`${a.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: ZIEL, objective: "Termin am Donnerstag vereinbaren" }),
+    });
+    assert.notEqual(start.status, HTTP_OK);
+    const uebrig = await sql("SELECT count(*)::int AS anzahl FROM tts_ablage");
+    assert.equal(uebrig.rows[0].anzahl, 0);
+  });
+});
