@@ -226,6 +226,7 @@ jobs:
           set -euo pipefail
           PR_TEXT=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json body -q .body)
           export PR_TEXT
+          node tools/pruefen.mjs fehlerfall-pflicht --basis "$BASIS"
           mapfile -t ausnahmen < <(node tools/pruefen.mjs rotprobe-ausnahmen)
           mapfile -t neu < <(git diff --name-only --diff-filter=A "$BASIS" -- test | grep -E '\.test\.[cm]?[jt]s$' || true)
           if [ "${#neu[@]}" -eq 0 ] || git diff --quiet "$BASIS" -- src; then

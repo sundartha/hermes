@@ -121,6 +121,8 @@ const BASIS_ROT_ZEILEN = 40;
 const BASIS_ROT_ZEICHEN = 4000;
 const SCHUTZ = /stryMutAct_\w+\("(\d+)"\)/g;
 const BEGRUENDUNG_MINDESTENS = 20;
+const KEIN_FEHLERFALL_MINDESTENS = 40;
+const FEHLERFALL_PFADE = ["src/elevenlabs/", "src/telephony/", "src/conversation/", "src/routes/voice.ts", "src/store/instanz-besitz.js", "src/store/zustand/"];
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
 const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
@@ -777,6 +779,20 @@ export function mutationUrteil(mutanten, minuten) {
   return offen.length === 0 && unbelegt.length === 0;
 }
 
+export function fehlerfallPflicht(geaenderte, neueTests, prText) {
+  const betroffen = geaenderte.filter((datei) => FEHLERFALL_PFADE.some((pfad) => datei.startsWith(pfad)));
+  if (betroffen.length === 0 || neueTests.some((datei) => TESTDATEI.test(datei))) return [];
+  const abschnitt = (prText ?? "").split(/^## /m).find((teil) => teil.startsWith("Kein Fehlerfall")) ?? "";
+  if (abschnitt.slice(abschnitt.indexOf("\n") + 1).trim().length >= KEIN_FEHLERFALL_MINDESTENS) return [];
+  return [`Rot: ${betroffen.join(", ")} ändert Anrufweg, Vorspann, ElevenLabs, Telnyx oder Instanz-Zustand ohne neue Testdatei. Pflicht: ein Test, der den Fehlerfall nachstellt und auf master rot ist; bei reinem Umbau stattdessen im PR-Text der Abschnitt „## Kein Fehlerfall“ mit einer Begründung von mindestens ${KEIN_FEHLERFALL_MINDESTENS} Zeichen.`];
+}
+
+function fehlerfallPruefen(basis, prText) {
+  const meldungen = fehlerfallPflicht(git(["diff", "--name-only", basis, "--", "src"]).split("\n"), git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n"), prText);
+  for (const meldung of meldungen) console.log(meldung);
+  return meldungen.length === 0;
+}
+
 function prTextLesen(argv) {
   try {
     const { body } = JSON.parse(readFileSync(argv[ERSTE_DATEI], "utf8"));
@@ -807,6 +823,7 @@ function prTextVorab(argv) {
   const prText = prTextLesen(argv);
   if (prText === undefined) return EXIT_UNLESBAR;
   const basis = basisAus(argv);
+  if (!fehlerfallPruefen(basis, prText)) return EXIT_ROT;
   const hinzugekommen = git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n");
   if (!hinzugekommen.some((datei) => TESTDATEI.test(datei)) || git(["diff", "--name-only", basis, "--", "src"]) === "") {
     console.log("Keine neue Testdatei zusammen mit einer Änderung unter src/: nichts zu prüfen.");
@@ -1051,6 +1068,10 @@ async function main() {
   }
   if (gewuenscht === "pr-text") {
     process.exitCode = prTextVorab(process.argv);
+    return;
+  }
+  if (gewuenscht === "fehlerfall-pflicht") {
+    if (!fehlerfallPruefen(basisAus(process.argv), env.PR_TEXT)) process.exitCode = EXIT_ROT;
     return;
   }
   if (gewuenscht === "betroffen") {
