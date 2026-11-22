@@ -355,6 +355,7 @@ export const {
   ausfallSql,
   nummernSql,
   nummerNachladen,
+  newsletterAbgleichen,
   load,
   save,
   drainFlushes,
