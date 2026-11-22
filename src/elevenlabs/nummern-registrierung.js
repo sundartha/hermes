@@ -22,7 +22,7 @@ export function registrierungsKoerper({ e164, numberId, agentId }) {
 
 export function fehlendeZugangsdaten({ el }) {
   if (!el?.apiKey) return "ELEVENLABS_API_KEY fehlt";
-  if (!el?.agentId) return "ELEVENLABS_AGENT_ID fehlt";
+  if (!el.agentId) return "ELEVENLABS_AGENT_ID fehlt";
   return null;
 }
 
@@ -48,7 +48,7 @@ export function makeElSipRegistrar({ el, fetchImpl = anfrage, logger = console }
     const { accepted, status } = await elevenlabsNummernKonto().deletePhoneNumber({ fetchImpl, account: el, phoneNumberId });
     if (!accepted)
       logger.warn(
-        `[el-registrierung] Loeschversuch FEHLGESCHLAGEN phone_number_id=${phoneNumberId} status=${status ?? "unbekannt"} - Waise beim Anbieter moeglich, s. Reparaturlauf`,
+        `[el-registrierung] Loeschversuch FEHLGESCHLAGEN phone_number_id=${phoneNumberId} status=${String(status ?? "unbekannt")} - Waise beim Anbieter moeglich, s. Reparaturlauf`,
       );
     return { accepted, status };
   }
@@ -137,7 +137,7 @@ export function inboundTrunkSchreiberWennErlaubt(config) {
 
 export function makeInboundTrunkSchreiber({ el, zugang, fetchImpl = anfrage, logger = console }) {
   const soll = { sipUser: zugang.sipUser, agentId: el.agentId };
-  const lies = (phoneNumberId) => elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId });
+  const lies = (phoneNumberId) => elevenlabsNummernKonto().fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId: String(phoneNumberId) });
 
   async function ensureInboundTrunk(number) {
     const body = inboundTrunkKoerper({ benutzer: zugang.sipUser, passwort: zugang.sipPassword, e164: number.e164 });
