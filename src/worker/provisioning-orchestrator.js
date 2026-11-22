@@ -94,7 +94,7 @@ export function makeProvisioningOrchestrator({
       gebucht = await bereiche.nummernkauf.legeNummerAn({
         tenantId,
         number: ergebnis.number,
-        hoechstens: config.provisioning.maxNumbersPerTenant,
+        hoechstens: Math.min(1, config.provisioning.maxNumbersPerTenant),
       });
     } catch (fehler) {
       await zurueck().catch(() => {});
