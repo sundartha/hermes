@@ -34,3 +34,9 @@ anrufer.offeneBeenden = async () => {
   zeile("AUFGELEGT");
   return FALL.offene ?? 0;
 };
+
+if (FALL.eigeneNummerFehler) {
+  anrufer.eigeneNummer = async () => {
+    throw new Error("get_agent_number gescheitert");
+  };
+}

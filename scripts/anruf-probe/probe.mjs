@@ -87,11 +87,29 @@ async function tagesStandOk(anrufer) {
   return stand.erstversuche < MAX_ERSTVERSUCHE && stand.anrufe <= MAX_ANRUFE - ANRUFE_JE_PROBE;
 }
 
+const SCHREIBWEISE = /[\s\-().]/g;
+const LETZTE_ZIFFERN = 4;
+
+function normalisiert(nummer) {
+  return String(nummer).replace(SCHREIBWEISE, "");
+}
+
+function endziffern(nummer) {
+  return normalisiert(nummer).replace(/\D/g, "").slice(-LETZTE_ZIFFERN);
+}
+
+function nummerLesbar(nummer) {
+  return typeof nummer === "string" && normalisiert(nummer) !== "";
+}
+
 async function zielGeprueft(anrufer) {
-  const ziel = zielErlaubt(env.STAGING_URL, "staging");
-  const eigene = ziel.erlaubt ? await anrufer.eigeneNummer().catch(() => null) : null;
-  if (eigene !== env.STAGING_PROBE_ZIEL) {
-    ende("probe_ziel_unerlaubt");
+  if (!zielErlaubt(env.STAGING_URL, "staging").erlaubt) ende("probe_ziel_unerlaubt: adresse_nicht_staging");
+  const eigene = await anrufer.eigeneNummer().catch(() => null);
+  if (!nummerLesbar(eigene)) ende("probe_ziel_unerlaubt: nummer_nicht_lesbar");
+  if (normalisiert(eigene) !== normalisiert(env.STAGING_PROBE_ZIEL)) {
+    ende(
+      `probe_ziel_unerlaubt: nummer_weicht_ab eigene=${endziffern(eigene)} ziel=${endziffern(env.STAGING_PROBE_ZIEL)}`,
+    );
   }
 }
 
