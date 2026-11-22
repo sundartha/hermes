@@ -18,6 +18,8 @@ export function setzeVorAuflegenHaken(haken) {
   vorAuflegenHaken = haken;
 }
 
+const vorHangupAntwort = (url) => (url.endsWith("/actions/hangup") ? vorAuflegenHaken(url) : undefined);
+
 export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null) {
   const pfade = [];
   const anfragen = [];
@@ -35,7 +37,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnun
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
-      if (req.url.endsWith("/actions/hangup")) await vorAuflegenHaken(req.url);
+      await vorHangupAntwort(req.url);
       const waehlaufruf = req.url === "/v2/calls" ? JSON.parse(roh) : null;
       if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
       const befehl = waehlaufruf ? waehlaufruf.command_id : "";
