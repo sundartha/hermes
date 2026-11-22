@@ -7,7 +7,7 @@ test("Proxy-Guard: unbekannter Top-Level-Key wirft TypeError statt undefined", (
 });
 
 test("Proxy-Guard: unbekannter verschachtelter Key wirft TypeError", () => {
-  assert.throws(() => config.telnyx.telnyxElevenLabs.doesNotExistNested, TypeError);
+  assert.throws(() => config.voice.elevenLabsPlayTts.doesNotExistNested, TypeError);
 });
 
 test("Proxy-Guard: legitimer Zugriff liefert weiterhin den echten Default-Wert", () => {
@@ -35,8 +35,8 @@ test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.ins
 });
 
 test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duck-Typing)", () => {
-  assert.doesNotThrow(() => JSON.stringify(config.telnyx.telnyxElevenLabs));
-  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyx.telnyxElevenLabs)), { voiceId: "" });
+  assert.doesNotThrow(() => JSON.stringify(config.voice.elevenLabsPlayTts));
+  assert.equal(JSON.parse(JSON.stringify(config.voice.elevenLabsPlayTts)).outputFormat, "mp3_44100_128");
 });
 
 test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-Duck-Typing)", () => {
@@ -44,18 +44,18 @@ test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-D
 });
 
 test("Proxy-Guard: await/Promise.resolve auf eine Config-Gruppe wirft nicht (then-Duck-Typing)", async () => {
-  const awaited = await config.telnyx.telnyxElevenLabs;
-  assert.equal(awaited.voiceId, "");
-  const resolved = await Promise.resolve(config.telnyx.telnyxElevenLabs);
-  assert.equal(resolved.voiceId, "");
+  const awaited = await config.voice.elevenLabsPlayTts;
+  assert.equal(awaited.outputFormat, "mp3_44100_128");
+  const resolved = await Promise.resolve(config.voice.elevenLabsPlayTts);
+  assert.equal(resolved.outputFormat, "mp3_44100_128");
 });
 
 test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewacht", () => {
-  assert.throws(() => config.telnyx.telnyxElevenLabs.doesNotExistNested, TypeError);
+  assert.throws(() => config.voice.elevenLabsPlayTts.doesNotExistNested, TypeError);
 });
 
-test("telnyx-Namespace: telnyxAssistant existiert nicht mehr", () => {
-  assert.throws(() => config.telnyx.telnyxAssistant, TypeError);
+test("voice-Namespace: telnyxAssistant existiert nicht mehr", () => {
+  assert.throws(() => config.voice.telnyxAssistant, TypeError);
 });
 
 test("Flip: die Flach-Aliase existieren nicht mehr (Read wirft TypeError)", () => {
