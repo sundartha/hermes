@@ -86,7 +86,6 @@ test("buildSettingsPatch baut ausschliesslich die Whitelist-Felder", () => {
     "allowBankData",
     "allowPersonalData",
     "greeting",
-    "language",
   ]);
 });
 
@@ -119,9 +118,9 @@ test("buildSettingsPatch: explizit uebergebene Permission-Booleans reisen weiter
   assert.deepEqual(patch, { allowPersonalData: true, allowBankData: false });
 });
 
-test("buildSettingsPatch: das reale Insel-Formular (nur language) sendet weder agentName/agentStyle/greeting noch Toggles", () => {
+test("buildSettingsPatch: language reist nicht mehr mit (Spracheinstellung entfaellt, Issue #5986)", () => {
   const patch = buildSettingsPatch({ language: "fr" });
-  assert.deepEqual(patch, { language: "fr" });
+  assert.deepEqual(patch, {});
 });
 
 test("buildSettingsPatch: Toggle-Werte werden zu Boolean normalisiert", () => {

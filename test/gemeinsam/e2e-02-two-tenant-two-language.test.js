@@ -32,7 +32,7 @@ function twoTenantSeed() {
   return s;
 }
 
-test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex E2E-02)", async () => {
+test("Inbound-Greeting - Tenant B (Einstellung en) spricht deutsch, die Einstellung wirkt nicht (ex E2E-02, Issue #5986 Kriterium 7)", async () => {
   const srv = await startServer({ seed: twoTenantSeed() });
   try {
     const [resA, resB] = await Promise.all([
@@ -47,13 +47,9 @@ test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex
     const callIdVon = (sid) => calls.find((call) => call.twilioSid === sid).id;
     const xmlA = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02a") })).text();
     const xmlB = await (await postElRueckfall(srv, { callId: callIdVon("CAe2e02b") })).text();
-    assert.match(xmlA, /KI-Assistent/, "Tenant A (DE) spricht weiterhin deutsch");
-    assert.match(xmlB, /AI assistant/);
-    assert.doesNotMatch(
-      xmlB,
-      /Guten Tag|Hallo|kann gerade nicht|KI-Assistent/,
-      `SOLL: Tenant B (language=en) darf im Greeting kein Deutsch sprechen (war "${xmlB}")`,
-    );
+    assert.match(xmlA, /KI-Assistent/, "Tenant A (DE) spricht deutsch");
+    assert.match(xmlB, /KI-Assistent/, "Tenant B (language=en) startet auf der Startsprache deutsch");
+    assert.doesNotMatch(xmlB, /AI assistant/, `Einstellung en wirkt bei eingehenden Anrufen nicht (war "${xmlB}")`);
   } finally {
     await srv.stop();
   }
