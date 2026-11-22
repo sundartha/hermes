@@ -18,6 +18,26 @@ const LEBENDE_SQL = `
 const AUFRAEUMEN_SQL = `
   DELETE FROM instanz_lebenszeichen WHERE gemeldet_um < now() - make_interval(mins => $1)`;
 
+const MANDANT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
+const UEBERNEHMEN_SQL = `
+  UPDATE call SET instanz = $1
+  WHERE tenant_id = $2 AND id = $3 AND status = 'active' AND instanz IS NOT DISTINCT FROM $4`;
+
+export function uebernimmAnruf(runner, { callId, tenantId, alt }) {
+  return runner.withClient(async (client) => {
+    await client.query("BEGIN");
+    try {
+      await client.query(MANDANT_SQL, [tenantId]);
+      const { rowCount } = await client.query(UEBERNEHMEN_SQL, [EIGENE_KENNUNG, tenantId, callId, alt ?? null]);
+      await client.query("COMMIT");
+      return rowCount === 1;
+    } catch (fehler) {
+      await client.query("ROLLBACK");
+      throw fehler;
+    }
+  });
+}
+
 export async function besitzLage(runner) {
   try {
     const { rows } = await runner.withClient((client) => client.query(LEBENDE_SQL, [LEBENSZEICHEN_FRIST_S]));
@@ -28,11 +48,11 @@ export async function besitzLage(runner) {
   }
 }
 
-export function makeInstanzTakt(runner) {
+export function makeInstanzTakt(runner, { nachMeldung = async () => {} } = {}) {
   let timer = null;
   let laufend = Promise.resolve();
 
-  const einmal = async () => {
+  const melden = async () => {
     try {
       await runner.withClient(async (client) => {
         await client.query(MELDEN_SQL, [EIGENE_KENNUNG]);
@@ -42,14 +62,26 @@ export function makeInstanzTakt(runner) {
       console.error("[instanz] Lebenszeichen nicht geschrieben:", fehler.message);
     }
   };
-  const takt = () => {
-    laufend = laufend.then(einmal);
+  const uebernehmen = async () => {
+    try {
+      await nachMeldung();
+    } catch (fehler) {
+      console.error("[instanz] Uebernahme verwaister Arbeit fehlgeschlagen:", fehler.message);
+    }
+  };
+  const einreihen = (arbeit) => {
+    laufend = laufend.then(arbeit);
     return laufend;
   };
+  const takt = () =>
+    einreihen(async () => {
+      await melden();
+      await uebernehmen();
+    });
 
   return {
     async starten() {
-      await takt();
+      await einreihen(melden);
       timer = setInterval(takt, LEBENSZEICHEN_TAKT_MS);
       timer.unref();
     },
