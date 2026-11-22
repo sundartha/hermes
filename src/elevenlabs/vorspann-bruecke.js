@@ -15,6 +15,8 @@ const STAND_NAMEN = new Map(Object.entries(STAND).map(([name, marke]) => [marke,
 export const standNachObjekt = (stand) => Object.fromEntries([...stand].map(([marke, ms]) => [STAND_NAMEN.get(marke), ms]));
 export const standAusObjekt = (objekt) => new Map(Object.entries(objekt).map(([name, ms]) => [STAND[name], ms]));
 
+export const elBeinVon = (call, zustand) => call.elCallControlId ?? zustand.elBeinId;
+
 const standName = (marke) => STAND_NAMEN.get(marke);
 
 export const messeSeit = ({ callId, messung, bezug, stand, seit, jetzt }) =>
@@ -39,7 +41,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, vorspannZus
     if (!(await beanspruche({ call, zustand, marke: STAND.BRUECKE }))) return;
     const steuerung = voiceControl(call.provider);
     try {
-      await steuerung.bridge(zustand.calleeId, { zielId: call.elCallControlId });
+      await steuerung.bridge(zustand.calleeId, { zielId: elBeinVon(call, zustand) });
     } catch (fehler) {
       logFehler("bruecke", call.id, fehler);
       await vermerkeElFehler(call);
