@@ -34,9 +34,9 @@ module.exports = {
       name: "elevenlabs-nur-ueber-port",
       severity: "error",
       comment:
-        "ElevenLabs-Adapter-Code aus src/elevenlabs/convai.ts, outbound.js, outbound-vorspann.js und nummern-registrierung.js nur über die Registry ansprechen: die Ports elevenlabsConvai, elevenlabsOutbound und elevenlabsNummern aus src/elevenlabs/registry.ts holen.",
+        "ElevenLabs-Adapter-Code aus src/elevenlabs/convai.ts, outbound.js, outbound-vorspann.js und nummern-registrierung.ts nur über die Registry ansprechen: die Ports elevenlabsConvai, elevenlabsOutbound und elevenlabsNummern aus src/elevenlabs/registry.ts holen.",
       from: { path: "^src/", pathNot: "^src/elevenlabs/" },
-      to: { path: "^src/elevenlabs/(convai\\.ts|outbound\\.js|outbound-vorspann\\.js|nummern-registrierung\\.js)$" },
+      to: { path: "^src/elevenlabs/(convai\\.ts|outbound\\.js|outbound-vorspann\\.js|nummern-registrierung\\.ts)$" },
     },
     {
       name: "speicher-nur-ueber-fassade",

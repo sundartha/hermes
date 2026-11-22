@@ -8,7 +8,7 @@ import {
   inboundTrunkSchreiberWennErlaubt,
   makeElSipRegistrar,
   makeInboundTrunkSchreiber,
-} from "../../src/elevenlabs/nummern-registrierung.js";
+} from "../../src/elevenlabs/nummern-registrierung.ts";
 import { makeTrunkSweep } from "../../src/elevenlabs/inbound-trunk-beleg.ts";
 import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,

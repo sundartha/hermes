@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { appendFile, access, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 
 import { config } from "../src/config.ts";
-import { holeRegistrierungen, inventarSchnappschuss } from "../src/elevenlabs/nummern-registrierung.js";
+import { holeRegistrierungen, inventarSchnappschuss } from "../src/elevenlabs/nummern-registrierung.ts";
 import * as anbieter from "./iel-mess-anbieter.mjs";
 import { sammleCallEvents, sammleDetailRecords, sammleElGespraeche, sammleNachdeployBelege, werteMitschnittAus } from "./iel-mess-belege.mjs";
 

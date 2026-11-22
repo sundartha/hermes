@@ -1,5 +1,5 @@
 import { config } from "../src/config.ts";
-import { registrierungsKoerper } from "../src/elevenlabs/nummern-registrierung.js";
+import { registrierungsKoerper } from "../src/elevenlabs/nummern-registrierung.ts";
 
 const TEXML_APP_ID = "3048315229369796444";
 const CC_APP_ID = "3048315366347376485";

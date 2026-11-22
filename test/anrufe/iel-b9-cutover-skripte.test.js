@@ -24,7 +24,7 @@ import {
   inventarSchnappschuss,
   registrierungenMitNummer,
   registrierungsKlasse,
-} from "../../src/elevenlabs/nummern-registrierung.js";
+} from "../../src/elevenlabs/nummern-registrierung.ts";
 import { BASE_ENV, ROOT } from "../helpers.js";
 import { SPION_MARKE } from "../_import-spion-store.mjs";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";

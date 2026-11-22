@@ -16,7 +16,6 @@ const WARTELISTE = {
   "src/conversation/consult-raised.js": FOLGE,
   "src/elevenlabs/inbound-initiation.js": FOLGE,
   "src/elevenlabs/init-webhook-ziel.js": FOLGE,
-  "src/elevenlabs/nummern-registrierung.js": FOLGE,
   "src/elevenlabs/opening-line-llm.js": FOLGE,
   "src/elevenlabs/outbound-vorspann.js": FOLGE,
   "src/elevenlabs/outbound.js": GROSS,

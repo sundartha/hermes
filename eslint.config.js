@@ -224,7 +224,7 @@ const WAHLSKRIPT_WORT_NUR_IN = [
     name: "zugangsdaten",
     nurIn: [],
     meldung:
-      "Dieses Skript setzt keine SIP-Zugangsdaten (IEL-B9-24); die Zugangsdaten verwaltet nur src/elevenlabs/nummern-registrierung.js.",
+      "Dieses Skript setzt keine SIP-Zugangsdaten (IEL-B9-24); die Zugangsdaten verwaltet nur src/elevenlabs/nummern-registrierung.ts.",
   },
   { name: "oeffentliche-adresse", nurIn: [], meldung: SKRIPT_MELDUNG_ADRESSE },
 ];

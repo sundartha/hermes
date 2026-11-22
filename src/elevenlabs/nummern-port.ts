@@ -1,4 +1,4 @@
-import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./nummern-registrierung.js";
+import { inboundTrunkSchreiberWennErlaubt, sipRegistrarWennAktiv } from "./nummern-registrierung.ts";
 
 interface NummernPort {
   sipRegistrarWennAktiv: typeof sipRegistrarWennAktiv;

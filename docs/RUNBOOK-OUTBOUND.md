@@ -34,7 +34,7 @@ npm run elevenlabs:nummern -- --anlegen --ja-wirklich --nur=<numberId>  # Pilot:
 ```
 
 Fail-closed: fehlender `ELEVENLABS_API_KEY` (bzw. bei `--anlegen` fehlende `ELEVENLABS_AGENT_ID`,
-Quelle `fehlendeZugangsdaten` in `src/elevenlabs/nummern-registrierung.js`) ⇒ Exit 1 mit benannter Meldung, nie ein
+Quelle `fehlendeZugangsdaten` in `src/elevenlabs/nummern-registrierung.ts`) ⇒ Exit 1 mit benannter Meldung, nie ein
 stilles OK. Betriebliche Voraussetzung: `STORE_BACKEND=pg` + `DATABASE_URL` + IP in der
 Prod-DB-Allowlist (Lehre `prod-db-ip-allowlist`: „SSL connection closed unexpectedly" heisst
 Firewall, nicht TLS).

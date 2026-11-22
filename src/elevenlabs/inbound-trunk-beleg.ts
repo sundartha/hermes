@@ -20,6 +20,7 @@ interface Registrierung {
   outbound_trunk?: unknown;
   assigned_agent?: { agent_id?: unknown } | null;
   phone_number?: unknown;
+  [schluessel: string]: unknown;
 }
 
 interface Nummer {
@@ -170,11 +171,11 @@ export async function leseTrunkBeleg({
   number,
   soll,
 }: {
-  lies: (phoneNumberId: string | null | undefined) => Promise<Registrierung>;
+  lies: (phoneNumberId: string | null | undefined) => Promise<Registrierung | null>;
   number: Nummer;
   soll: Soll;
 }): Promise<Abruf> {
-  let registrierung: Registrierung;
+  let registrierung: Registrierung | null;
   try {
     registrierung = await lies(number.providerAgentPhoneNumberId);
   } catch (fehler) {
