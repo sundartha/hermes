@@ -1061,17 +1061,13 @@ async function rotePruefschritte(namen, basis) {
 async function main() {
   pruefeTiefe("tools/pruefen.mjs");
   const [, , gewuenscht] = process.argv;
-  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben }[gewuenscht];
+  const mutation = { mutant: mutantPruefen, mutation: () => mutationTeil(process.argv), "rotprobe-ausnahmen": rotprobeAusnahmenAusgeben, "fehlerfall-pflicht": () => fehlerfallPruefen(basisAus(process.argv), env.PR_TEXT) }[gewuenscht];
   if (mutation !== undefined) {
     if (!(await mutation())) process.exitCode = EXIT_ROT;
     return;
   }
   if (gewuenscht === "pr-text") {
     process.exitCode = prTextVorab(process.argv);
-    return;
-  }
-  if (gewuenscht === "fehlerfall-pflicht") {
-    if (!fehlerfallPruefen(basisAus(process.argv), env.PR_TEXT)) process.exitCode = EXIT_ROT;
     return;
   }
   if (gewuenscht === "betroffen") {
