@@ -6,6 +6,7 @@ import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 const A = "t_vf_a";
 const B = "t_vf_b";
 const LEASE_MS = 60_000;
+const VERGANGEN = "2020-01-01T00:00:00.000Z";
 const ANFRAGE = { art: "vorspann", limitJeMandant: 10, leaseMs: LEASE_MS };
 
 process.env.STORE_BACKEND = "pg";
@@ -58,7 +59,8 @@ test("Vorspann-Fristen: faellige Fristen aller Mandanten mit Art der Frist, nich
   const b = treffer.find((eintrag) => eintrag.callId === "v_b" && eintrag.frist === "wiedergabe");
   assert.equal(b.tenantId, B);
   assert.equal(b.versuche, 1);
-  assert.ok(Date.parse(b.faelligAt) < Date.now() - 3_600_000);
+  assert.equal(b.faelligAt, (await zeile(B, "v_b")).wiedergabe.toISOString());
+  assert.ok(Date.parse(b.faelligAt) < Date.parse(treffer.find((eintrag) => eintrag.frist === "elBein").faelligAt));
 });
 
 test("Vorspann-Fristen: die zweite Instanz bekommt eine geleaste Frist nicht, nur die geholte Frist zaehlt einen Versuch, nach Lease-Ablauf kommt sie wieder", async () => {
@@ -86,7 +88,7 @@ test("Vorspann-Fristen: setze stellt die Frist und setzt den Zaehler zurueck, le
   await zeileAnlegen(A, "v_setze", { klingel: "-1 minute", elBein: "-1 minute" });
   await speicher.faelligeFristen(ANFRAGE);
   assert.equal((await zeile(A, "v_setze")).k_versuche, 1);
-  await speicher.setzeVorspannFrist({ tenantId: A, callId: "v_setze", frist: "klingel", faelligAt: new Date(Date.now() - 1000).toISOString() });
+  await speicher.setzeVorspannFrist({ tenantId: A, callId: "v_setze", frist: "klingel", faelligAt: VERGANGEN });
   const gestellt = await zeile(A, "v_setze");
   assert.equal(gestellt.k_versuche, 0);
   assert.ok(gestellt.klingel);
@@ -100,8 +102,8 @@ test("Vorspann-Fristen: setze stellt die Frist und setzt den Zaehler zurueck, le
 
 test("Vorspann-Fristen: setze fuer einen fremden Mandanten oder eine fehlende Zeile aendert nichts", async () => {
   await zeileAnlegen(A, "v_fremd");
-  await speicher.setzeVorspannFrist({ tenantId: B, callId: "v_fremd", frist: "klingel", faelligAt: new Date(Date.now() - 1000).toISOString() });
-  await speicher.setzeVorspannFrist({ tenantId: A, callId: "v_weg", frist: "klingel", faelligAt: new Date(Date.now() - 1000).toISOString() });
+  await speicher.setzeVorspannFrist({ tenantId: B, callId: "v_fremd", frist: "klingel", faelligAt: VERGANGEN });
+  await speicher.setzeVorspannFrist({ tenantId: A, callId: "v_weg", frist: "klingel", faelligAt: VERGANGEN });
   assert.equal((await zeile(A, "v_fremd")).klingel, null);
   assert.deepEqual(kurz(await speicher.faelligeFristen(ANFRAGE)).filter((s) => s.startsWith("v_fremd") || s.startsWith("v_weg")), []);
 });

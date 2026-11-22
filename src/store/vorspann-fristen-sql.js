@@ -59,7 +59,7 @@ export function macheVorspannFristenSql({ runner }) {
   };
 }
 
-export function macheSpeicherVorspannFristen({ zustand, jetzt = Date.now }) {
+export function macheSpeicherVorspannFristen({ zustand }) {
   const eintraege = new Map();
   const schluessel = ({ tenantId, callId }) => `${tenantId}/${callId}`;
   const setzen = async ({ tenantId, callId, frist, faelligAt }) => {
@@ -71,8 +71,7 @@ export function macheSpeicherVorspannFristen({ zustand, jetzt = Date.now }) {
   return {
     setze: setzen,
     leere: ({ tenantId, callId, frist }) => setzen({ tenantId, callId, frist, faelligAt: null }),
-    faellige: async ({ limitJeMandant, leaseMs }) => {
-      const jetztMs = jetzt();
+    faellige: async ({ limitJeMandant, leaseMs, jetztMs }) => {
       const gefunden = [];
       const jeMandant = new Map();
       for (const frist of Object.keys(FRISTEN)) {
@@ -103,3 +102,9 @@ export function macheSpeicherVorspannFristen({ zustand, jetzt = Date.now }) {
     },
   };
 }
+
+export const fristenEintraege = ({ vorspann, uebrige }) => ({
+  faelligeFristen: (anfrage) => (anfrage.art === "vorspann" ? vorspann.faellige(anfrage) : uebrige(anfrage)),
+  setzeVorspannFrist: vorspann.setze,
+  leereVorspannFrist: vorspann.leere,
+});
