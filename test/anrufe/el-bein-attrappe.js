@@ -13,13 +13,17 @@ const NUMMER_STELLEN = 3;
 export const calleeVon = (callId) => `cc_callee_${callId}`;
 export const elVon = (callId) => `cc_el_${callId}`;
 
-export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null, vorAuflegenAntwort = async () => {}) {
+let vorAuflegenHaken = async () => {};
+export function setzeVorAuflegenHaken(haken) {
+  vorAuflegenHaken = haken;
+}
+
+export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null) {
   const pfade = [];
   const anfragen = [];
   const waehlbefehle = [];
   const waehlaufrufe = [];
   const rohkoerper = [];
-  const vorAntwort = (url) => (url.endsWith("/actions/hangup") ? vorAuflegenAntwort(url) : undefined);
   const server = http.createServer((req, res) => {
     let roh = "";
     req.on("data", (teil) => (roh += teil));
@@ -31,7 +35,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnun
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
-      await vorAntwort(req.url);
+      if (req.url.endsWith("/actions/hangup")) await vorAuflegenHaken(req.url);
       const waehlaufruf = req.url === "/v2/calls" ? JSON.parse(roh) : null;
       if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
       const befehl = waehlaufruf ? waehlaufruf.command_id : "";
