@@ -13,7 +13,7 @@ const NUMMER_STELLEN = 3;
 export const calleeVon = (callId) => `cc_callee_${callId}`;
 export const elVon = (callId) => `cc_el_${callId}`;
 
-export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null) {
+export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnung = null, vorAuflegenAntwort = async () => {}) {
   const pfade = [];
   const anfragen = [];
   const waehlbefehle = [];
@@ -30,6 +30,7 @@ export async function starteAttrappe(vorElAntwort = async () => {}, wahlAblehnun
         res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
         return res.end(Buffer.alloc(AUDIO_BYTES, 1));
       }
+      if (req.url.endsWith("/actions/hangup")) await vorAuflegenAntwort(req.url);
       const waehlaufruf = req.url === "/v2/calls" ? JSON.parse(roh) : null;
       if (waehlaufruf) waehlaufrufe.push(waehlaufruf);
       const befehl = waehlaufruf ? waehlaufruf.command_id : "";

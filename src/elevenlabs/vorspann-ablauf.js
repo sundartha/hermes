@@ -180,8 +180,8 @@ async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAu
   const call = await store.leseCall(callId);
   const zustand = call.status === "active" ? await ladeZustand(call) : undefined;
   if (!zustand || zustand.abgehoben) return;
-  await vorspannZustand.entnimm(zustandsRef(call));
   await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
+  if (!(await vorspannZustand.entnimm(zustandsRef(call)))) return;
   await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
 }
 
