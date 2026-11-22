@@ -9,6 +9,9 @@ const LOESCHEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1`;
 const LADEN_SQL = `SELECT callee_id, token, text, stand, aufgelegt, abgehoben FROM vorspann_zustand WHERE call_id = $1`;
 const CALLEE_SQL = `UPDATE vorspann_zustand SET callee_id = COALESCE(callee_id, $2) WHERE call_id = $1 RETURNING callee_id`;
 const ABGEHOBEN_SQL = `UPDATE vorspann_zustand SET abgehoben = true WHERE call_id = $1 AND NOT abgehoben RETURNING call_id`;
+const MARKE_SQL = `UPDATE vorspann_zustand SET stand = stand || jsonb_build_object($2::text, $3::bigint)
+  WHERE call_id = $1 AND NOT stand ? $2::text RETURNING stand`;
+const ENTNEHMEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1 RETURNING callee_id, token, text, stand, aufgelegt, abgehoben`;
 const SPEICHERN_SQL = `UPDATE vorspann_zustand SET stand = $2::jsonb || stand, aufgelegt = $3::jsonb WHERE call_id = $1`;
 
 const zeileVon = (zeile) => zeile && { calleeId: zeile.callee_id, token: zeile.token, text: zeile.text, stand: zeile.stand, aufgelegt: zeile.aufgelegt, abgehoben: zeile.abgehoben };
@@ -43,6 +46,9 @@ export function makePostgresVorspannZustand(runner) {
     lade: async ({ tenantId, callId }) => zeileVon((await imMandanten(tenantId, [[LADEN_SQL, [callId]]]))[0]),
     setzeCallee: async ({ tenantId, callId, calleeId }) => (await imMandanten(tenantId, [[CALLEE_SQL, [callId, calleeId]]]))[0]?.callee_id,
     beanspruecheAbgehoben: async ({ tenantId, callId }) => (await imMandanten(tenantId, [[ABGEHOBEN_SQL, [callId]]])).length === 1,
+    beanspruecheMarke: async ({ tenantId, callId, marke, ms }) =>
+      (await imMandanten(tenantId, [[MARKE_SQL, [callId, marke, ms]]]))[0]?.stand,
+    entnimm: async ({ tenantId, callId }) => zeileVon((await imMandanten(tenantId, [[ENTNEHMEN_SQL, [callId]]]))[0]),
     speichere: async ({ tenantId, callId, stand, aufgelegt }) => {
       await imMandanten(tenantId, [[SPEICHERN_SQL, [callId, JSON.stringify(stand), JSON.stringify(aufgelegt)]]]);
     },
@@ -76,6 +82,16 @@ export function makeSpeicherVorspannZustand() {
       if (zeilen.get(schluessel(anfrage))?.abgehoben !== false) return false;
       ersetze(anfrage, () => ({ abgehoben: true }));
       return true;
+    },
+    beanspruecheMarke: async (anfrage) => {
+      const stand = zeilen.get(schluessel(anfrage))?.stand;
+      if (!stand || anfrage.marke in stand) return undefined;
+      return ersetze(anfrage, () => ({ stand: { ...stand, [anfrage.marke]: anfrage.ms } })).stand;
+    },
+    entnimm: async (anfrage) => {
+      const zeile = zeilen.get(schluessel(anfrage));
+      zeilen.delete(schluessel(anfrage));
+      return zeile;
     },
     speichere: async (anfrage) => {
       ersetze(anfrage, (zeile) => ({ stand: { ...anfrage.stand, ...zeile.stand }, aufgelegt: [...anfrage.aufgelegt] }));
