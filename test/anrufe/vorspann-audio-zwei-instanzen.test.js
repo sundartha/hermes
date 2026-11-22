@@ -1,92 +1,108 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import test from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
-import { mitZweiHermesAufPostgres, postgresVorhanden } from "./hermes-mit-postgres.js";
+import { makeTelnyxSigner, nowSeconds } from "../helpers.js";
+import { starteAttrappe } from "./attrappen-server.js";
+import { mitZweiHermesAufPostgres, postgresVorhanden, zeilenBis } from "./hermes-mit-postgres.js";
 
 const ZEITGRENZE_MS = 120_000;
-const MS_JE_S = 1000;
-const TTL_TOLERANZ_S = 20;
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
-const AUDIO = Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x01, 0x02]);
+const AUDIO = Buffer.alloc(200_000, 0xab);
 const TYP = "audio/mpeg";
-const VORSPANN_TTL_MS = 120_000;
-const STORE_URL = new URL("../../src/store.js", import.meta.url).href;
-const ABLAGE_URL = new URL("../../src/tts/ablage-bis-freigabe.js", import.meta.url).href;
-const TTS_STORE_URL = new URL("../../src/tts/store.ts", import.meta.url).href;
+const TTS_PFAD = "/v1/text-to-speech/";
+const WIEDERGABE_ENDE = "/actions/playback_start";
+const CALLEE_BEIN = "cc_callee_audio";
+const ZIEL = "+4915112399001";
 
-const KIND_SKRIPT = `
-const speicher = await import(${JSON.stringify(STORE_URL)});
-const { createTtsStore } = await import(${JSON.stringify(TTS_STORE_URL)});
-const { makeAblageBisFreigabe } = await import(${JSON.stringify(ABLAGE_URL)});
-await speicher.oeffneSpeicher();
-const ttsStore = createTtsStore({ ttlMs: 60000, ablage: speicher.ttsAblage, bisFreigabeAblage: makeAblageBisFreigabe(speicher.ttsAblage) });
-const befehl = JSON.parse(process.argv[1]);
-if (befehl.aktion === "ablegen") {
-  const audio = { contentType: befehl.contentType, bytes: Promise.resolve(Buffer.from(befehl.base64, "base64")) };
-  const token = await ttsStore.put(audio, { bisFreigabe: true, ttlMs: befehl.ttlMs });
-  console.log("token " + token);
-  process.stdin.once("data", () => process.exit(0));
-} else {
-  ttsStore.release(befehl.token);
-  await new Promise((fertig) => setTimeout(fertig, 500));
-  process.exit(0);
-}
-`;
-
-function starteKind(db, befehl) {
-  const kind = spawn(
-    process.execPath,
-    ["--input-type=module", "-e", KIND_SKRIPT, JSON.stringify({ base64: AUDIO.toString("base64"), contentType: TYP, ...befehl })],
-    { env: { ...process.env, ...pgStartUmgebung(db.adresse) }, stdio: ["pipe", "pipe", "inherit"] },
-  );
-  let aus = "";
-  const wartende = [];
-  kind.stdout.on("data", (stueck) => {
-    aus += stueck;
-    for (const warte of wartende.splice(0)) warte(aus);
-  });
-  const ende = new Promise((fertig) => kind.on("close", fertig));
-  const tokenBereit = () =>
-    new Promise((fertig) => {
-      const pruefe = (text) => {
-        const treffer = /token (\S+)/.exec(text);
-        if (treffer) fertig(treffer[1]);
-        else wartende.push(pruefe);
-      };
-      pruefe(aus);
+function starteAnbieterAttrappe(wiedergaben, elWahl) {
+  return starteAttrappe((anfrage, antwort) => {
+    const teile = [];
+    anfrage.on("data", (stueck) => teile.push(stueck));
+    anfrage.on("end", async () => {
+      if (anfrage.url.startsWith(TTS_PFAD)) {
+        antwort.writeHead(HTTP_OK, { "content-type": TYP });
+        return antwort.end(AUDIO);
+      }
+      if (anfrage.url.endsWith(WIEDERGABE_ENDE)) wiedergaben.push(JSON.parse(Buffer.concat(teile).toString()));
+      else if (anfrage.url === "/v2/calls" && wiedergaben.length > 0) await elWahl;
+      antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
+      antwort.end(JSON.stringify({ data: { sid: "v3:audio", result: "ok", call_control_id: CALLEE_BEIN } }));
     });
-  return { kind, ende, tokenBereit };
+  });
 }
 
+function signierterEreignisKoerper(signer, callId, eventType) {
+  const rumpf = JSON.stringify({
+    data: { id: `evt-${eventType}-${callId}`, event_type: eventType, payload: { call_control_id: CALLEE_BEIN, status: "ok" } },
+  });
+  const zeitstempel = String(nowSeconds());
+  return {
+    pfad: `/voice/vorspann?callId=${callId}`,
+    optionen: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf),
+        "telnyx-timestamp": zeitstempel,
+      },
+      body: rumpf,
+    },
+  };
+}
+
+const senden = (srv, { pfad, optionen }) => abrufMitFrist(`${srv.localUrl}${pfad}`, optionen);
 const abrufen = (srv, token) => abrufMitFrist(`${srv.localUrl}/voice/tts/${token}`);
 
-test("Vorspann-Audio, auf Instanz A erzeugt, ist ueber Instanz B abrufbar, mehrfach, bis zur Freigabe", { timeout: ZEITGRENZE_MS }, async (t) => {
+test("Vorspann-Audio eines auf Instanz A gestarteten Anrufs ist ueber Instanz B abrufbar, bis der Anruf aufgelegt wird", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
-  await mitZweiHermesAufPostgres(t, {}, async ({ a, b, db, sql }) => {
-    const erzeuger = starteKind(db, { aktion: "ablegen", ttlMs: VORSPANN_TTL_MS });
-    try {
-      const token = await erzeuger.tokenBereit();
-      const { rows } = await sql("SELECT extract(epoch FROM expires_at - now()) AS rest_s FROM tts_ablage");
-      assert.equal(rows.length, 1);
-      assert.ok(rows[0].rest_s > VORSPANN_TTL_MS / MS_JE_S - TTL_TOLERANZ_S && rows[0].rest_s <= VORSPANN_TTL_MS / MS_JE_S);
-      for (const srv of [b, a, b]) {
-        const antwort = await abrufen(srv, token);
-        assert.equal(antwort.status, HTTP_OK);
-        assert.equal(antwort.headers.get("content-type"), TYP);
-        assert.deepEqual(Buffer.from(await antwort.arrayBuffer()), AUDIO);
-      }
-      await starteKind(db, { aktion: "freigeben", token }).ende;
-      assert.equal((await abrufen(b, token)).status, HTTP_NOT_FOUND);
-      assert.equal((await abrufen(a, token)).status, HTTP_NOT_FOUND);
-      const uebrig = await sql("SELECT count(*)::int AS anzahl FROM tts_ablage");
-      assert.equal(uebrig.rows[0].anzahl, 0);
-    } finally {
-      erzeuger.kind.kill();
-      await erzeuger.ende;
+  const signer = makeTelnyxSigner();
+  const wiedergaben = [];
+  let elWahlFreigeben;
+  const elWahl = new Promise((fertig) => (elWahlFreigeben = fertig));
+  const anbieter = await starteAnbieterAttrappe(wiedergaben, elWahl);
+  t.after(() => anbieter.close());
+  const env = {
+    SKIP_TWILIO_SIGNATURE_CHECK: "false",
+    TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+    ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+    ELEVENLABS_OUTBOUND_VORSPANN: "true",
+    ELEVENLABS_API_BASE: anbieter.url,
+    TELNYX_API_BASE: anbieter.url,
+  };
+  await mitZweiHermesAufPostgres(t, { env }, async ({ a, b, sql }) => {
+    const start = await abrufMitFrist(`${a.localUrl}/api/calls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: ZIEL, objective: "Termin am Donnerstag vereinbaren" }),
+    });
+    assert.equal(start.status, HTTP_OK, await start.clone().text());
+    const { rows } = await sql("SELECT id FROM call WHERE to_e164 = $1", [ZIEL]);
+    assert.equal(rows.length, 1);
+    const callId = rows[0].id;
+    const abheben = senden(a, signierterEreignisKoerper(signer, callId, "call.answered"));
+    const [{ audio_url: audioUrl }] = await zeilenBis(
+      async () => wiedergaben,
+      (liste) => liste.length === 1,
+    );
+    const token = audioUrl.split("/voice/tts/")[1];
+    assert.ok(token);
+    for (const srv of [b, a, b]) {
+      const antwort = await abrufen(srv, token);
+      assert.equal(antwort.status, HTTP_OK);
+      assert.equal(antwort.headers.get("content-type"), TYP);
+      assert.deepEqual(Buffer.from(await antwort.arrayBuffer()), AUDIO);
     }
+    elWahlFreigeben();
+    await abheben;
+    await senden(a, signierterEreignisKoerper(signer, callId, "call.hangup"));
+    await zeilenBis(
+      async () => (await abrufen(b, token)).status,
+      (status) => status === HTTP_NOT_FOUND,
+    );
+    assert.equal((await abrufen(a, token)).status, HTTP_NOT_FOUND);
+    const uebrig = await sql("SELECT count(*)::int AS anzahl FROM tts_ablage");
+    assert.equal(uebrig.rows[0].anzahl, 0);
   });
 });
