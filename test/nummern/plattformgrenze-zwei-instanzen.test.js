@@ -192,7 +192,7 @@ async function ausloesen(instanz, mandant) {
   return ergebnis;
 }
 
-const nummerAnlegen = (umgebung, id, status, mandant = ANDERER) => umgebung.sql(ALTE_NUMMER, [id, mandant, status], mandant);
+const nummerAnlegen = (umgebung, { id, status, mandant }) => umgebung.sql(ALTE_NUMMER, [id, mandant, status], mandant);
 const gebucht = async (umgebung) => {
   const je = await Promise.all([MANDANT, ANDERER, FREMDER].map((mandant) => umgebung.sql(ALLE_NUMMERN, [], mandant)));
   return je.reduce((summe, zeilen) => summe + zeilen[0].anzahl, 0);
@@ -214,7 +214,7 @@ test("Grenze 2: eine lebende Nummer eines fremden Mandanten, der Instanz unbekan
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ maxNumbers: 2 }));
-  await nummerAnlegen(umgebung, "num_fremd_eins", "active");
+  await nummerAnlegen(umgebung, { id: "num_fremd_eins", status: "active", mandant: ANDERER });
   const ergebnis = await ausloesen(a, MANDANT);
   assert.equal(ergebnis.ok, true);
   assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
@@ -225,8 +225,8 @@ test("Grenze 2: zwei lebende Nummern fremder Mandanten lehnen den Kauf ab", { ti
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ maxNumbers: 2 }));
-  await nummerAnlegen(umgebung, "num_fremd_eins", "active");
-  await nummerAnlegen(umgebung, "num_fremd_zwei", "suspended", FREMDER);
+  await nummerAnlegen(umgebung, { id: "num_fremd_eins", status: "active", mandant: ANDERER });
+  await nummerAnlegen(umgebung, { id: "num_fremd_zwei", status: "suspended", mandant: FREMDER });
   assert.deepEqual(await ausloesen(a, MANDANT), { ok: false, reason: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
   assert.equal(await gebucht(umgebung), 2);
@@ -237,8 +237,8 @@ test("Freigegebene und fehlgeschlagene Nummern fremder Mandanten zaehlen nicht g
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz();
-  await nummerAnlegen(umgebung, "num_fremd_frei", "released");
-  await nummerAnlegen(umgebung, "num_fremd_fehl", "failed", FREMDER);
+  await nummerAnlegen(umgebung, { id: "num_fremd_frei", status: "released", mandant: ANDERER });
+  await nummerAnlegen(umgebung, { id: "num_fremd_fehl", status: "failed", mandant: FREMDER });
   assert.equal((await ausloesen(a, MANDANT)).ok, true);
   assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
   assert.equal(await gebucht(umgebung), 3);
@@ -248,7 +248,7 @@ test("Eine Nummer im Status requested ohne Kennung eines fremden Mandanten zaehl
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz();
-  await nummerAnlegen(umgebung, "num_fremd_angefragt", "requested");
+  await nummerAnlegen(umgebung, { id: "num_fremd_angefragt", status: "requested", mandant: ANDERER });
   assert.deepEqual(await ausloesen(a, MANDANT), { ok: false, reason: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });
@@ -256,7 +256,7 @@ test("Eine Nummer im Status requested ohne Kennung eines fremden Mandanten zaehl
 test("Der Zaehler folgt Statuswechsel und Loeschen der Nummer", { timeout: ZEITGRENZE_MS }, async (t) => {
   const umgebung = await aufbau(t);
   if (!umgebung) return;
-  await nummerAnlegen(umgebung, "num_zaehler", "requested");
+  await nummerAnlegen(umgebung, { id: "num_zaehler", status: "requested", mandant: ANDERER });
   const anzahl = async () => (await umgebung.sql(LEBEND_GESAMT, [""]))[0].anzahl;
   assert.equal(await anzahl(), 1);
   await umgebung.sql("UPDATE number SET status = 'released' WHERE id = 'num_zaehler'", [], ANDERER);
