@@ -70,7 +70,7 @@ interface TrunkNummer {
 
 interface OnboardingInboundTrunkSchreiber {
   ensureInboundTrunk: (number: TrunkNummer) => Promise<string>;
-  zugangFp: string;
+  zugangFp: string | null;
 }
 
 interface OnboardingLogger {

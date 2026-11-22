@@ -521,7 +521,7 @@ function hatInboundTrunkBeleg(number: Nummernsatz): boolean {
 export function markNumberElInboundTrunkBelegt(
   state: MitNummern,
   numberId: string,
-  { nowIso, zugangFp }: { nowIso: string; zugangFp: string },
+  { nowIso, zugangFp }: { nowIso: string; zugangFp: string | null },
 ): { number: Nummernsatz | null; changed: boolean } {
   if (!nowIso || !zugangFp) throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
   const number = findNumber(state, numberId);

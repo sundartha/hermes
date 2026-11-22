@@ -184,3 +184,15 @@ test("Bricht der Gesamtlauf ab, steht der Grund im Fehlerprotokoll", async () =>
 
   assert.deepEqual(fehler, ["[nummerntausch] Lauf abgebrochen: Speicher kaputt"]);
 });
+
+test("Fehlt der Registrierer, bleibt die Registrierung der Ersatznummer ohne Fehlerprotokoll offen", async () => {
+  const { store, state, telnyx } = await nachErstemFehlschlag();
+  const ersatz = state.numbers.find((nummer) => nummer.id !== ALT);
+  ersatz.status = "requested";
+  telnyx.orderNumber = async () => ({ e164: NEU, providerNumberId: "pnum_neu" });
+
+  const { log, fehler } = await protokollierterLauf({ store, telnyx, sipRegistrar: null });
+
+  assert.deepEqual(fehler, []);
+  assert.ok(log.some((zeile) => /^\[nummerntausch\] .*ergebnis=registrierung_fehlgeschlagen$/.test(zeile)));
+});
