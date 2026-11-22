@@ -1002,6 +1002,7 @@
           "event_id",
           "failure_reason",
           "next_step",
+          "next_steps",
           "objective_achieved",
           "open_points",
           "outcome",
@@ -1085,6 +1086,32 @@
               "null",
               "string"
             ]
+          },
+          "next_steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "at",
+                "text",
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -2109,6 +2136,12 @@
       "art": "bruch",
       "begruendung": "call v51: Anrufkarte gliedert deutsche Nummern nach der echten Vorwahllaenge (#5284)",
       "stand_sha256": "427ad24d54f0e1bff29de18340497a09f44829987a4013ee8f082d6cc85f6ae9"
+    },
+    {
+      "datum": "2026-11-22",
+      "art": "bruch",
+      "begruendung": "await_call_event liefert in der done-Antwort next_steps (Art, Text, Zeitpunkt) wie get_call_result, damit ein im Gespraech genannter Rueckruf den Assistenten erreicht (#5995). Noch nichts veroeffentlicht.",
+      "stand_sha256": "02494ad7414385bafecad4904e9bdf897e36b72d639a860acf7a009d6ca953ea"
     }
   ]
 }

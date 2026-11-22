@@ -51,6 +51,7 @@ export const AWAIT_EVENT_OUTPUT = {
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
   ...RESULT_CARD_OUTPUT,
+  next_steps: z.array(NEXT_STEP_OUTPUT),
 };
 
 export const ANSWER_CONSULT_OUTPUT = {

@@ -10,7 +10,7 @@ import {
 } from "./schemata.js";
 import { AWAIT_CALL_EVENT_DESCRIPTION, answerConsultDescription } from "./beschreibungen.js";
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
-import { callOutcomeView, pickTranscript, maskedResultCard } from "./anruf-ergebnis.js";
+import { callOutcomeView, pickTranscript, maskedResultCard, maskedNextSteps } from "./anruf-ergebnis.js";
 
 function awaitEventView({ callId, event, finished, texts }) {
   const done = finished ? pickTranscript(callId, finished, texts) : null;
@@ -23,6 +23,7 @@ function awaitEventView({ callId, event, finished, texts }) {
     result_summary: done?.result_summary ?? null,
     objective_achieved: done?.objective_achieved ?? null,
     ...maskedResultCard(finished?.result),
+    next_steps: maskedNextSteps(finished?.result),
   };
 }
 
