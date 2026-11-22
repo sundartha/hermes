@@ -215,12 +215,12 @@ async function mitNummerEigenerSprache({ richtung, sprache, agentAntwort }, lauf
   }
 }
 
-test("get_call_result (outbound): die Nummer des Absenders mit französischer Sprache fordert die französische Stimme an, zwei Stimmen", async () => {
+test("get_call_result (outbound): die Nummer des Absenders mit französischer Sprache fordert die eine Stimme an, zwei Stimmen, weil der Agent die französische Stimme führt", async () => {
   const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
   await mitNummerEigenerSprache({ richtung: "outbound", sprache: "fr", agentAntwort }, async (anzahl) => assert.equal(anzahl, ZWEI));
 });
 
-test("get_call_result (outbound): die Nummer des Absenders mit deutscher Sprache fordert nicht die französische Stimme an, zwei Stimmen", async () => {
+test("get_call_result (outbound): die Nummer des Absenders mit deutscher Sprache fordert die eine Stimme an, zwei Stimmen, weil der Agent die französische Stimme führt", async () => {
   const agentAntwort = agent({ eigene: FRANZOESISCHE_STIMME, ueberschreibbar: false });
   await mitNummerEigenerSprache({ richtung: "outbound", sprache: "de", agentAntwort }, async (anzahl) => assert.equal(anzahl, ZWEI));
 });
