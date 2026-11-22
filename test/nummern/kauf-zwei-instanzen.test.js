@@ -322,14 +322,13 @@ test("Fehlt der Mandant in der Datenbank, wird nichts gekauft", { timeout: ZEITG
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });
 
-test("Die Grenze je Mandant gilt genau: eine lebende Nummer bei Grenze 2 laesst den Kauf zu", { timeout: ZEITGRENZE_MS }, async (t) => {
+test("Die Grenze je Mandant gilt genau: eine lebende Nummer bei Grenze 2 sperrt den Kauf", { timeout: ZEITGRENZE_MS }, async (t) => {
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 2 }));
   await umgebung.sql(ALTE_NUMMER, ["num_alt_eins", MANDANT, "active"]);
-  assert.equal((await ausloesenUndAbarbeiten(a)).ok, true);
-  assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
-  await umgebung.zaehlen();
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });
 
 test("Die Grenze je Mandant gilt genau: zwei lebende Nummern bei Grenze 2 sperren den Kauf", { timeout: ZEITGRENZE_MS }, async (t) => {
