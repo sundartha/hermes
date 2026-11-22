@@ -134,10 +134,15 @@ function messenAufruf(anrufer) {
       typeof anrufer.ergebnisVorgetragen === "function"
         ? { ergebnisVorgetragen: await anrufer.ergebnisVorgetragen().catch(() => false) }
         : {};
-    if (typeof anrufer.stimmenAnzahl !== "function") return { ...messung, ...ergebnis };
+    const klingeln =
+      typeof anrufer.klingelnSekunden === "function"
+        ? { klingelnSekunden: await anrufer.klingelnSekunden().catch(() => undefined) }
+        : {};
+    if (typeof anrufer.stimmenAnzahl !== "function") return { ...messung, ...ergebnis, ...klingeln };
     return {
       ...messung,
       ...ergebnis,
+      ...klingeln,
       stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined),
     };
   };
