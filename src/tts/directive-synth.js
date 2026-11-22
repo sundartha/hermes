@@ -5,7 +5,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
-import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.ts";
+import { EINE_STIMME_ID } from "../elevenlabs/stimme-festlegen.ts";
 import { PROVIDER_WEBHOOK_HARDCUT_MS, TURN_NETWORK_RESERVE_MS } from "../turn-budget.ts";
 
 const synthOptionen = (cfg) => ({
@@ -46,7 +46,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function withPlayAudio(direktive, cfg, ablage) {
     const text = textDer(direktive);
     if (!text) return direktive;
-    const voiceId = direktive.voiceId || elevenLabsVoiceIdFor(cfg.voiceId, direktive.voiceProfile);
+    const voiceId = direktive.voiceId || EINE_STIMME_ID;
     const url = await synthToServeUrl(text, { ...cfg, voiceId }, ablage);
     if (!url) return direktive;
     return direktive.kind === DIRECTIVE.GATHER

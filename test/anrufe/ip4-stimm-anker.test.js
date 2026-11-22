@@ -5,10 +5,9 @@ import {
   pinCall,
   sendeAnrufstartKoerper,
 } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
-import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";
+import { playTtsVoiceIdsFor } from "../helpers/play-tts-stimm-probe.mjs";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { consultAllowedForCall } from "../../src/consult/gate.ts";
-import { elevenLabsVoiceIdFor } from "../../src/telephony/adapters/telnyx/elevenlabs-voice.ts";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 
 const ZIEL_JE_SPRACHE = Object.freeze({
@@ -24,9 +23,9 @@ test("Anker-Reichweite: jede unterstuetzte Sprache hat ein Ziel in der Messkarte
 for (const sprache of Object.keys(ZIEL_JE_SPRACHE)) {
   const { voiceProfile } = LOCALES[sprache];
 
-  test(`Stimm-Anker ${sprache}: Outbound-Anrufstart und Play-TTS loesen ueber DENSELBEN Resolver auf`, async () => {
+  test(`Stimm-Anker ${sprache}: Outbound-Anrufstart und Play-TTS sprechen dieselbe eine Stimme`, async () => {
     const erwartetOutbound = "cqPdIo76zSHFDcSZpFov";
-    const erwartetPlayTts = elevenLabsVoiceIdFor(PROBE_PLATTFORM_STIMME, voiceProfile);
+    const erwartetPlayTts = erwartetOutbound;
 
     const koerper = await sendeAnrufstartKoerper({
       makeElevenLabsOutbound,
