@@ -94,14 +94,31 @@ function endziffern(nummer) {
   return normalisiert(nummer).replace(/\D/g, "").slice(-LETZTE_ZIFFERN);
 }
 
-function nummerLesbar(nummer) {
-  return typeof nummer === "string" && normalisiert(nummer) !== "";
+const FEHLERCODE = /^[a-z0-9_]+$/;
+
+function nummerGrund(nummer) {
+  if (nummer === null || nummer === undefined) return "keine_nummer";
+  if (typeof nummer !== "string") return "kein_text";
+  return normalisiert(nummer) === "" ? "keine_nummer" : undefined;
+}
+
+async function nummerAbrufen(anrufer) {
+  try {
+    return { eigene: await anrufer.eigeneNummer() };
+  } catch (fehler) {
+    const code = FEHLERCODE.test(fehler?.message) ? fehler.message : "unbekannt";
+    return { grund: `abruf_fehler ${code}` };
+  }
 }
 
 async function zielGeprueft(anrufer) {
-  if (!zielErlaubt(env.STAGING_URL, "staging").erlaubt) ende("probe_ziel_unerlaubt: adresse_nicht_staging");
-  const eigene = await anrufer.eigeneNummer().catch(() => null);
-  if (!nummerLesbar(eigene)) ende("probe_ziel_unerlaubt: nummer_nicht_lesbar");
+  if (!zielErlaubt(env.STAGING_URL, "staging").erlaubt)
+    ende("probe_ziel_unerlaubt: adresse_nicht_staging");
+  const { eigene, grund = nummerGrund(eigene) } = await nummerAbrufen(anrufer);
+  if (grund !== undefined) {
+    zeile(`nummer_nicht_lesbar grund=${grund}`);
+    ende("probe_ziel_unerlaubt: nummer_nicht_lesbar");
+  }
   if (normalisiert(eigene) !== normalisiert(env.STAGING_PROBE_ZIEL)) {
     ende(
       `probe_ziel_unerlaubt: nummer_weicht_ab eigene=${endziffern(eigene)} ziel=${endziffern(env.STAGING_PROBE_ZIEL)}`,
@@ -118,7 +135,11 @@ function messenAufruf(anrufer) {
         ? { ergebnisVorgetragen: await anrufer.ergebnisVorgetragen().catch(() => false) }
         : {};
     if (typeof anrufer.stimmenAnzahl !== "function") return { ...messung, ...ergebnis };
-    return { ...messung, ...ergebnis, stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined) };
+    return {
+      ...messung,
+      ...ergebnis,
+      stimmenAnzahl: await anrufer.stimmenAnzahl().catch(() => undefined),
+    };
   };
 }
 
