@@ -29,10 +29,9 @@ const meldeStart = (callId, stand, jetzt) =>
 const logFehler = (aktion, callId, fehler) =>
   console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
 
-function meldeWiedergabeStartFehler({ call, store, fehler }) {
-  logFehler("abheben", call.id, fehler);
-  meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.START_ABGELEHNT });
-  vermerkeNichtAbgespielt({ call, store });
+function meldeWiedergabeStartFehler(callId, fehler) {
+  logFehler("abheben", callId, fehler);
+  meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.START_ABGELEHNT });
 }
 
 function calleeAnfrage({ call, config }) {
@@ -217,7 +216,8 @@ export function makeVorspannAblauf({
       steuerung.playbackStart(zustand.calleeId, { audioUrl }).then(() => meldeStart(call.id, zustand.stand, now())),
       waehleElBein({ call, zustand, steuerung, zugang, store, config }),
     ]);
-    if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler({ call, store, fehler: wiedergabe.reason });
+    if (wiedergabe.status === "rejected") meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
+    if (wiedergabe.status === "rejected" && elWahl.status === "fulfilled") vermerkeNichtAbgespielt({ call, store });
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
     if (elWahl.status === "rejected") await vermerkeElFehlerFuer(call);
