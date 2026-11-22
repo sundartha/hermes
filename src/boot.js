@@ -682,7 +682,7 @@ async function uebernimmAnrufVonAusgefallenem(store, call) {
 async function expireOrphanedConsults(store) {
   const nowMs = Date.now();
   const lage = await store.besitzLage();
-  const fremde = (await anrufeAllerInstanzen(store)).filter(
+  const fremde = (await store.aktiveAnrufeAlle()).filter(
     (call) =>
       call.status === "active" &&
       call.instanz !== lage.eigene &&
