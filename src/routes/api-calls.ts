@@ -3,6 +3,7 @@ import { makeKeyedChainMutex } from "../chain-mutex.js";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { normNum } from "../begriffe/rufnummern.js";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
@@ -62,7 +63,6 @@ export type WaehleAnruf = (call: Anruf, bestanden: GatesBestanden) => Promise<Wa
 
 type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
-const STARTSPRACHE = "de";
 const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
 const sprachtexteFuer: (language: string) => unknown = localeFor;
 const gateTexteFuer: (language: string) => { gates: { queueUnavailable: string } } = localeFor;

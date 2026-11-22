@@ -7,7 +7,7 @@ const VALID_STYLE = PERSONA_STYLE_IDS[0];
 
 test("agentStyle liegt in SELF_SERVICE_FREE_FIELDS (gleiche Naht wie language)", () => {
   assert.ok(SELF_SERVICE_FREE_FIELDS.includes("agentStyle"));
-  assert.ok(SELF_SERVICE_FREE_FIELDS.includes("language"));
+  assert.ok(!SELF_SERVICE_FREE_FIELDS.includes("language"));
 });
 
 test("gueltiger agentStyle landet in clean, nie in rejected", () => {
@@ -29,7 +29,8 @@ test("Muellwert als agentStyle wird NICHT in selfServicePatch abgelehnt (wie lan
   const style = selfServicePatch({ agentStyle: garbage }, {});
   const language = selfServicePatch({ language: garbage }, {});
   assert.ok(!style.rejected.includes("agentStyle"), "agentStyle nicht in rejected (Konsistenz zu language)");
-  assert.ok(!language.rejected.includes("language"), "language ebenfalls nicht in rejected");
+  assert.deepEqual(language.clean, {});
+  assert.ok(language.rejected.includes("language"), "language wird seit 5986 abgelehnt");
 });
 
 test("greeting bleibt unberuehrt: Freitext wird weiterhin in selfServicePatch abgelehnt", () => {

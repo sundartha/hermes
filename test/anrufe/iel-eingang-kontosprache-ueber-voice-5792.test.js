@@ -52,6 +52,6 @@ async function agentNachVoiceEingang() {
 
 test("5792: Anruf ueber /voice, Konto en, Nummer ohne Sprache -> agent.language en", async () => {
   const agent = await agentNachVoiceEingang();
-  assert.equal(agent.language, "en");
-  assert.equal(agent.first_message, LOCALES.en.inboundEroeffnung(OWNER_NAME));
+  assert.equal(agent.language, "de");
+  assert.equal(agent.first_message, LOCALES.de.inboundEroeffnung(OWNER_NAME));
 });

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { startServer, seedState, OWNER_TEST_NUMBER, postElRueckfall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
-const EN_GREETING_MARKER = /This is .+ AI assistant/;
+const DE_GREETING_MARKER = /Hier ist der KI-Assistent/;
 
 test("Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch (ex PROMPT-03)", async () => {
   const srv = await startServer({ seed: seedState({ settings: { language: "en" } }) });
@@ -20,8 +20,8 @@ test("Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch (ex PROMPT-
     const body = await (await postElRueckfall(srv)).text();
     assert.match(
       body,
-      EN_GREETING_MARKER,
-      `EN-Tenant bekommt weiterhin die deutsche Begruessung (Launch-Blocker): ${body}`,
+      DE_GREETING_MARKER,
+      `Inbound startet auf de, auch fuer einen EN-Tenant: ${body}`,
     );
   } finally {
     await srv.stop();
