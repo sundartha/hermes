@@ -6,7 +6,7 @@ import { ELEVENLABS_RESULT_POLL_STANDARD_MS } from "../../src/konfiguration/rohw
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { DAUER_GRENZE_S, MINDESTDAUER_S } from "./urteil.mjs";
-import { ABSTAND_MS } from "./wiederholung.mjs";
+import { ABSTAND_MS, normalisiert } from "./wiederholung.mjs";
 
 const ABFRAGE_FRIST_MS = 10_000;
 const TAKT_MS = 2000;
@@ -128,6 +128,7 @@ async function gegenStimmenAnzahl(ruf, probeStartMs) {
 
 export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
   const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
+  const zielNorm = normalisiert(ziel);
   const abbrechen = (callId) =>
     werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
@@ -173,7 +174,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
         for (const anruf of calls) tage.push(tag(await startVon(anruf)));
         if (!tage.some((eintrag) => eintrag < heute)) throw new Error("probe_tageszaehl_unklar");
       }
-      const eigene = calls.filter((anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel);
+      const eigene = calls.filter((anruf) => anruf.direction === "outbound" && anruf.counterparty === zielNorm);
       const starts = [];
       for (const anruf of eigene) starts.push(await startVon(anruf));
       const heutige = starts.filter((ms) => tag(ms) === heute).sort((frueher, spaeter) => frueher - spaeter);
@@ -182,7 +183,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     offeneBeenden: async () => {
       const { calls } = await ruf("list_calls", {});
       const offene = calls.filter(
-        (anruf) => anruf.direction === "outbound" && anruf.counterparty === ziel && !ENDSTATUS.includes(anruf.status),
+        (anruf) => anruf.direction === "outbound" && anruf.counterparty === zielNorm && !ENDSTATUS.includes(anruf.status),
       );
       for (const anruf of offene) await abbrechen(anruf.id);
       return offene.length;

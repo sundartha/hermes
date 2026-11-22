@@ -2,6 +2,12 @@ import { urteilen } from "./urteil.mjs";
 
 export const ABSTAND_MS = 120000;
 
+const SCHREIBWEISE = /[\s\-().]/g;
+
+export function normalisiert(nummer) {
+  return String(nummer).replace(SCHREIBWEISE, "");
+}
+
 async function messenOderNichts(messen) {
   try {
     return urteilen(await messen());

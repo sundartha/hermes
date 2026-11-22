@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import * as anruferModul from "../../scripts/anruf-probe/anrufer.mjs";
 import { PROBE_STAGING_TEST_TOKEN, PROBE_TELNYX_SCHLUESSEL } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const MODUL = fileURLToPath(new URL("../helpers/anruf-probe-anrufer.mjs", import.meta.url));
@@ -93,3 +94,53 @@ for (const [name, ziel] of SCHREIBWEISE) {
     assert.equal(gewaehlt, 1);
   });
 }
+
+const JETZT = Date.parse("2026-11-17T10:00:00.000Z");
+const HEUTE = "2026-11-17T01:00:00.000Z";
+
+function anruferFuerZiel(ziel, status) {
+  const calls = Array.from({ length: 6 }, (_x, index) => ({
+    id: `v${index}`,
+    direction: "outbound",
+    counterparty: NUMMER,
+    status,
+  }));
+  const aufgerufen = [];
+  const abfrage = async (_url, optionen) => {
+    const { name, arguments: argumente } = JSON.parse(optionen.body).params;
+    aufgerufen.push(name);
+    const strukturiert =
+      name === "list_calls" ? { calls } : { call_id: argumente.call_id, status: "completed", started_at: HEUTE };
+    const rpc = { jsonrpc: "2.0", id: 1, result: { structuredContent: strukturiert } };
+    return { ok: true, status: 200, text: async () => JSON.stringify(rpc) };
+  };
+  const anrufer = anruferModul.anruferBauen({
+    basis: STAGING,
+    token: PROBE_STAGING_TEST_TOKEN,
+    ziel,
+    sprache: "de",
+    auftraggeber: "Probe GmbH",
+    vorname: "Anna",
+    abfrage,
+    uhr: { jetzt: () => JETZT, warte: async () => {} },
+  });
+  return { anrufer, aufgerufen };
+}
+
+for (const [name, ziel] of [["glatt", NUMMER], ...SCHREIBWEISE]) {
+  test(`Tageszählung erkennt Anrufe an die Zielnummer trotz Schreibweise: ${name}`, async () => {
+    const { anrufer } = anruferFuerZiel(ziel, "completed");
+    assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 6, anrufe: 6 });
+  });
+
+  test(`Auflegen erkennt offene Anrufe an die Zielnummer trotz Schreibweise: ${name}`, async () => {
+    const { anrufer, aufgerufen } = anruferFuerZiel(ziel, "in_progress");
+    assert.equal(await anrufer.offeneBeenden(), 6);
+    assert.equal(aufgerufen.filter((eintrag) => eintrag === "cancel_call").length, 6);
+  });
+}
+
+test("Tageszählung zählt Anrufe an eine andere Nummer nicht", async () => {
+  const { anrufer } = anruferFuerZiel("+12544671234", "completed");
+  assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
+});
