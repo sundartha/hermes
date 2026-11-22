@@ -503,7 +503,7 @@ export { classifyCallTime, SUBSCRIPTION_PATCH_FIELDS } from "./store/state-ops.j
 export { KEINE_DB_RESERVIERUNG, RESERVIERUNG_GRUND } from "./store/budget-reserve.js";
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, WARTENDE_GESAMT, WARTENDE_JE_KUNDE, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
 export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
-export { arbeitGehoertLebenderFremder, auftragHaltGrund } from "./store/zustand/besitz.js";
+export { arbeitGehoertLebenderFremder } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export { ersatzNummerEintragen, ersatzSpurEntfernen } from "./store/ersatz-spur.js";
 export { speicherBereiche } from "./store/bereiche.js";

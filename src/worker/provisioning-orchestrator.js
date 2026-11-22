@@ -9,14 +9,12 @@ import {
 import { ANRUFSTART_JOB } from "../begriffe/anrufe.js";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.ts";
-import { auftragHaltGrund, speicherBereiche } from "../store.js";
+import { speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 
 const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
-const FREMDER_AUFTRAG = "fremd";
-const KEINE_LAGE = { eigene: null, lebende: [] };
 const ABGESCHALTET_MELDUNG = "Warteschlange gestoppt - Auftrag wird zurueckgestellt";
 
 function jobOptionsFor(number, billingConfig) {
@@ -230,69 +228,20 @@ export function makeProvisioningOrchestrator({
       .catch((e) => console.error("[provision-reconcile] close:", e.message));
   }
 
-  function meldeHalt(job, grund) {
-    console.warn(
-      `[provision-reconcile] hold job=${job.id} number=${job.numberId} tenant=${job.tenantId} grund=${grund}`,
-    );
-  }
-
-  async function uebernehmbareAuftraege(jobs, lage, besitzer) {
-    const frei = [];
-    for (const job of jobs) {
-      const alt = besitzer.get(job.id) ?? null;
-      const grund = auftragHaltGrund(alt, lage);
-      if (grund === FREMDER_AUFTRAG) {
-        console.log(`[provision-reconcile] fremd job=${job.id}`);
-        continue;
-      }
-      if (grund) {
-        meldeHalt(job, grund);
-        continue;
-      }
-      const gewonnen = await bereiche.nummernkauf.uebernimmAuftrag({
-        tenantId: job.tenantId,
-        jobId: job.id,
-        alt,
-        neu: lage.eigene,
-      });
-      if (!gewonnen) continue;
-      frei.push(job);
-    }
-    return frei;
-  }
-
-  async function reconcileOrphanedJobs() {
-    const lage = (await store.besitzLage?.()) ?? KEINE_LAGE;
-    const kandidaten = await bereiche.nummernkauf.ladeFremdeOffeneAuftraege(lage.eigene);
-    const zustand = store.load();
-    const buckets = classifyQueuedProvisioningJobs(
-      kandidaten
-        ? {
-            ...zustand,
-            provisioningJobs: kandidaten.map(({ job }) => job),
-            numbers: kandidaten.flatMap(({ nummer }) => (nummer ? [nummer] : [])),
-          }
-        : zustand,
-      {
-        nowMs: Date.now(),
-        maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
-        kycMinLevel: KYC_OUTBOUND_MIN,
-      },
-    );
-    closeSettledProvisioningJobs(buckets.close);
-    for (const { job, reason } of buckets.hold) meldeHalt(job, reason);
-    const besitzer = new Map((kandidaten ?? []).map(({ job, instanz }) => [job.id, instanz]));
-    redriveProvisioningJobs(await uebernehmbareAuftraege(buckets.redrive, lage, besitzer));
-  }
-
-  const reconcileOrphanedProvisioning = makeSingleFlight(async () => {
+  function reconcileOrphanedProvisioning() {
     if (!config.provisioning.provisioningEnabled) return;
-    try {
-      await reconcileOrphanedJobs();
-    } catch {
-      console.error("[provision-reconcile] Abgleich der offenen Auftraege fehlgeschlagen");
-    }
-  });
+    const buckets = classifyQueuedProvisioningJobs(store.load(), {
+      nowMs: Date.now(),
+      maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
+      kycMinLevel: KYC_OUTBOUND_MIN,
+    });
+    closeSettledProvisioningJobs(buckets.close);
+    for (const { job, reason } of buckets.hold)
+      console.warn(
+        `[provision-reconcile] hold job=${job.id} number=${job.numberId} tenant=${job.tenantId} grund=${reason}`,
+      );
+    redriveProvisioningJobs(buckets.redrive);
+  }
 
   let anrufstartGestoppt = false;
 
