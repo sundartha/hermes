@@ -97,7 +97,7 @@ export function makeProvisioningOrchestrator({
         hoechstens: Math.min(1, config.provisioning.maxNumbersPerTenant),
       });
     } catch (fehler) {
-      await zurueck().catch(() => {});
+      await zurueck().catch(() => undefined);
       throw fehler;
     }
     if (!gebucht || gebucht.ok) return null;
@@ -109,8 +109,8 @@ export function makeProvisioningOrchestrator({
     const idempotencyKey = `provision_${numberId}`;
     return store
       .withStoreLock(async () => {
-        const s = store.load();
-        const job = await jobAnlegen(s, { numberId, tenantId, idempotencyKey });
+        const zustand = store.load();
+        const job = await jobAnlegen(zustand, { numberId, tenantId, idempotencyKey });
         store.save();
         return { ok: true, jobId: job.id };
       })
@@ -118,8 +118,8 @@ export function makeProvisioningOrchestrator({
         await einreihen({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
         return res;
       })
-      .catch((e) => {
-        console.error("[provision] Job-Spur fehlgeschlagen:", e.message);
+      .catch((fehler) => {
+        console.error("[provision] Job-Spur fehlgeschlagen:", Reflect.get(Object(fehler), "message"));
         return { ok: false };
       });
   }
@@ -129,24 +129,27 @@ export function makeProvisioningOrchestrator({
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
       .withStoreLock(async () => {
-        const s = store.load();
-        const r = resolveProvisionRetry(s, {
+        const zustand = store.load();
+        const retry = resolveProvisionRetry(zustand, {
           tenantId,
           nowMs: Date.now(),
           maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
-        const abgelehnt = await nummerUnterSperre(s, r, tenantId);
+        const abgelehnt = await nummerUnterSperre(zustand, retry, tenantId);
         if (abgelehnt) return abgelehnt;
-        if (shouldPersistProvisionResult(r)) {
+        if (shouldPersistProvisionResult(retry)) {
           store.save();
           store.stammdatenSchreiben?.(tenantId, SKIP_VERMERK_SCHLUESSEL);
         }
-        return r;
+        return retry;
       })
-      .catch((e) => {
-        console.error("[webhook-provision] Persistenz fehlgeschlagen:", e.message);
+      .catch((fehler) => {
+        console.error(
+          "[webhook-provision] Persistenz fehlgeschlagen:",
+          Reflect.get(Object(fehler), "message"),
+        );
         return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
       });
     if (!numberResult.ok) {
@@ -163,14 +166,16 @@ export function makeProvisioningOrchestrator({
     }
     const jobRes = await queueProvisioning(numberId, tenantId);
     if (!jobRes.ok) return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
-    void runProvisioningDrainExclusive();
+    runProvisioningDrainExclusive().catch((fehler) => {
+      console.error("[provision-drain]", Reflect.get(Object(fehler), "message"));
+    });
     return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.jobId };
   }
 
   async function runQueuedJob(state, queuedJob, deps) {
     if (gestoppt) throw new Error(ABGESCHALTET_MELDUNG);
     const record = state.provisioningJobs.find(
-      (j) => j.idempotencyKey === queuedJob.idempotencyKey,
+      (eintrag) => eintrag.idempotencyKey === queuedJob.idempotencyKey,
     );
     const opts = jobOptionsFor(findNumber(state, queuedJob.payload.numberId), config.billing);
     let result;
@@ -179,12 +184,17 @@ export function makeProvisioningOrchestrator({
       if (skippedOverFailedNumber(result)) return;
       if (record) markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.DONE);
       store.save();
-    } catch (err) {
+    } catch (fehler) {
       if (record)
-        markProvisioningJob(state, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
+        markProvisioningJob(
+          state,
+          record.id,
+          PROVISIONING_JOB_STATUS.FAILED,
+          Reflect.get(Object(fehler), "message"),
+        );
       store.save();
-      console.error("[provision-worker]", err.message);
-      throw err;
+      console.error("[provision-worker]", Reflect.get(Object(fehler), "message"));
+      throw fehler;
     }
     meterNewNumber(result);
   }
@@ -193,8 +203,11 @@ export function makeProvisioningOrchestrator({
     if (!isNewPaidNumber(result, config.billing)) return;
     try {
       metering.recordNumberMonthMeter(result.number, new Date().toISOString());
-    } catch (err) {
-      console.error("[provision-worker] Monatsbeleg fehlgeschlagen:", err.message);
+    } catch (fehler) {
+      console.error(
+        "[provision-worker] Monatsbeleg fehlgeschlagen:",
+        Reflect.get(Object(fehler), "message"),
+      );
     }
   }
 
@@ -214,18 +227,23 @@ export function makeProvisioningOrchestrator({
     if (!jobs.length) return;
     Promise.all(jobs.map((job) => enqueueProvisioningJob(einreihen, job)))
       .then(() => runProvisioningDrainExclusive())
-      .catch((err) => console.error("[provision-redrive]", err.message));
+      .catch((fehler) => {
+        console.error("[provision-redrive]", Reflect.get(Object(fehler), "message"));
+      });
   }
 
   function closeSettledProvisioningJobs(jobs) {
     if (!jobs.length) return;
     store
       .withStoreLock(() => {
-        const s = store.load();
-        for (const j of jobs) markProvisioningJob(s, j.id, PROVISIONING_JOB_STATUS.DONE);
+        const zustand = store.load();
+        for (const eintrag of jobs)
+          markProvisioningJob(zustand, eintrag.id, PROVISIONING_JOB_STATUS.DONE);
         store.save();
       })
-      .catch((e) => console.error("[provision-reconcile] close:", e.message));
+      .catch((fehler) => {
+        console.error("[provision-reconcile] close:", Reflect.get(Object(fehler), "message"));
+      });
   }
 
   function reconcileOrphanedProvisioning() {
@@ -258,7 +276,9 @@ export function makeProvisioningOrchestrator({
       if (laeuft) return;
       laeuft = true;
       abruf()
-        .catch((err) => console.error(praefix, err.message))
+        .catch((fehler) => {
+          console.error(praefix, Reflect.get(Object(fehler), "message"));
+        })
         .finally(() => {
           laeuft = false;
         });
@@ -309,12 +329,12 @@ export function makeProvisioningOrchestrator({
       );
       if (bilanz.faellig)
         console.log(
-          `[number-month] faellig=${bilanz.faellig} gebucht=${bilanz.gebucht} ` +
-            `ohne_preis=${bilanz.ohnePreis} fehler=${bilanz.fehler}`,
+          `[number-month] faellig=${String(bilanz.faellig)} gebucht=${String(bilanz.gebucht)} ` +
+            `ohne_preis=${String(bilanz.ohnePreis)} fehler=${String(bilanz.fehler)}`,
         );
       return { gebucht: bilanz.gebucht };
-    } catch (e) {
-      console.error("[number-month] Buchung fehlgeschlagen:", e.message);
+    } catch (fehler) {
+      console.error("[number-month] Buchung fehlgeschlagen:", Reflect.get(Object(fehler), "message"));
       return { gebucht: 0 };
     }
   }
