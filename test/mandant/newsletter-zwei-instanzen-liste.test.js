@@ -1,8 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { speicherBereiche } from "../../src/store.js";
-import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+import { BASE_ENV, tempDataDir } from "../helpers.js";
+import { BOOTSTRAP_TENANT_ID, makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+
+Object.assign(process.env, BASE_ENV, { DATA_DIR: tempDataDir(), STORE_BACKEND: "json" });
+
+const store = await import("../../src/store.js");
+const { speicherBereiche } = store;
+await store.oeffneSpeicher();
 
 const LISTE_SQL = "SELECT newsletter_recipients, newsletter_confirm_mail_log FROM tenant WHERE id = $1";
 const ALT = "2026-11-17T09:00:00.000Z";
@@ -228,4 +234,12 @@ test("ein Speicher ohne Abgleich (JSON) entscheidet nur über die eigene Kopie",
   assert.equal(await newsletter.confirmNewsletterRecipientByToken("h", JETZT), null);
   assert.equal(await newsletter.unsubscribeNewsletterRecipientByToken("u"), null);
   assert.deepEqual(aufrufe, ["entfernen", "bestaetigen", "abmelden"]);
+});
+
+test("JSON-Speicher über die Fassade: unbekannter Token und unbekannte Adresse liefern null und false statt zu werfen", async () => {
+  const newsletter = store.speicherBereiche(store).newsletter;
+
+  assert.equal(await newsletter.confirmNewsletterRecipientByToken("unbekannt", JETZT), null);
+  assert.equal(await newsletter.unsubscribeNewsletterRecipientByToken("unbekannt"), null);
+  assert.equal(await newsletter.removeNewsletterRecipient(BOOTSTRAP_TENANT_ID, "niemand@example.com"), false);
 });
