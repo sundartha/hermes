@@ -62,8 +62,14 @@ interface OnboardingSipRegistrar {
   ensureRegistration: (nummer: { e164: string | null; numberId: string }) => Promise<{ phoneNumberId: string; angelegt: boolean }>;
 }
 
+interface TrunkNummer {
+  id: string;
+  e164: string;
+  providerAgentPhoneNumberId: string;
+}
+
 interface OnboardingInboundTrunkSchreiber {
-  ensureInboundTrunk: (number: OnboardingNumber) => Promise<string>;
+  ensureInboundTrunk: (number: TrunkNummer) => Promise<string>;
   zugangFp: string;
 }
 
@@ -169,7 +175,7 @@ export async function provisionNumber(
     monthlyCostCents: monthlyCostCentsForProviderPrice(candidate.price),
   });
   await registriereNummerFailSoft(state, activatedNumber, { sipRegistrar, logger });
-  await schreibeInboundTrunkFailSoft(state, activatedNumber, { inboundTrunkSchreiber, logger });
+  await schreibeInboundTrunkFailSoft(state, activatedNumber, { e164: ordered.e164, inboundTrunkSchreiber, logger });
   return activatedNumber;
 }
 
@@ -197,13 +203,23 @@ async function schreibeInboundTrunkFailSoft(
   state: OnboardingState,
   number: OnboardingNumber,
   {
+    e164,
     inboundTrunkSchreiber,
     logger = console,
-  }: { inboundTrunkSchreiber: OnboardingInboundTrunkSchreiber | null | undefined; logger?: OnboardingLogger },
+  }: {
+    e164: string;
+    inboundTrunkSchreiber: OnboardingInboundTrunkSchreiber | null | undefined;
+    logger?: OnboardingLogger;
+  },
 ) {
-  if (!inboundTrunkSchreiber || !number.providerAgentPhoneNumberId) return;
+  const agentNummernId = number.providerAgentPhoneNumberId;
+  if (!inboundTrunkSchreiber || !agentNummernId) return;
   try {
-    const beleg = await inboundTrunkSchreiber.ensureInboundTrunk(number);
+    const beleg = await inboundTrunkSchreiber.ensureInboundTrunk({
+      id: number.id,
+      e164,
+      providerAgentPhoneNumberId: agentNummernId,
+    });
     if (beleg === TRUNK_BELEG.BELEGT)
       markNumberElInboundTrunkBelegt(state, number.id, {
         nowIso: new Date().toISOString(),
