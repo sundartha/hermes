@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
-import { seedCall } from "../helpers.js";
+import { BASE_ENV, seedCall, tempDataDir } from "../helpers.js";
 
 const ALT = `alt-host:${randomUUID()}`;
 const FREMDER = `fremd-host:${randomUUID()}`;
 const LAUF = randomUUID();
+
+Object.assign(process.env, BASE_ENV, { DATA_DIR: tempDataDir(), STORE_BACKEND: "json" });
 
 test("Eintragung: unter dem JSON-Speicher wechselt ein aktiver Anruf nur beim erwarteten Besitzer, einmal und nur solange er aktiv ist", async () => {
   const speicher = await import("../../src/store.js");
