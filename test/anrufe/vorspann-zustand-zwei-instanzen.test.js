@@ -52,12 +52,12 @@ function starteAnbieter(verhalten) {
   return server.then((attrappe) => ({ attrappe, gesprochen, wiedergaben }));
 }
 
-function ereignis(signer, callId, eventType) {
+function ereignis(signer, srv, { callId, art: eventType }) {
   const rumpf = JSON.stringify({
     data: { id: `evt-${eventType}-${callId}`, event_type: eventType, payload: { call_control_id: CALLEE_BEIN, status: "ok" } },
   });
   const zeitstempel = String(nowSeconds());
-  return abrufMitFrist(`${signer.ziel}/voice/vorspann?callId=${callId}`, {
+  return abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf), "telnyx-timestamp": zeitstempel },
     body: rumpf,
@@ -113,8 +113,7 @@ test("Der gesprochene Vorspann eines auf Instanz A gewaehlten Anrufs steht beim 
     await sql(ALTE_ZEILE_SQL);
     assert.equal((await platziere(a)).status, HTTP_OK);
     const callId = await callIdVon(sql);
-    signer.ziel = a.localUrl;
-    assert.equal((await ereignis(signer, callId, "call.answered")).status, HTTP_OK);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.answered" })).status, HTTP_OK);
     const [{ audio_url: audioUrl }] = await zeilenBis(async () => wiedergaben, (liste) => liste.length === 1);
     const antwort = await init(b, sql, callId);
     assert.equal(antwort.status, HTTP_OK);
@@ -129,7 +128,7 @@ test("Der gesprochene Vorspann eines auf Instanz A gewaehlten Anrufs steht beim 
     assert.deepEqual((await sql(SICHERHEIT_SQL)).rows, [{ relrowsecurity: true, relforcerowsecurity: true }]);
     assert.equal(rows[0].token, audioUrl.split("/voice/tts/")[1]);
     assert.match(rows[0].token, TOKEN_FORMAT);
-    assert.equal((await ereignis(signer, callId, "call.hangup")).status, HTTP_OK);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
     await zeilenBis(async () => (await sql(ANZAHL_SQL)).rows[0].anzahl, (anzahl) => anzahl === 0);
   });
 });
@@ -139,8 +138,7 @@ test("Ist die Zeile abgelaufen, liefert Instanz B beim Init keinen Vorspann-Text
   await mitAnbieter(t, {}, async ({ a, b, sql, signer, wiedergaben, gesprochen }) => {
     assert.equal((await platziere(a)).status, HTTP_OK);
     const callId = await callIdVon(sql);
-    signer.ziel = a.localUrl;
-    assert.equal((await ereignis(signer, callId, "call.answered")).status, HTTP_OK);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.answered" })).status, HTTP_OK);
     await zeilenBis(async () => wiedergaben, (liste) => liste.length === 1);
     await sql("UPDATE vorspann_zustand SET expires_at = now() - interval '1 second' WHERE call_id = $1", [callId]);
     const eigene = await init(a, sql, callId);
@@ -186,8 +184,7 @@ test("Scheitert das Loeschen der Zeile beim Auflegen, wird der Anruf trotzdem be
     assert.equal((await platziere(a)).status, HTTP_OK);
     const callId = await callIdVon(sql);
     await sql("ALTER TABLE vorspann_zustand RENAME TO vorspann_zustand_weg");
-    signer.ziel = a.localUrl;
-    assert.equal((await ereignis(signer, callId, "call.hangup")).status, HTTP_OK);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
     await zeilenBis(
       async () => (await sql("SELECT status FROM call WHERE id = $1", [callId])).rows[0].status,
       (status) => status !== "active",
