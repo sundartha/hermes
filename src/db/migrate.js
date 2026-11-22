@@ -42,6 +42,7 @@ const NUMMER_SCHLUESSEL_NAME = "0030_nummer_schluessel.sql";
 const PROVISIONING_JOB_INSTANZ_NAME = "0031_provisioning_job_instanz.sql";
 const VORSPANN_ZUSTAND_NAME = "0032_vorspann_zustand.sql";
 const VORSPANN_FRISTEN_NAME = "0033_vorspann_fristen.sql";
+const NUMMER_LEBEND_NAME = "0034_nummer_lebend.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -193,6 +194,10 @@ const MIGRATION_READERS = [
   {
     name: VORSPANN_FRISTEN_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", VORSPANN_FRISTEN_NAME), "utf8"),
+  },
+  {
+    name: NUMMER_LEBEND_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", NUMMER_LEBEND_NAME), "utf8"),
   },
 ];
 

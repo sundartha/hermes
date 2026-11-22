@@ -111,7 +111,7 @@ interface Triggerergebnis {
 
 interface NummernkaufBereich {
   ensureTenant: (tenantId: string) => Promise<unknown>;
-  legeNummerAn: (eingabe: { tenantId: string; number: Nummer; hoechstens: number }) => Promise<{ ok: boolean } | null>;
+  legeNummerAn: (eingabe: { tenantId: string; number: Nummer; hoechstens: number; plattformHoechstens: number }) => Promise<{ ok: boolean } | null>;
   entferneNummer: (eingabe: { tenantId: string; numberId: string }) => Promise<unknown>;
   legeAuftragAn: (eingabe: JobEingabe & { number: Nummer; jetztIso: string }) => Promise<Bereitstellung | null>;
   ladeFremdeOffeneAuftraege: (eigene: string | null) => Promise<FremderAuftrag[] | null>;
@@ -265,6 +265,7 @@ export function makeProvisioningOrchestrator({
         tenantId,
         number: ergebnis.number,
         hoechstens: Math.min(1, config.provisioning.maxNumbersPerTenant),
+        plattformHoechstens: config.provisioning.maxNumbers,
       });
     } catch (fehler) {
       await zurueck().catch(() => undefined);

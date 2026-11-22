@@ -27,6 +27,7 @@ Die Teilläufe des Sweep-Takts (`TEILLAEUFE` in `src/zeitsteuerung.js`, Aufruf `
 | `anruf_schluessel` | mit dem Anruf (`ON DELETE CASCADE`), nur Prüfsummen | `src/db/migrations/0019_anruf_schluessel.sql` |
 | `nummer_schluessel` | mit der Nummer (Trigger auf `number`), nur Prüfsumme und Mandant | `src/db/migrations/0030_nummer_schluessel.sql` |
 | `vorspann_zustand` | Zeile je Vorspann-Anruf: gelöscht beim Auflegen, sonst nach `expires_at` im Sweep-Takt (alle Mandanten, Teillauf `vorspann-aufraeumen`) und beim nächsten Anlegen; enthält den Satz und das Token der TTS-Ablage | `src/store/vorspann-zustand.js`, `TEILLAEUFE` in `src/zeitsteuerung.js`, `src/db/migrations/0032_vorspann_zustand.sql`, Fristspalten `src/db/migrations/0033_vorspann_fristen.sql` |
+| `nummer_lebend_zahl` | eine Zeile, Trigger auf `number`; nur die Anzahl lebender Nummern, keine Kennungen | `src/db/migrations/0034_nummer_lebend.sql` |
 | Archiv der Warteschlange (pg-boss) | Aufbewahrung, Löschen nach Erledigung und Totpost-Aufbewahrung als Konstanten `RETENTION_SECONDS`, `DELETE_AFTER_SECONDS`, `DEAD_LETTER_RETENTION_SECONDS`; Pflege durch pg-boss | `src/queue/adapters/pgboss/queue.ts` |
 
 ## Bewusst unbegrenzt, Entscheidung offen
