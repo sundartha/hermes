@@ -2,11 +2,11 @@ import { findNumber } from "../store/state-ops.js";
 import { provisionNumber } from "../onboarding.ts";
 import { NUMBER_STATUS } from "../begriffe/nummern.js";
 
-export async function handleProvisionJob(s, job, { opts, ...deps }) {
+export async function handleProvisionJob(state, job, { opts, ...deps }) {
   const { numberId } = job.payload;
-  const number = findNumber(s, numberId);
-  if (!number || number.status !== NUMBER_STATUS.REQUESTED)
+  const number = findNumber(state, numberId);
+  if (number?.status !== NUMBER_STATUS.REQUESTED)
     return { skipped: true, status: number?.status ?? null };
-  const result = await provisionNumber(s, deps, { numberId, ...opts });
+  const result = await provisionNumber(state, deps, { numberId, ...opts });
   return { number: result };
 }

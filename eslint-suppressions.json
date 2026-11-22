@@ -698,11 +698,6 @@
       "count": 1
     }
   },
-  "src/worker/provisioning.js": {
-    "id-length": {
-      "count": 1
-    }
-  },
   "test/_outbound-harness.js": {
     "no-param-reassign": {
       "count": 3
