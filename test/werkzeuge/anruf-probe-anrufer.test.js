@@ -126,6 +126,7 @@ test("Anruf: place_call mit Ziel, 60 s und Deutsch, Messung aus Status und erste
   assert.deepEqual(messung, {
     annahmeSekunden: 4,
     begruessung: GRUSS,
+    begruessungAntwort: false,
     gegenseite: [GRUSS],
     stillstandSekunden: 0,
     sprache: "de",
@@ -136,7 +137,7 @@ test("Anruf: place_call mit Ziel, 60 s und Deutsch, Messung aus Status und erste
     status: "completed",
   });
   assert.equal(uhr.zeit, JETZT + 2 * 2000);
-  assert.deepEqual(urteilen(messung), { gruen: true, gerissen: [] });
+  assert.deepEqual(urteilen(messung), { gruen: false, gerissen: ["keine_antwort"] });
 });
 
 test("Anruf: Gegenseitenzeile in jeder Sprache der Rolle, Agentenzeilen zählen nicht, die erste gewinnt", async () => {
@@ -168,7 +169,7 @@ test("Anruf: keine Gegenseitenzeile ergibt keine Begrüßung und rotes Urteil be
   );
   const messung = await anrufer.anrufen({ ziel: ZIEL });
   assert.equal(messung.begruessung, undefined);
-  assert.deepEqual(urteilen(messung).gerissen, ["begruessung"]);
+  assert.deepEqual(urteilen(messung).gerissen, ["begruessung", "zu_kurz", "keine_antwort"]);
 });
 
 test("Anruf: nie angenommen ergibt Status des Anbieters und Annahme ohne Zahl, Urteil rot annahme und status", async () => {
@@ -181,7 +182,7 @@ test("Anruf: nie angenommen ergibt Status des Anbieters und Annahme ohne Zahl, U
   assert.equal(messung.status, "no_answer");
   assert.ok(Number.isNaN(messung.annahmeSekunden));
   assert.equal(von("get_call_status").length, 1);
-  assert.deepEqual(urteilen(messung).gerissen, ["annahme", "begruessung", "status"]);
+  assert.deepEqual(urteilen(messung).gerissen, ["annahme", "begruessung", "zu_kurz", "keine_antwort", "status"]);
 });
 
 test("Anruf: jeder Endstatus beendet die Abfrage ohne Auflegen", async () => {
