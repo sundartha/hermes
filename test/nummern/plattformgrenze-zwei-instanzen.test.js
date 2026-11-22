@@ -23,8 +23,8 @@ const KONTEXT = "SELECT set_config('app.current_tenant', $1, false)";
 const FREMDE_NUMMER = "INSERT INTO number (id, tenant_id, status) VALUES ($1, $2, $3)";
 const STATUS_SETZEN = "UPDATE number SET status = $2 WHERE id = $1";
 const NUMMERN_ZAEHLEN = "SELECT count(*)::int AS anzahl FROM number";
-const ZAEHLER_LESEN = "SELECT nummern_lebend_gesamt() AS anzahl";
-const ZAEHLER_ZEILEN = "SELECT * FROM nummer_lebend_zahl";
+const ZAEHLER_LESEN = "SELECT nummern_lebend_gesamt()::int AS anzahl";
+const ZAEHLER_ZEILEN = "SELECT id::int AS id, anzahl::int AS anzahl FROM nummer_lebend_zahl";
 const NUMMERN_LESEN = "SELECT id FROM number";
 
 function runnerFuer(pool, vorQuery = () => {}) {
