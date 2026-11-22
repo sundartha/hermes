@@ -408,6 +408,15 @@ export function makeProvisioningOrchestrator({
     );
   }
 
+  async function versuchtUebernahme(job, alt, lage) {
+    try {
+      return await bereiche.nummernkauf.uebernimmAuftrag({ tenantId: job.tenantId, jobId: job.id, alt, neu: lage.eigene });
+    } catch {
+      console.error(`[provision-reconcile] Uebernahme fehlgeschlagen job=${job.id}`);
+      return false;
+    }
+  }
+
   async function uebernehmbareAuftraege(jobs, lage, besitzer) {
     const frei = [];
     for (const job of jobs) {
@@ -421,14 +430,7 @@ export function makeProvisioningOrchestrator({
         meldeHalt(job, grund);
         continue;
       }
-      const gewonnen = await bereiche.nummernkauf.uebernimmAuftrag({
-        tenantId: job.tenantId,
-        jobId: job.id,
-        alt,
-        neu: lage.eigene,
-      });
-      if (!gewonnen) continue;
-      frei.push(job);
+      if (await versuchtUebernahme(job, alt, lage)) frei.push(job);
     }
     return frei;
   }
