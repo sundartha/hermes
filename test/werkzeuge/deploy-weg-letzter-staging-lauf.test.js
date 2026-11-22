@@ -214,3 +214,9 @@ test("Liste nur mit Läufen, die nicht zählen, ist rot", async () => {
   assert.equal(ergebnis.deploy, false);
   assert.equal(enthalten(zeilen, KEIN_LAUF_TEXT), true);
 });
+
+test("Antwort ohne Feld workflow_runs ist rot und sperrt den Lauf-Start", async () => {
+  const { ergebnis, zeilen } = await laufen(undefined, lauf_ereignis());
+  assert.equal(ergebnis.deploy, false);
+  assert.equal(enthalten(zeilen, KEIN_LAUF_TEXT), true);
+});
