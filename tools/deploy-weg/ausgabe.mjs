@@ -144,6 +144,7 @@ const KATALOG = new Map([
   ["rot_ereignis", "Rot: unbekanntes oder unvollständiges Ereignis"],
   ["rot_staging_nicht_gruen", "Rot: der Staging-Lauf ist nicht grün ({status})"],
   ["rot_staging_letzter_rot", "Rot: der jüngste Staging-Lauf auf master ist nicht grün ({status})"],
+  ["rot_staging_kein_lauf", "Rot: auf master gibt es keinen zählenden Staging-Lauf"],
   ["rot_staging_kein_push", "Rot: der Staging-Lauf kam nicht von einem Push auf master"],
   ["rot_fremdes_repo", "Rot: der Lauf gehört nicht zu diesem Repository"],
   ["rot_hand_nutzer", "Rot: Hand-Start durch einen Nutzer ohne Freigaberecht"],

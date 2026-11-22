@@ -61,7 +61,7 @@ function standardRouten(optionen) {
     [`/repos/${REPO}/compare/${PRODUKTION}...${COMMIT}`, { status: "ahead" }],
     [
       `/repos/${REPO}/actions/workflows/staging.yml/runs`,
-      { workflow_runs: optionen.stagingLaeufe ?? [] },
+      { workflow_runs: optionen.stagingLaeufe ?? [stagingLauf("success")] },
     ],
   ]);
 }
@@ -87,6 +87,7 @@ async function starten(optionen) {
 function stagingLauf(conclusion) {
   return {
     conclusion,
+    status: "completed",
     event: "push",
     head_branch: "master",
     head_sha: COMMIT,
@@ -331,7 +332,10 @@ test("Check, der nur nach dem Merge fehlschlug, bleibt rot", async () => {
 });
 
 test("Hand-Start ohne grünen Staging-Lauf für den Commit bleibt rot", async () => {
-  const { ergebnis, zeilen } = await laufen({}, handEreignis());
+  const { ergebnis, zeilen } = await laufen(
+    { stagingLaeufe: [stagingLauf("failure")] },
+    handEreignis(),
+  );
   assert.equal(ergebnis.ok, false);
   assert.equal(ergebnis.deploy, false);
   assert.equal(
