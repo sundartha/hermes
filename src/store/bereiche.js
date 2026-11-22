@@ -205,9 +205,8 @@ async function ladeFremdeOffeneAuftraege(speicher, sql, eigene) {
 }
 
 async function uebernimmAuftrag(speicher, sql, eingabe) {
-  if (!(await sql.auftragUebernehmen(eingabe))) return false;
-  const gefunden = (await sql.offene()).find(({ job }) => job.id === eingabe.jobId);
-  if (!gefunden) return true;
+  const gefunden = await sql.auftragUebernommen(eingabe);
+  if (!gefunden) return false;
   const zustand = speicher.load();
   if (gefunden.nummer) gleicheAn(zustand.numbers, gefunden.nummer);
   gleicheAn(zustand.provisioningJobs, gefunden.job);

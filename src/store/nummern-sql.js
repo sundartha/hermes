@@ -18,7 +18,9 @@ const MANDANTEN_SQL = `SELECT id FROM tenant ORDER BY id`;
 const OFFENE_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND status = $2 ORDER BY id`;
 const NUMMERN_ZU_AUFTRAEGEN_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND id = ANY($2)`;
 const UEBERNEHMEN_SQL = `UPDATE provisioning_job SET instanz = $1
-  WHERE tenant_id = $2 AND id = $3 AND status = $4 AND instanz IS NOT DISTINCT FROM $5`;
+  WHERE tenant_id = $2 AND id = $3 AND status = $4 AND instanz IS NOT DISTINCT FROM $5
+  RETURNING ${AUFTRAG_SPALTEN}`;
+const NUMMER_ZUM_AUFTRAG_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND id = $2`;
 const NUMMER_ENTFERNEN_SQL = `DELETE FROM number WHERE tenant_id = $1 AND id = $2`;
 const AUFTRAG_ENTFERNEN_SQL = `DELETE FROM provisioning_job WHERE tenant_id = $1 AND id = $2`;
 const NACHLADEN_FEHLER = "[pg] nummer nachladen fehlgeschlagen:";
@@ -126,13 +128,18 @@ async function offeneLesen(client, zeileZuNummer) {
   return gefunden;
 }
 
-async function auftragUebernehmen(client, { tenantId, jobId, alt, neu }) {
+async function auftragUebernehmen(client, zeileZuNummer, { tenantId, jobId, alt, neu }) {
   await client.query("BEGIN");
   try {
     await client.query(KONTEXT_SQL, [tenantId]);
-    const { rowCount } = await client.query(UEBERNEHMEN_SQL, [neu, tenantId, jobId, PROVISIONING_JOB_STATUS.QUEUED, alt ?? null]);
+    const { rows } = await client.query(UEBERNEHMEN_SQL, [neu, tenantId, jobId, PROVISIONING_JOB_STATUS.QUEUED, alt ?? null]);
+    if (rows.length !== 1) {
+      await client.query("COMMIT");
+      return null;
+    }
+    const { rows: nummern } = await client.query(NUMMER_ZUM_AUFTRAG_SQL, [tenantId, rows[0].number_id]);
     await client.query("COMMIT");
-    return rowCount === 1;
+    return { job: alsAuftrag(rows[0]), nummer: nummern[0] ? zeileZuNummer(nummern[0]) : null };
   } catch (fehler) {
     await client.query("ROLLBACK").catch(() => {});
     throw fehler;
@@ -179,7 +186,9 @@ export function macheNummernSql({ einreihen, runner, zeileZuNummer, kennung = EI
     nummerAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => nummerAnlegen(client, eingabe)),
     auftragAnlegen: (eingabe) => unterSperre(eingabe.tenantId, (client) => auftragAnlegen(client, kennung, eingabe)),
     offene: () => runner.withClient((client) => offeneLesen(client, zeileZuNummer)),
-    auftragUebernehmen: (eingabe) => runner.withClient((client) => auftragUebernehmen(client, eingabe)),
+    auftragUebernommen: (eingabe) => runner.withClient((client) => auftragUebernehmen(client, zeileZuNummer, eingabe)),
+    auftragUebernehmen: async (eingabe) =>
+      (await runner.withClient((client) => auftragUebernehmen(client, zeileZuNummer, eingabe))) !== null,
     nummerEntfernen: ({ tenantId, numberId }) =>
       einreihen((client) => imMandanten(client, tenantId, () => client.query(NUMMER_ENTFERNEN_SQL, [tenantId, numberId]))),
     auftragEntfernen: ({ tenantId, jobId }) =>
