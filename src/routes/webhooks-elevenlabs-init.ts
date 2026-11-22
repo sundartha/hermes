@@ -68,7 +68,7 @@ interface Abhaengigkeiten {
   now: () => number;
   speicherFristMs: number;
   outboundInitInhalt?: ((call: Anruf, vorspann: unknown) => Record<string, unknown>) | undefined;
-  vorspannText: (callId: string) => unknown;
+  vorspannText: (callId: string, tenantId: string) => unknown;
 }
 
 type Zaehler = (ip: string | undefined) => { allowed: boolean; retryAfterS: number };
@@ -272,14 +272,14 @@ function inboundSperrgrundFuer({ store, config, call }: Dienste): InitGrund | nu
   return null;
 }
 
-function outboundAntwortFuer({
+async function outboundAntwortFuer({
   outboundInitInhalt,
   vorspannText,
   call,
-}: Pick<Abhaengigkeiten, "outboundInitInhalt" | "vorspannText"> & { call: Anruf }): Record<string, unknown> | null {
+}: Pick<Abhaengigkeiten, "outboundInitInhalt" | "vorspannText"> & { call: Anruf }): Promise<Record<string, unknown> | null> {
   if (!istOutboundElProfil(call)) return null;
   if (typeof outboundInitInhalt !== "function") throw new Error("Outbound-Init ohne Inhaltsfabrik");
-  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, vorspannText(call.id)) };
+  return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, await vorspannText(call.id, call.tenantId)) };
 }
 
 async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fristMs: number }): Promise<void> {
@@ -309,7 +309,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   const sperrgrund = inboundSperrgrundFuer({ store, config, call });
   if (sperrgrund) return keinAnruf({ res, body, grund: sperrgrund, callId: call.id });
 
-  const outboundAntwort = outboundAntwortFuer({ outboundInitInhalt, vorspannText, call });
+  const outboundAntwort = await outboundAntwortFuer({ outboundInitInhalt, vorspannText, call });
 
   if (!(store.getCall(call.id) ?? (await store.attachActiveCall(call.id))))
     return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });

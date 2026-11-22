@@ -171,20 +171,25 @@ async function beiKlingelfrist({ callId, zustand, store, voiceControl, abgehoben
   await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
 }
 
-async function waehleBein({ steuerung, call, token, config, ttsStore }) {
+const zustandsRef = (call) => ({ tenantId: call.tenantId, callId: call.id });
+
+async function waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand }) {
   try {
+    await vorspannZustand.anlegen({ ...zustandsRef(call), token, text: vorspann.text, ttlMs: VORSPANN_ABLAGE_TTL_MS });
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
     return callControlId;
   } catch (fehler) {
     ttsStore.release(token);
+    await vorspannZustand.loesche(zustandsRef(call));
     throw fehler;
   }
 }
 
-async function verwirfBein({ steuerung, call, callControlId, token, ttsStore }) {
+async function verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand }) {
   ttsStore.release(token);
   await legeBeinAuf(steuerung, call.id, callControlId);
+  await vorspannZustand.loesche(zustandsRef(call));
 }
 
 export function makeVorspannAblauf({
@@ -192,14 +197,14 @@ export function makeVorspannAblauf({
   store,
   config,
   ttsStore,
+  vorspannZustand,
   inboundBridges,
   ausgehendGesperrt,
   terminateAndBillCall,
   awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
-  now,
-  setTimer,
+  now, setTimer,
 }) {
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now });
@@ -209,12 +214,12 @@ export function makeVorspannAblauf({
   async function waehle({ call, vorspann }) {
     const steuerung = voiceControl(call.provider);
     const token = await ttsStore.put(vorspann.audio, { bisFreigabe: true, ttlMs: VORSPANN_ABLAGE_TTL_MS });
-    const callControlId = await waehleBein({ steuerung, call, token, config, ttsStore });
+    const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
       const zustand = { calleeId: callControlId, token, text: vorspann.text, stand: new Map(), aufgelegt: new Set() };
       zustaende.set(call.id, zustand);
       armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, zustand, store, voiceControl, abgehobeneAnrufe, beiAufgelegt }) });
-    } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore });
+    } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
 
@@ -257,6 +262,7 @@ export function makeVorspannAblauf({
   async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = abgehobeneAnrufe.delete(call.id) }) {
     zustaende.delete(call.id);
     ttsStore.release(zustand.token);
+    await vorspannZustand.loesche(zustandsRef(call)).catch((fehler) => logFehler("zustand", call.id, fehler));
     if (call.status !== "active") return;
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis });
     const andereBeinId = vomElBein ? zustand.calleeId : call.elCallControlId;
@@ -291,5 +297,5 @@ export function makeVorspannAblauf({
     }
   }
 
-  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: (callId) => zustaende.get(callId)?.text };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle, gesagterText: async (callId, tenantId) => zustaende.get(callId)?.text ?? (await vorspannZustand.leseText({ tenantId, callId })) };
 }

@@ -22,6 +22,7 @@ import {
 import { macheNachlaufAnspruch } from "./store/nachlauf-anspruch.js";
 import { makeAnrufstartMarker, makePostgresAnrufstartMarker } from "./store/anrufstart-marker.js";
 import { makePostgresLeitungsplaetze } from "./store/leitungsplaetze-pg.js";
+import { makePostgresVorspannZustand, makeSpeicherVorspannZustand } from "./store/vorspann-zustand.js";
 
 async function createPgBackend() {
   const { createPgPoolRunner } = await import("./store/pg-runner.js");
@@ -83,6 +84,7 @@ async function createPgBackend() {
     anrufstartMarker: makePostgresAnrufstartMarker(runner),
     ttsAblage: makePostgresTtsAblage(runner, { ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs }),
     konsultPlaetze: makePostgresKonsultPlaetze(runner),
+    vorspannZustand: makePostgresVorspannZustand(runner),
     faelligeFristen: makePostgresFristen(runner).faellige,
     setzeHoechstdauerFrist: async (anfrage) => {
       await store.drainFlushes();
@@ -158,6 +160,16 @@ export const ttsAblage = {
   holen: (token) => offenesBackend.ttsAblage.holen(token),
   lesen: (token) => offenesBackend.ttsAblage.lesen(token),
   freigeben: (token) => offenesBackend.ttsAblage.freigeben(token),
+};
+
+const speicherVorspannZustand = makeSpeicherVorspannZustand();
+
+const aktiverVorspannZustand = () => offenesBackend?.vorspannZustand ?? speicherVorspannZustand;
+
+export const vorspannZustand = {
+  anlegen: (anfrage) => aktiverVorspannZustand().anlegen(anfrage),
+  leseText: (anfrage) => aktiverVorspannZustand().leseText(anfrage),
+  loesche: (anfrage) => aktiverVorspannZustand().loesche(anfrage),
 };
 
 const aktiveKonsultPlaetze = () => offenesBackend?.konsultPlaetze ?? speicherKonsultPlaetze;
