@@ -1978,7 +1978,6 @@ async function flushCostCrossCheck(client, row) {
 }
 
 async function flushPlatformNumberUse(client, bindings) {
-  await deleteMissingPlatformNumberUse(client, bindings.map((binding) => binding.id));
   for (const binding of bindings) {
     await client.query(
       `INSERT INTO platform_number_use
@@ -1992,14 +1991,6 @@ async function flushPlatformNumberUse(client, bindings) {
        binding.providerNumberId ?? null, binding.boundAt, binding.releasedAt ?? null, binding.note ?? null],
     );
   }
-}
-
-async function deleteMissingPlatformNumberUse(client, keepIds) {
-  if (keepIds.length === 0) {
-    await client.query(`DELETE FROM platform_number_use`);
-    return;
-  }
-  await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
 }
 
 async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
