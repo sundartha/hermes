@@ -1,4 +1,4 @@
-import { meldeVorspannAbgespielt, meldeVorspannMessung, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
+import { meldeVorspannAbgespielt, meldeVorspannMessung, meldeVorspannRueckfall, statusUrsache } from "./vorspann-erzeugen.js";
 import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
 
 const WIEDERGABE_VOLLSTAENDIG = "completed";
@@ -45,7 +45,7 @@ export function makeVorspannBruecke({ voiceControl, store, ttsStore, legeBeideBe
     if (zustand.stand.has(STAND.ABGEBROCHEN)) return;
     if (ereignis.wiedergabeStatus !== WIEDERGABE_VOLLSTAENDIG) {
       logFehler("wiedergabe", call.id, new Error(`Status ${ereignis.wiedergabeStatus}`));
-      meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
+      meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: statusUrsache(ereignis.wiedergabeStatus) });
       return legeBeideBeineAuf({ call, zustand, steuerung: voiceControl(call.provider) });
     }
     if (zustand.stand.has(STAND.WIEDERGABE)) return;

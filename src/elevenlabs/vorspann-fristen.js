@@ -1,5 +1,5 @@
 import { VORSPANN_WAHL_GRUND } from "./vorspann-pruefung.js";
-import { meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
+import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { STAND } from "./vorspann-bruecke.js";
 import { NICHT_ERREICHT_FRIST_MS } from "./nicht-erreicht-frist.ts";
 
@@ -24,7 +24,7 @@ export function armiereVorspannFristen({
     await beineAuf();
   }
   const nichtAbgespielt = () => {
-    meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT });
+    meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.KEIN_ENDE_EREIGNIS });
     vermerkeNichtAbgespielt();
   };
   setTimer(() => beiFrist(STAND.WIEDERGABE, nichtAbgespielt), vorspannWiedergabeFristMs);
