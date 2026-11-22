@@ -17,7 +17,7 @@ import {
   elBelegBetrag,
   EL_BELEG_ABLEHNUNG,
   EL_BELEG_QUELLE,
-} from "../../src/elevenlabs/kosten-beleg.js";
+} from "../../src/elevenlabs/kosten-beleg.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import {
   CONVERSATION_DONE_MIT_KOSTEN,
@@ -482,4 +482,46 @@ test("KV2-4: Fail-soft - ein Store-Fehler im Belegweg haelt Terminierung/Abrechn
     zeilen.some((zeile) => zeile.includes("art=Error")),
     "der Fehler wird geloggt, nicht verschluckt",
   );
+});
+
+test("kv2-4 2a: fehlende oder primitive Metadaten sind FEHLT und werfen nicht", () => {
+  for (const metadata of [undefined, null, "text", 7, true]) {
+    assert.deepEqual(elBelegBetrag(metadata), { ablehnung: EL_BELEG_ABLEHNUNG.FEHLT });
+  }
+});
+
+test("kv2-4 2a: Nullkosten mit Dauer 0 sind 0, mit Dauer 1 abgelehnt, mit negativer oder krummer Dauer unklar", () => {
+  assert.deepEqual(elBelegBetrag({ cost_fiat: 0, call_duration_secs: 0 }), { mikroCents: 0 });
+  assert.deepEqual(elBelegBetrag({ cost_fiat: 0, call_duration_secs: 1 }), {
+    ablehnung: EL_BELEG_ABLEHNUNG.NULL_BEI_DAUER,
+  });
+  for (const dauer of [-1, 1.5, "5", null, undefined]) {
+    assert.deepEqual(elBelegBetrag({ cost_fiat: 0, call_duration_secs: dauer }), {
+      ablehnung: EL_BELEG_ABLEHNUNG.NULL_DAUER_UNKLAR,
+    });
+  }
+});
+
+test("kv2-4 2a: ohne Gespraech wird nichts geschrieben, ohne gueltige Kennung ist belegRef leer", () => {
+  const leer = seedCall();
+  recordElevenLabsKostenBelege({
+    store: leer.store, callId: leer.callId, conversation: null,
+    belegNachreifbar: true, erwarteTelnyxSip: false, jetzt: () => new Date(0),
+  });
+  assert.equal(elZeile(leer.state, leer.callId), undefined);
+
+  const ohneId = seedCall();
+  recordElevenLabsKostenBelege({
+    store: ohneId.store, callId: ohneId.callId, conversation: { metadata: { cost_fiat: 0.01 } },
+    belegNachreifbar: true, erwarteTelnyxSip: false, jetzt: () => new Date(0),
+  });
+  assert.equal(elZeile(ohneId.state, ohneId.callId).belegRef ?? null, null);
+
+  const mitId = seedCall();
+  recordElevenLabsKostenBelege({
+    store: mitId.store, callId: mitId.callId,
+    conversation: { conversation_id: "conv_abc123", metadata: { cost_fiat: 0.01 } },
+    belegNachreifbar: true, erwarteTelnyxSip: false, jetzt: () => new Date(0),
+  });
+  assert.equal(elZeile(mitId.state, mitId.callId).belegRef, "conv_abc123");
 });

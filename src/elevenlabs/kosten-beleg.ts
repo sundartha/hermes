@@ -3,6 +3,15 @@ import { isBelegRef } from "../store/cost-evidence.ts";
 import { KOSTENART, KOSTENARTEN, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "../billing/kostenarten.ts";
 import { parseDecimalToMicroCents } from "../telephony/adapters/telnyx/cost-parse.ts";
 
+interface BelegSpeicher {
+  recordCallCostEvidence(eintrag: Record<string, unknown>): unknown;
+}
+
+interface BelegBezug {
+  store: BelegSpeicher;
+  callId: string;
+}
+
 export const EL_BELEG_QUELLE = "elevenlabs_conversation";
 
 export const EL_BELEG_ABLEHNUNG = Object.freeze({
@@ -14,40 +23,46 @@ export const EL_BELEG_ABLEHNUNG = Object.freeze({
   UNKONVERTIERBAR: "cost_fiat_nicht_in_mikro_cents_ueberfuehrbar",
 });
 
-export function anrufFuehrtTelnyxSip(call) {
+export function anrufFuehrtTelnyxSip(call: Parameters<typeof kostenprofilFuerAnruf>[0]): boolean {
   const profilFehlt = call?.costProfile == null;
   if (profilFehlt) return true;
   return pflichtTraegerFuerProfil(kostenprofilFuerAnruf(call)).includes(KOSTENART.TELNYX_SIP);
 }
 
-function istNichtNegativeGanzzahl(wert) {
-  return Number.isSafeInteger(wert) && wert >= 0;
+function istNichtNegativeGanzzahl(wert: unknown): boolean {
+  return Number.isSafeInteger(wert) && Number(wert) >= 0;
 }
 
-function elBelegBeiNullkosten(dauerSekunden) {
+function elBelegBeiNullkosten(dauerSekunden: unknown): { ablehnung: string } | { mikroCents: number } {
   if (!istNichtNegativeGanzzahl(dauerSekunden)) {
     return { ablehnung: EL_BELEG_ABLEHNUNG.NULL_DAUER_UNKLAR };
   }
-  if (dauerSekunden > 0) return { ablehnung: EL_BELEG_ABLEHNUNG.NULL_BEI_DAUER };
+  if (Number(dauerSekunden) > 0) return { ablehnung: EL_BELEG_ABLEHNUNG.NULL_BEI_DAUER };
   return { mikroCents: 0 };
 }
 
-export function elBelegBetrag(metadata) {
-  const costFiat = metadata?.cost_fiat;
+export function elBelegBetrag(metadata: unknown): { ablehnung: string } | { mikroCents: number } {
+  const costFiat: unknown = Reflect.get(Object(metadata), "cost_fiat");
   if (costFiat === undefined || costFiat === null) return { ablehnung: EL_BELEG_ABLEHNUNG.FEHLT };
   if (typeof costFiat !== "number" || !Number.isFinite(costFiat))
     return { ablehnung: EL_BELEG_ABLEHNUNG.KEIN_FLOAT };
   if (costFiat < 0) return { ablehnung: EL_BELEG_ABLEHNUNG.NEGATIV };
-  if (costFiat === 0) return elBelegBeiNullkosten(metadata?.call_duration_secs);
+  if (costFiat === 0) return elBelegBeiNullkosten(Reflect.get(Object(metadata), "call_duration_secs"));
   const mikroCents = parseDecimalToMicroCents(String(costFiat));
   return mikroCents === null ? { ablehnung: EL_BELEG_ABLEHNUNG.UNKONVERTIERBAR } : { mikroCents };
 }
 
-function recordTelnyxSipErwartet(store, callId) {
+function recordTelnyxSipErwartet(store: BelegSpeicher, callId: string): void {
   store.recordCallCostEvidence({ callId, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.ERWARTET });
 }
 
-function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifbar, jetzt }) {
+function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifbar, jetzt }: BelegBezug & {
+  conversation: unknown;
+  mikroCents: number;
+  belegNachreifbar: boolean;
+  jetzt: () => Date;
+}): void {
+  const conversationId: unknown = Reflect.get(Object(conversation), "conversation_id");
   store.recordCallCostEvidence({
     callId,
     traeger: KOSTENART.ELEVENLABS_CONVAI,
@@ -55,7 +70,7 @@ function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifb
     betragMikroCents: mikroCents,
     waehrung: KOSTENARTEN[KOSTENART.ELEVENLABS_CONVAI].waehrung,
     quelle: EL_BELEG_QUELLE,
-    belegRef: isBelegRef(conversation?.conversation_id) ? conversation.conversation_id : null,
+    belegRef: isBelegRef(conversationId) ? conversationId : null,
     gemessenAt: jetzt().toISOString(),
     detail: conversation,
     nachreifbar: belegNachreifbar,
@@ -69,10 +84,15 @@ export function recordElevenLabsKostenBelege({
   belegNachreifbar,
   erwarteTelnyxSip,
   jetzt,
-}) {
+}: BelegBezug & {
+  conversation: unknown;
+  belegNachreifbar: boolean;
+  erwarteTelnyxSip: boolean;
+  jetzt: () => Date;
+}): void {
   try {
     if (erwarteTelnyxSip) recordTelnyxSipErwartet(store, callId);
-    const ergebnis = elBelegBetrag(conversation?.metadata);
+    const ergebnis = elBelegBetrag(Reflect.get(Object(conversation), "metadata"));
     if ("ablehnung" in ergebnis) {
       console.warn(`[el-kosten-beleg] kein EL-Beleg (call=${callId}): grund=${ergebnis.ablehnung}`);
       return;

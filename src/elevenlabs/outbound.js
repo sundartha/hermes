@@ -22,7 +22,7 @@ import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
-import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
+import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 import { ermittleStimmenAnzahl } from "./wirksame-stimme.ts";
 

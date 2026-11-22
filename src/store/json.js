@@ -37,6 +37,10 @@ export function nummernSql() {
   return null;
 }
 
+export async function nummerNachladen() {
+  return false;
+}
+
 export function load() {
   if (state) return state;
   let raw;

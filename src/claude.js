@@ -6,7 +6,7 @@ import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
 import { resolveTimezone } from "./begriffe/sprache-zeit.js";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";
-import { metrics } from "./metrics.js";
+import { metrics } from "./metrics.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
 import { GET_CONSULT_TOOL_NAME, consultAvailableFor } from "./consult/in-call.js";

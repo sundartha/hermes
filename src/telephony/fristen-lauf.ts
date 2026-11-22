@@ -208,6 +208,12 @@ interface FristenTaktAbhaengigkeiten<Takt extends { unref: () => unknown }> exte
   uhr: Uhr<Takt>;
 }
 
+function starteAbfrageRunde(abfrageTakt: () => Promise<unknown>): void {
+  abfrageTakt().catch((fehler: unknown) => {
+    console.error(`[fristen] Abfrage-Runde abgebrochen: ${String(fehler)}`);
+  });
+}
+
 async function alleRunden(lauf: {
   takt: () => Promise<unknown>;
   geldTakt: () => Promise<unknown>;
@@ -225,7 +231,7 @@ async function alleRunden(lauf: {
         await lauf.reserveTakt();
       } finally {
         try {
-          await lauf.abfrageTakt();
+          starteAbfrageRunde(lauf.abfrageTakt);
         } finally {
           await lauf.uebergabeTakt();
         }

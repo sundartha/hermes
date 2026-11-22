@@ -15,7 +15,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.ts";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.ts";
 import { makeCallFinish } from "./telephony/call-finish.js";
-import { metrics } from "./metrics.js";
+import { metrics } from "./metrics.ts";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.ts";
 import { makePriceDriftWatch } from "./billing/price-drift-watch.ts";

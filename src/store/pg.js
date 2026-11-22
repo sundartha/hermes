@@ -192,7 +192,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
   const mandant = macheMandantSql({ ...optionen, stammdatenSpalten: STAMMDATEN_SPALTEN });
   const profil = macheProfilSql({ ...optionen, innerhalbFrist });
   const ausfallSql = macheAusfallSql(optionen);
-  const nummernSql = macheNummernSql(optionen);
+  const nummernSql = macheNummernSql({ ...optionen, zeileZuNummer: rowToNumber });
 
   async function drainFlushes() {
     let ref = flushChain;
@@ -225,6 +225,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     ...aboAbrechnungMethoden(kontext),
     ...mandantEinstellungenMethoden(kontext),
     ...verwaltungMethoden(kontext),
+    ...nummerMethoden({ requireState, runner, nummernSql }),
   };
 }
 
@@ -358,6 +359,51 @@ async function loesen(gebunden, callId, schreiben) {
 function entbindeEntfernte(mengen, state) {
   for (const menge of mengen)
     for (const callId of menge) if (!ops.getCall(state, callId)) menge.delete(callId);
+}
+
+async function ensureTenantLaden({ requireState, runner }, tenantId) {
+  try {
+    const state = requireState();
+    return await runner.withClient(async (client) => {
+      const statusRows = (
+        await client.query(`SELECT status FROM tenant WHERE id = $1`, [tenantId])
+      ).rows;
+      if (statusRows.length === 0) return false;
+      const present = ops.findTenant(state, tenantId);
+      if (present) {
+        present.status = statusRows[0].status;
+        return true;
+      }
+      const full = (
+        await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant WHERE id = $1`, [tenantId])
+      ).rows[0];
+      const raced = ops.findTenant(state, tenantId);
+      if (raced) {
+        raced.status = full.status;
+        return true;
+      }
+      state.tenants.push(rowToTenant(full));
+      await hydrateTenant(client, state, tenantId);
+      return true;
+    });
+  } catch (err) {
+    console.error("[pg] ensureTenant fehlgeschlagen:", err.message);
+    return false;
+  }
+}
+
+function nummerMethoden({ requireState, runner, nummernSql }) {
+  return {
+    async nummerNachladen(e164) {
+      const nummer = await nummernSql.nachladen(e164);
+      if (!nummer || !(await ensureTenantLaden({ requireState, runner }, nummer.tenantId))) return false;
+      const state = requireState();
+      const vorhanden = ops.findNumber(state, nummer.id);
+      if (vorhanden) Object.assign(vorhanden, nummer);
+      else state.numbers.push(nummer);
+      return true;
+    },
+  };
 }
 
 function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, einreihen, anrufe, posteingang, posteingangAnrufe }) {
@@ -964,36 +1010,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
     resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
     bindSubToTenant: (sub, tenantId) => ops.bindSubToTenant(requireState(), sub, tenantId),
 
-    async ensureTenant(tenantId) {
-      try {
-        const state = requireState();
-        return await runner.withClient(async (client) => {
-          const statusRows = (
-            await client.query(`SELECT status FROM tenant WHERE id = $1`, [tenantId])
-          ).rows;
-          if (statusRows.length === 0) return false;
-          const present = ops.findTenant(state, tenantId);
-          if (present) {
-            present.status = statusRows[0].status;
-            return true;
-          }
-          const full = (
-            await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant WHERE id = $1`, [tenantId])
-          ).rows[0];
-          const raced = ops.findTenant(state, tenantId);
-          if (raced) {
-            raced.status = full.status;
-            return true;
-          }
-          state.tenants.push(rowToTenant(full));
-          await hydrateTenant(client, state, tenantId);
-          return true;
-        });
-      } catch (err) {
-        console.error("[pg] ensureTenant fehlgeschlagen:", err.message);
-        return false;
-      }
-    },
+    ensureTenant: (tenantId) => ensureTenantLaden({ requireState, runner }, tenantId),
     listProfiles: () => ops.listProfiles(requireState()),
     setProfile(tenantId, patch) {
       const result = ops.setProfile(requireState(), tenantId, patch);
@@ -1961,7 +1978,6 @@ async function flushCostCrossCheck(client, row) {
 }
 
 async function flushPlatformNumberUse(client, bindings) {
-  await deleteMissingPlatformNumberUse(client, bindings.map((binding) => binding.id));
   for (const binding of bindings) {
     await client.query(
       `INSERT INTO platform_number_use
@@ -1975,14 +1991,6 @@ async function flushPlatformNumberUse(client, bindings) {
        binding.providerNumberId ?? null, binding.boundAt, binding.releasedAt ?? null, binding.note ?? null],
     );
   }
-}
-
-async function deleteMissingPlatformNumberUse(client, keepIds) {
-  if (keepIds.length === 0) {
-    await client.query(`DELETE FROM platform_number_use`);
-    return;
-  }
-  await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
 }
 
 async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
