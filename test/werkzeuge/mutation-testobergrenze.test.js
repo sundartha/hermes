@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { mutantKandidaten, mutationUrteil } from "../../tools/pruefen.mjs";
+import { mutantKandidaten, mutantReihenfolge, mutationUrteil } from "../../tools/pruefen.mjs";
 
 const dateien = (anzahl) => Array.from({ length: anzahl }, (_, nr) => `test/x/t${String(nr).padStart(4, "0")}.test.js`);
 
@@ -78,4 +78,13 @@ test("Ein gekürzter überlebter Mutant ist mit Begründung im PR-Text grün", (
 test("Ein überlebter Mutant ohne Kürzung trägt keinen Vermerk", () => {
   const { zeile } = urteilBericht("## Überlebende Mutanten\n\n", { ...GEKUERZT, gekuerzt: undefined });
   assert.ok(zeile.includes("| überlebt | – |"));
+});
+
+test("langsame Testdateien (gemessene Dauer ab 60 s) laufen zuletzt und fallen nicht unter die Obergrenze", () => {
+  const tests = dateien(5);
+  const dauer = { [tests[0]]: 61_000, [tests[1]]: 59_000 };
+  assert.deepEqual(mutantReihenfolge({ tests, dauer }, "").slice(-1), [tests[0]]);
+  assert.deepEqual(mutantReihenfolge({ tests, geaendert: [tests[0]], dauer }, "")[0], tests[0]);
+  const { auswahl } = mutantKandidaten({ tests, dauer }, "", 2);
+  assert.deepEqual(auswahl, [tests[1], tests[2], tests[0]]);
 });
