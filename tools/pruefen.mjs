@@ -788,7 +788,7 @@ export function fehlerfallPflicht(geaenderte, neueTests, prText) {
 }
 
 function fehlerfallPruefen(basis, prText) {
-  const meldungen = fehlerfallPflicht(git(["diff", "--name-only", basis, "--", "src"]).split("\n"), git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n"), prText);
+  const meldungen = fehlerfallPflicht(git(["diff", "--no-renames", "--name-only", basis, "--", "src"]).split("\n"), git(["diff", "--name-only", "--diff-filter=A", basis, "--", "test"]).split("\n"), prText);
   for (const meldung of meldungen) console.log(meldung);
   return meldungen.length === 0;
 }
