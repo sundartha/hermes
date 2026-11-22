@@ -29,7 +29,7 @@ const ZIEL_A = "+4915112340101";
 const ZIEL_B = "+4915112340102";
 const ANRUFE_SQL = "SELECT tenant_id AS \"tenantId\", to_e164 AS ziel FROM call ORDER BY seq";
 const TABELLE_SPERREN_SQL = "LOCK TABLE call IN SHARE ROW EXCLUSIVE MODE";
-const WARTENDE_SQL = `SELECT locktype, count(*)::int AS anzahl FROM pg_locks WHERE NOT granted GROUP BY locktype`;
+const WARTENDE_SQL = `SELECT locktype, count(*)::int AS anzahl FROM pg_locks WHERE NOT granted AND pid IN (SELECT pid FROM pg_stat_activity WHERE datname = current_database()) GROUP BY locktype`;
 
 function adminAdresse(rollenAdresse) {
   const url = new URL(process.env[POSTGRES_VARIABLE]);
@@ -170,9 +170,9 @@ const SPERRE_FRIST_PUFFER_MS = 4_000;
 const ANRUF_SPERRE_NAMENSRAUM = 2667;
 const MANDANT_SPERRE_NEHMEN_SQL = "SELECT pg_advisory_lock($1, hashtext($2))";
 const MANDANT_SPERRE_GEBEN_SQL = "SELECT pg_advisory_unlock($1, hashtext($2))";
-const SPERRE_HALTER_SQL = "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted";
+const SPERRE_HALTER_SQL = "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND pid IN (SELECT pid FROM pg_stat_activity WHERE datname = current_database())";
 const WARTENDE_MANDANT_SPERREN_SQL =
-  "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = $1 AND objid = hashtext($2)::oid";
+  "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = $1 AND objid = hashtext($2)::oid AND pid IN (SELECT pid FROM pg_stat_activity WHERE datname = current_database())";
 const wartendeAufMandantSperre = async (sql, mandant) => {
   const { rows } = await sql(WARTENDE_MANDANT_SPERREN_SQL, [ANRUF_SPERRE_NAMENSRAUM, mandant.id]);
   return rows[0].anzahl;

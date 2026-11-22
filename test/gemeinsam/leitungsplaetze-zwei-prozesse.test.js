@@ -40,7 +40,7 @@ const PLATZ_ZEILEN_SQL = "SELECT count(*)::int AS anzahl FROM leitungsplatz WHER
 const GESPRAECH_ENDE = [{ role: "agent", message: "Auf Wiederhoeren." }];
 const SPERRE_NEHMEN_SQL = "SELECT pg_advisory_lock(2665, 1)";
 const SPERRE_GEBEN_SQL = "SELECT pg_advisory_unlock(2665, 1)";
-const WARTENDE_SPERREN_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted";
+const WARTENDE_SPERREN_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND pid IN (SELECT pid FROM pg_stat_activity WHERE datname = current_database())";
 const FREIGABE_FRIST_MS = WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS;
 const PLAETZE_SQL = "SELECT anbieter, count(*)::int AS anzahl FROM leitungsplatz GROUP BY anbieter ORDER BY anbieter";
 const ANRUFE_SQL = "SELECT count(*)::int AS anzahl FROM call";

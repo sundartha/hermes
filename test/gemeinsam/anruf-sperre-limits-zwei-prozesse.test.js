@@ -17,7 +17,7 @@ const SPERRE_ART = Object.freeze({
   schreiben: "LOCK TABLE call IN SHARE ROW EXCLUSIVE MODE",
   lesen: "LOCK TABLE call IN ACCESS EXCLUSIVE MODE",
 });
-const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
+const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted AND pid IN (SELECT pid FROM pg_stat_activity WHERE datname = current_database())";
 const EIGENE_DATENBANK_SQL = "database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 const EIGENE_SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND ${EIGENE_DATENBANK_SQL}`;
 const SPERRE_WARTET_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND ${EIGENE_DATENBANK_SQL}`;
