@@ -453,8 +453,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
     },
     anrufHierBewacht: (id) => gebunden.has(id),
     leseCall: leseAnruf,
-    leseCallUngebunden: leseAnrufUngebunden,
-    leseCallFuerAnzeige: leseAnrufFuerAnzeige,
+    leseCallUngebunden: (id, { fuerAnzeige = false } = {}) => (fuerAnzeige ? leseAnrufFuerAnzeige(id) : leseAnrufUngebunden(id)),
     attachActiveCall(wert, { schluessel, mandant } = {}) {
       if (schluessel) return attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert);
       return mandant ? attachActiveCallImMandanten(wert, mandant) : attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, wert);
