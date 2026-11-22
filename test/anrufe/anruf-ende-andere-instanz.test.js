@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import express from "express";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makeReadRoutes } from "../../src/routes/api-read.ts";
 import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
@@ -30,7 +31,7 @@ async function abfrage(store, callId) {
     const server = app.listen(0, () => listening(server));
   });
   try {
-    const antwort = await fetch(`http://127.0.0.1:${http.address().port}/api/calls/${callId}`);
+    const antwort = await abrufMitFrist(`http://127.0.0.1:${http.address().port}/api/calls/${callId}`);
     return await antwort.json();
   } finally {
     await new Promise((closed) => http.close(closed));
