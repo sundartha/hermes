@@ -6,6 +6,8 @@ export { LOG_PREFIX };
 
 const MAX_TRACKED_CALLS = 10000;
 
+const METRICS_KONFIG = z.object({ metrics: z.object({ metricsEnabled: z.boolean() }) });
+
 const LLM_OPTIONAL_FIELDS = Object.freeze([
   "callId",
   "input_tokens",
@@ -13,8 +15,6 @@ const LLM_OPTIONAL_FIELDS = Object.freeze([
   "cache_read_input_tokens",
   "output_tokens",
 ] as const);
-
-const METRICS_KONFIG = z.object({ metrics: z.object({ metricsEnabled: z.boolean() }) });
 
 type Log = (kind: string, payload: object) => void;
 
@@ -103,15 +103,7 @@ export function createMetrics({
     log("speech_result", { callId, chars });
   }
 
-  function logCallDenied({
-    grund,
-    country,
-    language,
-  }: {
-    grund: unknown;
-    country: unknown;
-    language: unknown;
-  }): void {
+  function logCallDenied({ grund, country, language }: { grund: unknown; country: unknown; language: unknown }): void {
     if (!enabled) return;
     log("call_denied", { grund, country, language });
   }
