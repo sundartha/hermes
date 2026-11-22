@@ -45,7 +45,7 @@ const zeile = async (tenantId) => (await gemeinsam.query(LISTE_SQL, [tenantId]))
 const eintraege = async (tenantId) => (await zeile(tenantId)).newsletter_recipients;
 const adressen = async (tenantId) => (await eintraege(tenantId)).map((eintrag) => eintrag.email);
 
-const empfaenger = (email, tenant, now = JETZT, ablauf = ABLAUF) => ({
+const empfaenger = (email, tenant, { now = JETZT, ablauf = ABLAUF } = {}) => ({
   email,
   tokenHash: `${tenant}-hash-${email}`,
   tokenExpiresAt: ablauf,
@@ -53,16 +53,16 @@ const empfaenger = (email, tenant, now = JETZT, ablauf = ABLAUF) => ({
   now,
 });
 
-async function eintragen(speicher, tenant, email, now, ablauf) {
-  speicher.addNewsletterRecipient(tenant, empfaenger(email, tenant, now, ablauf));
+async function eintragen(speicher, tenant, { email, ...zeiten }) {
+  speicher.addNewsletterRecipient(tenant, empfaenger(email, tenant, zeiten));
   await speicher.drainFlushes();
 }
 
 test("Kriterium 1: A trägt X ein, B (veraltet) trägt Y ein: beide stehen in der Zeile", async () => {
   const { a, b, tenant } = await zweiInstanzen();
 
-  await eintragen(a, tenant, "x@example.com");
-  await eintragen(b, tenant, "y@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
+  await eintragen(b, tenant, { email: "y@example.com" });
 
   assert.deepEqual(await adressen(tenant), ["x@example.com", "y@example.com"]);
   const [x, y] = await eintraege(tenant);
@@ -72,8 +72,8 @@ test("Kriterium 1: A trägt X ein, B (veraltet) trägt Y ein: beide stehen in de
 
 test("Kriterium 2: B (veraltet) bestätigt Ys Token, X bleibt in der Zeile", async () => {
   const { a, b, tenant, bereichB } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com");
-  await eintragen(b, tenant, "y@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
+  await eintragen(b, tenant, { email: "y@example.com" });
 
   const ergebnis = await bereichB.confirmNewsletterRecipientByToken(`${tenant}-hash-y@example.com`, SPAETER);
   await b.drainFlushes();
@@ -86,7 +86,7 @@ test("Kriterium 2: B (veraltet) bestätigt Ys Token, X bleibt in der Zeile", asy
 
 test("Kriterium 2: B bestätigt den nur auf A eingetragenen Token von X", async () => {
   const { a, b, tenant, bereichB } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
 
   const ergebnis = await bereichB.confirmNewsletterRecipientByToken(`${tenant}-hash-x@example.com`, SPAETER);
   await b.drainFlushes();
@@ -98,9 +98,9 @@ test("Kriterium 2: B bestätigt den nur auf A eingetragenen Token von X", async 
 
 test("Kriterium 3: B (veraltet) meldet X per Abmelde-Token ab, andere bleiben", async () => {
   const { a, b, tenant, bereichB } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com");
-  await eintragen(a, tenant, "z@example.com");
-  await eintragen(b, tenant, "y@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
+  await eintragen(a, tenant, { email: "z@example.com" });
+  await eintragen(b, tenant, { email: "y@example.com" });
 
   const ergebnis = await bereichB.unsubscribeNewsletterRecipientByToken(`${tenant}-unsub-x@example.com`);
   await b.drainFlushes();
@@ -111,8 +111,8 @@ test("Kriterium 3: B (veraltet) meldet X per Abmelde-Token ab, andere bleiben", 
 
 test("Kriterium 4: B (veraltet) entfernt X, bei A eingetragenes Z bleibt", async () => {
   const { a, b, tenant, bereichB } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com");
-  await eintragen(a, tenant, "z@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
+  await eintragen(a, tenant, { email: "z@example.com" });
 
   const entfernt = await bereichB.removeNewsletterRecipient(tenant, "x@example.com");
   await b.drainFlushes();
@@ -124,16 +124,16 @@ test("Kriterium 4: B (veraltet) entfernt X, bei A eingetragenes Z bleibt", async
 test("Kriterium 5: das Mail-Log enthält beide Zeitstempel, Einträge älter als 24 Stunden fallen weg", async () => {
   const { a, b, tenant } = await zweiInstanzen();
 
-  await eintragen(a, tenant, "alt@example.com", ALT);
-  await eintragen(a, tenant, "x@example.com", JETZT);
-  await eintragen(b, tenant, "y@example.com", SPAETER);
+  await eintragen(a, tenant, { email: "alt@example.com", now: ALT });
+  await eintragen(a, tenant, { email: "x@example.com", now: JETZT });
+  await eintragen(b, tenant, { email: "y@example.com", now: SPAETER });
 
   assert.deepEqual((await zeile(tenant)).newsletter_confirm_mail_log, [JETZT, SPAETER]);
 });
 
 test("Kriterium 6: unbekannter und abgelaufener Token liefern null, unbekannte Adresse false, die Zeile bleibt", async () => {
   const { a, b, tenant, bereichB } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com", JETZT, ABGELAUFEN);
+  await eintragen(a, tenant, { email: "x@example.com", ablauf: ABGELAUFEN });
   const vorher = await zeile(tenant);
 
   assert.equal(await bereichB.confirmNewsletterRecipientByToken("unbekannt", SPAETER), null);
@@ -155,7 +155,7 @@ test("eine Eintragung, die während des Abgleichs beginnt, bleibt in der Kopie d
     if (/^SELECT id, newsletter_recipients/.test(text)) b.addNewsletterRecipient(tenant, empfaenger("y@example.com", tenant));
   };
   b = await instanz(gemeinsam, lesend);
-  await eintragen(a, tenant, "x@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
 
   await b.newsletterAbgleichen();
 
@@ -166,7 +166,7 @@ test("eine Eintragung, die während des Abgleichs beginnt, bleibt in der Kopie d
 
 test("der Abgleich übernimmt die Liste aus der Zeile in die Kopie, auch das Mail-Log", async () => {
   const { a, b, tenant } = await zweiInstanzen();
-  await eintragen(a, tenant, "x@example.com");
+  await eintragen(a, tenant, { email: "x@example.com" });
 
   await b.newsletterAbgleichen();
 
@@ -183,7 +183,7 @@ test("verschwindet der Mandant vor dem Schreiben, steht der Fehler im Log und de
   });
   const fehlerausgabe = t.mock.method(console, "error", () => {});
 
-  await eintragen(b, tenant, "y@example.com");
+  await eintragen(b, tenant, { email: "y@example.com" });
 
   assert.ok(
     fehlerausgabe.mock.calls.some(
@@ -194,17 +194,38 @@ test("verschwindet der Mandant vor dem Schreiben, steht der Fehler im Log und de
   );
 });
 
-test("ein Speicher ohne Abgleich (JSON) entscheidet weiter über die eigene Kopie", async () => {
+test("die Kopie entscheidet zuerst, nur ein Fehlschlag gleicht mit der Zeile ab und fragt dann noch einmal", async () => {
   const aufrufe = [];
+  const antworten = { entfernen: [false, true, true], bestaetigen: [null, { tenantId: "t", email: "a@example.com" }], abmelden: [null, null] };
   const speicher = {
-    removeNewsletterRecipient: (tenantId, email) => aufrufe.push(["entfernen", tenantId, email]) && true,
-    confirmNewsletterRecipientByToken: (hash, jetzt) => aufrufe.push(["bestaetigen", hash, jetzt]) && null,
-    unsubscribeNewsletterRecipientByToken: (token) => aufrufe.push(["abmelden", token]) && null,
+    newsletterAbgleichen: async () => aufrufe.push("abgleichen"),
+    removeNewsletterRecipient: () => (aufrufe.push("entfernen"), antworten.entfernen.shift()),
+    confirmNewsletterRecipientByToken: () => (aufrufe.push("bestaetigen"), antworten.bestaetigen.shift()),
+    unsubscribeNewsletterRecipientByToken: () => (aufrufe.push("abmelden"), antworten.abmelden.shift()),
   };
   const { newsletter } = speicherBereiche(speicher);
 
   assert.equal(await newsletter.removeNewsletterRecipient("t", "a@example.com"), true);
+  assert.deepEqual(aufrufe.splice(0), ["entfernen", "abgleichen", "entfernen"]);
+  assert.equal(await newsletter.removeNewsletterRecipient("t", "a@example.com"), true);
+  assert.deepEqual(aufrufe.splice(0), ["entfernen"]);
+  assert.deepEqual(await newsletter.confirmNewsletterRecipientByToken("h", JETZT), { tenantId: "t", email: "a@example.com" });
+  assert.deepEqual(aufrufe.splice(0), ["bestaetigen", "abgleichen", "bestaetigen"]);
+  assert.equal(await newsletter.unsubscribeNewsletterRecipientByToken("u"), null);
+  assert.deepEqual(aufrufe.splice(0), ["abmelden", "abgleichen", "abmelden"]);
+});
+
+test("ein Speicher ohne Abgleich (JSON) entscheidet nur über die eigene Kopie", async () => {
+  const aufrufe = [];
+  const speicher = {
+    removeNewsletterRecipient: () => (aufrufe.push("entfernen"), false),
+    confirmNewsletterRecipientByToken: () => (aufrufe.push("bestaetigen"), null),
+    unsubscribeNewsletterRecipientByToken: () => (aufrufe.push("abmelden"), null),
+  };
+  const { newsletter } = speicherBereiche(speicher);
+
+  assert.equal(await newsletter.removeNewsletterRecipient("t", "a@example.com"), false);
   assert.equal(await newsletter.confirmNewsletterRecipientByToken("h", JETZT), null);
   assert.equal(await newsletter.unsubscribeNewsletterRecipientByToken("u"), null);
-  assert.deepEqual(aufrufe, [["entfernen", "t", "a@example.com"], ["bestaetigen", "h", JETZT], ["abmelden", "u"]]);
+  assert.deepEqual(aufrufe, ["entfernen", "bestaetigen", "abmelden"]);
 });

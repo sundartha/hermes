@@ -79,7 +79,7 @@ export const sperreSchreiben = schreiberFuer(SPALTE_JE_SCHLUESSEL);
 
 const LISTEN_SCHLUESSEL = ["newsletterRecipients", "newsletterConfirmMailLog"];
 
-async function listeSchreiben(client, tenantId, sql, werte) {
+async function listeSchreiben(client, tenantId, { sql, werte }) {
   const { rows } = await client.query(sql, [tenantId, ...werte]);
   if (rows.length === 0) throw new Error("Mandant nicht in der Datenbank");
   return rows[0];
@@ -131,7 +131,7 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     else offen.delete(tenantId);
   }
 
-  async function ablauf(tenantId, schluessel, aktion, uebernahme) {
+  async function ablauf(tenantId, { schluessel, aktion, uebernahme }) {
     const eintraege = schluessel.map((key) => eintrag(tenantId, key));
     let zeile;
     try {
@@ -155,24 +155,22 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     if (!tenant) return Promise.resolve(true);
     const werte = Object.fromEntries(schluessel.map((key) => [key, tenant[key] ?? null]));
     offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
-    const vorgang = ablauf(
-      tenantId,
-      Object.keys(werte),
-      (client) => schreibenMitSpalten(client, tenantId, werte),
-      uebernehmen,
-    );
+    const vorgang = ablauf(tenantId, {
+      schluessel: Object.keys(werte),
+      aktion: (client) => schreibenMitSpalten(client, tenantId, werte),
+      uebernahme: uebernehmen,
+    });
     letzte.set(tenantId, vorgang);
     return vorgang;
   }
 
-  function listeAendern(tenantId, { sql, werte }) {
+  function listeAendern(tenantId, aenderung) {
     offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
-    const vorgang = ablauf(
-      tenantId,
-      LISTEN_SCHLUESSEL,
-      (client) => listeSchreiben(client, tenantId, sql, werte),
-      listenUebernehmen,
-    );
+    const vorgang = ablauf(tenantId, {
+      schluessel: LISTEN_SCHLUESSEL,
+      aktion: (client) => listeSchreiben(client, tenantId, aenderung),
+      uebernahme: listenUebernehmen,
+    });
     letzte.set(tenantId, vorgang);
     return vorgang;
   }
