@@ -85,7 +85,17 @@ function staginglaufText({ commit, laufUrl }) {
   ].join("\n");
 }
 
-function probeText({ commit, laufUrl, seit }) {
+function probeText({ commit, laufUrl, seit, grund }) {
+  if (grund !== undefined) {
+    return [
+      "Die Anrufprobe gegen Staging ist nicht gelaufen: " + grund + " (Commit " + commit + ").",
+      "Seit: " + seit,
+      "Lauf: " + laufUrl,
+      "",
+      "Das ist kein Hörtest und keine Freigabe für Live. Es fand kein Anruf statt.",
+      "",
+    ].join("\n");
+  }
   return [
     "Die Anrufprobe gegen Staging ist rot, auch die Wiederholung (Commit " + commit + ").",
     "Seit: " + seit,
@@ -155,9 +165,10 @@ const SEKUNDEN_JE_MINUTE = 60;
 const ENTPRELLEN_MINUTEN = 60;
 const VORFALL_ENTPRELLEN_MS = ENTPRELLEN_MINUTEN * SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
 
-function vorfallText({ titel, commit, laufUrl, seit, gestoert }) {
+function vorfallText({ titel, commit, laufUrl, seit, grund, gestoert }) {
   return [
     titel + " (Commit " + commit + ").",
+    ...(grund === undefined ? [] : ["Grund: " + grund]),
     ...(seit === undefined ? [] : ["Seit: " + seit]),
     "Umgebung: Staging.",
     ...gestoert.map((name) => "Anbieter meldet gerade Störung: " + name),
@@ -291,13 +302,14 @@ export async function hoertestIssueAnlegenOderErsetzen({
   commit,
   teile,
   seit,
+  grund,
   ausgabe,
 }) {
   const { titel, meldungen, text, vorfallId } = ANLAESSE[anlass];
-  const body = text({ commit, teile, seit, laufUrl: laufAdresse(einstellungen) });
+  const body = text({ commit, teile, seit, grund, laufUrl: laufAdresse(einstellungen) });
   const vorher = await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
   if (vorfallId === undefined) return;
-  const vorfall = { id: vorfallId, titel, commit, seit };
+  const vorfall = { id: vorfallId, titel, commit, seit, grund };
   await vorfallMelden({ einstellungen, vorfall, vorher, ausgabe });
 }
 

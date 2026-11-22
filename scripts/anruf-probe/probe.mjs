@@ -52,7 +52,7 @@ function kindUmgebung() {
   return Object.fromEntries(eigene);
 }
 
-function alarmSenden(seit) {
+function alarmSenden(seit, grund) {
   const argumente = [
     "tools/deploy-weg.mjs",
     "hoertest",
@@ -64,6 +64,7 @@ function alarmSenden(seit) {
     "",
     "--seit",
     seit,
+    ...(grund === undefined ? [] : ["--grund", grund]),
   ];
   const kind = spawn("node", argumente, { env: kindUmgebung(), stdio: "inherit" });
   return new Promise((fertig) => kind.on("close", fertig));
@@ -153,7 +154,7 @@ async function auflegen() {
 async function fehlendMelden(fehlt) {
   zeile(uebersprungenText(fehlt));
   if (ALARMWEGE.some((name) => env[name]) && COMMIT.test(env.GITHUB_SHA ?? "")) {
-    await alarmSenden(new Date().toISOString());
+    await alarmSenden(new Date().toISOString(), uebersprungenText(fehlt));
   }
   throw new Ende(uebersprungenText(fehlt));
 }
