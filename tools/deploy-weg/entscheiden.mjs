@@ -7,6 +7,7 @@ import {
   grund,
   gueltigerCommit,
   HTTP_OK,
+  letzterStagingLauf,
   prKopf,
   ungueltigesEreignis,
 } from "./herkunft.mjs";
@@ -88,6 +89,7 @@ async function lageErmitteln(kontext) {
   }
   if (commit !== null) {
     ausgabe.melde("kandidat", { commit });
+    gruende.push(...(await letzterStagingLauf({ github })));
     gruende.push(...(await commitPruefen(github, commit)));
   }
   const { produktion, gruende: weckGruende } = await produktionMessen(kontext);

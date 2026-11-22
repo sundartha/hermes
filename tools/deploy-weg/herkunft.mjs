@@ -102,6 +102,33 @@ async function stagingLaufFuer({ github, commit }) {
   return [grund("rot_hand_kein_staging")];
 }
 
+const LAUF_EREIGNISSE = ["push", "schedule"];
+
+function zaehltAlsLetzter(lauf, repository) {
+  return (
+    lauf?.status === "completed" &&
+    lauf.conclusion !== ABGEBROCHEN &&
+    LAUF_EREIGNISSE.includes(lauf.event) &&
+    lauf.head_branch === MASTER &&
+    imEigenenRepo(lauf, repository)
+  );
+}
+
+function neuerAls(links, rechts) {
+  return (zeitpunkt(links.created_at) ?? 0) > (zeitpunkt(rechts.created_at) ?? 0);
+}
+
+export async function letzterStagingLauf({ github }) {
+  const filter = new URLSearchParams({ branch: MASTER, status: "completed", per_page: SEITE });
+  const { status, daten } = await github.lesen(STAGING_LAEUFE + "?" + filter.toString());
+  if (status !== HTTP_OK) return [githubFehler("staging_letzter", status)];
+  const laeufe = Array.isArray(daten?.workflow_runs) ? daten.workflow_runs : [];
+  const zaehlend = laeufe.filter((lauf) => zaehltAlsLetzter(lauf, github.repository));
+  const letzter = zaehlend.reduce((neu, lauf) => (neuerAls(lauf, neu) ? lauf : neu), zaehlend[0]);
+  if (letzter === undefined || letzter.conclusion === ERFOLG) return [];
+  return [grund("rot_staging_letzter_rot", { status: statusWort(letzter.conclusion) })];
+}
+
 export async function ausHandStart({ nutzlast, einstellungen, github }) {
   const gruende = handGruende(nutzlast, einstellungen);
   const commit = gueltigerCommit(nutzlast.inputs?.commit);
