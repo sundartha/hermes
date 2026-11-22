@@ -7,7 +7,7 @@ import { clientVerhalten, minuteVergeht, rundenWarten, zeitgeberAn, zeitgeberAus
 const ROLLE = "kennzahlen_leser";
 const SPERRE_ABFRAGE = "pg_try_advisory_lock";
 const SICHT_ABFRAGE = "SELECT messwert";
-const SPERREN_ABFRAGE = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND classid = 1212369235 AND objid = 3";
+const SPERREN_ABFRAGE = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND classid = 1212369235 AND objid = 3 AND database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 
 const laufendesHermes = await starteHermesMitPglite({
   alarmPostfach: "",

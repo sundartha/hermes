@@ -21,7 +21,8 @@ const WARTEMELDUNG = "[migrate] Migrationssperre belegt, warte auf die andere In
 const TOKEN = { HERMES_DEPLOY_TOKEN: "t2a-migrationssperre-deploy-token-mindestens-32" };
 
 const SPERRE_ABFRAGE = `SELECT count(*)::int AS anzahl FROM pg_locks
-  WHERE locktype = 'advisory' AND classid = $1 AND objid = $2 AND objsubid = $3 AND granted`;
+  WHERE locktype = 'advisory' AND classid = $1 AND objid = $2 AND objsubid = $3 AND granted
+  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`;
 
 const abgeben = () => new Promise((fertig) => setImmediate(fertig));
 
