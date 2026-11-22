@@ -351,18 +351,20 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
     if (bekannt && eigene.has(bekannt.id)) return bekannt;
     return leseAusDatenbank(id, (_state, gelesen) => gelesen);
   };
-  const leseAnrufFuerAnzeige = async (id) => {
-    const bekannt = await leseAnrufUngebunden(id);
-    if (!bekannt || bekannt.elNachlaufStartedAt || !eigene.has(bekannt.id)) return bekannt;
-    try {
-      const gelesen = await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
-      return gelesen?.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
-    } catch (err) {
-      console.error("[pg] leseCall fehlgeschlagen:", err.message);
-      return bekannt;
-    }
-  };
+  const leseAnrufFuerAnzeige = (id) => anzeigeAbgleich({ runner, eigene, lese: leseAnrufUngebunden, anrufLesen }, id);
   return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden, leseAnrufFuerAnzeige };
+}
+
+async function anzeigeAbgleich({ runner, eigene, lese, anrufLesen }, id) {
+  const bekannt = await lese(id);
+  if (!bekannt || bekannt.elNachlaufStartedAt || !eigene.has(bekannt.id)) return bekannt;
+  try {
+    const gelesen = await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
+    return gelesen?.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
+  } catch (err) {
+    console.error("[pg] leseCall fehlgeschlagen:", err.message);
+    return bekannt;
+  }
 }
 
 async function loesen(gebunden, callId, schreiben) {
