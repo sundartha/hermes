@@ -1,6 +1,6 @@
 import { ALL_GREETING_TEMPLATES } from "./i18n/greeting-catalog.ts";
 
-export const SELF_SERVICE_FREE_FIELDS = ["agentName", "language", "agentStyle"];
+export const SELF_SERVICE_FREE_FIELDS = ["agentName", "agentStyle"];
 
 export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBankData"];
 

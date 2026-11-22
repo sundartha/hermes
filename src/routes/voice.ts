@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import zeitgeber from "node:timers/promises";
+import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { normNum } from "../begriffe/rufnummern.js";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { emergencyBrakeSeconds } from "../call-duration.ts";
@@ -114,7 +115,6 @@ interface Speicher {
 interface Bereiche {
   anrufe: {
     numberRecordByE164: (e164: string) => Promise<NummernBeleg | null | undefined>;
-    resolveCallLanguage: (anfrage: { tenantId: string; numberRecord: NummernBeleg }) => Promise<string>;
   };
   mandant: { tenantContext: (tenantId: string) => Promise<{ ownerName: unknown }> };
   einstellungen: { recordCostProfile: (callId: string, profil: string) => Promise<unknown> };
@@ -719,7 +719,7 @@ export function makeVoiceRoutes({
       }
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
-      const language = await bereiche.anrufe.resolveCallLanguage({ tenantId, numberRecord });
+      const language = STARTSPRACHE;
       const locale = sprachtexteFuer(language);
 
       if (store.budgetExceeded(tenantId, config.billing)) {

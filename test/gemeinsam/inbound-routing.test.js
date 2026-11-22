@@ -154,9 +154,9 @@ test("FR-Nummer -> call.language=fr + FR-Voice (Azure.fr-FR-Denise/fr-FR)", asyn
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, FR_NUMBER);
-    assert.equal(call.language, "fr", "Inbound-Sprache aus number.language (FR)");
-    assert.match(twiml, /language="fr-FR"/, "FR-STT-Locale");
-    assert.match(twiml, /voice="Azure\.fr-FR-DeniseNeural"/, "FR-Voice");
+    assert.equal(call.language, "de", "Inbound startet auf de, number.language (FR) zaehlt nicht");
+    assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
+    assert.match(twiml, /voice="Azure\.de-DE-KatjaNeural"/, "DE-Voice");
   } finally {
     await srv.stop();
   }
@@ -166,9 +166,9 @@ test("EN-Nummer -> call.language=en + EN-Voice (Azure.en-GB-Sonia/en-GB)", async
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, EN_NUMBER);
-    assert.equal(call.language, "en", "Inbound-Sprache aus number.language (EN)");
-    assert.match(twiml, /language="en-GB"/, "EN-STT-Locale");
-    assert.match(twiml, /voice="Azure\.en-GB-SoniaNeural"/, "EN-Voice");
+    assert.equal(call.language, "de", "Inbound startet auf de, number.language (EN) zaehlt nicht");
+    assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
+    assert.match(twiml, /voice="Azure\.de-DE-KatjaNeural"/, "DE-Voice");
   } finally {
     await srv.stop();
   }
@@ -180,10 +180,10 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
     const { twiml, call } = await postIncoming(srv, FR_NUMBER);
     assert.equal(
       call.language,
-      "en",
-      "Owner-Override (settings.language=en) schlaegt die FR-Nummer",
+      "de",
+      "Inbound startet auf de, weder Owner-Override (en) noch FR-Nummer zaehlen",
     );
-    assert.match(twiml, /language="en-GB"/, "Voice folgt dem Override");
+    assert.match(twiml, /language="de-DE"/, "Voice folgt der Startsprache");
   } finally {
     await srv.stop();
   }
