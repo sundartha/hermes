@@ -75,8 +75,9 @@ for (const name of VARIABLEN) {
     assert.ok(text.includes(grund));
     assert.ok(!text.includes("auch die Wiederholung"));
     assert.equal(ergebnis.githubEmpfangen.length, 1);
-    assert.ok(ergebnis.githubEmpfangen[0].body.includes(`Die Anrufprobe gegen Staging ist nicht gelaufen: ${grund} (Commit ${COMMIT}).`));
-    assert.ok(!ergebnis.githubEmpfangen[0].body.includes("auch die Wiederholung"));
+    const issueText = ergebnis.githubEmpfangen[0].body;
+    assert.ok(issueText.includes(`Die Anrufprobe gegen Staging ist nicht gelaufen: ${grund} (Commit ${COMMIT}).`));
+    assert.ok(!issueText.includes("auch die Wiederholung"));
   });
 }
 
@@ -97,8 +98,10 @@ test("Rote Probe: Text bleibt rot, auch die Wiederholung, ohne Grund", async () 
     ),
   );
   assert.equal(ergebnis.code, 0);
-  assert.ok(ergebnis.githubEmpfangen[0].body.startsWith(`Die Anrufprobe gegen Staging ist rot, auch die Wiederholung (Commit ${COMMIT}).`));
-  assert.ok(!ergebnis.slackEmpfangen[0].text.includes("probe_uebersprungen"));
+  const issueText = ergebnis.githubEmpfangen[0].body;
+  const slackText = ergebnis.slackEmpfangen[0].text;
+  assert.ok(issueText.startsWith(`Die Anrufprobe gegen Staging ist rot, auch die Wiederholung (Commit ${COMMIT}).`));
+  assert.ok(!slackText.includes("probe_uebersprungen"));
 });
 
 for (const grund of ["freitext", "probe_uebersprungen__fehlt", "probe_uebersprungen_X_fehlt", "probe_uebersprungen_a_fehlt\nmehr"]) {
