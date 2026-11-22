@@ -34,6 +34,7 @@ import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
+import { beginneAnrufstartMessung } from "../elevenlabs/anrufstart-messung.ts";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf } from "../i18n/locales.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -733,10 +734,12 @@ export function makeCallRoutes({
     meldeOutboundWeg({ callId: call.id, wahl });
     if (!wahl.weg) return { abbruch: { grund: wahl.grund } };
     await bereiche.einstellungen.recordCostProfile(call.id, KOSTENPROFIL_FUER_WEG[wahl.weg]);
-    const vorspann = await bereiteVorspannVor(call);
-    if ((await vorspannAblauf.pruefe({ call })).grund) return { abbruch: {} };
+    const messung = beginneAnrufstartMessung(uhr.jetztMs);
+    const vorspann = await messung.teil("ms_tts", () => bereiteVorspannVor(call));
+    if ((await messung.teil("ms_pruefe", () => vorspannAblauf.pruefe({ call }))).grund) return { abbruch: {} };
     if (vorspann.rueckfall) return { abbruch: { grund: vorspann.rueckfall } };
-    const gewaehlt = await vorspannAblauf.waehle({ call, vorspann });
+    const gewaehlt = await messung.teil("ms_waehle", () => vorspannAblauf.waehle({ call, vorspann }));
+    messung.melde(call);
     return { callControlId: gewaehlt.callControlId };
   };
 

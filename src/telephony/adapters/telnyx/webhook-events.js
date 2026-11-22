@@ -4,6 +4,7 @@ import { parseAnsweredBy } from "../../answered-by.ts";
 import { CALL_CONTROL_EREIGNIS } from "../../call-control-ereignis.ts";
 
 const EREIGNIS_VON_TYP = Object.freeze({
+  "call.ringing": CALL_CONTROL_EREIGNIS.KLINGELT,
   "call.answered": CALL_CONTROL_EREIGNIS.ABGEHOBEN,
   "call.hangup": CALL_CONTROL_EREIGNIS.AUFGELEGT,
   "call.playback.ended": CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE,
