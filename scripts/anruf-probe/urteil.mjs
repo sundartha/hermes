@@ -3,6 +3,7 @@ import { LOCALES } from "../../src/i18n/locales.ts";
 export const ANNAHME_GRENZE_S = 15;
 export const DAUER_GRENZE_S = 60;
 export const STILLSTAND_GRENZE_S = 20;
+export const MINDESTDAUER_S = 20;
 const STATUS_BEENDET = "completed";
 const RICHTUNG_STANDARD = "ausgehend";
 const SOLL_SAETZE = Object.freeze({
@@ -56,7 +57,9 @@ export function urteilen(messung) {
   else if (!offenlegungStimmt(messung)) gerissen.push("offenlegung");
   if (eroeffnungenZaehlen(messung) > 1) gerissen.push("eroeffnung_doppelt");
   if (!(messung.dauerSekunden <= DAUER_GRENZE_S)) gerissen.push("dauer");
+  if (messung.dauerSekunden < MINDESTDAUER_S) gerissen.push("zu_kurz");
   if (messung.stillstandSekunden > STILLSTAND_GRENZE_S) gerissen.push("stillstand");
+  if (messung.begruessungAntwort === false) gerissen.push("keine_antwort");
   gerissen.push(...stimmeGerissen(messung));
   gerissen.push(...ergebnisGerissen(messung));
   if (messung.status !== STATUS_BEENDET) gerissen.push("status");

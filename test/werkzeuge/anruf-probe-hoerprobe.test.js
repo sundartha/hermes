@@ -116,7 +116,7 @@ test("Hörprobe Anrufer: sich überlappende Fenster derselben Eröffnung zählen
   assert.deepEqual(messung.gegenseite, [GRUSS]);
   assert.equal(messung.begruessung, GRUSS);
   assert.equal(messung.stillstandSekunden, 4);
-  assert.deepEqual(urteilen(messung), { gruen: true, gerissen: [] });
+  assert.deepEqual(urteilen(messung), { gruen: false, gerissen: ["keine_antwort"] });
 });
 
 test("Hörprobe Anrufer: zwei Eröffnungen hintereinander werden beide gesammelt, Urteil eroeffnung_doppelt", async () => {
@@ -136,16 +136,16 @@ test("Hörprobe Anrufer: Stillstand zählt von der ersten Eröffnung bis zur nä
   assert.equal(frueh.messung.stillstandSekunden, 2);
   const spaet = await messen((n) => (n === 0 ? [] : n === 1 ? [G] : n < 12 ? [G] : n === 12 ? [G, "Agent: Hallo"] : "ende"));
   assert.equal(spaet.messung.stillstandSekunden, 22);
-  assert.deepEqual(urteilen(spaet.messung).gerissen, ["stillstand"]);
+  assert.deepEqual(urteilen(spaet.messung).gerissen, ["stillstand", "keine_antwort"]);
 });
 
 test("Hörprobe Anrufer: Ende ohne weitere Zeile innerhalb der Grenze ist grün, danach rot", async () => {
   const knapp = await messen((n) => (n === 0 ? [] : n < 11 ? [G] : "ende"));
   assert.equal(knapp.messung.stillstandSekunden, 20);
-  assert.deepEqual(urteilen(knapp.messung).gerissen, []);
+  assert.deepEqual(urteilen(knapp.messung).gerissen, ["keine_antwort"]);
   const lang = await messen((n) => (n === 0 ? [] : n < 12 ? [G] : "ende"));
   assert.equal(lang.messung.stillstandSekunden, 22);
-  assert.deepEqual(urteilen(lang.messung).gerissen, ["stillstand"]);
+  assert.deepEqual(urteilen(lang.messung).gerissen, ["stillstand", "keine_antwort"]);
 });
 
 test("Hörprobe Anrufer: läuft der Anruf stumm bis zum harten Auflegen, ist der Stillstand bis dahin gemessen", async () => {

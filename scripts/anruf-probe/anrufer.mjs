@@ -5,7 +5,7 @@ import { STIMMEN_FRIST_MS } from "../../src/elevenlabs/wirksame-stimme.ts";
 import { ELEVENLABS_RESULT_POLL_STANDARD_MS } from "../../src/konfiguration/rohwerte-voice.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
-import { DAUER_GRENZE_S } from "./urteil.mjs";
+import { DAUER_GRENZE_S, MINDESTDAUER_S } from "./urteil.mjs";
 import { ABSTAND_MS } from "./wiederholung.mjs";
 
 const ABFRAGE_FRIST_MS = 10_000;
@@ -18,7 +18,7 @@ const WIEDERHOLUNG_PUFFER_MS = PROBEN_LAENGEN_IM_PUFFER * DAUER_GRENZE_S * MS_JE
 const WIEDERHOLUNG_BIS_MS = ABSTAND_MS + WIEDERHOLUNG_PUFFER_MS;
 const SPRACHE = "de";
 const RICHTUNG = "eingehend";
-const ZIEL_OBJECTIVE = "Staging-Anrufprobe: Verbindung und Begrüßung prüfen, nach der Begrüßung auflegen.";
+const ZIEL_OBJECTIVE = `Staging-Anrufprobe: Verbindung und Begrüßung prüfen, das Gespräch mindestens ${MINDESTDAUER_S} Sekunden führen.`;
 const TAG_LAENGE = 10;
 export const LISTE_OBERGRENZE = 30;
 const ERGEBNIS_FRIST_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
@@ -100,7 +100,7 @@ function verlaufErgebnis(verlauf, endeMs) {
     verlauf.eroeffnungMs === undefined
       ? undefined
       : ((verlauf.naechsteMs ?? endeMs) - verlauf.eroeffnungMs) / MS_JE_SEKUNDE;
-  return { gegenseite, begruessung: gegenseite[0], stillstandSekunden };
+  return { gegenseite, begruessung: gegenseite[0], begruessungAntwort: gegenseite.length > 1, stillstandSekunden };
 }
 
 function startMs(stand) {
@@ -209,12 +209,13 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
         await abbrechen(platziert.call_id).catch(() => undefined);
         throw fehler;
       }
-      const { stand, begruessung, gegenseite, stillstandSekunden } = beobachtet;
+      const { stand, begruessung, begruessungAntwort, gegenseite, stillstandSekunden } = beobachtet;
       probeStartMs = Date.parse(stand.started_at);
       probeCallId = platziert.call_id;
       return {
         annahmeSekunden: (Date.parse(stand.answered_at) - Date.parse(stand.started_at)) / MS_JE_SEKUNDE,
         begruessung,
+        begruessungAntwort,
         gegenseite,
         stillstandSekunden,
         sprache,
