@@ -397,15 +397,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ordner=$(mktemp -d)
-          abruf() {
-            for lauf in $(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?event=merge_group&per_page=20" --jq '.workflow_runs[].id'); do
-              job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${lauf}/jobs?per_page=100" --jq '.jobs[] | select(.name == "Lastlauf") | .id' | head -n 1)
-              if [ -n "$job" ]; then
-                gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "$ordner/$lauf.log" || rm -f "$ordner/$lauf.log"
-              fi
-            done
-          }
-          abruf || echo "Abruf der letzten Queue-Läufe nicht möglich"
+          if ! laeufe=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?event=merge_group&per_page=20" --jq '.workflow_runs[].id'); then
+            echo "Abruf der letzten Queue-Läufe nicht möglich"
+            exit 0
+          fi
+          for lauf in $laeufe; do
+            job=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${lauf}/jobs?per_page=100" --jq '.jobs[] | select(.name == "Lastlauf") | .id' | head -n 1)
+            if [ -n "$job" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs" > "$ordner/$lauf.log" || rm -f "$ordner/$lauf.log"
+            fi
+          done
           node scripts/last/median.mjs "$ordner" || echo "Median nicht berechenbar"
 
       - name: Rotprobe, erzwungene Fehlerquote und verworfener Anruf machen den Lauf rot
