@@ -170,6 +170,10 @@ export const vorspannZustand = {
   anlegen: (anfrage) => aktiverVorspannZustand().anlegen(anfrage),
   leseText: (anfrage) => aktiverVorspannZustand().leseText(anfrage),
   loesche: (anfrage) => aktiverVorspannZustand().loesche(anfrage),
+  lade: (anfrage) => aktiverVorspannZustand().lade(anfrage),
+  setzeCallee: (anfrage) => aktiverVorspannZustand().setzeCallee(anfrage),
+  beanspruecheAbgehoben: (anfrage) => aktiverVorspannZustand().beanspruecheAbgehoben(anfrage),
+  speichere: (anfrage) => aktiverVorspannZustand().speichere(anfrage),
 };
 
 const aktiveKonsultPlaetze = () => offenesBackend?.konsultPlaetze ?? speicherKonsultPlaetze;

@@ -121,8 +121,8 @@ test("Der gesprochene Vorspann eines auf Instanz A gewaehlten Anrufs steht beim 
     const { rows } = await sql(ZEILE_SQL, [callId]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].text, gesprochen.at(-1));
-    assert.equal(rows[0].callee_id, null);
-    assert.deepEqual([rows[0].stand, rows[0].aufgelegt, rows[0].abgehoben], [{}, [], false]);
+    assert.equal(rows[0].callee_id, CALLEE_BEIN);
+    assert.deepEqual([Object.keys(rows[0].stand), rows[0].aufgelegt, rows[0].abgehoben], [["ABGEHOBEN"], [], true]);
     assert.ok(rows[0].rest_s > TTL_UNTERGRENZE_S && rows[0].rest_s <= TTL_S, `Restlaufzeit ${rows[0].rest_s}`);
     assert.equal((await sql("SELECT 1 FROM vorspann_zustand WHERE call_id = 'call_alt'")).rowCount, 0);
     assert.deepEqual((await sql(SICHERHEIT_SQL)).rows, [{ relrowsecurity: true, relforcerowsecurity: true }]);
@@ -142,7 +142,8 @@ test("Ist die Zeile abgelaufen, liefert Instanz B beim Init keinen Vorspann-Text
     await zeilenBis(async () => wiedergaben, (liste) => liste.length === 1);
     await sql("UPDATE vorspann_zustand SET expires_at = now() - interval '1 second' WHERE call_id = $1", [callId]);
     const eigene = await init(a, sql, callId);
-    assert.equal(eigene.json.dynamic_variables.eroeffnung_gesagt, gesprochen.at(-1));
+    assert.equal(eigene.json.dynamic_variables.eroeffnung_gesagt, undefined);
+    assert.ok(gesprochen.at(-1));
     const antwort = await init(b, sql, callId);
     assert.equal(antwort.status, HTTP_OK);
     assert.equal(antwort.json.dynamic_variables.eroeffnung_gesagt, undefined);
@@ -185,10 +186,7 @@ test("Scheitert das Loeschen der Zeile beim Auflegen, wird der Anruf trotzdem be
     const callId = await callIdVon(sql);
     await sql("ALTER TABLE vorspann_zustand RENAME TO vorspann_zustand_weg");
     assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
-    await zeilenBis(
-      async () => (await sql("SELECT status FROM call WHERE id = $1", [callId])).rows[0].status,
-      (status) => status !== "active",
-    );
-    await zeilenBis(async () => a.stdout, (text) => text.includes(`[el-vorspann] zustand fehlgeschlagen call=${callId}`));
+    await zeilenBis(async () => a.stdout, (text) => text.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}`));
+    assert.equal((await sql("SELECT status FROM call WHERE id = $1", [callId])).rows[0].status, "active");
   });
 });

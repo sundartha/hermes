@@ -10,6 +10,11 @@ export const STAND = Object.freeze({
   ABGEBROCHEN: Symbol(),
 });
 
+const STAND_NAMEN = new Map(Object.entries(STAND).map(([name, marke]) => [marke, name]));
+
+export const standNachObjekt = (stand) => Object.fromEntries([...stand].map(([marke, ms]) => [STAND_NAMEN.get(marke), ms]));
+export const standAusObjekt = (objekt) => new Map(Object.entries(objekt).map(([name, ms]) => [STAND[name], ms]));
+
 export const messeSeit = ({ callId, messung, bezug, stand, seit, jetzt }) =>
   meldeVorspannMessung({ callId, messung, bezug, ms: jetzt - stand.get(seit) });
 
