@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
   pinCall,
   sendeAnrufstartKoerper,
-  PIN_PLATTFORM_STIMME,
 } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "../helpers/play-tts-stimm-probe.mjs";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
