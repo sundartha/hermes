@@ -10,11 +10,13 @@ import {
   placeCall,
   seedState,
   seedCall,
+  waitUntil,
   anthropicAttrappe,
   TELNYX_TEST_OWNER_NUMBER,
 } from "../helpers.js";
 
 const HTTP_OK = 200;
+const ABRUF_FRIST_MS = 15000;
 const BEOBACHTER = fileURLToPath(new URL("../helpers/netz-beobachter.cjs", import.meta.url));
 const EL_ERGEBNISABRUF = "/v1/convai/conversations/conv_ohne_internet";
 
@@ -52,6 +54,10 @@ function leseProtokoll(protokoll) {
   return zeilen.filter(Boolean).map((zeile) => JSON.parse(zeile));
 }
 
+function abrufVersucht(eintraege) {
+  return eintraege.some((eintrag) => eintrag.art === "abruf" && eintrag.ziel.endsWith(EL_ERGEBNISABRUF));
+}
+
 function pruefeNurLokal(eintraege) {
   assert.ok(
     eintraege.some((eintrag) => eintrag.art === "start"),
@@ -80,14 +86,12 @@ test("Testserver aus startServer spricht beim Anruf ueber ElevenLabs nur Ziele a
   try {
     const res = await placeCall(srv);
     assert.equal(res.status, HTTP_OK);
+    await waitUntil(() => abrufVersucht(beobachter.eintraege()), { timeoutMs: ABRUF_FRIST_MS });
   } finally {
     await srv.stop();
   }
   const eintraege = beobachter.eintraege();
-  assert.ok(
-    eintraege.some((eintrag) => eintrag.art === "abruf" && eintrag.ziel.endsWith(EL_ERGEBNISABRUF)),
-    "Ergebnisabruf bei ElevenLabs nicht versucht",
-  );
+  assert.ok(abrufVersucht(eintraege), "Ergebnisabruf bei ElevenLabs nicht versucht");
   pruefeNurLokal(eintraege);
   assert.ok(anthropicAttrappe.anfragen() > anfragenVorher, "Anthropic-Attrappe nicht angefragt");
   const { usage } = srv.readStore();
