@@ -171,6 +171,10 @@ const ANRUF_SPERRE_NAMENSRAUM = 2667;
 const MANDANT_SPERRE_NEHMEN_SQL = "SELECT pg_advisory_lock($1, hashtext($2))";
 const MANDANT_SPERRE_GEBEN_SQL = "SELECT pg_advisory_unlock($1, hashtext($2))";
 const SPERRE_HALTER_SQL = "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted";
+const WARTENDE_MANDANT_SPERREN_SQL =
+  "SELECT count(*)::int AS anzahl FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = $1 AND objid = hashtext($2)::oid";
+const wartendeAufMandantSperre = async (sql, mandant) =>
+  (await sql(WARTENDE_MANDANT_SPERREN_SQL, [ANRUF_SPERRE_NAMENSRAUM, mandant.id])).rows[0].anzahl;
 const HTTP_UNAVAILABLE = 503;
 const UHR_SQL = "SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS ms";
 const datenbankUhr = async (sql) => (await sql(UHR_SQL)).rows[0].ms;
@@ -229,11 +233,11 @@ test(
       let wartender;
       try {
         wartender = rufeAn(a, MANDANTEN[0], ZIEL_A);
-        await zeilenBis(() => wartendeNachArt(sql), (wartende) => wartende.advisory === 1);
+        await zeilenBis(() => wartendeAufMandantSperre(sql, MANDANTEN[0]), (anzahl) => anzahl === 1);
         const anderer = await rufeAn(a, MANDANTEN[1], ZIEL_B);
         assert.equal(anderer.status, HTTP_OK);
         assert.equal(anderer.body.deduplicated, false);
-        assert.equal((await wartendeNachArt(sql)).advisory, 1, "der erste Mandant wartet noch, als der andere antwortet");
+        assert.equal(await wartendeAufMandantSperre(sql, MANDANTEN[0]), 1, "der erste Mandant wartet noch, als der andere antwortet");
       } finally {
         await sql(MANDANT_SPERRE_GEBEN_SQL, [ANRUF_SPERRE_NAMENSRAUM, MANDANTEN[0].id]);
       }
