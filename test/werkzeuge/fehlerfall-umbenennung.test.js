@@ -20,7 +20,7 @@ function schreiben(ordner, datei, text) {
   writeFileSync(join(ordner, datei), text);
 }
 
-function verschieben(von, nach, prText, neueTestdatei) {
+function verschieben(von, nach, { prText, neueTestdatei }) {
   const ordner = mkdtempSync(join(tmpdir(), "fehlerfall-umbenennung-"));
   try {
     git(ordner, "init", "-q");
@@ -43,20 +43,20 @@ function verschieben(von, nach, prText, neueTestdatei) {
 
 for (const ordner of ["src/telephony", "src/elevenlabs", "src/conversation", "src/store/zustand"]) {
   test(`Verschieben aus ${ordner} nach src/anderswo ohne Testdatei und Begründung ist rot und nennt den alten Pfad`, () => {
-    const { status, ausgabe } = verschieben(`${ordner}/x.ts`, "src/anderswo/x.ts", "## Was\n\nx", false);
+    const { status, ausgabe } = verschieben(`${ordner}/x.ts`, "src/anderswo/x.ts", { prText: "## Was\n\nx", neueTestdatei: false });
     assert.notEqual(status, 0);
     assert.ok(ausgabe.includes(`${ordner}/x.ts`), ausgabe);
   });
 }
 
 test("Dieselbe Verschiebung mit neuer Testdatei ist grün", () => {
-  assert.equal(verschieben("src/telephony/x.ts", "src/anderswo/x.ts", "## Was\n\nx", true).status, 0);
+  assert.equal(verschieben("src/telephony/x.ts", "src/anderswo/x.ts", { prText: "## Was\n\nx", neueTestdatei: true }).status, 0);
 });
 
 test("Dieselbe Verschiebung mit Abschnitt Kein Fehlerfall ist grün", () => {
-  assert.equal(verschieben("src/telephony/x.ts", "src/anderswo/x.ts", `## Kein Fehlerfall\n\n${GRUND}`, false).status, 0);
+  assert.equal(verschieben("src/telephony/x.ts", "src/anderswo/x.ts", { prText: `## Kein Fehlerfall\n\n${GRUND}`, neueTestdatei: false }).status, 0);
 });
 
 test("Verschieben zwischen ungeschützten Pfaden ist grün", () => {
-  assert.equal(verschieben("src/utils/x.ts", "src/anderswo/x.ts", "## Was\n\nx", false).status, 0);
+  assert.equal(verschieben("src/utils/x.ts", "src/anderswo/x.ts", { prText: "## Was\n\nx", neueTestdatei: false }).status, 0);
 });
