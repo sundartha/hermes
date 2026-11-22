@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bindPlatformNumber, unbindPlatformNumber } from "../../src/store/state-ops.js";
 import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const E164 = "+15005550006";
@@ -18,7 +17,11 @@ async function neueInstanz(db) {
   return store;
 }
 
-const binden = (store, e164) => bindPlatformNumber(store.load(), { e164, purpose: "outbound_ani", provider: "telnyx" });
+const binden = (store, e164) => {
+  const bindung = { id: `pnu_${e164}`, e164, purpose: "outbound_ani", provider: "telnyx", tenantId: null, providerNumberId: null, boundAt: "2026-11-21T10:00:00.000Z", releasedAt: null, note: null };
+  store.load().platformNumberUse.push(bindung);
+  return bindung;
+};
 
 async function flushen(store) {
   store.save();
@@ -40,11 +43,11 @@ test("Eine Instanz mit veralteter Kopie loescht beim Flush die Bindung der ander
 test("Eine neue Bindung und das Schliessen einer Bindung schreibt der Flush weiter", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   const a = await neueInstanz(db);
-  binden(a, E164);
+  const erste = binden(a, E164);
   binden(a, ZWEITE);
   await flushen(a);
   assert.deepEqual((await db.query(ABFRAGE)).rows.map((zeile) => zeile.offen), [true, true]);
-  unbindPlatformNumber(a.load(), { e164: E164, purpose: "outbound_ani" });
+  erste.releasedAt = "2026-11-22T10:00:00.000Z";
   await flushen(a);
   assert.deepEqual((await db.query(ABFRAGE)).rows.map((zeile) => [zeile.e164, zeile.offen]), [[E164, false], [ZWEITE, true]]);
 });
