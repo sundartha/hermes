@@ -1,5 +1,5 @@
 import { fetchConversation, listConversations, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
-import { registrierungenMitNummer } from "../src/elevenlabs/nummern-registrierung.js";
+import { registrierungenMitNummer } from "../src/elevenlabs/nummern-registrierung.ts";
 import { EXIT, jaNein } from "./iel-geheimnisse-ausgabe.mjs";
 
 const TENANT_TOKEN = "tenant_token";

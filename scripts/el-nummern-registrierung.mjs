@@ -11,7 +11,7 @@ import {
   inventarUrteil,
   makeElSipRegistrar,
   registrierungsKlasse,
-} from "../src/elevenlabs/nummern-registrierung.js";
+} from "../src/elevenlabs/nummern-registrierung.ts";
 import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
 import { resolve } from "node:path";

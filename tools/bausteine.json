@@ -232,7 +232,7 @@
         "src/worker/",
         "src/queue/",
         "src/telephony/provisioning-geo.ts",
-        "src/elevenlabs/nummern-registrierung.js",
+        "src/elevenlabs/nummern-registrierung.ts",
         "src/elevenlabs/nummern-port.ts",
         "src/elevenlabs/inbound-trunk-beleg.ts"
       ],

@@ -4,7 +4,7 @@ import { provisionNumber } from "../../src/onboarding.ts";
 import { makeDefaultState, registerTenant, requestNumber, findNumber } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
 import { fakeProvisioner } from "../helpers.js";
-import { fehlendeZugangsdaten, makeElSipRegistrar, registrierungsKoerper } from "../../src/elevenlabs/nummern-registrierung.js";
+import { fehlendeZugangsdaten, makeElSipRegistrar, registrierungsKoerper } from "../../src/elevenlabs/nummern-registrierung.ts";
 
 const EL_ACCOUNT = Object.freeze({ apiKey: "xi_test_key", apiBase: "https://api.elevenlabs.io", agentId: "agent_x" });
 const SIP_USER = "sip_user_test";
