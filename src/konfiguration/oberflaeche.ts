@@ -48,6 +48,10 @@ export function attachNamespaces(target: Record<string, unknown>, namespaces: Re
   }
 }
 
+export function buildNamespaceSurface<S extends Record<string, unknown>, N extends Readonly<Record<string, readonly string[]>>>(
+  storage: S,
+  namespaces: N,
+): { readonly [G in keyof N]: { [K in N[G][number]]: K extends keyof S ? S[K] : unknown } };
 export function buildNamespaceSurface(storage: Record<string, unknown>, namespaces: Record<string, readonly string[]>): object {
   const surface = {};
   for (const [namespace, keys] of Object.entries(namespaces)) {

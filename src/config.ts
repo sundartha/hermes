@@ -188,7 +188,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
   werkzeug: ["renderApiKey"],
-});
+} as const);
 
 export { attachNamespaces, isSelfServiceLive };
 
