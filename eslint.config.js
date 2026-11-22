@@ -737,7 +737,6 @@ const UHR_TESTS_BESTAND = [
   "test/werkzeuge/freigabe-pr-merge-stand.test.js",
   "test/werkzeuge/lastlauf-vorspann-ablauf.test.js",
   "test/werkzeuge/mutation-eingebettete-skripte.test.js",
-  "test/werkzeuge/mutation-frist-alle-laufenden-dateien.test.js",
   "test/werkzeuge/mutation-frist-arbeiterzahl-aus-pid-dateien.test.js",
   "test/werkzeuge/mutation-haengende-testdatei.test.js",
   "test/werkzeuge/mutation-zeilen-abdeckung.test.js",
