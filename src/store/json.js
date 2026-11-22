@@ -41,6 +41,8 @@ export async function nummerNachladen() {
   return false;
 }
 
+export async function newsletterAbgleichen() {}
+
 export function load() {
   if (state) return state;
   let raw;

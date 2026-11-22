@@ -253,7 +253,6 @@ function jsonBackendAufbauen() {
       jsonBackend.save();
     },
     starteZustellungsLoeschtakt: async () => {},
-    newsletterAbgleichen: async () => {},
     mitStartSperre: async (_routine, arbeit) => ({ uebersprungen: false, ergebnis: await arbeit() }),
     mitAnrufSperre: (_tenantId, arbeit) => arbeit(),
     nummernVorhanden: async () => jsonBackend.load().numbers.length > 0,
