@@ -662,9 +662,9 @@ describe("IEL-B10 stimmen-beleg", () => {
     const alle200 = [{ voiceId: "a", status: HTTP_OK }, { voiceId: "b", status: HTTP_OK }];
     const einer401 = [{ voiceId: "a", status: HTTP_OK }, { voiceId: "b", status: HTTP_UNAUTHORIZED }];
     const tabelle = [
-      [{ profilProben: alle200, telnyxVoice: "t", telnyxProbe: HTTP_OK, agentVoice: "x", playVoice: "y" }, true],
+      [{ profilProben: alle200, telnyxVoice: "t", telnyxProbe: HTTP_OK, agentVoice: "x", playVoice: "y" }, false],
       [{ profilProben: einer401, telnyxVoice: "t", telnyxProbe: HTTP_OK, agentVoice: "x", playVoice: "x" }, false],
-      [{ profilProben: alle200, telnyxVoice: "t", telnyxProbe: HTTP_UNAUTHORIZED, agentVoice: "x", playVoice: "x" }, false],
+      [{ profilProben: alle200, telnyxVoice: "t", telnyxProbe: HTTP_UNAUTHORIZED, agentVoice: "x", playVoice: "x" }, true],
       [{ profilProben: alle200, telnyxVoice: "", telnyxProbe: null, agentVoice: "x", playVoice: "x" }, true],
       [{ profilProben: alle200, telnyxVoice: "", telnyxProbe: null, agentVoice: "x", playVoice: "y" }, false],
       [{ profilProben: alle200, telnyxVoice: "", telnyxProbe: null, agentVoice: "", playVoice: "" }, false],
@@ -677,7 +677,7 @@ describe("IEL-B10 stimmen-beleg", () => {
 
     const mitTelnyx = await laufe(["stimmen-beleg"], { renderEnv: { ...renderEnvGruen(), TELNYX_ELEVENLABS_VOICE_ID: "telnyxStimme" } });
     assert.equal(mitTelnyx.code, 0, mitTelnyx.ausgabe);
-    assert.equal(aufrufeAn(mitTelnyx.aufrufe, EL_BASIS).filter((aufruf) => aufruf.adresse.includes("/telnyxStimme/stream")).length, 1);
+    assert.equal(aufrufeAn(mitTelnyx.aufrufe, EL_BASIS).filter((aufruf) => aufruf.adresse.includes("/telnyxStimme/stream")).length, 0);
 
     const ohneModell = await laufe(["stimmen-beleg"], { agent: { conversation_config: { tts: { voice_id: AGENT_STIMME } } } });
     assert.equal(ohneModell.code, 1, ohneModell.ausgabe);

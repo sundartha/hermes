@@ -23,7 +23,6 @@ Dieser Lauf braucht echten Telnyx-Zugang und ist deshalb **Owner-gated**:
 | `TELNYX_API_KEY` | Render-Env / lokale `.env` |
 | `PUBLIC_URL` | Render-Dashboard-Var `PUBLIC_URL` (Boot-Pflicht in Produktion) / lokale `.env` |
 | `elevenlabs_prod`-Integration-Secret | **IN Telnyx** angelegt (nicht im Repo, hält den ElevenLabs-API-Key) |
-| `TELNYX_ELEVENLABS_VOICE_ID` | Render-Env / lokale `.env` |
 | `TELNYX_ELEVENLABS_API_KEY_REF` | `elevenlabs_prod` (Referenz auf das Telnyx-Secret oben) |
 | `TELNYX_ELEVENLABS_MODEL` | optional, Default `"Default"` |
 | `TELNYX_SHIM_API_KEY_REF` | NAME eines zweiten Telnyx-Integration-Secrets fuer `external_llm.llm_api_key_ref` — **WERT-gleich** mit `TELNYX_SHIM_SHARED_SECRET` (Server-Bearer-Pruefung) |

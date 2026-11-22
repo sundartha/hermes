@@ -126,8 +126,7 @@ test("IE6-S1-7: eine Altzeile mit costProfile='telnyx_assistant' bleibt fail-clo
 test("IE6-S1-8: der telnyxAssistant-Namespace ist aus config.js entfernt", async () => {
   const { config, CONFIG_NAMESPACES } = await import("../../src/config.ts");
   const { CAPABILITY } = await import("../../src/telephony/registry.js");
-  assert.deepEqual(CONFIG_NAMESPACES.telnyx, ["telnyxElevenLabs"]);
-  assert.throws(() => config.telnyx.telnyxAssistant, TypeError);
-  assert.deepEqual(Object.keys(config.telnyx.telnyxElevenLabs), ["voiceId"]);
+  assert.equal("telnyx" in CONFIG_NAMESPACES, false);
+  assert.throws(() => config.telnyx, TypeError);
   assert.deepEqual(Object.keys(CAPABILITY), ["PLAY_AUDIO_TTS"]);
 });

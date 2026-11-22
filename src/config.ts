@@ -34,7 +34,6 @@ import { rohwerteProvisioning } from "./konfiguration/rohwerte-provisioning.ts";
 import { rohwerteFristen, rohwerteSafety } from "./konfiguration/rohwerte-safety.ts";
 import { rohwerteStore } from "./konfiguration/rohwerte-store.ts";
 import { rohwerteTelephony } from "./konfiguration/rohwerte-telephony.ts";
-import { rohwerteTelnyx } from "./konfiguration/rohwerte-telnyx.ts";
 import { rohwerteTenancy } from "./konfiguration/rohwerte-tenancy.ts";
 import { rohwerteVoice } from "./konfiguration/rohwerte-voice.ts";
 import { rohwerteWerkzeug } from "./konfiguration/rohwerte-werkzeug.ts";
@@ -126,7 +125,6 @@ const rawConfig = {
   }),
 
   ...rohwerteTelephony(process.env, umgebung),
-  ...rohwerteTelnyx(process.env),
 
   ...rohwerteVoice(process.env, umgebung, DEFAULT_STT_PROFILE),
 
@@ -177,7 +175,6 @@ export const CONFIG_NAMESPACES = Object.freeze({
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled", "webhookZustellungSecret", "deployToken", "statusToken"],
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
-  telnyx: ["telnyxElevenLabs"],
   voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds", "inboundOwnerGreetingEnabled", "inboundOwnerGreetingTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxCallControlAppId", "telnyxAccountSid"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
