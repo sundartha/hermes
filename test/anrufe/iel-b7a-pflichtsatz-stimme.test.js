@@ -42,18 +42,15 @@ test("IEL-B7a-2: gesetzte voiceId an gather gewinnt gegen die Profil-Stimme", as
   assert.ok(out[0].promptAudioUrl);
 });
 
-test("IEL-B7a-3: ohne Feld -> heutige Aufloesung (Profil-Stimme)", async () => {
+test("IEL-B7a-3: ohne Feld -> die eine Stimme fuer jedes Profil", async () => {
   const profiles = [VOICE_PROFILE.DE_FEMALE_NEURAL, VOICE_PROFILE.FR_FEMALE_NEURAL, VOICE_PROFILE.EN_FEMALE_NEURAL];
   const { voiceIds } = await runPlayTtsProbe(profiles.map((profile) => say(AGENT_SATZ, profile)));
-  assert.deepEqual(
-    voiceIds,
-    profiles.map((profile) => elevenLabsVoiceIdFor(PROBE_PLATTFORM_STIMME, profile)),
-  );
+  assert.deepEqual(voiceIds, profiles.map(() => "cqPdIo76zSHFDcSZpFov"));
 });
 
-test("IEL-B7a-4: ohne Feld und ohne Profil-Stimme -> cfg.voiceId", async () => {
+test("IEL-B7a-4: ohne Feld und ohne Profil -> die eine Stimme", async () => {
   const { voiceIds } = await runPlayTtsProbe([{ kind: DIRECTIVE.SAY, text: AGENT_SATZ }]);
-  assert.deepEqual(voiceIds, [PROBE_PLATTFORM_STIMME]);
+  assert.deepEqual(voiceIds, ["cqPdIo76zSHFDcSZpFov"]);
 });
 
 test('IEL-B7a-5: voiceId "" am Builder -> kein Feld, Direktive formgleich zum Bestand', () => {
