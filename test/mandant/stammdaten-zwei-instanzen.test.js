@@ -200,7 +200,7 @@ test("Kriterium 2: ein Patch mit nur der Zeitzone lässt das Land stehen, das ei
   assert.equal(stand.timezone, "Europe/Vienna");
 });
 
-test("Kriterium 2: das Löschen von Mandantendaten ohne eigene Nummer lässt die Nummer einer anderen Instanz stehen", async () => {
+test("Kriterium 2: das Löschen von Mandantendaten ohne eigene Nummer entfernt auch die Nummer einer anderen Instanz", async () => {
   const { a, b, tenant } = await zweiInstanzen();
   b.setPrivateNumber(tenant, EIGENE_NUMMER);
   await b.drainFlushes();
@@ -209,7 +209,7 @@ test("Kriterium 2: das Löschen von Mandantendaten ohne eigene Nummer lässt die
   await a.drainFlushes();
 
   assert.equal(entfernt.privateNumber, 0);
-  assert.equal((await zeile(tenant)).private_number, EIGENE_NUMMER);
+  assert.equal((await zeile(tenant)).private_number, null);
 });
 
 test("Kriterium 2: das Löschen von Mandantendaten mit nur einem Anruf speichert den Zustand", async () => {
@@ -240,5 +240,5 @@ test("Kriterium 2: das Löschen von Mandantendaten ohne etwas zu entfernen speic
   assert.equal(entfernt.actionItems, 0);
   assert.equal(entfernt.privateNumber, 0);
   assert.ok(!abfragen.includes("BEGIN"));
-  assert.ok(!abfragen.some((text) => /^\s*(UPDATE|INSERT)[^;]*\btenants?\b/i.test(text)));
+  assert.ok(!abfragen.some((text) => /^\s*(UPDATE|INSERT)[^;]*\btenants?\b/i.test(text) && !/private_number/i.test(text)));
 });

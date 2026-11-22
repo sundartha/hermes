@@ -975,7 +975,7 @@ function verwaltungMethoden({ requireState, save, gebunden, eigene, runner, eins
       const removed = { ...ops.eraseTenantData(state, tenantId), ...geloescht };
       entbindeEntfernte([gebunden, eigene], state);
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
-      if (removed.privateNumber) mandant.schreiben(tenantId, ["privateNumber"]);
+      mandant.schreiben(tenantId, ["privateNumber"]);
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
