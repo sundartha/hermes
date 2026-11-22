@@ -177,3 +177,89 @@ test("Ohne Ablage: put liefert den Token sofort und takeOnce ruft nichts ausserh
   assert.deepEqual(await store.takeOnce(token), { bytes: AUDIO, contentType: TYP });
   assert.equal(await store.takeOnce(token), null);
 });
+
+const GELIEFERT = { bytes: AUDIO, contentType: TYP };
+const EIGENE_TTL_MS = 7_000;
+
+function aufzeichnendeAblage({ ablegenFehler = null, gelesen = null } = {}) {
+  const aufrufe = { ablegen: [], lesen: [], freigeben: [], holen: [] };
+  const bisFreigabe = {
+    ablegen: async (token, audio, optionen) => {
+      aufrufe.ablegen.push({ token, audio, optionen });
+      if (ablegenFehler) throw ablegenFehler;
+    },
+    lesen: async (token) => {
+      aufrufe.lesen.push(token);
+      return gelesen;
+    },
+    freigeben: async (token) => {
+      aufrufe.freigeben.push(token);
+    },
+  };
+  const normal = {
+    ablegen: async () => {},
+    holen: async (token) => {
+      aufrufe.holen.push(token);
+      return null;
+    },
+  };
+  return { aufrufe, bisFreigabe, normal };
+}
+
+test("put mit bisFreigabe legt das Audio mit eigener Frist in der Ablage bis Freigabe ab, ohne bisFreigabe nicht", async () => {
+  const { aufrufe, bisFreigabe } = aufzeichnendeAblage();
+  const store = createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe });
+  const audio = fertigesAudioMitTyp();
+  const token = await store.put(audio, { bisFreigabe: true, ttlMs: EIGENE_TTL_MS });
+  assert.deepEqual(aufrufe.ablegen, [{ token, audio, optionen: { ttlMs: EIGENE_TTL_MS } }]);
+  await store.put(fertigesAudioMitTyp());
+  assert.equal(aufrufe.ablegen.length, 1);
+});
+
+test("scheitert die Ablage bis Freigabe, liefert put trotzdem den Token und der Prozess liefert das Audio", async (t) => {
+  const fehlerAus = t.mock.method(console, "error", () => {});
+  const { bisFreigabe } = aufzeichnendeAblage({ ablegenFehler: new Error("db weg") });
+  const store = createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe });
+  const token = await store.put(fertigesAudioMitTyp(), { bisFreigabe: true });
+  assert.equal(typeof token, "string");
+  assert.deepEqual(await store.takeOnce(token), GELIEFERT);
+  assert.equal(fehlerAus.mock.calls.length, 1);
+  const [aufruf] = fehlerAus.mock.calls;
+  assert.match(aufruf.arguments.join(" "), /Vorspann-Audio nicht in der Ablage: db weg/);
+});
+
+test("release gibt das Audio in der Ablage frei, auch wenn der Prozess es nicht selbst hielt", () => {
+  const { aufrufe, bisFreigabe } = aufzeichnendeAblage();
+  createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe }).release("fremder-token");
+  assert.deepEqual(aufrufe.freigeben, ["fremder-token"]);
+});
+
+test("scheitert das Freigeben in der Ablage, wird es gemeldet und release wirft nicht", async (t) => {
+  const fehlerAus = t.mock.method(console, "error", () => {});
+  const bisFreigabe = { ...aufzeichnendeAblage().bisFreigabe, freigeben: async () => { throw new Error("db weg"); } };
+  createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe }).release("tok");
+  await new Promise((fertig) => setImmediate(fertig));
+  assert.equal(fehlerAus.mock.calls.length, 1);
+});
+
+test("takeOnce faellt ohne Eintrag auf die Ablage bis Freigabe zurueck, nachdem die einmalige Ablage nichts hat", async () => {
+  const { aufrufe, bisFreigabe, normal } = aufzeichnendeAblage({ gelesen: GELIEFERT });
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage: normal, bisFreigabeAblage: bisFreigabe });
+  assert.deepEqual(await store.takeOnce("tok"), GELIEFERT);
+  assert.deepEqual(aufrufe.holen, ["tok"]);
+  assert.deepEqual(aufrufe.lesen, ["tok"]);
+});
+
+test("takeOnce liest nicht aus der Ablage bis Freigabe, wenn die einmalige Ablage das Audio hat", async () => {
+  const { aufrufe, bisFreigabe } = aufzeichnendeAblage({ gelesen: GELIEFERT });
+  const normal = { ablegen: async () => {}, holen: async () => ({ bytes: AUDIO, contentType: "audio/wav" }) };
+  const store = createTtsStore({ ttlMs: TTL_MS, ablage: normal, bisFreigabeAblage: bisFreigabe });
+  assert.deepEqual(await store.takeOnce("tok"), { bytes: AUDIO, contentType: "audio/wav" });
+  assert.deepEqual(aufrufe.lesen, []);
+});
+
+test("takeOnce liest ohne einmalige Ablage nur aus der Ablage bis Freigabe und ohne beide liefert es nichts", async () => {
+  const { bisFreigabe } = aufzeichnendeAblage({ gelesen: GELIEFERT });
+  assert.deepEqual(await createTtsStore({ ttlMs: TTL_MS, bisFreigabeAblage: bisFreigabe }).takeOnce("tok"), GELIEFERT);
+  assert.equal(await createTtsStore({ ttlMs: TTL_MS }).takeOnce("tok"), null);
+});
