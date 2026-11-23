@@ -212,8 +212,9 @@ async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAu
   const zustand = call.status === "active" ? await ladeZustand(call) : undefined;
   if (!zustand || zustand.abgehoben) return;
   await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
-  if (!(await vorspannZustand.entnimm(zustandsRef(call)))) return;
-  await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
+  const zeile = await vorspannZustand.entnimm(zustandsRef(call));
+  if (!zeile) return;
+  await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false, aufgelegt: new Set(zeile.aufgelegt) });
 }
 
 const setzeKlingelfristGeschuetzt = ({ call, store, config, now, beiFehler }) =>
@@ -309,12 +310,12 @@ export function makeVorspannAblauf({
     now,
   });
 
-  async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben }) {
+  async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben, aufgelegt = zustand.aufgelegt }) {
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
     if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis });
     const andereBeinId = vomElBein ? zustand.calleeId : elBeinVon(call, zustand);
-    const nochOffen = andereBeinId && !zustand.aufgelegt.has(andereBeinId);
+    const nochOffen = andereBeinId && !aufgelegt.has(andereBeinId);
     const aufzeichnung = await store.leseCall(call.id);
     const warBereitsGebunden = Boolean(aufzeichnung.bridgedAt), traegerAuflegen = nochOffen ? () => legeBeinAuf(voiceControl(call.provider), call.id, andereBeinId) : null;
     await terminateAndBillCall({
@@ -329,7 +330,10 @@ export function makeVorspannAblauf({
 
   const BEHANDLER = Object.freeze({
     [CALL_CONTROL_EREIGNIS.ABGEHOBEN]: (args) => (args.vomElBein ? beiElAngenommen(args) : beiAbgehoben(args)),
-    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: async (args) => (await vorspannZustand.entnimm(zustandsRef(args.call))) && beiAufgelegt(args),
+    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: async (args) => {
+      const zeile = await vorspannZustand.entnimm(zustandsRef(args.call));
+      if (zeile) await beiAufgelegt({ ...args, aufgelegt: new Set(zeile.aufgelegt) });
+    },
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: (args) => (args.vomElBein ? undefined : beiWiedergabeEnde(args)),
   });
 
