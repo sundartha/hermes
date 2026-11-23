@@ -1460,20 +1460,44 @@ async function konversationsIdSchreiben(runner, call) {
       const { rows } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
       const gehalten = rows[0];
       if (!gehalten || gehalten.geschrieben === 1 || !gehalten.id || gehalten.id === call.elevenlabsConversationId) return true;
-      ops.uebernehmeGehalteneBindung(call, { conversationId: gehalten.id, boundAt: gehalten.bound_at });
-      return false;
+      return { conversationId: gehalten.id, boundAt: gehalten.bound_at };
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
     }
   });
 }
+function bindungErstNachBestaetigung({ call, alt, runner, save }) {
+  const neu = { elevenlabsConversationId: call.elevenlabsConversationId, elBoundAt: call.elBoundAt };
+  Object.assign(call, alt);
+  const uebernehmen = () => {
+    Object.assign(call, neu);
+    save();
+  };
+  return konversationsIdSchreiben(runner, { ...neu, tenantId: call.tenantId, id: call.id }).then(
+    (gehalten) => {
+      if (gehalten === true) {
+        uebernehmen();
+        return true;
+      }
+      ops.uebernehmeGehalteneBindung(call, gehalten);
+      save();
+      return false;
+    },
+    (fehler) => {
+      uebernehmen();
+      throw fehler;
+    },
+  );
+}
 function brueckenZustandMutatoren({ requireState, save, runner }) {
   const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
   return {
     bindInboundElConversation(callId, bindung) {
-      const ergebnis = speichereBeiAenderung(ops.bindInboundElConversation(requireState(), callId, bindung));
+      const vorhanden = ops.getCall(requireState(), callId);
+      const alt = { elevenlabsConversationId: vorhanden?.elevenlabsConversationId, elBoundAt: vorhanden?.elBoundAt };
+      const ergebnis = ops.bindInboundElConversation(requireState(), callId, bindung);
       if (!ergebnis.changed) return ergebnis;
-      return { ...ergebnis, dauerhaft: konversationsIdSchreiben(runner, ergebnis.call) };
+      return { ...ergebnis, dauerhaft: bindungErstNachBestaetigung({ call: ergebnis.call, alt, runner, save }) };
     },
     markInboundElFallback(callId, nowIso) {
       return speichereBeiAenderung(ops.markInboundElFallback(requireState(), callId, nowIso));
