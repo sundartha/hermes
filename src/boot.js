@@ -779,8 +779,7 @@ export async function bootServer({
       outageWatch,
       paidWithoutNumberWatch,
       provisionRetryWatch,
-      priceDriftWatch,
-      vorspannZustand: store.vorspannZustand,
+      priceDriftWatch, vorspannZustand: store.vorspannZustand,
     },
     provisioning,
   );
