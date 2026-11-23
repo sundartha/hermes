@@ -10,7 +10,7 @@ import {
 
 const HTTP_OK = 200;
 const IN_DATENBANK = "cancelled";
-const ANGEZEIGT = "completed";
+const ANGEZEIGT = "cancelled";
 
 test("ZWEI-SCHREIBER-T3: GET /api/calls/:id auf Instanz A zeigt den Anruf als beendet, nachdem Instanz B ihn beendet hat", async (t) => {
   await mitZweiSchreibern(t, async ({ a, b, platziere, sql }) => {
