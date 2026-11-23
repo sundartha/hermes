@@ -586,7 +586,9 @@ async function antworteAufVorspannEreignis(
     call,
     ereignis,
     zugang: elZugangVon(config),
-    nachLesen: () => bestaetigeFallsOffen(res),
+    nachLesen: () => {
+      bestaetigeFallsOffen(res);
+    },
   });
   if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT) bestaetigeFallsOffen(res);
   try {
