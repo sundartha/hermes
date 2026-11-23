@@ -38,8 +38,9 @@ function belegseite(recordType, um) {
 function telnyxBelegeAnbieten(um) {
   const weiter = globalThis.fetch;
   globalThis.fetch = async (url, optionen) => {
-    if (!String(url).startsWith(TELNYX_BASIS)) return weiter(url, { ...optionen, signal: fristSignal() });
-    const recordType = new URL(String(url)).searchParams.get("filter[record_type]");
+    const ziel = new URL(String(url));
+    if (ziel.origin !== TELNYX_BASIS) return weiter(url, { ...optionen, signal: fristSignal() });
+    const recordType = ziel.searchParams.get("filter[record_type]");
     return new Response(JSON.stringify({ data: belegseite(recordType, um) }), { status: HTTP_OK });
   };
 }
