@@ -154,7 +154,7 @@ test("Probe-Zugang: tools/list nennt genau die sechs freigegebenen Werkzeuge, al
     const { tools } = await readToolResult(await probe(TOKEN, { jsonrpc: "2.0", id: 1, method: "tools/list" }));
     assert.deepEqual(tools.map((t) => t.name).sort(), SECHS_WERKZEUGE);
     const place = tools.find((t) => t.name === "place_call");
-    assert.doesNotMatch(place.description, /consult/i);
+    assert.doesNotMatch(place.description, /await_call_event/);
   });
 });
 
