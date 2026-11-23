@@ -76,7 +76,7 @@ test("Status zaehlt einen beendeten Anruf von 21 Minuten nicht", () =>
 test("Healthz bleibt bei 0 und 0 unveraendert", () =>
   mitServer({}, async (server) => {
     const koerper = await healthz(server);
-    assert.deepEqual(Object.keys(koerper).sort(), ["commit", "ok"]);
+    assert.deepEqual(Object.keys(koerper).sort(), ["commit", "instanz", "ok"]);
     assert.equal(koerper.ok, true);
     assert.equal(server.stdout.includes("[fruehwarnung]"), false);
   }));

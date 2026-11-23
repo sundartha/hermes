@@ -31,7 +31,7 @@ test("/healthz-Antwort traegt genau {commit, ok} und keinen Rohwert, keinen 64-H
     const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     const raw = await res.text();
     const body = JSON.parse(raw);
-    assert.deepEqual(Object.keys(body).sort(), ["commit", "ok"]);
+    assert.deepEqual(Object.keys(body).sort(), ["commit", "instanz", "ok"]);
     assert.equal(body.commit, FAKE_COMMIT);
     assert.doesNotMatch(raw, /[a-f0-9]{64}/);
     for (const leak of ["+49", "+33", "sk_", "leakcanary", "eur"]) {
