@@ -107,3 +107,37 @@ export async function sendeEnde(instanz, callId) {
   });
   assert.equal(antwort.status, HTTP_OK);
 }
+
+export function brecheAb(instanz, callId) {
+  return mandantenAbruf(instanz, MANDANT.sub).sende(`/api/calls/${callId}/cancel`);
+}
+
+export async function mitZweiInstanzenMitKostendecke(t, { tarifCent, deckeCent }, lauf) {
+  const db = await echteDatenbankMitRolle(t);
+  const verwaltung = new pg.Client({ connectionString: adminAdresse(db.adresse) });
+  await verwaltung.connect();
+  const anbieter = await starteAttrappeMitGespraechsende();
+  const env = {
+    ELEVENLABS_INBOUND_TENANT_IDS: [BOOTSTRAP_TENANT_ID, MANDANT.id].join(","),
+    ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+    ELEVENLABS_OUTBOUND_VORSPANN: "true",
+    DEFAULT_TENANT_BUDGET_CENTS: String(deckeCent),
+    VOICE_TARIFF_DOMESTIC_CENTS: String(tarifCent),
+    VOICE_TARIFF_DEFAULT_CENTS: String(tarifCent),
+  };
+  const gestartet = [];
+  const sql = (text, parameter) => verwaltung.query(text, parameter);
+  try {
+    gestartet.push(await starteAnAnbieter(db, anbieter, env));
+    await gestartet[0].stop();
+    await seedeMandant(sql, MANDANT);
+    const [a, b] = [await starteAnAnbieter(db, anbieter, env), await starteAnAnbieter(db, anbieter, env)];
+    gestartet.push(a, b);
+    const rufeAn = (instanz, to) => mandantenAbruf(instanz, MANDANT.sub).rufeAn(to);
+    await lauf({ a, b, sql, rufeAn, anbieter });
+  } finally {
+    await Promise.all(gestartet.map((instanz) => instanz.stop()));
+    await anbieter.schliessen();
+    await verwaltung.end();
+  }
+}
