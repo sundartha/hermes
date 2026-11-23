@@ -10,6 +10,7 @@ import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers
 const MANDANT = "t_abschluss_kunde";
 const ZIEL = "+4915112346139";
 const ABSENDER = "+4930555006139";
+const EMPFAENGER = "kunde@example.test";
 const KONVERSATION = "conv_abschluss_6139";
 const HTTP_OK = 200;
 const LAUFZEIT_S = 60;
@@ -37,12 +38,14 @@ async function neueInstanz(db) {
   const freigegeben = [];
   const gesendet = [];
   const abgerechnet = [];
+  const mails = [];
   const store = {
     ...pgStore,
     setzeAbfrageFrist: async () => {},
     leitungsplaetze: { freigeben: (id) => freigegeben.push(id) },
     releaseOutboundReserve: async () => {},
     recordUsageEvent: () => {},
+    confirmedNewsletterRecipients: () => [{ email: EMPFAENGER, unsubToken: null }],
   };
   const { finishCall } = makeCallFinish({
     store,
@@ -51,6 +54,7 @@ async function neueInstanz(db) {
     messaging: () => ({ sendSms: async ({ body }) => gesendet.push(body) }),
     summarizeCall: async () => ({ summary: "Termin vereinbart.", actionItems: [] }),
     planSummarySms: () => ({ send: true, to: ZIEL, smsFrom: { e164: ABSENDER } }),
+    mailer: { sendMail: async ({ to }) => mails.push(to) },
     audit: () => {},
   });
   const el = elevenlabsOutbound().makeElevenLabsOutbound({
@@ -60,7 +64,7 @@ async function neueInstanz(db) {
     billThunk,
     finishCall,
   });
-  return { store, el, freigegeben, gesendet, abgerechnet };
+  return { store, el, freigegeben, gesendet, abgerechnet, mails };
 }
 
 async function aufbau() {
@@ -99,12 +103,14 @@ test("Abschluss in der Datenbank: zwei Instanzen schliessen denselben Anruf ab, 
   await schliesseAb(b, callId);
   assert.equal(a.gesendet.length + b.gesendet.length, 1);
   assert.deepEqual([...a.abgerechnet, ...b.abgerechnet], [callId]);
+  assert.deepEqual([...a.mails, ...b.mails], [EMPFAENGER]);
 });
 
 test("Abschluss in der Datenbank: die Instanz, die das Ende gewinnt, schliesst wie bisher ab", async () => {
   const { db, a, callId } = await aufbau();
   await schliesseAb(a, callId);
   assert.equal(a.gesendet.length, 1);
+  assert.deepEqual(a.mails, [EMPFAENGER]);
   assert.deepEqual(a.abgerechnet, [callId]);
   const gespeichert = await zeile(db, callId);
   assert.equal(gespeichert.status, "completed");
@@ -116,6 +122,7 @@ test("Abschluss in der Datenbank: die verlierende Instanz ruft keinen Abschluss 
   await a.store.setCallEndedAt(callId, "failed", "2031-01-02T03:04:05.000Z");
   await schliesseAb(b, callId);
   assert.equal(b.gesendet.length, 0);
+  assert.deepEqual(b.mails, []);
   assert.deepEqual(b.abgerechnet, []);
   const gespeichert = await zeile(db, callId);
   assert.equal(gespeichert.status, "failed");
