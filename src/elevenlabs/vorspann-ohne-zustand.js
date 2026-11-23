@@ -32,10 +32,20 @@ function nachBruecke({ beiAufgelegt, call, ereignis, vomElBein, now }) {
   return beiAufgelegt({ call, zustand, vomElBein, abgehoben: true });
 }
 
-export function behandleOhneZustand(args) {
+async function nochAktiv({ store, call, logFehler }) {
+  try {
+    return (await store.leseCallAusDatenbank(call.id))?.status === "active";
+  } catch (fehler) {
+    logFehler("lesen", call.id, fehler);
+    return false;
+  }
+}
+
+export async function behandleOhneZustand(args) {
   const { call, ereignis, vomElBein } = args;
   const bekannt = vomElBein || ereignis.callControlId === call.callControlId;
   if (!ereignis.ereignis || !ereignis.callControlId || !bekannt || call.status !== "active") return;
+  if (!(await nochAktiv(args))) return;
   if (call.bridgedAt) return nachBruecke(args);
   meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.ZUSTAND_FEHLT });
   return beendeAufbau(args);

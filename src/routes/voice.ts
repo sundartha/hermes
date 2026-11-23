@@ -566,6 +566,7 @@ async function antworteAufVorspannEreignis(
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
   await vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
 }
 
 function ownerTonFuer({ from, tenantId }: { from: string; tenantId: string }, { store, config }: VoiceDeps): boolean {
