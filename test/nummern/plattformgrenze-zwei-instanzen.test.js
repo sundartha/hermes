@@ -24,7 +24,7 @@ const FREMDE_NUMMER = "INSERT INTO number (id, tenant_id, status) VALUES ($1, $2
 const STATUS_SETZEN = "UPDATE number SET status = $2 WHERE id = $1";
 const NUMMERN_ZAEHLEN = "SELECT count(*)::int AS anzahl FROM number";
 const ZAEHLER_LESEN = "SELECT nummern_lebend_gesamt()::int AS anzahl";
-const ZAEHLER_ZEILEN = "SELECT id::int AS id, anzahl::int AS anzahl FROM nummer_lebend_zahl";
+const ZAEHLER_ZEILEN = "SELECT * FROM nummer_lebend_zahl";
 const NUMMERN_LESEN = "SELECT id FROM number";
 
 function runnerFuer(pool, vorQuery = () => {}) {
@@ -269,7 +269,7 @@ test("Die Plattformzaehlung gibt einem Mandanten nur eine Anzahl, keine fremden 
   assert.deepEqual(await umgebung.sql(A, NUMMERN_LESEN), []);
   assert.deepEqual(await umgebung.sql(A, ZAEHLER_LESEN), [{ anzahl: 2 }]);
   const zeilen = await umgebung.sql(A, ZAEHLER_ZEILEN);
-  assert.deepEqual(zeilen, [{ id: 1, anzahl: 2 }]);
+  assert.deepEqual(zeilen.map((zeile) => ({ ...zeile, id: Number(zeile.id), anzahl: Number(zeile.anzahl) })), [{ id: 1, anzahl: 2 }]);
   assert.equal(JSON.stringify(zeilen).includes("num_fremd"), false);
   assert.equal(JSON.stringify(zeilen).includes(B), false);
 });
