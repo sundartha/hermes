@@ -18,6 +18,7 @@ export type StartKonfiguration = PruefungenKonfiguration & {
   auth: {
     sessionSecret: string | undefined;
     statusToken: string | undefined;
+    probeToken: string | undefined;
     deployToken: string | undefined;
   };
   store: { databaseUrl: string | undefined };
@@ -124,15 +125,23 @@ const REQUIRED_CONFIG = (
 
 function sharedTokenFindings({
   statusToken,
+  probeToken,
   deployToken,
 }: {
   statusToken: string | undefined;
+  probeToken: string | undefined;
   deployToken: string | undefined;
 }): string[] {
-  if (!statusToken || statusToken !== deployToken) return [];
-  return [
-    "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
-  ];
+  const befunde: string[] = [];
+  if (statusToken && statusToken === deployToken)
+    befunde.push(
+      "HERMES_STATUS_TOKEN und HERMES_DEPLOY_TOKEN sind gleich - der Statusschluessel braucht einen eigenen Wert.",
+    );
+  if (probeToken && (probeToken === deployToken || probeToken === statusToken))
+    befunde.push(
+      "HERMES_PROBE_TOKEN ist gleich HERMES_DEPLOY_TOKEN oder HERMES_STATUS_TOKEN - der Probe-Schluessel braucht einen eigenen Wert.",
+    );
+  return befunde;
 }
 
 const fatalMessages = (findings: Befund[]): string[] =>

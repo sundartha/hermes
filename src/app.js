@@ -40,6 +40,8 @@ import { makeInternAnrufpauseRoutes } from "./routes/intern-anrufpause.js";
 import { makeInternStatusRoutes } from "./routes/intern-status.js";
 import { makeHealthzRoutes } from "./utils/healthz-route.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
+import { bearerAbgewiesen } from "./routes/bearer-schluessel.js";
+import { makeInternProbeMcpRoutes } from "./routes/intern-probe-mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot } from "./boot-guard.ts";
 import {
@@ -332,6 +334,7 @@ export async function buildApp(deps) {
   app.use(makeInternAnrufeLaufendRoutes({ config, store }));
   app.use(makeInternAnrufpauseRoutes({ config, store }));
   app.use(makeInternStatusRoutes({ config, store }));
+  app.use(makeInternProbeMcpRoutes({ config, store, bearerAbgewiesen }));
 
   let operatorAuth = null;
   if (config.auth.sessionSecret && config.store.storeBackend === "pg") {

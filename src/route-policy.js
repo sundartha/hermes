@@ -165,6 +165,12 @@ export const PUBLIC_ROUTES = Object.freeze([
       "HANDLER-INTERNE AUTH (Paket B2, Statusroute fuer die Wache): Better Stack und OpenClaw fragen ohne Sitzung, ob die Datenbank antwortet. Eigener Nur-Lese-Schluessel, nicht das Deploy-Token: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_STATUS_TOKEN>'; leer oder kuerzer als STATUS_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit. Antwort nur {datenbank: <boolean>, commit} mit no-store, 200 wenn die Datenbank binnen 2 s antwortet, sonst 503; nie ein Fehlertext. Liest nur, schreibt nichts, loest nichts aus. Drossel: eigener Begrenzer der Route vor der Schluesselpruefung, 30 Abrufe je Minute und Adresse.",
   },
   {
+    method: "POST",
+    path: "/intern/probe/mcp",
+    reason:
+      "HANDLER-INTERNE AUTH (Anrufprobe auf Staging): Staging nimmt an /mcp nur JWTs des Anmeldedienstes an, die die Probe nicht bekommt. Eigener Schluessel, nicht das Deploy- oder Status-Token: safeEqual des ganzen Authorization-Headers gegen 'Bearer <HERMES_PROBE_TOKEN>'; leer oder kuerzer als PROBE_TOKEN_MIN_LENGTH -> JEDER Aufruf 401 mit konstantem Koerper und Audit, auf Live ist der Wert nie gesetzt. Der Aufruf gehoert fest dem Bootstrap-Mandanten, kein Header, Koerper oder Parameter aendert das. Nur die Werkzeuge der Positivliste PROBE_WERKZEUGE sind registriert, alle Gates der Werkzeuge (Verifikation, OUTBOUND_FROZEN, Denylist/Land, Stundenlimit, Kostendecke, Max-Dauer, Offenlegung) bleiben unveraendert. Drossel: eigener Begrenzer der Route vor der Schluesselpruefung, 30 Aufrufe je Minute und Adresse.",
+  },
+  {
     method: "GET",
     path: LEGACY_PORTAL_PATH,
     reason:

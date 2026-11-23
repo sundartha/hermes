@@ -49,6 +49,7 @@ function betreiberZugaenge(
     WEBHOOK_ZUSTELLUNG_SECRET?: string | undefined;
     HERMES_DEPLOY_TOKEN?: string | undefined;
     HERMES_STATUS_TOKEN?: string | undefined;
+    HERMES_PROBE_TOKEN?: string | undefined;
     ADMIN_EMAILS?: string | undefined;
     OWNER_IDP_SUBJECT?: string | undefined;
     DASHBOARD_PASSWORD?: string | undefined;
@@ -60,6 +61,7 @@ function betreiberZugaenge(
   webhookZustellungSecret: string;
   deployToken: string;
   statusToken: string;
+  probeToken: string;
   adminEmails: string[];
   ownerIdpSubject: string;
   dashboardPassword: string;
@@ -69,6 +71,7 @@ function betreiberZugaenge(
     webhookZustellungSecret: env.WEBHOOK_ZUSTELLUNG_SECRET ?? "",
     deployToken: (env.HERMES_DEPLOY_TOKEN ?? "").trim(),
     statusToken: (env.HERMES_STATUS_TOKEN ?? "").trim(),
+    probeToken: (env.HERMES_PROBE_TOKEN ?? "").trim(),
     adminEmails: csvEnv(env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
     ownerIdpSubject: env.OWNER_IDP_SUBJECT ?? "",
     dashboardPassword: env.DASHBOARD_PASSWORD ?? "",
