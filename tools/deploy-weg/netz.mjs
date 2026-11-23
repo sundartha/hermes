@@ -161,7 +161,10 @@ export function hermesZugang(basisUrl, deployToken = null) {
     },
     async abgewieseneWebhooks() {
       const { daten } = await anfrage(basisUrl + HEALTHZ_PFAD);
-      return zaehler(daten?.webhooksAbgewiesen);
+      return {
+        instanz: typeof daten?.instanz === "string" ? daten.instanz : "",
+        abgewiesen: zaehler(daten?.webhooksAbgewiesen),
+      };
     },
     aufwecken: (optionen) => aufwecken(basisUrl, optionen),
     async wachhalten() {

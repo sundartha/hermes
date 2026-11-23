@@ -12,6 +12,7 @@ const HTTP_OK = 200;
 const HTTP_NICHT_ANGEMELDET = 401;
 const HTTP_VERBOTEN = 403;
 const KENNUNG_LAENGE = 12;
+const HEALTHZ_LESUNGEN = 12;
 const MS_JE_SEKUNDE = 1000;
 const SIGNATUR_KOPF = "telnyx-signature-ed25519";
 const ZEIT_KOPF = "telnyx-timestamp";
@@ -121,6 +122,23 @@ async function webhooksProbieren(kontext) {
   return ergebnisse.every(({ http }) => http === HTTP_VERBOTEN);
 }
 
+async function abgewieseneJeInstanz(hermes) {
+  const staende = new Map();
+  for (let lesung = 0; lesung < HEALTHZ_LESUNGEN; lesung++) {
+    const { instanz, abgewiesen } = await hermes.abgewieseneWebhooks();
+    staende.set(instanz, abgewiesen);
+  }
+  return staende;
+}
+
+function zuwachsGleicherInstanzen(vorher, nachher) {
+  let summe = 0;
+  for (const [instanz, bisher] of vorher) {
+    if (nachher.has(instanz)) summe += nachher.get(instanz) - bisher;
+  }
+  return summe;
+}
+
 export function fruehwarnungOk({ stand, basis, eigene, ausgabe }) {
   const zuviel = stand.webhooksAbgewiesen - basis - eigene;
   const rot = zuviel > 0 || stand.anrufeUeberHoechstdauer >= 1;
@@ -173,13 +191,15 @@ function stagingStandLesen({ hermes, einstellungen, commit, ausgabe, uhr, pinTak
 }
 
 async function standProbieren({ hermes, einstellungen, commit, ausgabe, basis, uhr, pinTakte }) {
+  const nachher = await abgewieseneJeInstanz(hermes);
   const { stand } = await stagingStandLesen({ hermes, einstellungen, commit, ausgabe, uhr, pinTakte });
   const { status, gesund, commit: gemeldet, telnyxSchluessel } = stand;
   const ok = gesund && gemeldet === commit;
   ausgabe.melde("probe_stand", { http: status, ok });
   ausgabe.melde("telnyx_schluessel", { http: status, ok: telnyxSchluessel });
   const eigene = webhookZiele(commit).length;
-  return fruehwarnungOk({ stand, basis, eigene, ausgabe }) && ok && telnyxSchluessel;
+  const gezaehlt = { ...stand, webhooksAbgewiesen: zuwachsGleicherInstanzen(basis, nachher) };
+  return fruehwarnungOk({ stand: gezaehlt, basis: 0, eigene, ausgabe }) && ok && telnyxSchluessel;
 }
 
 export async function staging({
@@ -197,7 +217,7 @@ export async function staging({
   const http = await hermesZugang(einstellungen.stagingUrl).mcpOhneAnmeldung();
   ausgabe.melde("mcp_ohne_anmeldung", { http });
   const hermes = hermesZugang(einstellungen.stagingUrl);
-  const basis = await hermes.abgewieseneWebhooks();
+  const basis = await abgewieseneJeInstanz(hermes);
   const webhooks = await webhooksProbieren({ hermes, commit, ausgabe, uhr });
   const stand = await standProbieren({ hermes, einstellungen, commit, ausgabe, basis, uhr, pinTakte });
   if (absichtlichRotMelden({ einstellungen, ausgabe })) return false;

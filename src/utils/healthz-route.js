@@ -71,7 +71,8 @@ export function makeHealthzRoutes({
     const warnung = fruehwarnungsFelder(fruehwarnung());
     if (ueberfaellig.length > 0) console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
     const felder = ueberfaellig.length > 0 ? { zeitplaeneUeberfaellig: ueberfaellig.length } : {};
-    return res.json({ ok: true, commit, ...felder, ...warnung });
+    const instanz = config.telemetry?.telemetryInstanceId;
+    return res.json({ ok: true, commit, instanz, ...felder, ...warnung });
   });
 
   return router;
