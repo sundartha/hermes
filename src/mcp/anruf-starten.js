@@ -45,7 +45,7 @@ export function registerPlaceCall({
       requireFields(placed, { callId: "string" });
       const data = {
         call_id: placed.callId,
-        status: "dialing",
+        status: placed.deduplicated ? placed.status : "dialing",
         to: placed.to ?? null,
         objective: placed.objective ?? null,
         recipient_name: args.recipient_name?.trim() || null,

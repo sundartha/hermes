@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
+import { anrufStatusAnzeige } from "../begriffe/anruf-zustand.ts";
 import { normNum } from "../begriffe/rufnummern.js";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
@@ -599,7 +600,7 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anru
     callId: call.id,
     twilioSid: call.twilioSid,
     startedAt: call.startedAt,
-    status: deduplicated ? call.status : "dialing",
+    status: deduplicated ? anrufStatusAnzeige(call) : "dialing",
     to: call.to,
     objective: call.goal,
     deduplicated,
