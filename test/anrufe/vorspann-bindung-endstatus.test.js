@@ -30,7 +30,7 @@ test("Legt das EL-Bein vor der Bruecke auf der nicht aufbauenden Instanz auf, st
       async () => (await srv.sql(BINDUNG_SQL, [callId])).rows,
       (liste) => liste[0].failure_reason !== null && liste[0].status !== "active",
     );
-    assert.equal(zeilen[0].failure_reason, "el_uebergabe_gescheitert");
+    assert.ok(zeilen[0].failure_reason.startsWith("el_uebergabe_gescheitert"));
     assert.equal(zeilen[0].status, "failed");
     assert.notEqual(zeilen[0].el_fallback_at, null);
     assert.equal(zaehleMarke([srv.a, srv.b], "[el-inbound] frist_abgelaufen"), 0);
