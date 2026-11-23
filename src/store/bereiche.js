@@ -292,15 +292,15 @@ export function speicherBereiche(speicher) {
       advanceInCallConsult: async (callId, eingabe) =>
         speicher.advanceInCallConsult(callId, eingabe),
       noteConsultPoll: async (callId) => speicher.noteConsultPoll(callId),
-      markConsultAskDelivered: async (callId, eventId, tenantId) =>
-        speicher.markConsultAskDelivered(callId, eventId, tenantId),
-      zustellzeitGelesen: async (callId, tenantId, eventId) =>
-        speicher.zustellzeitGelesen?.(callId, tenantId, eventId),
+      markConsultAskDelivered: async (callId, eventId) =>
+        speicher.markConsultAskDelivered(callId, eventId),
       pendingConsult: async (callId, nachEventId) => speicher.pendingConsult(callId, nachEventId),
       timeOutStagedConsult: async (callId, eingabe) =>
         speicher.timeOutStagedConsult(callId, eingabe),
     },
     rueckfrageAbschluss: {
+      zustellzeitGelesen: async (callId, tenantId, eventId) =>
+        speicher.zustellzeitGelesen?.(callId, tenantId, eventId),
       verwaisteSchliessen: async (callId, eingabe) => {
         if (speicher.leseCall) await speicher.leseCall(callId);
         const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);

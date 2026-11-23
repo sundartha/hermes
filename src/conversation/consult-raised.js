@@ -95,7 +95,7 @@ export function makeConsultRaised({
     const consult = consultById(call, consultId);
     if (consult.askDeliveredAt) return;
     try {
-      const gelesen = await bereiche.rueckfrage.zustellzeitGelesen(call.id, call.tenantId, consultId);
+      const gelesen = await bereiche.rueckfrageAbschluss.zustellzeitGelesen(call.id, call.tenantId, consultId);
       if (gelesen) consult.askDeliveredAt = gelesen;
     } catch (fehler) {
       console.error(ZUSTELLZEIT_FEHLER, fehler.message);
