@@ -54,6 +54,29 @@ test("Ein leerer Monatsschluessel aendert die gespeicherte Zeile nicht", async (
   assert.deepEqual(await geprueft(), [VORMONAT]);
 });
 
+test("Ein leerer Monatsschluessel loest keine Abfrage an die Kostenvergleich-Tabelle aus", async () => {
+  const { runner } = await makePgTestStore();
+  const abfragen = [];
+  const mitProtokoll = {
+    withClient: (arbeit) =>
+      runner.withClient((client) =>
+        arbeit({
+          ...client,
+          query: (text, parameter) => {
+            if (text.includes("cost_cross_check")) abfragen.push(text);
+            return client.query(text, parameter);
+          },
+        }),
+      ),
+  };
+  const store = makePgStore(mitProtokoll);
+  await store.init();
+  abfragen.length = 0;
+  await store.markCostCrossCheckAttempted(null);
+  await store.markCostCrossCheckAttempted("");
+  assert.deepEqual(abfragen, []);
+});
+
 test("Das Speichern anderer Daten durch Instanz A setzt den Monat von Instanz B nicht zurueck", async () => {
   const { a, b, geprueft } = await zweiInstanzen();
   await b.markCostCrossCheckAttempted(VORMONAT);
