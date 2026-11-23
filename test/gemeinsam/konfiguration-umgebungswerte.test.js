@@ -1257,6 +1257,7 @@ test("Rohwerte Anmeldung und Sprachmodell: ohne Umgebung gelten die Standardwert
     webhookZustellungSecret: "",
     deployToken: "",
     statusToken: "",
+    probeToken: "",
   });
   assert.equal(ist.llm.anthropicApiKey, "");
   assert.equal(ist.llm.llmProvider, "anthropic");
@@ -1287,6 +1288,7 @@ test("Rohwerte Anmeldung und Sprachmodell: gesetzte Werte werden gelesen, gekuer
     WEBHOOK_ZUSTELLUNG_SECRET: "wz",
     HERMES_DEPLOY_TOKEN: "  dep  ",
     HERMES_STATUS_TOKEN: "  stat  ",
+    HERMES_PROBE_TOKEN: "  probe  ",
     WORKOS_API_BASE: "https://workos.test/",
     WORKOS_MANAGEMENT_API_KEY: "wk",
     ADMIN_EMAILS: "A@X.de, B@Y.de",
@@ -1333,6 +1335,7 @@ test("Rohwerte Anmeldung und Sprachmodell: gesetzte Werte werden gelesen, gekuer
     webhookZustellungSecret: "wz",
     deployToken: "dep",
     statusToken: "stat",
+    probeToken: "probe",
   });
   assert.equal(ist.llm.anthropicApiKey, "ak");
   assert.equal(ist.llm.llmProvider, "deepseek");

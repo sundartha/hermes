@@ -35,6 +35,7 @@ oeffentlich|GET|/intern/anrufe-laufend|401|keine|Deploy-Token fehlt -> 401, auch
 oeffentlich|GET|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
 oeffentlich|POST|/intern/anrufpause|401|keine|Deploy-Token fehlt -> 401, auch bei leerem HERMES_DEPLOY_TOKEN (Paket V6)
 oeffentlich|GET|/intern/status|401|keine|Status-Schluessel fehlt -> 401, auch bei leerem HERMES_STATUS_TOKEN (Paket B2)
+oeffentlich|POST|/intern/probe/mcp|401|keine|Probe-Schluessel fehlt -> 401, auch bei leerem HERMES_PROBE_TOKEN (Probe-Zugang)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login

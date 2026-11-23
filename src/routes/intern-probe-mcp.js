@@ -47,8 +47,6 @@ export function makeInternProbeMcpRoutes({ config, store, bearerAbgewiesen }) {
       identity: PROBE_IDENTITAET,
       scopedTenant: BOOTSTRAP_TENANT_ID,
       consultAllowed: false,
-      consultTore: {},
-      uiHost: { enabled: false, chatgptEgress: false },
       language,
     });
     applyToolSecuritySchemes(server);
