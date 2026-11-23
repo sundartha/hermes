@@ -34,7 +34,7 @@ import { macheAnrufNummernSql } from "./anruf-nummern-sql.js";
 import { macheAnrufSucheSql } from "./anruf-suche-sql.js";
 import { macheAnrufePosteingangSql } from "./posteingang-anrufe-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
-import { macheRueckfrageSql } from "./rueckfrage-sql.js";
+import { CONSULTS_BEIM_SCHREIBEN_SQL, macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
@@ -1901,7 +1901,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          cost_truing_attempts=EXCLUDED.cost_truing_attempts,
          telnyx_conversation_id=EXCLUDED.telnyx_conversation_id,
          caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result,
-         consults=EXCLUDED.consults, context=EXCLUDED.context,
+         consults=${CONSULTS_BEIM_SCHREIBEN_SQL}, context=EXCLUDED.context,
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
          estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
          elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id,

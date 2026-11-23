@@ -289,3 +289,152 @@ test(
     });
   },
 );
+
+const FLUSH_SCHLUESSEL = 604402;
+const FLUSH_TOR_SQL = `CREATE FUNCTION flush_tor() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF current_query() ~ '^\\s*INSERT INTO call\\s' THEN
+      PERFORM pg_advisory_lock(${FLUSH_SCHLUESSEL}); PERFORM pg_advisory_unlock(${FLUSH_SCHLUESSEL});
+    END IF;
+    RETURN NULL;
+  END $$;
+  CREATE TRIGGER flush_tor BEFORE INSERT ON call FOR EACH STATEMENT EXECUTE FUNCTION flush_tor()`;
+const FLUSH_ZU_SQL = `SELECT pg_advisory_lock(${FLUSH_SCHLUESSEL})`;
+const FLUSH_AUF_SQL = `SELECT pg_advisory_unlock(${FLUSH_SCHLUESSEL})`;
+const WARTENDER_FLUSH_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_activity
+  WHERE wait_event_type = 'Lock' AND query ~ '^\\s*INSERT INTO call\\s'`;
+const OFFENE_TRANSAKTIONEN_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_activity
+  WHERE datname = current_database() AND pid <> pg_backend_pid() AND xact_start IS NOT NULL`;
+const ERSTE_ZUSTELLZEIT = "2020-01-01T00:00:00.000Z";
+const ZUSTELLZEIT_SETZEN_SQL = `UPDATE call SET consults = jsonb_set(consults, '{0,askDeliveredAt}', to_jsonb($2::text)) WHERE id = $1`;
+
+function fluss(a, sql, anrufId) {
+  const bestaetige = (eventId, status, answers) =>
+    abrufMitFrist(`${a.localUrl}/api/calls/${anrufId}/consult/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Internal-Identity": MANDANT.sub },
+      body: JSON.stringify({ event_id: eventId, status, answers }),
+    }, { wartezeitMs: ABRUF_FRIST_MS });
+  const toranlage = async () => {
+    await sql(FLUSH_TOR_SQL);
+    await sql(FLUSH_ZU_SQL);
+  };
+  const wartenderFlush = () =>
+    zeilenBis(
+      async () => (await sql(WARTENDER_FLUSH_SQL)).rows[0].anzahl,
+      (anzahl) => anzahl > 0,
+    );
+  const freigeben = async () => {
+    await sql(FLUSH_AUF_SQL);
+    await zeilenBis(
+      async () => (await sql(OFFENE_TRANSAKTIONEN_SQL)).rows[0].anzahl,
+      (anzahl) => anzahl === 0,
+    );
+  };
+  return { bestaetige, toranlage, wartenderFlush, freigeben };
+}
+
+test(
+  "Schreibt A zwischen dem Abruf ueber B und ihrem naechsten Tick den Anruf, bleibt die Zustellzeit von B in der Datenbank und A bricht nicht mit not_delivered ab",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_flush_1", async ({ a, b, sql, hole, frageAuf, antworteAuf, gestellt, nachZustellfrist }) => {
+      const werkzeug = fluss(a, sql, "call_kz_flush_1");
+      const frage = frageAuf(a);
+      const gestelltFrage = await gestellt();
+      await werkzeug.toranlage();
+      const flush = werkzeug.bestaetige(gestelltFrage.id, "working");
+      await werkzeug.wartenderFlush();
+      assert.equal((await hole(b)).event, "consult");
+      const [vonB] = (await sql(FRAGEN_SQL, ["call_kz_flush_1"])).rows[0].consults;
+      assert.match(vonB.askDeliveredAt, /^\d{4}-\d{2}-\d{2}T/);
+      await werkzeug.freigeben();
+      await flush;
+      const [danach] = (await sql(FRAGEN_SQL, ["call_kz_flush_1"])).rows[0].consults;
+      assert.equal(danach.askDeliveredAt, vonB.askDeliveredAt);
+      const offen = await nachZustellfrist();
+      assert.equal(offen.status, "open");
+      assert.equal(offen.timeoutReason, undefined);
+      assert.equal((await antworteAuf(a, gestelltFrage.id)).status, 200);
+      assert.match(JSON.stringify(await frage), /Ja/);
+    });
+  },
+);
+
+test(
+  "Steht in der Datenbank schon eine Zustellzeit, gewinnt sie gegen den Wert im Spiegel von A, wenn A den Anruf schreibt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_flush_2", async ({ a, sql, hole, frageAuf, antworteAuf, gestellt }) => {
+      const werkzeug = fluss(a, sql, "call_kz_flush_2");
+      const frage = frageAuf(a);
+      const gestelltFrage = await gestellt();
+      assert.equal((await hole(a)).event, "consult");
+      const [vonA] = (await sql(FRAGEN_SQL, ["call_kz_flush_2"])).rows[0].consults;
+      assert.match(vonA.askDeliveredAt, /^\d{4}-\d{2}-\d{2}T/);
+      assert.notEqual(vonA.askDeliveredAt, ERSTE_ZUSTELLZEIT);
+      await zeilenBis(
+        async () => (await sql(OFFENE_TRANSAKTIONEN_SQL)).rows[0].anzahl,
+        (anzahl) => anzahl === 0,
+      );
+      await werkzeug.toranlage();
+      const flush = werkzeug.bestaetige(gestelltFrage.id, "working");
+      await werkzeug.wartenderFlush();
+      await sql(ZUSTELLZEIT_SETZEN_SQL, ["call_kz_flush_2", ERSTE_ZUSTELLZEIT]);
+      await werkzeug.freigeben();
+      await flush;
+      const [danach] = (await sql(FRAGEN_SQL, ["call_kz_flush_2"])).rows[0].consults;
+      assert.equal(danach.askDeliveredAt, ERSTE_ZUSTELLZEIT);
+      assert.equal((await antworteAuf(a, gestelltFrage.id)).status, 200);
+      await frage;
+    });
+  },
+);
+
+test(
+  "Holt niemand die Rueckfrage ab und schreibt A den Anruf zwischendurch, bleibt die Zustellzeit leer und A bricht mit not_delivered ab",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_flush_3", async ({ a, sql, frageAuf, gestellt }) => {
+      const werkzeug = fluss(a, sql, "call_kz_flush_3");
+      const frage = frageAuf(a);
+      const gestelltFrage = await gestellt();
+      assert.equal((await werkzeug.bestaetige(gestelltFrage.id, "working")).status, 200);
+      const [abgebrochen] = await zeilenBis(
+        async () => (await sql(FRAGEN_SQL, ["call_kz_flush_3"])).rows[0].consults,
+        (fragen) => fragen[0].status !== "open",
+      );
+      assert.equal(abgebrochen.status, "timed_out");
+      assert.equal(abgebrochen.timeoutReason, "not_delivered");
+      assert.equal(abgebrochen.askDeliveredAt, undefined);
+      await frage;
+    });
+  },
+);
+
+test(
+  "Beantwortet A die Rueckfrage, waehrend B die Zustellzeit setzt, gelten Status und Antwort von A und die Zustellzeit von B bleibt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_flush_4", async ({ a, b, sql, hole, frageAuf, gestellt }) => {
+      const werkzeug = fluss(a, sql, "call_kz_flush_4");
+      const frage = frageAuf(a);
+      const gestelltFrage = await gestellt();
+      await werkzeug.toranlage();
+      const antwort = werkzeug.bestaetige(gestelltFrage.id, "final", ["Ja"]);
+      await werkzeug.wartenderFlush();
+      assert.equal((await hole(b)).event, "consult");
+      const [vonB] = (await sql(FRAGEN_SQL, ["call_kz_flush_4"])).rows[0].consults;
+      await werkzeug.freigeben();
+      assert.equal((await antwort).status, 200);
+      const [danach] = (await sql(FRAGEN_SQL, ["call_kz_flush_4"])).rows[0].consults;
+      assert.equal(danach.status, "answered");
+      assert.equal(danach.askDeliveredAt, vonB.askDeliveredAt);
+      assert.match(JSON.stringify(await frage), /Ja/);
+    });
+  },
+);

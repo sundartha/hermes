@@ -13,6 +13,17 @@ const ZUSTELLUNG_SETZEN_SQL = `UPDATE call SET consults = (
     FROM jsonb_array_elements(consults) WITH ORDINALITY AS eintrag(value, ordinality))
   WHERE id = $1 AND jsonb_typeof(consults) = 'array'`;
 
+export const CONSULTS_BEIM_SCHREIBEN_SQL = `CASE WHEN jsonb_typeof(EXCLUDED.consults) = 'array' AND jsonb_typeof(call.consults) = 'array' THEN
+    COALESCE((SELECT jsonb_agg(
+      CASE WHEN COALESCE(gespeichert.zeit, '') <> ''
+      THEN neu.value || jsonb_build_object('askDeliveredAt', gespeichert.zeit) ELSE neu.value END
+      ORDER BY neu.ordinality)
+    FROM jsonb_array_elements(EXCLUDED.consults) WITH ORDINALITY AS neu(value, ordinality)
+    LEFT JOIN LATERAL (SELECT alt.value->>'askDeliveredAt' AS zeit FROM jsonb_array_elements(call.consults) AS alt(value)
+      WHERE alt.value->>'id' = neu.value->>'id' AND COALESCE(alt.value->>'askDeliveredAt', '') <> '' LIMIT 1) AS gespeichert ON true),
+    EXCLUDED.consults)
+  ELSE EXCLUDED.consults END`;
+
 export function rueckfrageAusZustand(zustand, callId, afterEventId) {
   const call = zustand.calls.find((eintrag) => eintrag.id === callId);
   return { consult: pendingConsult(zustand, callId, afterEventId), status: call?.status ?? null };
