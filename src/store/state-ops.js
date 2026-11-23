@@ -508,6 +508,10 @@ export function bindInboundElConversation(state, callId, { conversationId, nowIs
   return { call, changed: true, bound: true };
 }
 
+export function uebernehmeGehalteneBindung(call, { conversationId, boundAt }) {
+  Object.assign(call, { elevenlabsConversationId: conversationId, elBoundAt: boundAt ? new Date(boundAt).toISOString() : null });
+}
+
 export function recordWebhookAnchors(state, callId, anchors) {
   const call = getCall(state, callId);
   if (!call) return { call: null, changed: false };
