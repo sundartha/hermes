@@ -213,6 +213,9 @@ interface Bereiche {
     noteConsultPoll: (callId: string) => Promise<unknown>;
     markConsultAskDelivered: (callId: string, eventId: string) => Promise<unknown>;
   };
+  rueckfrageAbschluss: {
+    zustellungSchreiben: (callId: string, tenantId: string | undefined, eventId: string) => Promise<unknown>;
+  };
   konto: { tenantPrivateNumberLesen: (tenantId: string | undefined) => Promise<string | null | undefined> };
   mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
   einstellungen: {
@@ -997,6 +1000,7 @@ export function makeCallRoutes({
     });
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
       await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
+      await bereiche.rueckfrageAbschluss.zustellungSchreiben(call.id, call.tenantId, event.eventId);
     return res.json(event);
   }
 

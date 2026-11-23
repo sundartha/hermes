@@ -301,6 +301,8 @@ export function speicherBereiche(speicher) {
     rueckfrageAbschluss: {
       zustellzeitGelesen: async (callId, tenantId, eventId) =>
         speicher.zustellzeitGelesen?.(callId, tenantId, eventId),
+      zustellungSchreiben: async (callId, tenantId, eventId) =>
+        speicher.zustellungSchreiben?.(callId, tenantId, eventId),
       verwaisteSchliessen: async (callId, eingabe) => {
         if (speicher.leseCall) await speicher.leseCall(callId);
         const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);
