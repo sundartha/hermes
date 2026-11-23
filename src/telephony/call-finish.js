@@ -17,6 +17,8 @@ const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
 
+const nichtMehrZuAbschliessen = (call) => finishedCalls.has(call) || endeLagAnderswo(call);
+
 const ANBIETER_ENDE_GRUENDE = new Set(["failed", "busy", "no-answer"]);
 
 const TELNYX_LEITUNG_PROFILE = new Set([
@@ -332,7 +334,7 @@ export function makeCallFinish({
   }
 
   async function finishCall(call) {
-    if (!call || finishedCalls.has(call) || endeLagAnderswo(call)) return;
+    if (!call || nichtMehrZuAbschliessen(call)) return;
     finishedCalls.add(call);
     if (lehneUnbekanntenZustandAb(call)) return;
     messeEnde(call);
