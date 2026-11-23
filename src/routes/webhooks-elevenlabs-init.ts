@@ -56,7 +56,7 @@ interface Speicher {
   getCall(callId: string): Anruf | null | undefined;
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
-  bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string }): Bindung;
+  bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string; stand?: Anruf }): Bindung;
 }
 
 type NummernSatz = Parameters<typeof inboundElPathFor>[0]["numberRecord"];
@@ -317,6 +317,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   const bindung = store.bindInboundElConversation(call.id, {
     conversationId: body.conversation_id,
     nowIso: new Date(nowMs).toISOString(),
+    stand: call,
   });
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 

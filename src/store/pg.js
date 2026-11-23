@@ -1463,12 +1463,12 @@ function mitSpeichernBeiAenderung(save) {
     return ergebnis;
   };
 }
-const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = $4 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
 async function konversationsIdSchreiben(runner, call) {
   await runner.withClient(async (client) => {
     await setTenant(client, call.tenantId);
     try {
-      await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId]);
+      await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
     }
