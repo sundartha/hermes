@@ -118,6 +118,7 @@ const TEILLAEUFE = [
   { name: "paid-without-number", zweig: "paidWithoutNumberWatch", methode: "runPaidWithoutNumberSweep", logTag: "[paid-no-number]" },
   { name: "provision-retry", zweig: "provisionRetryWatch", methode: "runProvisionRetrySweep", logTag: "[provision-retry-sweep]" },
   { name: "price-drift", zweig: "priceDriftWatch", methode: "runPriceDriftSweep", logTag: "[price-drift]" },
+  { name: "vorspann-aufraeumen", zweig: "vorspannZustand", methode: "raeumeAbgelaufene", logTag: "[vorspann-aufraeumen]" },
 ];
 
 function wachen(aufrufe, fehlerBei) {
