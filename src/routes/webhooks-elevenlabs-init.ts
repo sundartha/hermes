@@ -296,6 +296,23 @@ async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fr
   }
 }
 
+async function bindungUebernommen({
+  bindung,
+  bridges,
+  callId,
+  fristMs,
+}: {
+  bindung: Bindung;
+  bridges: Abhaengigkeiten["bridges"];
+  callId: string;
+  fristMs: number;
+}): Promise<boolean> {
+  if (!bindung.changed) return true;
+  if (!(await bindungDauerhaft({ dauerhaft: bindung.dauerhaft, fristMs }))) return false;
+  bridges.clearDeadlines(callId);
+  return true;
+}
+
 async function handleInit({ req, res, deps }: { req: Request; res: Response; deps: Abhaengigkeiten }): Promise<unknown> {
   const eingangMs = performance.now();
   const { store, config, bridges, now, outboundInitInhalt, vorspannText, speicherFristMs } = deps;
@@ -322,11 +339,8 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   });
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
-  if (bindung.changed) {
-    if (!(await bindungDauerhaft({ dauerhaft: bindung.dauerhaft, fristMs: speicherFristMs })))
-      return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
-    bridges.clearDeadlines(call.id);
-  }
+  if (!(await bindungUebernommen({ bindung, bridges, callId: call.id, fristMs: speicherFristMs })))
+    return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
 
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() }));
