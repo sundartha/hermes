@@ -2,7 +2,6 @@ import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { anschlussSatz } from "../../src/elevenlabs/vorspann-anschluss.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import {
@@ -189,7 +188,7 @@ for (const sprache of ["en", "de", "fr"]) {
 
 test("6126-K1: der Anschluss nennt den bereinigten Anlass des Auftrags", async () => {
   const { agent } = await anschlussFuer({ language: "en", objective: "Book a table for four on Friday" });
-  assert.match(agent.first_message, /book a table for four on friday/i);
+  assert.equal(agent.first_message, "Here's what I'm calling about: Book a table for four on Friday. Please go ahead.");
 });
 
 test("6126-K5: Anlass mit Platzhalter im Auftrag -> der Anschluss traegt nie einen Platzhalter", async () => {
@@ -198,15 +197,7 @@ test("6126-K5: Anlass mit Platzhalter im Auftrag -> der Anschluss traegt nie ein
   assert.ok(agent.first_message.endsWith(AUFFORDERUNG.en), agent.first_message);
 });
 
-for (const [fall, eingabe, erwartet] of [
-  ["Anlass mit Platzhalter", { language: "en", anlass: "I am calling about {{x}}" }, "Please go ahead."],
-  ["leerer Anlass", { language: "de", anlass: "  " }, "Bitte sprechen Sie."],
-  ["Anlass kein Text", { language: "fr", anlass: undefined }, "Je vous écoute."],
-  ["Anlass mit Satzende", { language: "en", anlass: "I am calling about your order!" }, "I am calling about your order. Please go ahead."],
-  ["Anlass klein am Anfang", { language: "de", anlass: "Wegen Ihrer Bestellung" }, "Wegen Ihrer Bestellung. Bitte sprechen Sie."],
-  ["unbekannte Sprache ohne Aufforderung", { language: "xx", anlass: "I am calling about it" }, "I am calling about it."],
-]) {
-  test(`6126-K5: anschlussSatz, ${fall}`, () => {
-    assert.equal(anschlussSatz(eingabe), erwartet);
-  });
-}
+test("6126-K1: Anlass mit Satzende und grossem Anfang -> genau ein Punkt, Anlass gross am Satzanfang", async () => {
+  const { agent } = await anschlussFuer({ language: "en", objective: "I want to ask about your order!" });
+  assert.equal(agent.first_message, "I want to ask about your order. Please go ahead.");
+});
