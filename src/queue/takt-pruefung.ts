@@ -1,6 +1,10 @@
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 
-export function loeschtaktBefund(config) {
+interface TaktEinstellungen {
+  store: { queueBackend: string; webhookZustellungLoeschtaktMs: number };
+}
+
+export function loeschtaktBefund(config: TaktEinstellungen): string | null {
   const taktMs = config.store.webhookZustellungLoeschtaktMs;
   if (config.store.queueBackend !== "pgboss" || Number.isInteger(taktMs / MS_PER_MINUTE)) return null;
   return (

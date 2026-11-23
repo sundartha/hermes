@@ -70,7 +70,7 @@ import { numberProvisioning, inboundSignatureVerifier } from "./telephony/regist
 import { makeGracefulShutdown } from "./abschalten.js";
 import { warteAufOffeneAbrechnungen } from "./telephony/call-termination.ts";
 import { starteAufbewahrung, starteSweepTakt, starteFristenTakt } from "./zeitsteuerung.js";
-import { loeschtaktBefund } from "./queue/takt-pruefung.js";
+import { loeschtaktBefund } from "./queue/takt-pruefung.ts";
 import { starteLebenszeichen } from "./lebenszeichen.js";
 
 export { makeGracefulShutdown } from "./abschalten.js";
