@@ -56,3 +56,11 @@ test("Vorspann-Fristen im JSON-Speicher: die Zeile loeschen nimmt die Frist mit,
   }
   assert.equal(kurz(await speicher.faelligeFristen({ ...ANFRAGE, limitJeMandant: 2 }), "m_").length, 2);
 });
+
+test("Vorspann-Fristen im JSON-Speicher: leere macht eine bereits faellige Frist ohne laufende Lease nie wieder faellig", async () => {
+  await anlegen(A, "g_a");
+  await speicher.setzeVorspannFrist({ tenantId: A, callId: "g_a", frist: "klingel", faelligAt: VOR() });
+  assert.deepEqual(kurz(await speicher.faelligeFristen({ ...ANFRAGE, leaseMs: 0 }), "g_"), ["g_a:klingel"]);
+  await speicher.leereVorspannFrist({ tenantId: A, callId: "g_a", frist: "klingel" });
+  assert.deepEqual(kurz(await speicher.faelligeFristen(ANFRAGE), "g_"), []);
+});
