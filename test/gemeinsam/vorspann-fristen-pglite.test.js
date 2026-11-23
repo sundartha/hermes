@@ -108,8 +108,13 @@ test("Vorspann-Fristen: setze fuer einen fremden Mandanten oder eine fehlende Ze
   assert.deepEqual(kurz(await speicher.faelligeFristen(ANFRAGE)).filter((s) => s.startsWith("v_fremd") || s.startsWith("v_weg")), []);
 });
 
-test("Vorspann-Fristen: ein Lesefehler wirft statt eine leere Liste zu liefern", async () => {
+test("Vorspann-Fristen: ein Lesefehler wirft statt eine leere Liste zu liefern und steht im Fehlerlog", async (t) => {
+  const meldungen = [];
+  t.mock.method(console, "error", (...teile) => meldungen.push(teile));
   await db.query("ALTER TABLE vorspann_zustand RENAME COLUMN frist_el_bein_at TO frist_el_bein_kaputt");
   await assert.rejects(speicher.faelligeFristen(ANFRAGE));
+  assert.equal(meldungen.length, 1);
+  assert.equal(meldungen[0][0], "[vorspann-fristen] faellige Fristen lesen fehlgeschlagen:");
+  assert.match(meldungen[0][1], /frist_el_bein_at/);
   await db.query("ALTER TABLE vorspann_zustand RENAME COLUMN frist_el_bein_kaputt TO frist_el_bein_at");
 });
