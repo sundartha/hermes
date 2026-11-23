@@ -1,10 +1,13 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { BASE_ENV, tempDataDir } from "../helpers.js";
 import { aufraeumenVormerken, vorlage } from "../pglite-helfer.js";
 import { poolAufPglite, serverImportieren } from "../abrechnung/server-mit-testdatenbank.js";
 
 const FREMDE_KENNUNG = "fremd-host:00000000-0000-4000-8000-0000000000f1";
+const TAKT_MS = 10_000;
+const TAKT_FRIST_MS = 30_000;
+const TOTER = "tot-host:00000000-0000-4000-8000-0000000000f2";
 const WARNUNG = "[boot] Konfig-Warnung: SERVER_INSTANCES=1, aber 2 Instanzen leben";
 
 Object.assign(process.env, BASE_ENV, {
@@ -39,7 +42,13 @@ stand.numbers.push({ id: "num_instanz_zahl", tenantId: "t_instanz_zahl", e164: "
 store.save();
 await store.drainFlushes();
 await db.query("INSERT INTO instanz_lebenszeichen (kennung, gemeldet_um) VALUES ($1, now())", [FREMDE_KENNUNG]);
+mock.timers.enable({ apis: ["setInterval"] });
 const server = await serverImportieren();
+
+async function besitzerVon(callId) {
+  const { rows } = await db.query("SELECT instanz FROM call WHERE id = $1", [callId]);
+  return rows[0].instanz;
+}
 
 test("Instanzzahl: zwei lebende Instanzen bei SERVER_INSTANCES=1 geben beim Start genau eine Warnung, der Start laeuft weiter", (t) => {
   t.after(() => {
@@ -49,4 +58,19 @@ test("Instanzzahl: zwei lebende Instanzen bei SERVER_INSTANCES=1 geben beim Star
   const treffer = zeilen.filter((zeile) => zeile.includes("SERVER_INSTANCES"));
   assert.deepEqual(treffer.map((zeile) => zeile.slice(0, WARNUNG.length)), [WARNUNG]);
   assert.ok(server.address());
+});
+
+test("Instanzzahl: der Takt, den der Start mit der Warnung aufsetzt, uebernimmt den Anruf einer ausgefallenen Instanz", async () => {
+  await db.query(
+    `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at, max_duration_s, instanz)
+     VALUES ('call_instanz_zahl', 't_instanz_zahl', 'token', 'outbound', 'active', now()::text, 3600, $1)`,
+    [TOTER],
+  );
+  mock.timers.tick(TAKT_MS);
+  const frist = AbortSignal.timeout(TAKT_FRIST_MS);
+  while ((await besitzerVon("call_instanz_zahl")) === TOTER) {
+    assert.ok(!frist.aborted, "der Takt hat den Anruf nicht uebernommen");
+    await new Promise((fertig) => setImmediate(fertig));
+  }
+  assert.notEqual(await besitzerVon("call_instanz_zahl"), TOTER);
 });
