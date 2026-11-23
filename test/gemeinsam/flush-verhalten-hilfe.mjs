@@ -1,7 +1,7 @@
 import { mock } from "node:test";
 
-export const TABELLE_DES_FLUSHS = "platform_tts_usage";
-const TABELLE_VERSTECKT = "platform_tts_usage_versteckt";
+export const TABELLE_DES_FLUSHS = "usage_event";
+const TABELLE_VERSTECKT = "usage_event_versteckt";
 
 async function umbenennen(db, von, nach) {
   const { rows } = await db.query("SELECT current_user AS rolle");

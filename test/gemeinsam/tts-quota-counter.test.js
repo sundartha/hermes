@@ -186,7 +186,7 @@ test("(j2) json-Fassade: Fehlschlag-Warnung bleibt aus (warnPercent=0 im Test-De
 
 test("(j3) pg-Rundlauf (PGlite): recordTtsCharacters -> save -> reopen -> Zeile hydriert (Singleton id=1)", async () => {
   const { store, db } = await makePgTestStore();
-  store.recordTtsCharacters(222, AUG_ISO);
+  await store.recordTtsCharacters(222, AUG_ISO);
   await store.save();
   const rows = (await db.query("SELECT id, cycle_key, characters, warned_cycle FROM platform_tts_usage")).rows;
   assert.equal(rows.length, 1, "Singleton-Tabelle: genau eine Zeile (id=1)");
@@ -197,13 +197,13 @@ test("(j3) pg-Rundlauf (PGlite): recordTtsCharacters -> save -> reopen -> Zeile 
   const { makePgStore } = await import("../../src/store/pg.js");
   const reopened = makePgStore(runner);
   await reopened.init();
-  const view = reopened.platformTtsUsageView(AUG_ISO);
+  const view = await reopened.platformTtsUsageView(AUG_ISO);
   assert.equal(view.characters, 222, "der Zaehler ueberlebt Re-Init aus der DB");
 });
 
 test("(j4) pg-Bestand ohne Zeile (frische DB, kein Seed) hydriert den inerten Default", async () => {
   const { store } = await makePgTestStore();
-  const view = store.platformTtsUsageView(AUG_ISO);
+  const view = await store.platformTtsUsageView(AUG_ISO);
   assert.equal(view.characters, 0);
 });
 

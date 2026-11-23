@@ -21,7 +21,7 @@ import {
   mitStatusroute as mitStatusrouteMit,
   stumm,
 } from "./statusroute-hilfe.mjs";
-import { mitGescheitertemFlush, mitHaengendemFlush } from "./flush-verhalten-hilfe.mjs";
+import { TABELLE_DES_FLUSHS, mitGescheitertemFlush, mitHaengendemFlush } from "./flush-verhalten-hilfe.mjs";
 import { oeffneSpeicherAn } from "./speicher-oeffnen.js";
 
 const MELDUNG = "Statusroute meldet flush nicht";
@@ -130,6 +130,7 @@ test("[NIE2] die Antwort enthaelt nie einen Fehlertext, auch wenn der Flush mit 
   assert.deepEqual(Object.keys(koerperVon(antwort)).sort(), ["anrufeUeberHoechstdauer", "commit", "datenbank", "flush", "telnyxSignaturSchluessel", "webhooksAbgewiesen"]);
   assert.equal(typeof koerperVon(antwort).flush, "boolean");
   assert.equal(antwort.text.includes("platform_tts_usage"), false);
+  assert.equal(antwort.text.includes(TABELLE_DES_FLUSHS), false);
 });
 
 test("[NIE3] ohne gueltigen Statusschluessel fragt die Route den Speicher weder nach Verbindung noch nach Flush und antwortet 401", async () => {
