@@ -37,6 +37,8 @@ function meldeWiedergabeStartFehler(callId, fehler) {
   meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.START_ABGELEHNT });
 }
 
+const gehoertNeuZugestellt = ({ geladen, ereignis }) => !geladen && ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT;
+
 function behandleWiedergabeStartFehler({ call, store, wiedergabe, elWahl }) {
   if (wiedergabe.status !== "rejected") return;
   meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
@@ -352,7 +354,7 @@ export function makeVorspannAblauf({
       await speichereZustand({ vorspannZustand, call, zustand });
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
-      if (!geladen && ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT) throw fehler;
+      if (gehoertNeuZugestellt({ geladen, ereignis })) throw fehler;
     }
   }
 

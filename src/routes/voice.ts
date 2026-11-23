@@ -139,7 +139,7 @@ interface Synthese {
 }
 
 interface VorspannAblauf {
-  behandle: (anfrage: { call: Anruf; ereignis: object; zugang: Zugang }) => Promise<unknown>;
+  behandle: (anfrage: { call: Anruf; ereignis: object; zugang: Zugang; nachLesen: () => void }) => Promise<unknown>;
 }
 
 interface Zugang {
