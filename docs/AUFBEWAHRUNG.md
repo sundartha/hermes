@@ -14,7 +14,7 @@ Die drei Läufe starten beim Boot und danach im Takt `RETENTION_SWEEP_INTERVAL_M
 
 Dieselbe Regel gilt für die Session-Aufbewahrung (`src/wiring/session-aufbewahrung.js`), den Löschtakt der Webhook-Ablage (`planeLoeschtakt` in `src/store/webhook-zustellung.js`) und die vier Sweeps des Web-Logins (`src/wiring/web-login.js`: did-release, contract-end, cancellation-mail, stripe-reconcile); Namen und Takte stehen dort. Ein pg-boss-Zeitplan kennt nur Takte in ganzen Minuten oder Stunden, die 24 h teilen (`cronFuerTakt` in `src/queue/adapters/pgboss/queue.ts`); ein anderer Takt lässt den Start scheitern.
 
-Die neun Teilläufe des Sweep-Takts (`TEILLAEUFE` in `src/zeitsteuerung.js`, Aufruf `starteSweepTakt` in `src/boot.js`) sind je ein eigener Zeitplan im Takt `costTruingSweepIntervalMs` (`src/konfiguration/rohwerte-billing.ts`) und gelten nach derselben Regel; die Frist des Herzschlags steht in `src/queue/zeitplan-frist.ts`.
+Die Teilläufe des Sweep-Takts (`TEILLAEUFE` in `src/zeitsteuerung.js`, Aufruf `starteSweepTakt` in `src/boot.js`) sind je ein eigener Zeitplan im Takt `costTruingSweepIntervalMs` (`src/konfiguration/rohwerte-billing.ts`) und gelten nach derselben Regel; die Frist des Herzschlags steht in `src/queue/zeitplan-frist.ts`.
 
 ## Tabellen mit Frist und Aufräumlauf
 
