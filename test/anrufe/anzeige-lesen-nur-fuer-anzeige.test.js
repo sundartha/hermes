@@ -137,3 +137,56 @@ test("Anzeige: unbekannter Anruf ergibt 404", async () => {
   const antwort = await abfrage(a, "gibt-es-nicht");
   assert.equal(antwort.status, 404);
 });
+
+async function beendetVonAnderer(status) {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await anrufAnlegen(db);
+  const zustand = neuerZustand();
+  const a = await neueInstanz(db, zustand);
+  const b = await neueInstanz(db);
+  const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
+  await a.persistCall(call.id);
+  const fremd = await b.leseCall(call.id);
+  fremd.summary = "Termin vereinbart";
+  fremd.answeredAt = "2026-11-22T18:51:00.000Z";
+  fremd.transcript.push({ role: "agent", text: "Guten Tag", at: JETZT });
+  await b.persistCall(call.id);
+  await b.recordFailureReason(call.id, "el_uebergabe_gescheitert");
+  await b.endCallRecord(call.id, status);
+  return { a, b, zustand, id: call.id };
+}
+
+for (const status of ["completed", "failed"]) {
+  test(`Anzeige: Kopie active, Zeile ${status} -> die Route zeigt die Zeile samt Zeiten, Zusammenfassung, Grund und Transkript`, async () => {
+    const { a, b, id } = await beendetVonAnderer(status);
+    const zeile = await b.leseCallUngebunden(id);
+    const { body } = await abfrage(a, id);
+    assert.equal(body.status, status);
+    assert.equal(body.answeredAt, "2026-11-22T18:51:00.000Z");
+    assert.equal(body.endedAt, zeile.endedAt);
+    assert.ok(body.endedAt);
+    assert.equal(body.summary, "Termin vereinbart");
+    assert.equal(body.failureReason, "el_uebergabe_gescheitert");
+    assert.equal(body.transcript.length, 1);
+    assert.equal(body.transcript[0].text, "Guten Tag");
+  });
+}
+
+test("Anzeige: ohne fuerAnzeige bleibt die Kopie active und die Datenbank wird nicht gefragt", async () => {
+  const { a, zustand, id } = await beendetVonAnderer("completed");
+  zustand.abfragen = 0;
+  const call = await a.leseCallUngebunden(id);
+  assert.equal(call.status, "active");
+  assert.equal(zustand.abfragen, 0);
+});
+
+test("Anzeige: Kopie und Zeile active -> Spiegelstand", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await anrufAnlegen(db);
+  const a = await neueInstanz(db);
+  const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
+  await a.persistCall(call.id);
+  const antwort = await abfrage(a, call.id);
+  assert.equal(antwort.body.status, "active");
+  assert.equal(antwort.body.endedAt ?? null, null);
+});

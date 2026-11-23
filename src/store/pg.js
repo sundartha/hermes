@@ -365,11 +365,18 @@ async function anzeigeAbgleich({ runner, eigene, lese, anrufLesen }, id) {
   if (!bekannt || bekannt.elNachlaufStartedAt || !eigene.has(bekannt.id)) return bekannt;
   try {
     const gelesen = await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
-    return gelesen?.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
+    return anzeigeStand(bekannt, gelesen);
   } catch (err) {
     console.error("[pg] leseCall fehlgeschlagen:", err.message);
     return bekannt;
   }
+}
+
+function anzeigeStand(bekannt, gelesen) {
+  const mitNachlauf = gelesen?.elNachlaufStartedAt ? { ...bekannt, elNachlaufStartedAt: gelesen.elNachlaufStartedAt } : bekannt;
+  if (bekannt.status !== "active" || !gelesen || gelesen.status === "active") return mitNachlauf;
+  const { status, answeredAt, endedAt, summary, failureReason, transcript } = gelesen;
+  return { ...mitNachlauf, status, answeredAt, endedAt, summary, failureReason, transcript };
 }
 
 async function loesen(gebunden, callId, schreiben) {
