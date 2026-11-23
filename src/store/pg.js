@@ -8,7 +8,6 @@ import { tenantLanguage as tenantLanguageOf } from "./views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { emptyPlatformTtsUsage } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
 import {
   hydratedCostCents,
@@ -38,6 +37,7 @@ import { CONSULTS_BEIM_SCHREIBEN_SQL, macheRueckfrageSql } from "./rueckfrage-sq
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
+import { macheTtsZaehlerSql } from "./tts-zaehler-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
@@ -208,7 +208,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), kalender: macheKalenderSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), ttsZaehler: macheTtsZaehlerSql({ einreihen, runner }), kalender: macheKalenderSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -671,7 +671,7 @@ function aktionKalenderMethoden({ requireState, save, posteingang, kalender }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save, kostenvergleich, aktiveAnrufe, anrufNummern, anrufSuche }) {
+function kostenBudgetMethoden({ requireState, save, kostenvergleich, ttsZaehler, aktiveAnrufe, anrufNummern, anrufSuche }) {
   return {
     numberHasActiveCall: async (e164) =>
       ops.activeCallOnNumber(requireState(), e164) || anrufNummern.aktivBelegt(e164),
@@ -719,12 +719,8 @@ function kostenBudgetMethoden({ requireState, save, kostenvergleich, aktiveAnruf
     claimPlatformSpendWarning: (cfg, nowIso) =>
       ops.claimPlatformSpendWarning(requireState(), cfg, nowIso),
 
-    recordTtsCharacters(chars, nowIso) {
-      const result = ops.recordTtsCharacters(requireState(), chars, config.billing, nowIso);
-      if (result.changed) save();
-      return result.warning;
-    },
-    platformTtsUsageView: (nowIso) => ops.platformTtsUsageView(requireState(), config.billing, nowIso),
+    recordTtsCharacters: (chars, nowIso) => ttsZaehler.buchenPlattform(chars, config.billing, nowIso),
+    platformTtsUsageView: (nowIso) => ttsZaehler.ansicht(config.billing, nowIso),
 
     recordTenantTtsCharacters(tenantId, chars) {
       const result = ops.recordTenantTtsCharacters(requireState(), tenantId, chars);
@@ -732,10 +728,11 @@ function kostenBudgetMethoden({ requireState, save, kostenvergleich, aktiveAnruf
       return result;
     },
 
-    recordRelayTtsCharacters(tenantId, chars, nowIso) {
-      const result = ops.recordRelayTtsCharacters(requireState(), { tenantId, chars, cfg: config.billing, nowIso });
-      if (result.changed) save();
-      return result.warning;
+    async recordRelayTtsCharacters(tenantId, chars, nowIso) {
+      const tenant = ops.recordTenantTtsCharacters(requireState(), tenantId, chars);
+      if (!tenant.changed) return null;
+      save();
+      return ttsZaehler.buchenRelay(chars, config.billing, nowIso);
     },
 
     markCostCrossCheckAttempted: (monthKey) => kostenvergleich.markieren(monthKey),
@@ -1088,9 +1085,6 @@ async function hydrate(client) {
     await hydrateTenant(client, state, tenant.id);
   }
   state.profiles = await hydrateProfiles(client);
-  state.platformTtsUsage = await hydratePlatformTtsUsage(client);
-  ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters =
-    await hydratePlatformKostenstelleZeichen(client);
   state.anrufpause = await hydrateAnrufpause(client);
   state.platformNumberUse = await hydratePlatformNumberUse(client);
   state.outageAlerts = await hydrateOutageAlerts(client);
@@ -1101,22 +1095,6 @@ async function hydrate(client) {
 async function hydrateProfiles(client) {
   const rows = (await client.query(`SELECT tenant_id, data FROM profile`)).rows;
   return Object.fromEntries(rows.map((r) => [r.tenant_id, r.data]));
-}
-
-async function hydratePlatformTtsUsage(client) {
-  const rows = (
-    await client.query(`SELECT cycle_key, characters, warned_cycle FROM platform_tts_usage WHERE id = 1`)
-  ).rows;
-  if (rows.length === 0) return emptyPlatformTtsUsage();
-  const r = rows[0];
-  return { cycleKey: r.cycle_key, characters: Number(r.characters), warnedCycle: r.warned_cycle };
-}
-
-async function hydratePlatformKostenstelleZeichen(client) {
-  const rows = (
-    await client.query(`SELECT kostenstelle_zeichen FROM platform_tts_usage WHERE id = 1`)
-  ).rows;
-  return rows.length === 0 ? 0 : Number(rows[0].kostenstelle_zeichen);
 }
 
 async function hydrateAnrufpause(client) {
@@ -1647,7 +1625,6 @@ async function flush(client, state, { preFlush, gebunden }) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke, gebunden });
     }
-    await flushPlatformTtsUsage(client, state);
     await client.query("COMMIT");
     inDatenbankMerken(geschrieben);
     for (const [call, abdruck] of abdruecke) geschriebeneAnrufe.set(call, abdruck);
@@ -1942,18 +1919,6 @@ async function flushTranscript(client, tenantId, call) {
       [call.id, tenantId, seg.role, seg.text, seg.at],
     );
   }
-}
-
-async function flushPlatformTtsUsage(client, state) {
-  const row = state.platformTtsUsage;
-  const kostenstelleZeichen = ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters;
-  await client.query(
-    `INSERT INTO platform_tts_usage (id, cycle_key, characters, warned_cycle, kostenstelle_zeichen)
-       VALUES (1,$1,$2,$3,$4)
-     ON CONFLICT (id) DO UPDATE SET cycle_key=EXCLUDED.cycle_key, characters=EXCLUDED.characters,
-       warned_cycle=EXCLUDED.warned_cycle, kostenstelle_zeichen=EXCLUDED.kostenstelle_zeichen`,
-    [row.cycleKey, row.characters, row.warnedCycle, kostenstelleZeichen],
-  );
 }
 
 async function flushPlatformNumberUse(client, bindings) {

@@ -284,14 +284,6 @@
       "count": 1
     }
   },
-  "src/billing/cost-calibration.js": {
-    "id-length": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
   "src/billing/cost-truing.ts": {
     "complexity": {
       "count": 1
@@ -494,7 +486,7 @@
       "count": 2
     },
     "id-length": {
-      "count": 20
+      "count": 19
     },
     "max-params": {
       "count": 1
@@ -730,29 +722,6 @@
       "count": 1
     }
   },
-  "test/anmeldung/auth-p4-deleted-routes.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/anmeldung/auth-p6-operator-routes.test.js": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/anrufe/al-p11-result-card.test.js": {
-    "max-params": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/anrufe/al-p12-call-memory.test.js": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "test/abrechnung/billing-subscribe.test.js": {
     "max-params": {
       "count": 1
@@ -777,27 +746,7 @@
       "count": 1
     }
   },
-  "test/gemeinsam/budget-failure-reason.test.js": {
-    "no-param-reassign": {
-      "count": 3
-    }
-  },
   "test/abrechnung/call-actual-cost-roundtrip.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/gemeinsam/cap-failure-reason.test.js": {
-    "no-param-reassign": {
-      "count": 3
-    }
-  },
-  "test/config-namespaces-helper.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
-  "test/gemeinsam/config-shape.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
@@ -812,11 +761,6 @@
       "count": 1
     }
   },
-  "test/cost-truing-harness.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "test/abrechnung/cost-truing-observe.test.js": {
     "max-params": {
       "count": 1
@@ -827,17 +771,94 @@
       "count": 2
     }
   },
-  "test/gemeinsam/cq-p6-mandate-persist.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/anrufe/cq-p8-briefing-breaker.test.js": {
+  "test/abrechnung/ks-p5-current-period-credits.test.js": {
     "no-param-reassign": {
       "count": 1
     }
   },
-  "test/gemeinsam/cq-p8-briefing-http.test.js": {
+  "test/abrechnung/kv-p3-inbound-truing.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/abrechnung/prov01-boot-reconcile.test.js": {
+    "max-params": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "test/abrechnung/prov01-capture-idempotent.test.js": {
+    "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "test/abrechnung/stripe-reconcile-sweep.test.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/anmeldung/auth-p4-deleted-routes.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/anmeldung/auth-p6-operator-routes.test.js": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "test/anmeldung/grant-admin.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/anmeldung/p5-onboarding-funnel.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/anmeldung/probe-auth-table.test.js": {
+    "complexity": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/anmeldung/w4-self-service-subscribe.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/anmeldung/web-auth-pg.test.js": {
+    "no-restricted-syntax": {
+      "count": 17
+    }
+  },
+  "test/anmeldung/web-auth.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/anrufe/al-p11-result-card.test.js": {
+    "max-params": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/anrufe/al-p12-call-memory.test.js": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/anrufe/cq-p8-briefing-breaker.test.js": {
     "no-param-reassign": {
       "count": 1
     }
@@ -847,46 +868,38 @@
       "count": 1
     }
   },
-  "test/gemeinsam/dial-target-normalization.test.js": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "test/website-onboarding/f1-geo-onboard.test.js": {
+  "test/anrufe/gq-p10-recorded-messages.test.js": {
     "no-restricted-syntax": {
-      "count": 6
-    }
-  },
-  "test/website-onboarding/f1-geo-store.test.js": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "test/nummern/f1-provisioning-geo.test.js": {
-    "max-params": {
-      "count": 1
-    },
-    "no-negated-condition": {
       "count": 2
     }
   },
-  "test/posteingang/f2-mail-summary-finish-call.test.js": {
+  "test/anrufe/gq-p4-action-item-dedup.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/anrufe/llm-sdk-learning.test.js": {
     "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "test/anrufe/p11-agent-language-contract.test.js": {
+    "complexity": {
       "count": 1
     }
   },
-  "test/website-onboarding/f2-self-service-private-number.test.js": {
+  "test/anrufe/telnyx-call-control.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/posteingang/f2-sms-opt-in-persist.test.js": {
-    "no-restricted-syntax": {
-      "count": 3
+  "test/config-namespaces-helper.js": {
+    "complexity": {
+      "count": 1
     }
   },
-  "test/start/gap-38-plan-free-predeploy.test.js": {
-    "no-sparse-arrays": {
+  "test/cost-truing-harness.js": {
+    "complexity": {
       "count": 1
     }
   },
@@ -923,33 +936,33 @@
       "count": 3
     }
   },
-  "test/anrufe/gq-p10-recorded-messages.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/rueckfrage/gq-p13-consult-answer-without-facts.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/rueckfrage/gq-p2-consult-deadline.test.js": {
+  "test/gemeinsam/budget-failure-reason.test.js": {
     "no-param-reassign": {
-      "count": 1
+      "count": 3
     }
   },
-  "test/anrufe/gq-p4-action-item-dedup.test.js": {
+  "test/gemeinsam/cap-failure-reason.test.js": {
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "test/gemeinsam/config-shape.test.js": {
     "no-restricted-syntax": {
       "count": 1
     }
   },
-  "test/rueckfrage/gq-p8-consult-arrival-marker.test.js": {
+  "test/gemeinsam/cq-p6-mandate-persist.test.js": {
     "no-restricted-syntax": {
-      "count": 6
+      "count": 2
     }
   },
-  "test/anmeldung/grant-admin.test.js": {
+  "test/gemeinsam/cq-p8-briefing-http.test.js": {
     "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/gemeinsam/dial-target-normalization.test.js": {
+    "max-lines-per-function": {
       "count": 1
     }
   },
@@ -958,48 +971,9 @@
       "count": 2
     }
   },
-  "test/helpers.js": {
-    "no-param-reassign": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "test/helpers/characterization-scan.mjs": {
-    "complexity": {
-      "count": 1
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/website-onboarding/i9-self-service.test.js": {
-    "no-restricted-syntax": {
-      "count": 25
-    }
-  },
-  "test/abrechnung/ks-p5-current-period-credits.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/abrechnung/kv-p3-inbound-truing.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "test/gemeinsam/l0-metrics.test.js": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "test/anrufe/llm-sdk-learning.test.js": {
-    "no-param-reassign": {
-      "count": 2
     }
   },
   "test/gemeinsam/mcp-ui-w1-bind.test.js": {
@@ -1020,28 +994,8 @@
       "count": 2
     }
   },
-  "test/website-onboarding/newsletter-recipients-confirm-unsub.test.js": {
-    "max-params": {
-      "count": 1
-    }
-  },
-  "test/website-onboarding/onboarding-identity.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/gemeinsam/outbound-tenant.test.js": {
     "max-params": {
-      "count": 1
-    }
-  },
-  "test/anrufe/p11-agent-language-contract.test.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
-  "test/anmeldung/p5-onboarding-funnel.test.js": {
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -1050,71 +1004,14 @@
       "count": 3
     }
   },
-  "test/anmeldung/probe-auth-table.test.js": {
-    "complexity": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/abrechnung/prov01-boot-reconcile.test.js": {
-    "max-params": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "test/abrechnung/prov01-capture-idempotent.test.js": {
-    "no-param-reassign": {
-      "count": 2
-    }
-  },
-  "test/nummern/provisioning-enqueue-order.test.js": {
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/nummern/provisioning-worker.test.js": {
-    "max-params": {
-      "count": 2
-    }
-  },
   "test/gemeinsam/rls-with-check.test.js": {
     "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/rueckfrage/al-p13-consult-channel.test.js": {
-    "max-params": {
-      "count": 2
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 24
-    }
-  },
   "test/gemeinsam/scripts-config-namespace.test.js": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "test/website-onboarding/self-service-mirror-hydration.test.js": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "test/website-onboarding/self-service-newsletter-consent.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/website-onboarding/self-service-newsletter-recipients.test.js": {
-    "no-restricted-syntax": {
-      "count": 5
     }
   },
   "test/gemeinsam/store-pg-multitenant.test.js": {
@@ -1130,16 +1027,6 @@
   "test/gemeinsam/store-pg.test.js": {
     "no-restricted-syntax": {
       "count": 17
-    }
-  },
-  "test/abrechnung/stripe-reconcile-sweep.test.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/anrufe/telnyx-call-control.test.js": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "test/gemeinsam/tenant-erasure-pg.test.js": {
@@ -1172,22 +1059,127 @@
       "count": 1
     }
   },
-  "test/anmeldung/w4-self-service-subscribe.test.js": {
+  "test/helpers.js": {
+    "no-param-reassign": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/helpers/characterization-scan.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/nummern/f1-provisioning-geo.test.js": {
+    "max-params": {
+      "count": 1
+    },
+    "no-negated-condition": {
+      "count": 2
+    }
+  },
+  "test/nummern/provisioning-enqueue-order.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/nummern/provisioning-worker.test.js": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "test/posteingang/f2-mail-summary-finish-call.test.js": {
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/posteingang/f2-sms-opt-in-persist.test.js": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/rueckfrage/al-p13-consult-channel.test.js": {
+    "max-params": {
+      "count": 2
+    },
     "no-param-reassign": {
       "count": 1
     },
     "no-restricted-syntax": {
+      "count": 24
+    }
+  },
+  "test/rueckfrage/gq-p13-consult-answer-without-facts.test.js": {
+    "no-restricted-syntax": {
       "count": 2
     }
   },
-  "test/anmeldung/web-auth-pg.test.js": {
-    "no-restricted-syntax": {
-      "count": 17
-    }
-  },
-  "test/anmeldung/web-auth.test.js": {
+  "test/rueckfrage/gq-p2-consult-deadline.test.js": {
     "no-param-reassign": {
       "count": 1
+    }
+  },
+  "test/rueckfrage/gq-p8-consult-arrival-marker.test.js": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "test/start/gap-38-plan-free-predeploy.test.js": {
+    "no-sparse-arrays": {
+      "count": 1
+    }
+  },
+  "test/website-onboarding/f1-geo-onboard.test.js": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "test/website-onboarding/f1-geo-store.test.js": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/website-onboarding/f2-self-service-private-number.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/website-onboarding/i9-self-service.test.js": {
+    "no-restricted-syntax": {
+      "count": 25
+    }
+  },
+  "test/website-onboarding/newsletter-recipients-confirm-unsub.test.js": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "test/website-onboarding/onboarding-identity.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/website-onboarding/self-service-mirror-hydration.test.js": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/website-onboarding/self-service-newsletter-consent.test.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/website-onboarding/self-service-newsletter-recipients.test.js": {
+    "no-restricted-syntax": {
+      "count": 5
     }
   }
 }
