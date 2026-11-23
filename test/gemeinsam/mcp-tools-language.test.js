@@ -188,13 +188,17 @@ test("Tenant mit language=de bleibt im MCP-Kanal deutsch, auch bei scharfem Welt
   }
 });
 
-test("unbekannte/leere Sprache faellt auf den EINEN Fallback (localeFor), nicht auf einen zweiten", async () => {
-  const expected = localeFor(null).mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE];
-  for (const language of ["xx", "", null]) {
+test("leere Sprache faellt auf den Standard, unbekannte Sprache auf Englisch", async () => {
+  const faelle = [
+    ["xx", localeFor("en").mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE]],
+    ["", localeFor(null).mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE]],
+    [null, localeFor(null).mcp.errors[MCP_ERROR_CODE.UPSTREAM_INCOMPLETE]],
+  ];
+  for (const [language, expected] of faelle) {
     await withGateway({}, async () => {
       const handlers = captureTools({ identity: null, scopedTenant: "tenant-unknown", language });
       const result = await handlers.get("list_calls")();
-      assert.equal(toolText(result), expected, `language=${JSON.stringify(language)} muss auf localeFor(null) fallen`);
+      assert.equal(toolText(result), expected, `language=${JSON.stringify(language)} faellt auf den erwarteten Text`);
     });
   }
 });
