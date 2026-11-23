@@ -6,8 +6,8 @@ export const VORSPANN_ABLAGE_TTL_MS = 120_000;
 
 export const VORSPANN_ZEILE_PUFFER_MS = 30_000;
 
-export const vorspannZeileTtlMs = ({ klingelFristMs, wiedergabeFristMs, bridgeStartDeadlineMs }) =>
-  Math.max(VORSPANN_ABLAGE_TTL_MS, klingelFristMs + Math.max(wiedergabeFristMs, bridgeStartDeadlineMs) + VORSPANN_ZEILE_PUFFER_MS);
+export const vorspannZeileTtlMs = ({ klingelFristMs, wiedergabeFristMs, bridgeStartDeadlineMs, fristenTaktMs = 0 }) =>
+  Math.max(VORSPANN_ABLAGE_TTL_MS, klingelFristMs + Math.max(wiedergabeFristMs, bridgeStartDeadlineMs) + VORSPANN_ZEILE_PUFFER_MS + 2 * fristenTaktMs);
 
 export const VORSPANN_RUECKFALL = Object.freeze({
   KEINE_CALL_CONTROL_APP: "keine_call_control_app",

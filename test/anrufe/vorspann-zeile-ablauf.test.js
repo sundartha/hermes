@@ -10,6 +10,7 @@ import { HTTP_OK, ZIEL, ereignis, starteAnbieter } from "./vorspann-zwei-instanz
 const ZEITGRENZE_MS = 120_000;
 const KLINGEL_S = 75;
 const PUFFER_S = 30;
+const TAKT_PUFFER_S = 30;
 const TOLERANZ_S = 20;
 const ZEILE_SQL = "SELECT extract(epoch FROM expires_at - now()) AS rest_s FROM vorspann_zustand WHERE call_id = $1";
 const ID_SQL = "SELECT id FROM call WHERE to_e164 = $1";
@@ -58,7 +59,7 @@ test("Mit Fristen von 120 s lebt die Vorspann-Zeile nach dem Waehlen ueber Kling
     const callId = await waehle(srv);
     const rest = await restS(srv.sql, callId);
     assert.ok(rest > KLINGEL_S + 120, `Rest ${rest} s endet vor Klingelfrist plus Wiedergabefrist`);
-    pruefeRest(rest, KLINGEL_S + 120 + PUFFER_S);
+    pruefeRest(rest, KLINGEL_S + 120 + PUFFER_S + TAKT_PUFFER_S);
   });
 });
 
@@ -77,7 +78,7 @@ test("Mit Standardfristen (20 s und 30 s) lebt die Zeile Klingelfrist plus 30 s 
   if (!postgresVorhanden()) return;
   await mitFristen(t, {}, async (srv) => {
     const callId = await waehle(srv);
-    pruefeRest(await restS(srv.sql, callId), KLINGEL_S + 30 + PUFFER_S);
+    pruefeRest(await restS(srv.sql, callId), KLINGEL_S + 30 + PUFFER_S + TAKT_PUFFER_S);
   });
 });
 

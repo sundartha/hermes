@@ -1,4 +1,5 @@
 import { meldeAuftragBisKlingeln } from "./anrufstart-messung.ts";
+import { fristenEinstellungen } from "../config.ts";
 import { maxDurationSOf } from "../call-duration.ts";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
@@ -222,7 +223,7 @@ const setzeKlingelfristGeschuetzt = ({ call, store, config, now, beiFehler }) =>
 async function waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand }) {
   try {
     const { vorspannKlingelFristMs, vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
-    const ttlMs = vorspannZeileTtlMs({ klingelFristMs: vorspannKlingelFristMs, wiedergabeFristMs: vorspannWiedergabeFristMs, bridgeStartDeadlineMs });
+    const ttlMs = vorspannZeileTtlMs({ klingelFristMs: vorspannKlingelFristMs, wiedergabeFristMs: vorspannWiedergabeFristMs, bridgeStartDeadlineMs, fristenTaktMs: fristenEinstellungen.fristenTaktMs });
     await vorspannZustand.anlegen({ ...zustandsRef(call), token, text: vorspann.text, ttlMs });
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
