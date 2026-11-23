@@ -186,7 +186,7 @@ test("Gelingt das Auflegen eines Beins nicht, bleibt es in der Zeile als nicht a
 
 test("Ist die Zeile beim Ablauf der Wiedergabefrist verschwunden, wirft die Frist nichts und tut nichts", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
-  await mitAnbieter(t, { umgebung: { VORSPANN_WIEDERGABE_FRIST_MS: "1500" } }, async ({ a, sql, signer, aufrufe }) => {
+  await mitAnbieter(t, { umgebung: { VORSPANN_WIEDERGABE_FRIST_MS: "1500", FRISTEN_TAKT_MS: "200" } }, async ({ a, sql, signer, aufrufe }) => {
     assert.equal((await platziere(a)).status, HTTP_OK);
     const erster = await callIdVon(sql);
     assert.equal((await ereignis(signer, a, { callId: erster, art: "call.answered" })).status, HTTP_OK);
