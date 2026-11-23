@@ -282,16 +282,17 @@ async function outboundAntwortFuer({
   return { type: INITIATION_RESPONSE_TYPE, ...outboundInitInhalt(call, await vorspannText(call.id, call.tenantId)) };
 }
 
-async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fristMs: number }): Promise<void> {
+async function bindungDauerhaft({ dauerhaft, fristMs }: { dauerhaft: unknown; fristMs: number }): Promise<boolean> {
   const abgelaufen = new Promise<never>((_ignoriert, abbrechen) => {
     setTimeout(() => {
       abbrechen(new Error(`Frist von ${String(fristMs)} ms abgelaufen`));
     }, fristMs).unref();
   });
   try {
-    await Promise.race([dauerhaft, abgelaufen]);
+    return (await Promise.race([dauerhaft, abgelaufen])) !== false;
   } catch {
     console.error(`[${INIT_LOG_TAG}] speichern fehlgeschlagen oder Frist abgelaufen`);
+    return true;
   }
 }
 
@@ -322,7 +323,8 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   if (!bindung.bound) return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
 
   if (bindung.changed) {
-    await bindungDauerhaft({ dauerhaft: bindung.dauerhaft, fristMs: speicherFristMs });
+    if (!(await bindungDauerhaft({ dauerhaft: bindung.dauerhaft, fristMs: speicherFristMs })))
+      return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
     bridges.clearDeadlines(call.id);
   }
   console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
