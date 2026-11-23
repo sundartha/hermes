@@ -21,7 +21,8 @@ const EL_BEIN_SQL = "SELECT el_call_control_id FROM call WHERE id = $1";
 const STATUS_SQL = "SELECT status FROM call WHERE id = $1";
 const ZEILEN_SQL = "SELECT count(*)::int AS anzahl FROM vorspann_zustand";
 const ABLAGE_SQL = "SELECT count(*)::int AS anzahl FROM tts_ablage";
-const BUCHUNGEN_SQL = "SELECT coalesce(sum(calls), 0)::int AS anzahl FROM usage";
+const ABRECHNUNG_SQL = "SELECT billed_at FROM call WHERE id = $1";
+const KOSTEN_SQL = "SELECT coalesce(sum(spend_month_cost_cents), 0)::text AS summe, coalesce(sum(cost_eur), 0)::text AS eur FROM usage";
 const TRANSKRIPT_SQL = "SELECT count(*)::int AS anzahl FROM transcript_segment WHERE call_id = $1 AND role = 'agent'";
 
 const beinFuer = (roh) => (roh.includes('-el"') ? EL_BEIN : CALLEE_BEIN);
@@ -161,11 +162,13 @@ test("Ein zeitlich versetztes zweites Auflegen auf der anderen Instanz löst wed
     assert.equal((await ereignis(srv.signer, srv.a, { callId, art: "call.hangup", kennung: "a" })).status, HTTP_OK);
     await zeilenBis(async () => (await srv.sql(STATUS_SQL, [callId])).rows, (zeilen) => zeilen[0].status !== "active");
     await zeilenBis(async () => elAuflegen(srv.aufrufe), (liste) => liste.length >= 1);
-    await zeilenBis(async () => await zaehle(srv.sql, BUCHUNGEN_SQL), (anzahl) => anzahl >= 1);
+    const abgerechnet = await zeilenBis(async () => (await srv.sql(ABRECHNUNG_SQL, [callId])).rows, (zeilen) => zeilen[0].billed_at !== null);
+    const kostenVorher = (await srv.sql(KOSTEN_SQL)).rows[0];
     assert.equal((await ereignis(srv.signer, srv.b, { callId, art: "call.hangup", kennung: "spaet" })).status, HTTP_OK);
     assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
     assert.equal(elAuflegen(srv.aufrufe).length, 1);
-    assert.equal(await zaehle(srv.sql, BUCHUNGEN_SQL), 1);
+    assert.deepEqual((await srv.sql(ABRECHNUNG_SQL, [callId])).rows[0].billed_at, abgerechnet[0].billed_at);
+    assert.deepEqual((await srv.sql(KOSTEN_SQL)).rows[0], kostenVorher);
   });
 });
 
