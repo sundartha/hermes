@@ -183,7 +183,8 @@ test(
     for (const antwort of antworten) assert.equal(antwort.status, HTTP_OK);
     await mitProtokoll([a, b], async () => {
       await waitUntil(
-        () => spuren(a).length + spuren(b).length === ANZAHL_SPUREN && bestellungen(telnyx).length > 0,
+        () =>
+          spuren(a).length + spuren(b).length === ANZAHL_SPUREN && bestellungen(telnyx).length > 0,
         { timeoutMs: BESTELL_FRIST_MS },
       );
       await zeilenBis(
