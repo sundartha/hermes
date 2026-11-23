@@ -200,3 +200,93 @@ test("Ist die Zeile beim Ablauf der Wiedergabefrist verschwunden, wirft die Fris
     assert.equal((await sql(STATUS_SQL, [erster])).rows[0].status, "active");
   });
 });
+
+const FRIST_KURZ_MS = "1500";
+const FRIST_LANG_MS = "600000";
+const FRISTEN_TAKT_KURZ_MS = "200";
+const FRISTEN_SQL = `SELECT (EXTRACT(EPOCH FROM (frist_el_bein_at - frist_wiedergabe_at)) * 1000)::int AS abstand_ms,
+  frist_wiedergabe_at > now() + interval '590 seconds' AS wiedergabe_weit,
+  frist_wiedergabe_at < now() + interval '610 seconds' AS wiedergabe_nah
+  FROM vorspann_zustand WHERE call_id = $1`;
+
+const meldeMitStatus = (signer, srv, { callId, art }) => {
+  const rumpf = JSON.stringify({ data: { id: `evt-4b-${art}-${callId}`, event_type: art, payload: { call_control_id: CALLEE_BEIN, status: "completed" } } });
+  const zeitstempel = String(nowSeconds());
+  return abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf), "telnyx-timestamp": zeitstempel },
+    body: rumpf,
+  });
+};
+
+async function beendeInstanz(srv) {
+  const beendet = new Promise((fertig) => srv.child.once("exit", fertig));
+  srv.child.kill("SIGTERM");
+  await beendet;
+}
+
+const fristUmgebung = (wiedergabeMs, elMs) => ({ VORSPANN_WIEDERGABE_FRIST_MS: wiedergabeMs, EL_BRIDGE_START_DEADLINE_MS: elMs, FRISTEN_TAKT_MS: FRISTEN_TAKT_KURZ_MS });
+
+async function hebeAufAAb({ a, sql, signer, aufrufe }) {
+  assert.equal((await platziere(a)).status, HTTP_OK);
+  const callId = await callIdVon(sql);
+  assert.equal((await ereignis(signer, a, { callId, art: "call.answered" })).status, HTTP_OK);
+  await zeilenBis(async () => aufrufe.wiedergaben, (liste) => liste.length === 1);
+  await zeilenBis(async () => (await sql("SELECT el_call_control_id FROM call WHERE id = $1", [callId])).rows, (zeilen) => zeilen[0]?.el_call_control_id === EL_BEIN);
+  return callId;
+}
+
+const beideBeineAufgelegt = (aufrufe) => aufrufe.auflegen.some((url) => url.includes(CALLEE_BEIN)) && aufrufe.auflegen.some((url) => url.includes(EL_BEIN));
+
+test("5928-4b K7: kommt nach dem Abheben auf A kein Wiedergabe-Ende und ist A beendet, legt B beide Beine auf und vermerkt vorspann_nicht_abgespielt", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, { umgebung: fristUmgebung(FRIST_KURZ_MS, FRIST_LANG_MS) }, async (srv) => {
+    const callId = await hebeAufAAb(srv);
+    await beendeInstanz(srv.a);
+    await zeilenBis(async () => srv.aufrufe, beideBeineAufgelegt);
+    const [anruf] = await zeilenBis(async () => (await srv.sql(STATUS_SQL, [callId])).rows, (zeilen) => zeilen[0]?.failure_reason === "vorspann_nicht_abgespielt");
+    assert.equal(anruf.failure_reason, "vorspann_nicht_abgespielt");
+    assert.equal(srv.aufrufe.auflegen.length, 2);
+    assert.equal(zaehleMarke([srv.b], "rueckfall grund=vorspann_nicht_abgespielt"), 1);
+    assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
+  });
+});
+
+test("5928-4b K7: kommt nach dem Wiedergabe-Ende auf B kein EL-Bein und ist A beendet, legt B beide Beine auf und vermerkt el_frist", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, { umgebung: fristUmgebung(FRIST_LANG_MS, FRIST_KURZ_MS) }, async (srv) => {
+    const callId = await hebeAufAAb(srv);
+    assert.equal((await meldeMitStatus(srv.signer, srv.b, { callId, art: "call.playback.ended" })).status, HTTP_OK);
+    await beendeInstanz(srv.a);
+    await zeilenBis(async () => srv.aufrufe, beideBeineAufgelegt);
+    const [anruf] = await zeilenBis(async () => (await srv.sql(STATUS_SQL, [callId])).rows, (zeilen) => zeilen[0]?.failure_reason === "el_frist");
+    assert.equal(anruf.failure_reason, "el_frist");
+    assert.equal(zaehleMarke([srv.b], "rueckfall grund=el_frist"), 1);
+    assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
+  });
+});
+
+test("5928-4b K7: nach dem Abheben stehen Wiedergabe- und EL-Bein-Frist in der Zeile, je mit ihrer eigenen Dauer ab jetzt", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, { umgebung: fristUmgebung(FRIST_LANG_MS, "700000") }, async (srv) => {
+    const callId = await hebeAufAAb(srv);
+    const { rows } = await srv.sql(FRISTEN_SQL, [callId]);
+    assert.deepEqual(rows, [{ abstand_ms: 100000, wiedergabe_weit: true, wiedergabe_nah: true }]);
+  });
+});
+
+test("5928-4b K7: scheitert das Schreiben der Fristen, steht der Fehler im Log, das Bein wird aufgelegt und der Satz nicht gestartet", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, { umgebung: fristUmgebung(FRIST_LANG_MS, FRIST_LANG_MS) }, async (srv) => {
+    await srv.sql("ALTER TABLE vorspann_zustand DROP COLUMN frist_el_bein_at");
+    assert.equal((await platziere(srv.a)).status, HTTP_OK);
+    const callId = await callIdVon(srv.sql);
+    assert.equal((await ereignis(srv.signer, srv.a, { callId, art: "call.answered" })).status, HTTP_OK);
+    const ausgabeA = () => srv.a.stdout;
+    await zeilenBis(async () => ausgabeA(), (text) => text.includes(`[el-vorspann] frist fehlgeschlagen call=${callId}:`));
+    await zeilenBis(async () => srv.aufrufe.auflegen, (liste) => liste.length === 1);
+    assert.deepEqual(srv.aufrufe.wiedergaben, []);
+    const [aufgelegt] = srv.aufrufe.auflegen;
+    assert.ok(aufgelegt.includes(CALLEE_BEIN));
+  });
+});
