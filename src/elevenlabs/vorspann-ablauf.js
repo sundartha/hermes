@@ -340,7 +340,10 @@ export function makeVorspannAblauf({
   });
 
   async function behandle({ call, ereignis, zugang, nachLesen }) {
-    const zustand = await ladeZustand(call);
+    const zustand = await ladeZustand(call).catch((fehler) => {
+      logFehler("ereignis", call.id, fehler);
+      throw fehler;
+    });
     nachLesen?.();
     try {
       const vomElBein = ereignis.callControlId === (zustand ? elBeinVon(call, zustand) : call.elCallControlId);
