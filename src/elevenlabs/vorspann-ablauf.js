@@ -134,7 +134,9 @@ async function vermerkeElFehler({ call, store, inboundBridges, now, rueckfall = 
 
 async function vermerkeElNichtAngenommen({ ereignis, ...args }) {
   meldeElBeinAufgelegt(args.call.id, ereignis);
-  await vermerkeElFehler({ ...args, rueckfall: EL_NICHT_ANGENOMMEN });
+  const ursache = [ereignis.hangupCause && `hangup_cause=${ereignis.hangupCause}`, ereignis.sipHangupCause && `sip_hangup_cause=${ereignis.sipHangupCause}`];
+  const grund = [INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, ...ursache].filter(Boolean).join(" ");
+  await vermerkeElFehler({ ...args, rueckfall: EL_NICHT_ANGENOMMEN, grund });
 }
 
 const vermerkeElFrist = (args) =>
