@@ -1907,7 +1907,8 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          ended_at=CASE WHEN call.status = 'active' THEN EXCLUDED.ended_at ELSE call.ended_at END,
          summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
-         summary_sms_sent_at=COALESCE(call.summary_sms_sent_at, EXCLUDED.summary_sms_sent_at), failure_reason=EXCLUDED.failure_reason,
+         summary_sms_sent_at=COALESCE(call.summary_sms_sent_at, EXCLUDED.summary_sms_sent_at),
+         failure_reason=CASE WHEN $74::boolean THEN call.failure_reason ELSE EXCLUDED.failure_reason END,
          billed_at=COALESCE(call.billed_at, EXCLUDED.billed_at),
          call_control_id=EXCLUDED.call_control_id, assistant_id=EXCLUDED.assistant_id,
          estimated_cost_cents=COALESCE(EXCLUDED.estimated_cost_cents, call.estimated_cost_cents),
@@ -1938,7 +1939,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
-      callRowValues(endeAusstehend.has(call) ? { ...call, status: "active", endedAt: null } : call, tenantId),
+      [...callRowValues(endeAusstehend.has(call) ? { ...call, status: "active", endedAt: null } : call, tenantId), endeAusstehend.has(call)],
     );
 }
 
