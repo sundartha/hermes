@@ -11,6 +11,7 @@ import {
 const HTTP_OK = 200;
 const HTTP_UNAVAILABLE = 503;
 const EINMAL = 1;
+const ZWEIMAL = 2;
 const KEINMAL = 0;
 const ANLEGEN_FEHLER =
   "Anruf konnte nicht angelegt werden. Es wurde nicht gewaehlt, es entstehen keine Kosten.";
@@ -55,7 +56,7 @@ test("GATES-SQL-2: ist die Liste der laufenden Anrufe nicht lesbar, wird nicht g
   });
 });
 
-test("GATES-SQL-6: ein Anruf, den nur der Spiegel dieser Instanz noch als laufend kennt, wird weiter nicht doppelt gewaehlt", async (t) => {
+test("GATES-SQL-6: ein Anruf, den nur der Spiegel dieser Instanz noch als laufend kennt, ist in der Datenbank beendet und blockiert keinen neuen Anruf", async (t) => {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   const { ziel } = neueAnrufe();
   await mitZweiHermesAufPostgres(t, {}, async ({ a, sql, anbieter }) => {
@@ -63,8 +64,8 @@ test("GATES-SQL-6: ein Anruf, den nur der Spiegel dieser Instanz noch als laufen
     const erster = await (await rufeAnMit(a, { to })).json();
     await sql(BEENDET_SQL, [erster.callId]);
     const zweiter = await (await rufeAnMit(a, { to })).json();
-    assert.equal(zweiter.deduplicated, true);
-    assert.equal(zweiter.callId, erster.callId);
-    assert.equal(anbieter.starts().length, EINMAL);
+    assert.equal(zweiter.deduplicated, false);
+    assert.notEqual(zweiter.callId, erster.callId);
+    assert.equal(anbieter.starts().length, ZWEIMAL);
   });
 });

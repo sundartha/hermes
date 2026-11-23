@@ -28,6 +28,7 @@ import {
 import { GatesBestanden, fuehreToreAus, type Ablehnung as TorAblehnung, type Tor } from "../telephony/gates-bestanden.ts";
 import { NOT_PLACED, WARTEFRIST_REASON, startRejectionReason } from "../telephony/failure-reason.ts";
 import { findDuplicateOutboundCall } from "../telephony/call-dedup.ts";
+import { mapStatus } from "../call-result.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
@@ -96,6 +97,8 @@ interface Anruf {
   goal?: string | null;
   direction: string;
   status: string;
+  answeredAt?: string | null;
+  queued?: boolean;
   startedAt: string;
   twilioSid?: string;
   callControlId: string;
@@ -599,7 +602,7 @@ function placeCallResponseBody({ call, ctx, config, deduplicated }: { call: Anru
     callId: call.id,
     twilioSid: call.twilioSid,
     startedAt: call.startedAt,
-    status: "dialing",
+    status: deduplicated ? mapStatus(call) : "dialing",
     to: call.to,
     objective: call.goal,
     deduplicated,
