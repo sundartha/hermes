@@ -5,6 +5,7 @@ const GELD = "geld";
 const RESERVE = "reserve";
 const ABFRAGE = "abfrage";
 const UEBERGABE = "uebergabe";
+const VORSPANN = "vorspann";
 const MAX_VERSUCHE = 3;
 const LESEFEHLER_BIS_ENDE = 2;
 
@@ -18,6 +19,7 @@ interface Treffer {
   callId: string;
   tenantId: string;
   versuche: number;
+  frist?: string;
 }
 
 interface GeldAbhaengigkeiten {
@@ -39,6 +41,10 @@ interface UebergabeAbhaengigkeiten {
   umleiten: (callId: string) => Promise<unknown>;
 }
 
+interface VorspannAbhaengigkeiten {
+  bei: (treffer: Treffer) => Promise<unknown>;
+}
+
 interface FristenLaufAbhaengigkeiten {
   store: {
     faelligeFristen: (anfrage: { art: string; limitJeMandant: number; leaseMs: number }) => Promise<Treffer[]>;
@@ -47,12 +53,14 @@ interface FristenLaufAbhaengigkeiten {
     setzeGeldFrist: (frist: { callId: string; tenantId: string; faelligAt: string }) => Promise<unknown>;
     setzeReserveFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
     setzeUebergabeFrist: (frist: { callId: string; tenantId: string; faelligAt: string | null }) => Promise<unknown>;
+    leereVorspannFrist: (frist: { callId: string; tenantId: string; frist: string | undefined }) => Promise<unknown>;
   };
   beende: (call: Anruf) => Promise<unknown>;
   geld?: GeldAbhaengigkeiten;
   reserve?: ReserveAbhaengigkeiten;
   abfrage?: AbfrageAbhaengigkeiten;
   uebergabe?: UebergabeAbhaengigkeiten;
+  vorspann?: VorspannAbhaengigkeiten;
   abgelaufeneHier?: () => Anruf[];
   limitJeMandant: number;
   leaseMs: number;
@@ -85,20 +93,37 @@ async function beendeAlle(
   };
 }
 
+function offen(callId: string, versuche: number): "offen" {
+  if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
+  return "offen";
+}
+
+async function behandleVorspannFrist(
+  store: FristenLaufAbhaengigkeiten["store"],
+  wache: VorspannAbhaengigkeiten,
+  treffer: Treffer,
+): Promise<"weg" | "offen"> {
+  const { callId, tenantId, frist, versuche } = treffer;
+  try {
+    await wache.bei(treffer);
+    await store.leereVorspannFrist({ callId, tenantId, frist });
+  } catch (fehler) {
+    console.error(`[fristen] Vorspann-Frist behandeln fehlgeschlagen: ${callId} ${String(fehler)}`);
+    return offen(callId, versuche);
+  }
+  return "weg";
+}
+
 export function makeFristenLauf({
-  store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe, abgelaufeneHier,
+  store, beende, limitJeMandant, leaseMs, geld, reserve, abfrage, uebergabe, vorspann, abgelaufeneHier,
 }: FristenLaufAbhaengigkeiten): {
   takt: () => Promise<TaktErgebnis>;
   geldTakt: () => Promise<TaktErgebnis>;
   reserveTakt: () => Promise<TaktErgebnis>;
   abfrageTakt: () => Promise<TaktErgebnis>;
   uebergabeTakt: () => Promise<TaktErgebnis>;
+  vorspannTakt: () => Promise<TaktErgebnis>;
 } {
-  function offen(callId: string, versuche: number): "offen" {
-    if (versuche >= MAX_VERSUCHE) console.error(`[fristen] Beenden nach ${String(versuche)} Versuchen nicht gelungen: ${callId}`);
-    return "offen";
-  }
-
   const hoechstdauerFaellig = (): Promise<boolean> => Promise.resolve(true);
 
   const geldFaellig = (wache: GeldAbhaengigkeiten) => async ({ callId, tenantId }: Treffer): Promise<boolean> => {
@@ -195,6 +220,7 @@ export function makeFristenLauf({
     reserveTakt: async () => (reserve ? runde(RESERVE, async (treffer) => gibReserveFrei(reserve, treffer)) : nichts),
     abfrageTakt: async () => (abfrage ? runde(ABFRAGE, async (treffer) => starteAbfrage(abfrage, treffer)) : nichts),
     uebergabeTakt: async () => (uebergabe ? runde(UEBERGABE, async (treffer) => leiteUm(uebergabe, treffer)) : nichts),
+    vorspannTakt: async () => (vorspann ? runde(VORSPANN, async (treffer) => behandleVorspannFrist(store, vorspann, treffer)) : nichts),
   };
 }
 
@@ -220,24 +246,22 @@ async function alleRunden(lauf: {
   reserveTakt: () => Promise<unknown>;
   abfrageTakt: () => Promise<unknown>;
   uebergabeTakt: () => Promise<unknown>;
+  vorspannTakt: () => Promise<unknown>;
 }): Promise<void> {
-  try {
-    await lauf.takt();
-  } finally {
+  const abfrage = (): Promise<void> => {
+    starteAbfrageRunde(lauf.abfrageTakt);
+    return Promise.resolve();
+  };
+  const runden = [lauf.takt, lauf.geldTakt, lauf.reserveTakt, abfrage, lauf.uebergabeTakt, lauf.vorspannTakt];
+  const fehler: unknown[] = [];
+  for (const runde of runden) {
     try {
-      await lauf.geldTakt();
-    } finally {
-      try {
-        await lauf.reserveTakt();
-      } finally {
-        try {
-          starteAbfrageRunde(lauf.abfrageTakt);
-        } finally {
-          await lauf.uebergabeTakt();
-        }
-      }
+      await runde();
+    } catch (grund) {
+      fehler.push(grund);
     }
   }
+  if (fehler.length > 0) throw fehler[fehler.length - 1];
 }
 
 export function starteFristenTakt<Takt extends { unref: () => unknown }>({

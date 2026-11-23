@@ -92,6 +92,7 @@ beforeEach(async () => {
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL: "https://agent.test",
     VORSPANN_WIEDERGABE_FRIST_MS: String(WIEDERGABE_FRIST_MS),
+    FRISTEN_TAKT_MS: "200",
   };
   const seed = seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] });
   umgebung.srv = await startServer({ env, seed });

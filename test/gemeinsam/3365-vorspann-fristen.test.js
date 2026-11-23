@@ -125,6 +125,7 @@ beforeEach(async () => {
     VOICE_TARIFF_DEFAULT_CENTS: String(TARIF_CENTS),
     VORSPANN_WIEDERGABE_FRIST_MS: String(WIEDERGABE_FRIST_MS),
     EL_BRIDGE_START_DEADLINE_MS: String(EL_FRIST_MS),
+    FRISTEN_TAKT_MS: "200",
   };
   umgebung.env = env;
   umgebung.srv = await startServer({

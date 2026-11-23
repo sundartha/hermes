@@ -726,6 +726,7 @@ export async function bootServer({
   messaging,
   consultDelivery,
   elevenLabsOutbound,
+  vorspannAblauf,
   inboundBridges,
   inboundTrunkSweep,
   auditStore,
@@ -783,8 +784,7 @@ export async function bootServer({
     provisioning,
   );
 
-  const abfrage = { pollen: elevenLabsOutbound.abfrageDurchLauf };
-  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf } });
+  starteFristenTakt({ store, lifecycle, config, fristen: fristenEinstellungen, abfrage: { pollen: elevenLabsOutbound.abfrageDurchLauf }, uebergabe: { umleiten: inboundBridges.uebergabeDurchLauf }, vorspann: { bei: vorspannAblauf.beiFrist } });
 
   const uebernimmVerwaisteArbeit = async () => {
     await provisioning.reconcileOrphanedProvisioning();

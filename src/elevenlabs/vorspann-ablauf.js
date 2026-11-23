@@ -9,7 +9,7 @@ import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, elBeinVon, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
 import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
-import { armiereKlingelfrist, armiereVorspannFristen } from "./vorspann-fristen.js";
+import { armiereKlingelfrist, beiVorspannFrist, setzeVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
 
 export const VORSPANN_PFAD = "/voice/vorspann";
@@ -141,6 +141,27 @@ const vermerkeNichtAbgespielt = ({ call, store }) => {
   }
 };
 
+const meldeNichtAbgespielt = ({ call, store }) => {
+  meldeVorspannRueckfall({ callId: call.id, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.KEIN_ENDE_EREIGNIS });
+  vermerkeNichtAbgespielt({ call, store });
+};
+
+async function setzeFristenGeschuetzt({ call, store, config, now }) {
+  try {
+    await setzeVorspannFristen({ call, store, config, jetzt: now });
+    return true;
+  } catch (fehler) {
+    logFehler("frist", call.id, fehler);
+    return false;
+  }
+}
+
+const beiVorspannFristVon = ({ store, inboundBridges, now, ladeZustand, beineAuf }) => async ({ callId, frist }) => {
+  const call = await store.leseCall(callId);
+  const melde = { wiedergabe: () => meldeNichtAbgespielt({ call, store }), elBein: () => vermerkeElFrist({ call, store, inboundBridges, now }) };
+  await beiVorspannFrist({ frist, call, ladeZustand, melde, beineAuf: (zustand) => beineAuf(call, zustand) });
+};
+
 const protokolliereFehler = (callId, aktion, schritt) => async () => {
   try {
     await schritt();
@@ -220,6 +241,7 @@ export function makeVorspannAblauf({
 }) {
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now, vorspannZustand });
+  const beineAufFuer = (call, zustand) => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
   const ladeZustand = async (call) => zustandVon(await vorspannZustand.lade(zustandsRef(call)));
 
   async function waehle({ call, vorspann }) {
@@ -244,8 +266,7 @@ export function makeVorspannAblauf({
     }
     zustand.stand.set(STAND.ABGEHOBEN, now());
     await speichereZustand({ vorspannZustand, call, zustand });
-    const beineAuf = () => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
-    armiereVorspannFristen({ call, ladeStand: async () => (await ladeZustand(call))?.stand, store, config, beineAuf, vermerkeElFrist: () => vermerkeElFrist({ call, store, inboundBridges, now }), vermerkeNichtAbgespielt: () => vermerkeNichtAbgespielt({ call, store }), setTimer });
+    if (!(await setzeFristenGeschuetzt({ call, store, config, now }))) return legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
     const audioUrl = `${config.server.publicUrl}/voice/tts/${zustand.token}`;
     const steuerung = voiceControl(call.provider);
     const [wiedergabe, elWahl] = await Promise.allSettled([
@@ -308,5 +329,5 @@ export function makeVorspannAblauf({
     }
   }
 
-  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, behandle: (args) => (args.ereignis.ereignis === CALL_CONTROL_EREIGNIS.KLINGELT ? meldeAuftragBisKlingeln({ ...args, jetzt: now() }) : behandle(args)), gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, beiFrist: beiVorspannFristVon({ store, inboundBridges, now, ladeZustand, beineAuf: beineAufFuer }), behandle: (args) => (args.ereignis.ereignis === CALL_CONTROL_EREIGNIS.KLINGELT ? meldeAuftragBisKlingeln({ ...args, jetzt: now() }) : behandle(args)), gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
 }
