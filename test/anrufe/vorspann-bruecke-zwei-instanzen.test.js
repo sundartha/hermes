@@ -103,6 +103,8 @@ async function platziereUndHebeAb({ a, b, sql, signer, aufrufe }) {
 
 const zaehle = async (sql, abfrage, parameter) => (await sql(abfrage, parameter)).rows[0].anzahl;
 
+const abgerechnetUm = async (sql, callId) => (await sql(ABRECHNUNG_SQL, [callId])).rows[0].billed_at;
+
 const elAuflegen = (aufrufe) => aufrufe.auflegen.filter((url) => url.includes(EL_BEIN));
 
 test("Endet die Wiedergabe auf Instanz B ohne Auflegen, ist das Audio auf beiden Instanzen weg und die Ablage leer", { timeout: ZEITGRENZE_MS }, async (t) => {
@@ -167,7 +169,7 @@ test("Ein zeitlich versetztes zweites Auflegen auf der anderen Instanz löst wed
     assert.equal((await ereignis(srv.signer, srv.b, { callId, art: "call.hangup", kennung: "spaet" })).status, HTTP_OK);
     assert.equal(zaehleMarke([srv.a, srv.b], ZUSTAND_FEHLT), 0);
     assert.equal(elAuflegen(srv.aufrufe).length, 1);
-    assert.deepEqual((await srv.sql(ABRECHNUNG_SQL, [callId])).rows[0].billed_at, abgerechnet[0].billed_at);
+    assert.deepEqual(await abgerechnetUm(srv.sql, callId), abgerechnet[0].billed_at);
     assert.deepEqual((await srv.sql(KOSTEN_SQL)).rows[0], kostenVorher);
   });
 });
