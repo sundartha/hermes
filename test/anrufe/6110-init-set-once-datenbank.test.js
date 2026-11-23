@@ -67,9 +67,10 @@ test("Die zweite Instanz mit veraltetem Spiegel ueberschreibt eine gebundene Kon
 });
 
 test("Dieselbe Konversation ein zweites Mal in der Datenbank gilt als gespeichert", async () => {
-  const { a, b, callId } = await zweiInstanzen();
+  const { a, b, runner, callId } = await zweiInstanzen();
   assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
   assert.equal(await b.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: SPAETER_ISO }).dauerhaft, true);
+  assert.equal((await zeileLesen(runner, callId)).el_bound_at.toISOString(), JETZT_ISO);
 });
 
 test("Ein beendeter Anruf gilt nicht als gespeichert", async () => {
