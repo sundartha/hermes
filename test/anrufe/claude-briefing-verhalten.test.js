@@ -209,6 +209,7 @@ const ENDE_ZUSTAND = (zusatz = {}) =>
   seedCall({
     id: "ende_7b",
     status: "completed",
+    startedAt: "2026-01-01T00:00:00.000Z",
     answeredAt: "2026-01-01T00:00:00.000Z",
     endedAt: "2026-01-01T00:05:00.000Z",
     goal: "Tisch reservieren",
@@ -251,7 +252,7 @@ test("R7b-7: Anrufende - Zusammenfassung wird mit Auftrag und Transkript angefra
     assert.equal(a.model, "claude-haiku-4-5");
     assert.equal(
       a.messages[0].content,
-      "Richtung: outbound\nAuftrag: Tisch reservieren\n\nTRANSKRIPT:\nAGENT: Guten Tag\nANRUFER: Ja bitte",
+      "Richtung: outbound\nAuftrag: Tisch reservieren\nAnrufdatum: 2026-01-01 (Europe/Berlin)\n\nTRANSKRIPT:\nAGENT: Guten Tag\nANRUFER: Ja bitte",
     );
     const call = anrufVon(srv);
     assert.equal(call.summary, "Tisch ist reserviert.");
@@ -268,7 +269,7 @@ test("R7b-8: ohne Auftrag fehlt die Auftragszeile; ohne Angabe der Modellantwort
     await meldeEnde(srv);
     await waitUntil(() => hinweise(srv).length === 1, { timeoutMs: WARTEZEIT_MS });
     const [{ content }] = anfragen[0].messages;
-    assert.ok(content.startsWith("Richtung: outbound\n\nTRANSKRIPT:\n"));
+    assert.ok(content.startsWith("Richtung: outbound\nAnrufdatum: 2026-01-01 (Europe/Berlin)\n\nTRANSKRIPT:\n"));
     assert.equal(anrufVon(srv).objectiveAchieved, "unclear");
     assert.equal(srv.readStore().actionItems.length, 0);
   });
