@@ -1450,13 +1450,19 @@ function mitSpeichernBeiAenderung(save) {
     return ergebnis;
   };
 }
-const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = COALESCE(el_bound_at, $4) WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND (elevenlabs_conversation_id IS NULL OR elevenlabs_conversation_id = $3)`;
+const KONVERSATION_SPEICHERN_SQL = `WITH vorher AS (SELECT elevenlabs_conversation_id AS id, el_bound_at AS bound_at FROM call WHERE tenant_id = $1 AND id = $2),
+  neu AS (UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = COALESCE(el_bound_at, $4) WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND (elevenlabs_conversation_id IS NULL OR elevenlabs_conversation_id = $3) RETURNING 1)
+  SELECT (SELECT count(*) FROM neu)::int AS geschrieben, vorher.id, vorher.bound_at FROM vorher`;
 async function konversationsIdSchreiben(runner, call) {
   return runner.withClient(async (client) => {
     await setTenant(client, call.tenantId);
     try {
-      const { rowCount } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
-      return rowCount === 1;
+      const { rows } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
+      const gehalten = rows[0];
+      if (!gehalten || gehalten.geschrieben === 1 || !gehalten.id || gehalten.id === call.elevenlabsConversationId) return true;
+      call.elevenlabsConversationId = gehalten.id;
+      call.elBoundAt = gehalten.bound_at ? new Date(gehalten.bound_at).toISOString() : null;
+      return false;
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
     }
@@ -1886,7 +1892,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          consults=${CONSULTS_BEIM_SCHREIBEN_SQL}, context=EXCLUDED.context,
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
          estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
-         elevenlabs_conversation_id=COALESCE(call.elevenlabs_conversation_id, EXCLUDED.elevenlabs_conversation_id),
+         elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id,
          answered_unclear_reason=EXCLUDED.answered_unclear_reason,
          appointment_date=EXCLUDED.appointment_date, appointment_time=EXCLUDED.appointment_time,
          amount=EXCLUDED.amount, currency=EXCLUDED.currency,
@@ -1901,7 +1907,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          cost_profile=EXCLUDED.cost_profile,
          el_detector_counts=EXCLUDED.el_detector_counts,
          webhook_anchors=EXCLUDED.webhook_anchors,
-         el_bound_at=COALESCE(call.el_bound_at, EXCLUDED.el_bound_at), el_fallback_at=EXCLUDED.el_fallback_at,
+         el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
       callRowValues(call, tenantId),

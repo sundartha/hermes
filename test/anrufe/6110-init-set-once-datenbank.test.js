@@ -61,6 +61,11 @@ test("Die zweite Instanz mit veraltetem Spiegel ueberschreibt eine gebundene Kon
   assert.equal(zweite.changed, true);
   assert.equal(await zweite.dauerhaft, false);
   assert.deepEqual(
+    { id: b.getCall(callId).elevenlabsConversationId, gebunden: b.getCall(callId).elBoundAt },
+    { id: ERSTE, gebunden: JETZT_ISO },
+  );
+  await b.drainFlushes();
+  assert.deepEqual(
     { id: (await zeileLesen(runner, callId)).elevenlabs_conversation_id, gebunden: (await zeileLesen(runner, callId)).el_bound_at.toISOString() },
     { id: ERSTE, gebunden: JETZT_ISO },
   );
@@ -73,13 +78,13 @@ test("Dieselbe Konversation ein zweites Mal in der Datenbank gilt als gespeicher
   assert.equal((await zeileLesen(runner, callId)).el_bound_at.toISOString(), JETZT_ISO);
 });
 
-test("Ein beendeter Anruf gilt nicht als gespeichert", async () => {
+test("Ein beendeter Anruf ohne andere Konversation lehnt die Bindung nicht ab", async () => {
   const { a, runner, callId } = await zweiInstanzen();
   await runner.withClient(async (client) => {
     await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
     await client.query("UPDATE call SET status = 'completed' WHERE id = $1", [callId]);
   });
-  assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, false);
+  assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
 });
 
 function gegenInit(url, konversation) {
@@ -139,4 +144,15 @@ test("Der Init antwortet 200, wenn die Datenbank die eigene Konversation gespeic
     assert.equal((await gegenInit(url, ZWEITE)).status, HTTP_OK);
   });
   assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ZWEITE);
+});
+
+test("Der Init antwortet 200, wenn die Zeile noch nicht in der Datenbank steht", async () => {
+  const { b, runner, callId } = await zweiInstanzen();
+  await runner.withClient(async (client) => {
+    await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+    await client.query("DELETE FROM call WHERE id = $1", [callId]);
+  });
+  await mitInitServer(b, async (url) => {
+    assert.equal((await gegenInit(url, ZWEITE)).status, HTTP_OK);
+  });
 });
