@@ -55,7 +55,7 @@ before(async () => {
       ...(await import("../../src/begriffe/anrufe.js")),
       ...(await import("../../src/begriffe/mandant.js")),
     }),
-    () => import("../../src/consult/delivery.js"),
+    () => import("../../src/consult/delivery.ts"),
     () => import("../../src/consult/gate.ts"),
     () => import("../../src/routes/api-calls.ts"),
     () => import("../../src/boot.js"),

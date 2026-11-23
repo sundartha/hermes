@@ -55,7 +55,7 @@ before(async () => {
   defaults = await import("../../src/begriffe/rueckfrage.js");
   claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
-  delivery = await import("../../src/consult/delivery.js");
+  delivery = await import("../../src/consult/delivery.ts");
   ({ LOCALES, SUPPORTED_LANGUAGES } = await import("../../src/i18n/locales.ts"));
 });
 

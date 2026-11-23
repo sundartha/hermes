@@ -10,7 +10,7 @@ import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.js";
 import { validateAssistantContext } from "../i18n/anruf-eingabe-texte.ts";
 import { consultAllowedFor } from "../consult/gate.ts";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
-import { CONSULT_EVENT } from "../consult/delivery.js";
+import { CONSULT_EVENT } from "../consult/delivery.ts";
 import { isConsultEventId, newId } from "../store/state-ops.js";
 import {
   ANBIETER,
