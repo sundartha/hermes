@@ -26,6 +26,7 @@ export function zustellzeitAusZustand(zustand, callId, eventId) {
 export const rueckfrageLeser = (sql) => ({
   rueckfrageGelesen: sql.lesen,
   zustellzeitGelesen: sql.zustellzeitLesen,
+  zustellungSchreiben: sql.zustellungSetzen,
 });
 
 export function macheRueckfrageSql({ runner }) {

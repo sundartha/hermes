@@ -551,8 +551,7 @@ function anrufBelegMethoden({ requireState, save, runner }) {
   };
 }
 
-function rueckfrageRechercheMethoden({ requireState, save, anrufe, runner }) {
-  const rueckfrageSql = macheRueckfrageSql({ runner });
+function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
   return {
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
@@ -579,8 +578,6 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe, runner }) {
       if (result.changed) save();
       return result;
     },
-    zustellungSchreiben: (callId, tenantId, eventId) =>
-      rueckfrageSql.zustellungSetzen(callId, tenantId, eventId),
     ackConsult(callId, input) {
       const result = ops.ackConsult(requireState(), callId, input);
       if (result.changed) save();
