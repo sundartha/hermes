@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { vorspannZeileTtlMs } from "../../src/elevenlabs/vorspann-pruefung.js";
 import { makeTelnyxSigner } from "../helpers.js";
 import { mitZweiHermesAufPostgres, postgresVorhanden, zeilenBis } from "./hermes-mit-postgres.js";
 import { HTTP_OK, ZIEL, ereignis, starteAnbieter } from "./vorspann-zwei-instanzen-hilfen.js";
@@ -78,4 +79,9 @@ test("Mit Standardfristen (20 s und 30 s) lebt die Zeile Klingelfrist plus 30 s 
     const callId = await waehle(srv);
     pruefeRest(await restS(srv.sql, callId), KLINGEL_S + 30 + PUFFER_S);
   });
+});
+
+test("Die Zeile eines Anrufs mit Fristen von 120 s ueberdauert Klingelfrist plus 120 s ohne Postgres-Lauf", () => {
+  const ttlMs = vorspannZeileTtlMs({ klingelFristMs: 75_000, wiedergabeFristMs: 120_000, bridgeStartDeadlineMs: 120_000 });
+  assert.equal(ttlMs, (KLINGEL_S + 120 + PUFFER_S) * 1000);
 });
