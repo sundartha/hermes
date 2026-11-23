@@ -123,7 +123,7 @@ interface Bereiche {
 interface Ereignisse {
   parseLifecycleEvent: (body: unknown) => { status: string; diagnostics: Diagnose };
   parseSpeakOutcome: (body: unknown) => { outcome: string; reason: unknown };
-  parseCallControlEvent: (body: unknown) => object;
+  parseCallControlEvent: (body: unknown) => { ereignis?: string };
   parseWiedergabeStatus: (body: unknown) => unknown;
 }
 
