@@ -417,7 +417,11 @@ export function makeProvisioningOrchestrator({
       });
   }
 
+  const gemeldeterHalt = new Map<string, string>();
+
   function meldeHalt(job: Bereitstellung, grund: string) {
+    if (gemeldeterHalt.get(job.id) === grund) return;
+    gemeldeterHalt.set(job.id, grund);
     console.warn(
       `[provision-reconcile] hold job=${job.id} number=${job.numberId} tenant=${job.tenantId} grund=${grund}`,
     );
@@ -469,8 +473,9 @@ export function makeProvisioningOrchestrator({
       },
     );
     closeSettledProvisioningJobs(buckets.close);
-    for (const { job, reason } of buckets.hold) meldeHalt(job, reason);
     const besitzer = new Map((kandidaten ?? []).map(({ job, instanz }) => [job.id, instanz]));
+    for (const { job, reason } of buckets.hold)
+      if (auftragHaltGrund(besitzer.get(job.id) ?? null, lage) !== FREMDER_AUFTRAG) meldeHalt(job, reason);
     redriveProvisioningJobs(await uebernehmbareAuftraege(buckets.redrive, lage, besitzer));
   }
 
