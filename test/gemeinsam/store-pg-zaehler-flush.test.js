@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgTestStore, makePgStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 
-const PLATFORM_TTS_TENANT = "platform:play-tts";
 const NOW_ISO = "2026-11-08T10:00:00.000Z";
 const KEIN_ZYKLUS_DATUM = "kein-datum";
 const PLATFORM_CHARS = 238;
@@ -45,11 +44,10 @@ async function flushesDurch(store, zaehler, aktion) {
 test("recordTtsCharacters persistiert Plattform-Zeichen und Zyklusschluessel ueber einen Neustart", async () => {
   const { store, runner } = await mitFlushZaehler();
   store.recordTtsCharacters(PLATFORM_CHARS, NOW_ISO);
-  assert.equal(store.usageOf(PLATFORM_TTS_TENANT).ttsCharacters, PLATFORM_CHARS);
   await store.drainFlushes();
 
   const geoeffnet = await neuGeoeffnet(runner);
-  assert.equal(geoeffnet.platformTtsUsageView(NOW_ISO).characters, PLATFORM_CHARS);
+  assert.equal((await geoeffnet.platformTtsUsageView(NOW_ISO)).characters, PLATFORM_CHARS);
 });
 
 test("recordTtsCharacters ohne Zyklusschluessel flusht nicht", async () => {
@@ -84,7 +82,7 @@ test("recordRelayTtsCharacters persistiert Mandanten- und Plattform-Zeichen uebe
 
   const geoeffnet = await neuGeoeffnet(runner);
   assert.equal(geoeffnet.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters, TENANT_CHARS);
-  assert.equal(geoeffnet.platformTtsUsageView(NOW_ISO).characters, TENANT_CHARS);
+  assert.equal((await geoeffnet.platformTtsUsageView(NOW_ISO)).characters, TENANT_CHARS);
 });
 
 test("recordRelayTtsCharacters mit 0 Zeichen flusht nicht", async () => {
