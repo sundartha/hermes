@@ -1,5 +1,5 @@
 import { config } from "../config.ts";
-import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
+import { CONSULT_POLL_TICK_MS } from "../consult/delivery.ts";
 import { sanitizeConsultQuestion } from "../consult/question.ts";
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON } from "../begriffe/rueckfrage.js";
 import { speicherBereiche } from "../store.js";
