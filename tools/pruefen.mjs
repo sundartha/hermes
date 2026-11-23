@@ -759,6 +759,13 @@ export function gruenAufMaster(prText) {
   return [...ueberlebendeAbschnitt(prText).matchAll(GETOETET_VON)].map(([, schluessel, id, datei]) => ({ schluessel, id, datei }));
 }
 
+const quelldatei = (schluessel) => schluessel.slice(0, schluessel.lastIndexOf(":"));
+
+function meintenSie(schluessel, mutanten) {
+  const gueltig = mutanten.filter((mutant) => mutant.ergebnis === GETOETET && quelldatei(mutant.schluessel) === quelldatei(schluessel));
+  return gueltig.length === 0 ? "" : ` Meinten Sie ${gueltig.map((mutant) => `\`${mutant.schluessel}\` (getötet von \`${mutant.test}\`)`).join(", ")}?`;
+}
+
 export function mutationUrteil(mutanten, minuten) {
   const abschnitt = ueberlebendeAbschnitt(env.PR_TEXT);
   const genannt = gruenAufMaster(env.PR_TEXT);
@@ -772,7 +779,7 @@ export function mutationUrteil(mutanten, minuten) {
   const tabelle = lebend.map((mutant) => `| \`${mutant.schluessel}\` | \`${mutant.mutation}\` | ${mutant.ergebnis}${mutant.gekuerzt === undefined ? "" : ` (${mutant.gekuerzt.geprueft} von ${mutant.gekuerzt.kandidaten} Tests)`}${mutant.liefNoch === undefined ? "" : `, lief noch: ${mutant.liefNoch.map(({ datei, sekunden }) => `${datei} ${sekunden} s`).join(", ")}`} | ${grund(mutant)?.slice(0, MUTATION_ANZEIGE) ?? "–"} |`);
   const zaehlung = mutanten.length === 0 ? LEERER_LAUF : `${mutanten.length - lebend.length} von ${mutanten.length} Mutanten getötet, ${offen.length} von ${lebend.length} übrigen ohne Begründung, ${minuten.toFixed(1)} min.`;
   const kopf = `### Mutation ${teilNummer() + 1}/${teilAnzahl()} auf den geänderten Zeilen unter src/\n\n${zaehlung}\n`;
-  const unbelegtZeilen = unbelegt.map(({ schluessel, datei }) => `Rot: \`${datei}\` ist auf master grün; ${schluessel === "ohne Eintrag" ? "der PR-Text nennt sie nicht unter „## Überlebende Mutanten“" : `der PR-Text nennt \`${schluessel}\`, die Mutation tötet ihn aber nicht mit genau diesem Test`}.`);
+  const unbelegtZeilen = unbelegt.map(({ schluessel, datei }) => `Rot: \`${datei}\` ist auf master grün; ${schluessel === "ohne Eintrag" ? "der PR-Text nennt sie nicht unter „## Überlebende Mutanten“" : `der PR-Text nennt \`${schluessel}\`, die Mutation tötet ihn aber nicht mit genau diesem Test`}.${schluessel === "ohne Eintrag" ? "" : meintenSie(schluessel, mutanten)}`);
   const text = [kopf, ...unbelegtZeilen, ...(tabelle.length > 0 ? ["| Mutant | Mutation | Ergebnis | Begründung im PR-Text |", "|---|---|---|---|", ...tabelle, ""] : []), ...(offen.length > 0 ? [MUTATION_AUSWEG] : [])].join("\n");
   console.log(text);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
