@@ -190,3 +190,35 @@ test("Anzeige: Kopie und Zeile active -> Spiegelstand", async () => {
   assert.equal(antwort.body.status, "active");
   assert.equal(antwort.body.endedAt ?? null, null);
 });
+
+test("Anzeige: Kopie schon beendet -> die Route zeigt die eigene Kopie, nicht die abweichende Zeile", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await anrufAnlegen(db);
+  const a = await neueInstanz(db);
+  const b = await neueInstanz(db);
+  const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
+  await a.persistCall(call.id);
+  await b.leseCall(call.id);
+  const eigen = await a.leseCall(call.id);
+  eigen.summary = "Eigene Zusammenfassung";
+  await a.endCallRecord(call.id, "completed");
+  await db.query(`UPDATE call SET summary = 'Fremde Zusammenfassung' WHERE id = $1`, [call.id]);
+  const { body } = await abfrage(a, call.id);
+  assert.equal(body.status, "completed");
+  assert.equal(body.summary, "Eigene Zusammenfassung");
+});
+
+test("Anzeige: Zeile fehlt -> Spiegelstand ohne Fehlerzeile", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await anrufAnlegen(db);
+  const a = await neueInstanz(db);
+  const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
+  await a.persistCall(call.id);
+  await db.query(`DELETE FROM call WHERE id = $1`, [call.id]);
+  const log = mock.method(console, "error", () => {});
+  const antwort = await abfrage(a, call.id);
+  const zeilen = log.mock.calls.length;
+  log.mock.restore();
+  assert.equal(antwort.body.status, "active");
+  assert.equal(zeilen, 0);
+});
