@@ -36,6 +36,7 @@ import { macheAnrufePosteingangSql } from "./posteingang-anrufe-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { CONSULTS_BEIM_SCHREIBEN_SQL, macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
+import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
@@ -207,7 +208,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), kalender: macheKalenderSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -637,7 +638,7 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
   };
 }
 
-function aktionKalenderMethoden({ requireState, save, posteingang }) {
+function aktionKalenderMethoden({ requireState, save, posteingang, kalender }) {
   return {
     async addActionItem(callId, text, type = "todo") {
       const state = requireState();
@@ -662,14 +663,9 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
       return item;
     },
 
-    getCalendar: (tenantId) => ops.getCalendar(requireState(), tenantId),
-    addCalendarEvent(event) {
-      const ev = ops.addCalendarEvent(requireState(), event);
-      save();
-      return ev;
-    },
-    findConflict: (tenantId, startIso, endIso) =>
-      ops.findConflict(requireState(), tenantId, startIso, endIso),
+    getCalendar: (tenantId) => kalender.liste(tenantId),
+    addCalendarEvent: (event) => kalender.hinzufuegen(event),
+    findConflict: (tenantId, startIso, endIso) => kalender.konflikt(tenantId, startIso, endIso),
 
     tenantContext: (tenantId) => ops.tenantContext(requireState(), "", tenantId),
   };
@@ -1272,11 +1268,6 @@ async function loadTenantRows(client, tenantId) {
       tenantId,
     ])
   ).rows;
-  const calRows = (
-    await client.query(`SELECT * FROM calendar_event WHERE tenant_id = $1 ORDER BY seq ASC`, [
-      tenantId,
-    ])
-  ).rows;
   const usageRows = (await client.query(`SELECT * FROM usage WHERE tenant_id = $1`, [tenantId]))
     .rows;
   const notifRows = (
@@ -1313,7 +1304,6 @@ async function loadTenantRows(client, tenantId) {
   return {
     settingsRows,
     itemRows,
-    calRows,
     usageRows,
     notifRows,
     numberRows,
@@ -1343,7 +1333,6 @@ async function hydrateTenantInto(client, state, tenantId) {
     Object.assign(state.usage, { [tenantId]: rowToUsage(rows.usageRows[0]) });
     nutzungGeladen(state, tenantId, state.usage[tenantId]);
   }
-  Object.assign(state.calendar, { [tenantId]: rows.calRows.map(rowToCalendarEvent) });
   state.actionItems.push(...rows.itemRows.map(rowToActionItem));
   state.notifications.push(...rows.notifRows.map(rowToNotification));
   state.numbers.push(...rows.numberRows.map(rowToNumber));
@@ -1624,10 +1613,6 @@ function rowToActionItem(r) {
   };
 }
 
-function rowToCalendarEvent(r) {
-  return { id: r.id, title: r.title, start: r.starts_at, end: r.ends_at };
-}
-
 function rowToUsage(r) {
   return {
     inputTokens: Number(r.input_tokens),
@@ -1683,7 +1668,6 @@ async function flushTenantScope(client, state, { tenantId, geschrieben, abdrueck
       meldungen: notificationsForTenant(state, tenantId, callIds),
     })),
   );
-  await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
   await nutzungSchreiben(client, state, tenantId);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
@@ -1956,23 +1940,6 @@ async function flushTranscript(client, tenantId, call) {
     await client.query(
       `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`,
       [call.id, tenantId, seg.role, seg.text, seg.at],
-    );
-  }
-}
-
-async function flushCalendar(client, tenantId, events) {
-  await deleteMissing(
-    client,
-    "calendar_event",
-    tenantId,
-    events.map((e) => e.id),
-  );
-  for (const ev of events) {
-    await client.query(
-      `INSERT INTO calendar_event (id, tenant_id, title, starts_at, ends_at)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, starts_at=EXCLUDED.starts_at, ends_at=EXCLUDED.ends_at`,
-      [ev.id, tenantId, ev.title, ev.start, ev.end],
     );
   }
 }

@@ -193,7 +193,7 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
     "usage/Budget-Gate ueberlebt",
   );
   assert.equal(
-    reopened.getCalendar(BOOTSTRAP_TENANT_ID).length,
+    (await reopened.getCalendar(BOOTSTRAP_TENANT_ID)).length,
     3,
     "Demo-Kalender (Service-Config) bleibt",
   );

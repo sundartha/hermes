@@ -260,7 +260,7 @@ export function makeSelfServiceRoutes({
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
       notifications: data.notifications,
-      calendar: upcomingCalendar(store, tenant),
+      calendar: await upcomingCalendar(store, tenant),
       agent: agentView(agentState, {
         tenantId: tenant,
         ownerName: ctx.ownerName,
