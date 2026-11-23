@@ -8,13 +8,10 @@ import { legeAnruf, makeTelnyxSigner, neueAnrufNummer, starteAttrappe, vorspannU
 
 const TENANT_ID = seedCall().tenantId;
 const WARTE_FRIST_MS = 5_000;
-const KLINGEL_FRIST_MS = 75_000;
-const VERKUERZT_MS = 300;
 const ERGEBNIS = "ui/notifications/tool-result";
 const ANRUF = (await ausgelieferteWidgets()).call;
 const SKRIPT_I18N = skriptbloecke(ANRUF).find((code) => code.includes("HermesI18n = {"));
 const SKRIPT_CALL = skriptbloecke(ANRUF).filter((code) => code.includes("TOOL_GET_STATUS")).at(-1);
-const KURZE_KLINGELFRIST = `const echt = globalThis.setTimeout; globalThis.setTimeout = (fn, ms, ...rest) => echt(fn, ms === ${KLINGEL_FRIST_MS} ? ${VERKUERZT_MS} : ms, ...rest);`;
 
 const umgebung = {};
 const gespeicherteAnrufe = () => umgebung.srv.readStore().calls;
@@ -24,7 +21,8 @@ beforeEach(async () => {
   const signer = makeTelnyxSigner();
   const env = {
     ...vorspannUmgebung({ attrappe: umgebung.attrappe, signer, publicUrl: "https://agent.test", kennung: "5179-widget" }),
-    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(KURZE_KLINGELFRIST)}`,
+    VORSPANN_KLINGEL_FRIST_MS: "300",
+    FRISTEN_TAKT_MS: "200",
   };
   const seed = seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] });
   umgebung.srv = await startServer({ env, seed });
