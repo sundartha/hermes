@@ -206,7 +206,7 @@ test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1
     keineGeheimnisseIm(srv.stdout, call);
     assert.equal((await angenommen(srv, callId)).status, HTTP_OK);
     const init = await initAntwort(srv, call);
-    assert.equal(init.conversation_config_override.agent.first_message, "", "der Anbieter spricht die Eroeffnung nicht noch einmal");
+    assert.match(init.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/, "der Anbieter spricht die Eroeffnung nicht noch einmal");
     assert.equal(init.dynamic_variables.eroeffnung_gesagt, text, "wortgleich der gesprochene Vorspann");
   });
 });

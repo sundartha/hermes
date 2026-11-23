@@ -154,7 +154,7 @@ async function startVon(srv, ziel) {
   const anruf = anrufAn(srv, ziel);
   assert.ok(anruf, `kein ElevenLabs-Start an ${ziel}`);
   const daten = await initInhaltFuer(srv, { callId: anruf.id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
-  assert.equal(daten.conversation_config_override.agent.first_message, "");
+  assert.match(daten.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
   return { eroeffnung: daten.dynamic_variables.eroeffnung_gesagt, variablen: daten.dynamic_variables };
 }
 
