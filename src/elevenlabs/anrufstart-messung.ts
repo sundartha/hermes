@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const LOG_TAG = "[el-vorspann]";
 const TEILE = ["ms_tts", "ms_pruefe", "ms_waehle"];
 
@@ -42,4 +44,39 @@ export function meldeAuftragBisKlingeln({
 }): void {
   if (ereignis.callControlId === call.elCallControlId) return;
   console.log(`${LOG_TAG} auftrag_bis_klingeln ms=${msSeitStart({ call, jetzt })} call=${call.id}`);
+}
+
+const FIRST_MESSAGE_ANTWORT = z
+  .object({ conversation_config_override: z.object({ agent: z.object({ first_message: z.string() }) }) })
+  .transform((antwort) => antwort.conversation_config_override.agent.first_message);
+const MS_JE_SEKUNDE = 1000;
+const KEIN_WERT = "-";
+
+export function meldeFirstMessageErgebnis({ callId, antwort }: { callId: string; antwort: Record<string, unknown> }): void {
+  const gelesen = FIRST_MESSAGE_ANTWORT.safeParse(antwort);
+  const laenge = gelesen.success ? gelesen.data.length : 0;
+  console.log(`${LOG_TAG} first_message_ergebnis geliefert=${gelesen.success ? "ja" : "nein"} laenge=${String(laenge)} call=${callId}`);
+}
+
+interface Gespraech {
+  transcript?: ({ role?: unknown; message?: unknown; time_in_call_secs?: unknown } | null)[] | null;
+  metadata?: { start_time_unix_secs?: unknown } | null;
+}
+
+interface Rede {
+  call: Messbarer & { answeredAt?: string | null };
+  conversation: Gespraech;
+}
+
+const alsMs = (wert: number): string => (Number.isFinite(wert) ? String(Math.round(wert)) : KEIN_WERT);
+
+export function meldeAgentErsteRede({ call, conversation }: Rede): void {
+  const zeile = (conversation.transcript ?? []).find((eintrag) => eintrag?.role === "agent" && Boolean(eintrag.message));
+  if (!zeile) return;
+  const start = conversation.metadata?.start_time_unix_secs;
+  const sekunden = zeile.time_in_call_secs;
+  const redeMs = typeof start === "number" && typeof sekunden === "number" ? (start + sekunden) * MS_JE_SEKUNDE : Number.NaN;
+  const seitStart = alsMs(redeMs - Date.parse(call.startedAt));
+  const seitAbheben = alsMs(redeMs - Date.parse(call.answeredAt ?? ""));
+  console.log(`${LOG_TAG} agent_erste_rede ms_seit_start=${seitStart} ms_seit_abheben=${seitAbheben} call=${call.id}`);
 }

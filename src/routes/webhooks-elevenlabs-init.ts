@@ -10,6 +10,7 @@ import {
   inboundEroeffnungsDefekteFuer,
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
+import { meldeFirstMessageErgebnis } from "../elevenlabs/anrufstart-messung.ts";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.ts";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.ts";
 import { normNum } from "../begriffe/rufnummern.js";
@@ -265,6 +266,20 @@ function bindungsLogZeile({
   return `${zeile} ms_bearbeitung=${String(Math.round(performance.now() - eingangMs))}`;
 }
 
+function meldeBindung({
+  outboundAntwort,
+  ...zeile
+}: {
+  bindung: Bindung;
+  call: Anruf;
+  nowMs: number;
+  eingangMs: number;
+  outboundAntwort: Record<string, unknown> | null;
+}): void {
+  console.log(bindungsLogZeile(zeile));
+  if (outboundAntwort && zeile.bindung.changed) meldeFirstMessageErgebnis({ callId: zeile.call.id, antwort: outboundAntwort });
+}
+
 function inboundSperrgrundFuer({ store, config, call }: Dienste): InitGrund | null {
   if (istOutboundElProfil(call)) return null;
   if (!elWegFuer({ store, config, call })) return INIT_GRUND.KEIN_EL_WEG;
@@ -341,7 +356,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
 
   if (!(await bindungUebernommen({ bindung, bridges, callId: call.id, fristMs: speicherFristMs })))
     return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
-  console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
+  meldeBindung({ bindung, call, nowMs, eingangMs, outboundAntwort });
 
   return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() }));
 }

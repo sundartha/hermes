@@ -24,6 +24,7 @@ import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
+import { meldeAgentErsteRede } from "./anrufstart-messung.ts";
 import { meldeVorspannEroeffnung } from "./vorspann-erzeugen.js";
 import { ermittleStimmenAnzahl } from "./wirksame-stimme.ts";
 
@@ -406,7 +407,9 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
   });
   await schreibeNeueAnbieterZeilen(store, callId, zeilen);
   const speicherFehler = await sichereErgebnisUndFelder({ store, callId, conversation, politik });
-  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
+  const call = await store.leseCall(callId);
+  if (call) meldeAgentErsteRede({ call, conversation });
+  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(call);
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
   recordElevenLabsKostenBelege({
