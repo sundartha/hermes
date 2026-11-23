@@ -87,6 +87,58 @@ test("Ein beendeter Anruf ohne andere Konversation lehnt die Bindung nicht ab", 
   assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
 });
 
+test("Ein Flush der abgelehnten Instanz vor dem bedingten UPDATE schreibt die fremde Konversation nicht in die Datenbank", async () => {
+  const { a, runner, callId } = await zweiInstanzen();
+  let halten = false;
+  let freigeben;
+  const tor = new Promise((fertig) => {
+    freigeben = fertig;
+  });
+  const gebremst = {
+    withClient: (arbeit) => {
+      if (!halten) return runner.withClient(arbeit);
+      halten = false;
+      return tor.then(() => runner.withClient(arbeit));
+    },
+  };
+  const b = makePgStore(gebremst);
+  await b.init();
+  assert.ok(b.getCall(callId) ?? (await b.attachActiveCall(callId)));
+  assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
+  halten = true;
+  const zweite = b.bindInboundElConversation(callId, { conversationId: ZWEITE, nowIso: SPAETER_ISO });
+  await b.drainFlushes();
+  assert.equal(b.getCall(callId).elevenlabsConversationId ?? null, null);
+  freigeben();
+  assert.equal(await zweite.dauerhaft, false);
+  await b.drainFlushes();
+  assert.deepEqual(
+    { id: (await zeileLesen(runner, callId)).elevenlabs_conversation_id, gebunden: (await zeileLesen(runner, callId)).el_bound_at.toISOString() },
+    { id: ERSTE, gebunden: JETZT_ISO },
+  );
+});
+
+test("Scheitert das Speichern der Bindung, bleibt sie im Spiegel und wird geflusht", async () => {
+  const { runner, callId } = await zweiInstanzen();
+  let ausfallen = false;
+  const bruechig = {
+    withClient: (arbeit) => {
+      if (!ausfallen) return runner.withClient(arbeit);
+      ausfallen = false;
+      return Promise.reject(new Error("Verbindung weg"));
+    },
+  };
+  const b = makePgStore(bruechig);
+  await b.init();
+  assert.ok(b.getCall(callId) ?? (await b.attachActiveCall(callId)));
+  ausfallen = true;
+  const bindung = b.bindInboundElConversation(callId, { conversationId: ZWEITE, nowIso: JETZT_ISO });
+  await assert.rejects(bindung.dauerhaft, /Verbindung weg/);
+  assert.equal(b.getCall(callId).elevenlabsConversationId, ZWEITE);
+  await b.drainFlushes();
+  assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ZWEITE);
+});
+
 function gegenInit(url, konversation) {
   return abrufMitFrist(`${url}${ELEVENLABS_INIT_PATH}`, {
     method: "POST",
