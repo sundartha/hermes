@@ -28,6 +28,7 @@ auth.ownerIdpSubject
 auth.sessionSecret
 auth.sessionTtlSeconds
 auth.statusToken
+auth.probeToken
 auth.webhookZustellungSecret
 auth.workosApiBase
 auth.workosManagementApiKey
