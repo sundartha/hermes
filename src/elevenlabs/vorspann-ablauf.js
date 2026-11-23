@@ -338,11 +338,12 @@ export function makeVorspannAblauf({
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: (args) => (args.vomElBein ? undefined : beiWiedergabeEnde(args)),
   });
 
-  async function behandle({ call, ereignis, zugang }) {
+  async function behandle({ call, ereignis, zugang, nachLesen }) {
     let geladen = false;
     try {
       const zustand = await ladeZustand(call);
       geladen = true;
+      nachLesen?.();
       const vomElBein = ereignis.callControlId === (zustand ? elBeinVon(call, zustand) : call.elCallControlId);
       if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein, now });
       zustand.calleeId ??= await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: ereignis.callControlId });

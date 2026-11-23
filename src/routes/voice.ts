@@ -568,18 +568,24 @@ async function antworteAufVorspannEreignis(
   }
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
-  const verarbeitung = vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  const verarbeitung = vorspannAblauf.behandle({
+    call,
+    ereignis,
+    zugang: elZugangVon(config),
+    nachLesen: () => {
+      if (!res.headersSent) res.sendStatus(HTTP_OK);
+    },
+  });
   const aufgelegt = ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT;
   if (!aufgelegt) res.sendStatus(HTTP_OK);
   try {
     await verarbeitung;
   } catch (fehler) {
     if (!aufgelegt) throw fehler;
-    res.status(HTTP_SERVICE_UNAVAILABLE).end();
+    if (!res.headersSent) res.status(HTTP_SERVICE_UNAVAILABLE).end();
     console.error(VORSPANN_LOG_PREFIX, "neu_zustellen", fehlerText(fehler));
     return;
   }
-  if (aufgelegt) res.sendStatus(HTTP_OK);
   console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
 }
 
