@@ -22,6 +22,14 @@ const SPERRTRIGGER_SQL = `CREATE FUNCTION aufgelegt_gesperrt() RETURNS trigger A
   RETURN NEW; END $$ LANGUAGE plpgsql;
   CREATE TRIGGER aufgelegt_gesperrt BEFORE UPDATE ON vorspann_zustand FOR EACH ROW EXECUTE FUNCTION aufgelegt_gesperrt()`;
 
+const PROTOKOLL_SQL = `CREATE TABLE aufgelegt_protokoll (nr serial PRIMARY KEY, alt jsonb, neu jsonb);
+  GRANT ALL ON aufgelegt_protokoll TO PUBLIC; GRANT ALL ON SEQUENCE aufgelegt_protokoll_nr_seq TO PUBLIC;
+  CREATE FUNCTION aufgelegt_protokollieren() RETURNS trigger AS $$ BEGIN
+  IF NEW.aufgelegt IS DISTINCT FROM OLD.aufgelegt THEN INSERT INTO aufgelegt_protokoll (alt, neu) VALUES (OLD.aufgelegt, NEW.aufgelegt); END IF;
+  RETURN NEW; END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER aufgelegt_protokollieren AFTER UPDATE ON vorspann_zustand FOR EACH ROW EXECUTE FUNCTION aufgelegt_protokollieren()`;
+const PROTOKOLL_LESEN_SQL = "SELECT alt, neu FROM aufgelegt_protokoll ORDER BY nr";
+
 const beinFuer = (roh) => (roh.includes('-el"') ? EL : CALLEE);
 
 function starteAnbieter({ elAuflegen }) {
@@ -107,6 +115,7 @@ test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachd
   };
   t.after(() => elFreigeben());
   await mitAnbieter(t, { elAuflegen }, async ({ a, b, sql, signer, aufrufe }) => {
+    await sql(PROTOKOLL_SQL);
     const { callId, abbruch } = await bisAbgebrochen({ a, sql, signer, aufrufe }, "call.playback.ended");
     assert.equal((await abbruch(b)).status, HTTP_OK);
     await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.includes(EL));
@@ -122,6 +131,8 @@ test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachd
     assert.equal((await veraltet).status, HTTP_OK);
     await zeilenBis(async () => verarbeitet([a, b]), (anzahl) => anzahl === 2);
     assert.deepEqual((await sql(ZEILE_SQL, [callId])).rows[0].aufgelegt, [CALLEE]);
+    const uebergaenge = (await sql(PROTOKOLL_LESEN_SQL)).rows.map((zeile) => `${zeile.alt.sort()}>${zeile.neu.sort()}`);
+    assert.deepEqual(uebergaenge, [`>${CALLEE}`, `${CALLEE}>${CALLEE},${EL}`, `${CALLEE},${EL}>${CALLEE}`]);
     assert.equal((await ereignis(signer, b, { callId, art: "call.hangup", kennung: "hangup" })).status, HTTP_OK);
     await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.filter((bein) => bein === EL).length === 2);
   });
