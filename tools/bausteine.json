@@ -166,7 +166,7 @@
       "zweck": "Rückfragen während des Anrufs.",
       "quellen": ["src/consult/", "src/conversation/consult-raised.js"],
       "eingaenge": [
-        "src/consult/delivery.js",
+        "src/consult/delivery.ts",
         "src/consult/gate.ts",
         "src/consult/in-call.js",
         "src/conversation/consult-raised.js"

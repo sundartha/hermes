@@ -54,7 +54,7 @@ import {
   OWNER_ID,
   TENANT_REJECT,
 } from "./request-tenant.js";
-import { makeConsultDelivery } from "./consult/delivery.js";
+import { makeConsultDelivery } from "./consult/delivery.ts";
 import { consultAllowedForCall } from "./consult/gate.ts";
 import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";

@@ -55,7 +55,7 @@ const UHR_QUELLEN_BESTAND = [
   "src/billing/price-drift-watch.ts",
   "src/billing/provision-retry-sweep.ts",
   "src/billing/webhook.ts",
-  "src/consult/delivery.js",
+  "src/consult/delivery.ts",
   "src/consult/in-call.js",
   "src/conversation/consult-raised.js",
   "src/queue/adapters/memory/queue.ts",
