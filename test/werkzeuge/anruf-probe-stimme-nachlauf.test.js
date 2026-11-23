@@ -81,10 +81,7 @@ test("Nachlauf: Zahl erst ab dem zweiten Abruf wird gelesen", async () => {
 test("Nachlauf: Zahl nie geliefert bleibt nach der Frist undefined", async () => {
   const { wert, wartezeiten } = await gelesen(Number.POSITIVE_INFINITY);
   assert.equal(wert, undefined);
-  const drosselWartezeiten = [38000, 34000];
-  assert.equal(wartezeiten.filter((ms) => drosselWartezeiten.includes(ms)).length, 2);
-  assert.equal(wartezeiten.filter((ms) => ms === TAKT_MS).length, 26);
-  assert.equal(wartezeiten.length, 28);
+  assert.deepEqual(wartezeiten, Array(25).fill(TAKT_MS));
 });
 
 test("Nachlauf: Zahl beim ersten Abruf wartet nicht", async () => {

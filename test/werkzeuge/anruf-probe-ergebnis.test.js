@@ -146,7 +146,7 @@ test("Anrufer Ergebnis: Abfrage im Takt von 2 s, höchstens 60 s lang", async ()
   const zeiten = aufrufe.filter((x) => x.name === "get_call_result").map((x) => (x.zeit - JETZT) / 1000);
   assert.deepEqual(zeiten.slice(0, 3), [0, 2, 4]);
   assert.equal(zeiten.at(-1), 60);
-  assert.equal(zeiten.length, 24);
+  assert.equal(zeiten.length, 31);
   assert.equal(aufrufe.find((x) => x.name === "get_call_result").argumente.call_id, "c1");
 });
 

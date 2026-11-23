@@ -84,8 +84,7 @@ test("Frist: Zahl erst nach 20 s eingespeister Zeit wird gelesen", async () => {
 test("Frist: Zahl nie geliefert gibt nach genau 50000 ms undefined", async () => {
   const { wert, wartezeiten } = await gelesen(Number.POSITIVE_INFINITY);
   assert.equal(wert, undefined);
-  const drosselMs = 74_000;
-  assert.equal(summe(wartezeiten), FRIST_MS + drosselMs);
+  assert.equal(summe(wartezeiten), FRIST_MS);
 });
 
 test("Frist: Zahl im letzten Abruf vor Fristablauf zählt noch", async () => {
