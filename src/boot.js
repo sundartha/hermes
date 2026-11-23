@@ -780,6 +780,7 @@ export async function bootServer({
       paidWithoutNumberWatch,
       provisionRetryWatch,
       priceDriftWatch,
+      vorspannZustand: store.vorspannZustand,
     },
     provisioning,
   );

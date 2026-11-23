@@ -171,6 +171,7 @@ const aktiverVorspannZustand = () => offenesBackend?.vorspannZustand ?? speicher
 
 export const vorspannZustand = {
   anlegen: (anfrage) => aktiverVorspannZustand().anlegen(anfrage),
+  raeumeAbgelaufene: () => aktiverVorspannZustand().raeumeAbgelaufene(),
   leseText: (anfrage) => aktiverVorspannZustand().leseText(anfrage),
   loesche: (anfrage) => aktiverVorspannZustand().loesche(anfrage),
   lade: (anfrage) => aktiverVorspannZustand().lade(anfrage),

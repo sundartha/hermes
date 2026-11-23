@@ -2,6 +2,7 @@ import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 const ABGELAUFENE_LOESCHEN_SQL = `DELETE FROM vorspann_zustand WHERE expires_at <= now()`;
+const MANDANTEN_SQL = `SELECT id FROM tenant`;
 const ANLEGEN_SQL = `INSERT INTO vorspann_zustand (call_id, tenant_id, token, text, expires_at)
   VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`;
 const TEXT_SQL = `SELECT text FROM vorspann_zustand WHERE call_id = $1 AND expires_at > now()`;
@@ -40,6 +41,10 @@ export function makePostgresVorspannZustand(runner) {
         [ANLEGEN_SQL, [callId, tenantId, token, text, ttlMs / MS_PER_SECOND]],
       ]);
     },
+    raeumeAbgelaufene: async () => {
+      const mandanten = await runner.withClient(async (client) => (await client.query(MANDANTEN_SQL)).rows);
+      for (const { id } of mandanten) await imMandanten(id, [[ABGELAUFENE_LOESCHEN_SQL]]);
+    },
     leseText: async ({ tenantId, callId }) => (await imMandanten(tenantId, [[TEXT_SQL, [callId]]]))[0]?.text,
     loesche: async ({ tenantId, callId }) => {
       await imMandanten(tenantId, [[LOESCHEN_SQL, [callId]]]);
@@ -70,6 +75,7 @@ export function makeSpeicherVorspannZustand() {
     anlegen: async ({ tenantId, callId, token, text }) => {
       zeilen.set(schluessel({ tenantId, callId }), { calleeId: null, token, text, stand: {}, aufgelegt: [], abgehoben: false });
     },
+    raeumeAbgelaufene: async () => {},
     leseText: async (anfrage) => zeilen.get(schluessel(anfrage))?.text,
     loesche: async (anfrage) => {
       zeilen.delete(schluessel(anfrage));
