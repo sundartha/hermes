@@ -117,9 +117,11 @@ test("5928-4b K7: scheitert das Schreiben der Fristen, steht der Fehler im Log, 
     await srv.sql("ALTER TABLE vorspann_zustand DROP COLUMN frist_el_bein_at");
     const callId = await platziereAufA(srv);
     assert.equal((await sende(srv.signer, srv.a, { callId, art: "call.answered" })).status, HTTP_OK);
-    await zeilenBis(async () => srv.a.stdout, (text) => text.includes(`[el-vorspann] frist fehlgeschlagen call=${callId}:`));
+    const ausgabeA = () => srv.a.stdout;
+    await zeilenBis(async () => ausgabeA(), (text) => text.includes(`[el-vorspann] frist fehlgeschlagen call=${callId}:`));
     await zeilenBis(async () => srv.aufrufe.auflegen, (liste) => liste.length === 1);
     assert.deepEqual(srv.aufrufe.wiedergaben, []);
-    assert.ok(srv.aufrufe.auflegen[0].includes(CALLEE_BEIN));
+    const [aufgelegt] = srv.aufrufe.auflegen;
+    assert.ok(aufgelegt.includes(CALLEE_BEIN));
   });
 });

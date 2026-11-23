@@ -39,8 +39,11 @@ afterEach(async () => {
   await umgebung.attrappe.close();
 });
 
-const anrufIn = (callId) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === callId);
-const aufgelegt = (bein) => umgebung.attrappe.pfade.filter((pfad) => pfad.includes(bein) && pfad.endsWith("/actions/hangup")).length;
+const ausgabe = () => umgebung.srv.stdout;
+const pfade = () => umgebung.attrappe.pfade;
+const anrufe = () => umgebung.srv.readStore().calls;
+const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
+const aufgelegt = (bein) => pfade().filter((pfad) => pfad.includes(bein) && pfad.endsWith("/actions/hangup")).length;
 const beideAufgelegt = (callId) => aufgelegt(calleeVon(callId)) === 1 && aufgelegt(elVon(callId)) === 1;
 
 function sende(callId, typ, bein) {
@@ -63,9 +66,9 @@ test("5928-4b K7: ohne Wiedergabe-Ende legt der Fristen-Takt beide Beine auf und
   await waitUntil(() => beideAufgelegt(spaeter), { timeoutMs: WARTE_FRIST_MS });
 
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
-  assert.equal(umgebung.srv.stdout.includes("vorspann-frist-timer"), false);
-  assert.equal(umgebung.srv.stdout.split(`rueckfall grund=vorspann_nicht_abgespielt call=${callId}`).length - 1, 1);
-  assert.equal(umgebung.srv.stdout.includes(`rueckfall grund=el_frist call=${callId}`), false);
+  assert.equal(ausgabe().includes("vorspann-frist-timer"), false);
+  assert.equal(ausgabe().split(`rueckfall grund=vorspann_nicht_abgespielt call=${callId}`).length - 1, 1);
+  assert.equal(ausgabe().includes(`rueckfall grund=el_frist call=${callId}`), false);
   assert.equal(beideAufgelegt(callId), true);
 });
 
@@ -76,8 +79,8 @@ test("5928-4b K7: ohne EL-Annahme legt der Fristen-Takt beide Beine auf und verm
   await waitUntil(() => beideAufgelegt(callId), { timeoutMs: WARTE_FRIST_MS });
 
   assert.equal(anrufIn(callId).failureReason, "el_frist");
-  assert.equal(umgebung.srv.stdout.includes("vorspann-frist-timer"), false);
-  assert.equal(umgebung.srv.stdout.split(`rueckfall grund=el_frist call=${callId}`).length - 1, 1);
+  assert.equal(ausgabe().includes("vorspann-frist-timer"), false);
+  assert.equal(ausgabe().split(`rueckfall grund=el_frist call=${callId}`).length - 1, 1);
 });
 
 const elGewaehlt = (callId) => umgebung.attrappe.waehlbefehle.includes(`vorspann-${callId}-el`);
@@ -100,7 +103,7 @@ test("5928-4b K7: war der Anruf vor Ablauf der Frist schon beendet, legt die Fri
   assert.equal(anrufIn(beendet).failureReason ?? null, null);
 });
 
-const bruecken = (callId) => umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/bridge")).length;
+const bruecken = (callId) => pfade().filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/bridge")).length;
 
 test("5928-4b K7: ist die Bruecke vor Ablauf der Fristen geschlagen, legen die Fristen nichts auf und vermerken nichts", async () => {
   const verbunden = await legeAnruf(umgebung.srv, neueAnrufNummer(15));
