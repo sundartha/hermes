@@ -717,7 +717,6 @@ const UHR_TESTS_BESTAND = [
   "test/rueckfrage/gq-p8-consult-arrival-marker.test.js",
   "test/rueckfrage/leere-antwort.test.js",
   "test/rueckfrage/rueckfrage-staende-am-echten-server.test.js",
-  "test/rueckfrage/zusammenfassung-bei-done.test.js",
   "test/rueckfrage/zusammenfassung-wartefrist.test.js",
   "test/sicherheit/abhaengigkeits-updates-wartezeiten.test.js",
   "test/sicherheit/ci-lockfile-alter.test.js",
