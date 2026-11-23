@@ -201,3 +201,8 @@ test("6126-K1: Anlass mit Satzende und grossem Anfang -> genau ein Punkt, Anlass
   const { agent } = await anschlussFuer({ language: "en", objective: "I want to ask about your order!" });
   assert.equal(agent.first_message, "I want to ask about your order. Please go ahead.");
 });
+
+test("6126-K1: Anlass mit innerem Satzzeichen -> das Zeichen bleibt, genau ein Punkt vor der Aufforderung", async () => {
+  const { agent } = await anschlussFuer({ language: "en", objective: "Ask about the price of 2.50 euros on Friday" });
+  assert.equal(agent.first_message, "Here's what I'm calling about: Ask about the price of 2.50 euros on Friday. Please go ahead.");
+});
