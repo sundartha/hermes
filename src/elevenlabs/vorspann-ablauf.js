@@ -8,7 +8,7 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-ueberg
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, elBeinVon, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
 import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
-import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
+import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, vorspannZeileTtlMs, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { beiVorspannFrist, setzeKlingelfrist, setzeVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
 
@@ -209,7 +209,9 @@ async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAu
 
 async function waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand }) {
   try {
-    await vorspannZustand.anlegen({ ...zustandsRef(call), token, text: vorspann.text, ttlMs: VORSPANN_ABLAGE_TTL_MS });
+    const { vorspannKlingelFristMs, vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
+    const ttlMs = vorspannZeileTtlMs({ klingelFristMs: vorspannKlingelFristMs, wiedergabeFristMs: vorspannWiedergabeFristMs, bridgeStartDeadlineMs });
+    await vorspannZustand.anlegen({ ...zustandsRef(call), token, text: vorspann.text, ttlMs });
     const { callControlId } = await steuerung.dialCallControl(calleeAnfrage({ call, config }));
     if (!callControlId) throw new Error("Der Anbieter hat keine Kennung fuer das neue Bein geliefert");
     return callControlId;
