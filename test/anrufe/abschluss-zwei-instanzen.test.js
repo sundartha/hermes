@@ -194,3 +194,13 @@ test("Abschluss in der Datenbank: ein Speichern ohne ausstehendes Ende schreibt 
   await a.store.drainFlushes();
   assert.equal(await grundDerZeile(db, callId), "el_uebergabe_gescheitert");
 });
+
+test("Abschluss in der Datenbank: ein Speichern nach geschriebenem Ende schreibt den Grund und laesst das Ende stehen", async () => {
+  const { db, a, callId } = await aufbau();
+  await a.store.setCallEndedAt(callId, "failed", "2031-04-05T06:07:08.000Z");
+  a.store.getCall(callId).failureReason = "el_uebergabe_gescheitert";
+  await a.store.save();
+  await a.store.drainFlushes();
+  assert.equal(await grundDerZeile(db, callId), "el_uebergabe_gescheitert");
+  assert.deepEqual(await zeile(db, callId), { status: "failed", ended_at: "2031-04-05T06:07:08.000Z" });
+});
