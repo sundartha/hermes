@@ -35,10 +35,11 @@ import {
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.ts";
+import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
-import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
@@ -560,12 +561,25 @@ async function antworteAufVorspannEreignis(
   { store, config, webhookEvents, vorspannAblauf }: VoiceDeps,
 ): Promise<void> {
   if (!anfrageGeprueft(req, res, VORSPANN_KOERPER)) return;
-  res.sendStatus(HTTP_OK);
   const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
-  if (!call) return;
+  if (!call) {
+    res.sendStatus(HTTP_OK);
+    return;
+  }
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
-  await vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  const verarbeitung = vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  const aufgelegt = ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT;
+  if (!aufgelegt) res.sendStatus(HTTP_OK);
+  try {
+    await verarbeitung;
+  } catch (fehler) {
+    if (!aufgelegt) throw fehler;
+    res.status(HTTP_SERVICE_UNAVAILABLE).end();
+    console.error(VORSPANN_LOG_PREFIX, "neu_zustellen", fehlerText(fehler));
+    return;
+  }
+  if (aufgelegt) res.sendStatus(HTTP_OK);
   console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
 }
 
