@@ -263,3 +263,29 @@ for (const [status, bezeichnung] of ZUSTELLUNG_NACH_STATUSWECHSEL) {
     },
   );
 }
+
+test(
+  "Bleibt die Rueckfrage zwischen Lesen und Zustellmarke offen (open), setzt der ueber das Tor angehaltene Abruf askDeliveredAt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_open_tor", async ({ a, b, sql, hole, frageAuf, antworteAuf, gestellt }) => {
+      const frage = frageAuf(a);
+      const gestelltFrage = await gestellt();
+      await sql(TORWAECHTER_SQL);
+      await sql(TOR_ZU_SQL);
+      const abruf = hole(b);
+      await zeilenBis(
+        async () => (await sql(WARTENDE_ZUSTELLUNG_SQL)).rows[0].anzahl,
+        (anzahl) => anzahl > 0,
+      );
+      await sql(TOR_AUF_SQL);
+      assert.equal((await abruf).event, "consult");
+      const [danach] = (await sql(FRAGEN_SQL, ["call_kz_open_tor"])).rows[0].consults;
+      assert.equal(danach.status, "open");
+      assert.match(danach.askDeliveredAt, /^\d{4}-\d{2}-\d{2}T/);
+      assert.equal((await antworteAuf(a, gestelltFrage.id)).status, 200);
+      await frage;
+    });
+  },
+);
