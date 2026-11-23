@@ -9,6 +9,7 @@ import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfW
 import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, START_UNKLAR_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
+import { anschlussSatz } from "./vorspann-anschluss.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
@@ -491,7 +492,8 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
 
 function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
   const perCallEroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
-  const { ersteNachricht } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
+  const { ersteNachricht: uebergabe } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
+  const ersteNachricht = eroeffnungGesagt ? anschlussSatz({ language: locale.language, anlass: openingLine }) : uebergabe;
   return {
     agent: {
       language: locale.providerLanguage,

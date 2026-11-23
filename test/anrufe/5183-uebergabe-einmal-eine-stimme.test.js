@@ -202,7 +202,7 @@ for (const [fall, extra] of FAELLE) {
     const callId = await angenommenerAnruf(extra);
     const { text: gesprochen } = koerper(sprachAnfragen().at(-1));
     const antwort = await init(anrufIn(callId));
-    assert.equal(antwort.conversation_config_override.agent.first_message, "");
+    assert.match(antwort.conversation_config_override.agent.first_message, /Termin am Donnerstag vereinbaren\. \S/);
     assert.equal(antwort.dynamic_variables.eroeffnung, "");
     assert.equal(antwort.dynamic_variables.eroeffnung_gesagt, gesprochen);
     await beendeAnruf(callId);
