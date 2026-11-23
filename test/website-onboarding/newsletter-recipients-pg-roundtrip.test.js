@@ -56,6 +56,7 @@ test("pg: Entfernen eines Eintrags ueberlebt den Reload (Liste bleibt geleert, n
     unsubToken: "u",
   });
   store.removeNewsletterRecipient(tenantId, "weg@example.test");
+  await store.drainFlushes();
 
   const store2 = makePgStore(runner);
   await store2.init();
