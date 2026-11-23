@@ -6,6 +6,7 @@ import {
   istBeweisendeHerkunft,
 } from "../begriffe/abrechnung.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { fehlerText } from "../utils/fehler-text.ts";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { speicherBereiche } from "../store.js";
@@ -574,8 +575,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   async function bookTtsCharactersFor(call: KostenAnruf, measured: Messung, sammler: Sammler): Promise<void> {
     if (measured.ttsCharacters <= 0) return;
     const nowMs = now();
-    const warnung = await store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
-    if (warnung) sammler.ttsWarnungen.push(warnung);
+    try {
+      const warnung = await store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
+      if (warnung) sammler.ttsWarnungen.push(warnung);
+    } catch (err) {
+      console.warn(`[cost-truing] TTS-Zeichen nicht gebucht call=${call.id}: ${fehlerText(err)}`);
+    }
   }
 
   async function reportTtsQuotaFinding(warning: TtsWarnung, nowMs: number): Promise<void> {
