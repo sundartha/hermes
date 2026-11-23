@@ -8,7 +8,7 @@ import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.ts";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, elBeinVon, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
-import { NICHT_ABGESPIELT_URSACHE, instanzKennung, meldeVorspannRueckfall, mitInstanz } from "./vorspann-erzeugen.js";
+import { NICHT_ABGESPIELT_URSACHE, instanzKennung, meldeVorspannRueckfall, mitInstanz, setzeInstanzKennung } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, vorspannZeileTtlMs, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { beiVorspannFrist, setzeKlingelfrist, setzeVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
@@ -265,6 +265,7 @@ export function makeVorspannAblauf({
   finishCall,
   now,
 }) {
+  setzeInstanzKennung(config);
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now, vorspannZustand });
   const beineAufFuer = (call, zustand) => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });

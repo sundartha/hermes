@@ -1,4 +1,3 @@
-import { config } from "../config.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import {
   VORSPANN_RUECKFALL,
@@ -17,7 +16,14 @@ export const NICHT_ABGESPIELT_URSACHE = Object.freeze({
 const ZIFFER = /\d/g;
 const ANFANG_LAENGE = 40;
 
-export const instanzKennung = () => config.telemetry.telemetryInstanceId;
+const KEIN_WERT = "-";
+let kennung = KEIN_WERT;
+
+export const setzeInstanzKennung = (config) => {
+  kennung = config.telemetry?.telemetryInstanceId ?? KEIN_WERT;
+};
+
+export const instanzKennung = () => kennung;
 
 export const mitInstanz = (zeile) => `${zeile} instanz=${instanzKennung()}`;
 
