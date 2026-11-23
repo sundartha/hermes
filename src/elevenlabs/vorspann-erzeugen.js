@@ -1,3 +1,4 @@
+import { config } from "../config.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import {
   VORSPANN_RUECKFALL,
@@ -13,6 +14,13 @@ export const NICHT_ABGESPIELT_URSACHE = Object.freeze({
   KEIN_ENDE_EREIGNIS: "kein_ende_ereignis",
 });
 
+const ZIFFER = /\d/g;
+const ANFANG_LAENGE = 40;
+
+export const instanzKennung = () => config.telemetry.telemetryInstanceId;
+
+export const mitInstanz = (zeile) => `${zeile} instanz=${instanzKennung()}`;
+
 const STATUS_ZEICHEN_UNGUELTIG = /[^A-Za-z0-9_.:-]/g;
 const STATUS_LAENGE_MAX = 48;
 
@@ -20,7 +28,12 @@ export const statusUrsache = (status) =>
   `status_${String(status ?? "null").replace(STATUS_ZEICHEN_UNGUELTIG, "_").slice(0, STATUS_LAENGE_MAX)}`;
 
 export function meldeVorspannRueckfall({ callId, grund, ursache = "" }) {
-  console.log(`${LOG_TAG} rueckfall grund=${grund} call=${callId}${ursache ? ` ursache=${ursache}` : ""}`);
+  console.log(mitInstanz(`${LOG_TAG} rueckfall grund=${grund} call=${callId}${ursache ? ` ursache=${ursache}` : ""}`));
+}
+
+export function meldeVorspannEroeffnung({ callId, text }) {
+  const anfang = JSON.stringify(text.replace(ZIFFER, "#").slice(0, ANFANG_LAENGE));
+  console.log(mitInstanz(`${LOG_TAG} eroeffnung laenge=${text.length} anfang=${anfang} call=${callId}`));
 }
 
 export function meldeVorspannMessung({ callId, messung, bezug, ms }) {

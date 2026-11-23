@@ -4,7 +4,7 @@ import http from "node:http";
 import { EventEmitter } from "node:events";
 
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, makeTelnyxSigner, nowSeconds, seedCall, seedState, startServer, warteAufEreignis } from "../helpers.js";
-import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
+import { elInboundInitSpawnEnv, initBindungsKoerper } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TENANT_ID = seedCall().tenantId;
@@ -15,6 +15,9 @@ const NIE = 0;
 const NUMMER_PRAEFIX = "+4915112392";
 const AUDIO_BYTES = 200_000;
 const GRUND = "el_uebergabe_gescheitert";
+const INSTANZ = "inst-6125";
+const INIT_PFAD = "/webhooks/elevenlabs/init";
+const ANFANG_LAENGE = 40;
 
 const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -84,6 +87,7 @@ beforeEach(async () => {
     SKIP_TWILIO_SIGNATURE_CHECK: "false",
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL: "https://agent.test",
+    RENDER_INSTANCE_ID: INSTANZ,
   };
   umgebung.srv = await startServer({ env, seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }) });
 });
@@ -113,11 +117,11 @@ function sende(callId, typ, { bein = calleeVon(callId), zusatz = {} } = {}) {
   });
 }
 
-async function angenommenerAnruf() {
+async function angenommenerAnruf(ziel = "Termin am Donnerstag vereinbaren") {
   const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: "Termin am Donnerstag vereinbaren" }),
+    body: JSON.stringify({ to: `${NUMMER_PRAEFIX}${String((zaehler += EINMAL)).padStart(3, "0")}`, objective: ziel }),
   });
   const { callId } = await antwort.json();
   assert.equal((await sende(callId, "call.answered")).status, HTTP_OK);
@@ -140,7 +144,7 @@ test("5378-B1: EL-Bein legt vor der Bruecke auf -> Grund el_nicht_angenommen sta
   await warteAuf(() => srv.stdout.includes(aufgelegtLog(["timeout", "480", "callee"], callId)));
   assert.ok(srv.stdout.includes(rueckfallLog("el_nicht_angenommen", callId)));
   assert.ok(!srv.stdout.includes(rueckfallLog("el_fehler", callId)));
-  assert.equal(anrufIn(callId).failureReason, `${GRUND} hangup_cause=timeout sip_hangup_cause=480`);
+  assert.equal(anrufIn(callId).failureReason, `${GRUND}:hangup_cause=timeout sip_hangup_cause=480 hangup_source=callee instanz=${INSTANZ}`);
   assert.ok(anrufIn(callId).elFallbackAt);
   await sende(callId, "call.playback.ended");
   await verarbeitet();
@@ -172,4 +176,49 @@ test("5378-B4: Angerufener legt auf -> keine Zeile el_bein_aufgelegt", async () 
   await warteAuf(() => aktionen(attrappe, elVon(callId), "hangup").length === EINMAL);
   await warteAuf(() => anrufIn(callId).status === "completed");
   assert.ok(!srv.stdout.includes("el_bein_aufgelegt"));
+});
+
+test("6125-A1: fehlende Ursachenfelder stehen in der gespeicherten failureReason als -", async () => {
+  const callId = await angenommenerAnruf();
+  await elLegtAuf(callId, { sip_hangup_cause: "603" });
+  assert.equal(anrufIn(callId).failureReason, `${GRUND}:hangup_cause=- sip_hangup_cause=603 hangup_source=- instanz=${INSTANZ}`);
+});
+
+test("6125-A2: Logzeilen el-vorspann tragen die Instanzkennung", async () => {
+  const { srv } = umgebung;
+  const callId = await angenommenerAnruf();
+  await elLegtAuf(callId, { hangup_cause: "timeout", sip_hangup_cause: "480", hangup_source: "callee" });
+  await warteAuf(() => srv.stdout.includes(`${aufgelegtLog(["timeout", "480", "callee"], callId)} instanz=${INSTANZ}`));
+  assert.ok(srv.stdout.includes(`${rueckfallLog("el_nicht_angenommen", callId)} instanz=${INSTANZ}`));
+});
+
+async function initAntwort(callId) {
+  const { streamToken, from } = anrufIn(callId);
+  const antwort = await abrufMitFrist(`${umgebung.srv.localUrl}${INIT_PFAD}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-hermes-init-token": EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN },
+    body: JSON.stringify({ ...initBindungsKoerper({ bindung: streamToken, agentId: "agent_5378_nicht_angenommen", conversationId: `conv_${callId}` }), called_number: from }),
+  });
+  assert.equal(antwort.status, HTTP_OK);
+  return antwort.json();
+}
+
+test("6125-A3: Anrufstart loggt Laenge und ersten 40 Zeichen der uebergebenen Eroeffnung", async () => {
+  const { srv } = umgebung;
+  const callId = await angenommenerAnruf();
+  const antwort = await initAntwort(callId);
+  const text = antwort.dynamic_variables.eroeffnung_gesagt;
+  const zeile = srv.stdout.split("\n").find((eintrag) => eintrag.includes("[el-vorspann] eroeffnung ") && eintrag.includes(`call=${callId}`));
+  assert.equal(zeile, `[el-vorspann] eroeffnung laenge=${text.length} anfang=${JSON.stringify(text.slice(0, ANFANG_LAENGE))} call=${callId} instanz=${INSTANZ}`);
+  assert.ok(text.length > ANFANG_LAENGE);
+});
+
+test("6125-A4: Ziffern der Eroeffnung stehen maskiert im Log, die Laenge bleibt die echte", async () => {
+  const { srv } = umgebung;
+  const callId = await angenommenerAnruf("Tisch 4711 reservieren");
+  const antwort = await initAntwort(callId);
+  const text = antwort.dynamic_variables.eroeffnung_gesagt;
+  const zeile = srv.stdout.split("\n").find((eintrag) => eintrag.includes("[el-vorspann] eroeffnung ") && eintrag.includes(`call=${callId}`));
+  assert.ok(text.slice(0, ANFANG_LAENGE).includes("4711"));
+  assert.equal(zeile, `[el-vorspann] eroeffnung laenge=${text.length} anfang=${JSON.stringify(text.slice(0, ANFANG_LAENGE).replace(/\d/g, "#"))} call=${callId} instanz=${INSTANZ}`);
 });
