@@ -123,9 +123,10 @@
         "src/mcp-rate-limit.js",
         "src/mcp-no-tenant.js",
         "src/mcp-security-schemes.js",
-        "src/routes/mcp.js"
+        "src/routes/mcp.js",
+        "src/routes/intern-probe-mcp.js"
       ],
-      "eingaenge": [],
+      "eingaenge": ["src/routes/intern-probe-mcp.js"],
       "nutzt": ["oberflaeche"]
     },
     {
@@ -155,6 +156,7 @@
       ],
       "eingaenge": [
         "src/routes/_validation.ts",
+        "src/routes/bearer-schluessel.js",
         "src/routes/intern-anrufe-laufend.js",
         "src/routes/intern-anrufpause.js",
         "src/routes/intern-status.js"

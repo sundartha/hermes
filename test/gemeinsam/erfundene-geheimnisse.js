@@ -118,3 +118,7 @@ export const OIDC_KAUF_ECHT_GEHEIMNIS = "kauf-echt-oidc-geheimnis-erfunden";
 export const EL_LISTE_SCHLUESSEL = "xi_liste_key";
 export const VORSPANN_RUECKFALL_SCHLUESSEL = "vorspann-rueckfall-erfunden";
 export const VORSPANN_RUECKFALL_TELNYX_SCHLUESSEL = "KEYtest-vorspann-rueckfall-erfunden";
+
+export const PROBE_ZUGANG_SCHLUESSEL = "probe-zugang-erfunden-".padEnd(48, "p");
+export const PROBE_ZUGANG_SCHLUESSEL_ABWEICHEND = "probe-zugang-erfunden-".padEnd(47, "p") + "q";
+export const PROBE_ZUGANG_SCHLUESSEL_ZU_KURZ = "probe-zugang-kurz".padEnd(31, "k");

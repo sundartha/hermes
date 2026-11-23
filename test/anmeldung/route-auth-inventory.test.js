@@ -202,6 +202,7 @@ const ROUTE_FINGERPRINT = [
   "POST /api/self-service/settings",
   "POST /auth/logout",
   "POST /intern/anrufpause",
+  "POST /intern/probe/mcp",
   "POST /mcp",
   "POST /voice/el-bein",
   "POST /voice/el-rueckfall",
