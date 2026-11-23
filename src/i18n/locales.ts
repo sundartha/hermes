@@ -394,12 +394,6 @@ export const LOCALES = Object.freeze({
 
 export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 
-export function supportedLanguageOf(wert: unknown): string | null {
-  if (typeof wert !== "string") return null;
-  const code = wert.trim().toLowerCase();
-  return SUPPORTED_LANGUAGES.find((unterstuetzt) => unterstuetzt === code) ?? null;
-}
-
 const DISCLOSURE_NAME_SENTINEL = "\u0000";
 export function disclosurePrefixFor(language: string): string {
   return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL, 1).join("");
@@ -423,5 +417,6 @@ export function languageForCountry(country: string | number | boolean | null | u
 const LOCALE_BY_LANGUAGE = new Map<string | undefined, (typeof LOCALES)[Sprache]>(Object.entries(LOCALES));
 
 export function localeFor(language: string | undefined): (typeof LOCALES)[Sprache] {
-  return LOCALE_BY_LANGUAGE.get(language) ?? LOCALES[DEFAULT_LANGUAGE];
+  if (language === undefined) return LOCALES[DEFAULT_LANGUAGE];
+  return LOCALE_BY_LANGUAGE.get(language) ?? LOCALES.en;
 }

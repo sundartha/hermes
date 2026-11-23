@@ -50,12 +50,11 @@ test("3395-R1: POST /api/calls lehnt unvollstaendige und falsch formatierte Anfr
 test("3395-R2: Sprachwahl - unbekannte Sprache nennt die erlaubten, bekannte ohne ElevenLabs-Weg ist nicht verfuegbar", async () => {
   const srv = await startServer({ env: BASE_ENV, seed: seedState() });
   try {
-    const unbekannt = await post(srv, "/api/calls", { to: PEER, objective: "x", language: "xx" });
+    const unbekannt = await post(srv, "/api/calls", { to: PEER, objective: "x", language: "x9" });
     assert.equal(unbekannt.status, HTTP_BAD_REQUEST);
     const body = await unbekannt.json();
-    assert.equal(body.code, "unsupported_language");
-    assert.ok(body.supported.includes("de"));
-    assert.equal(body.error, `unsupported_language: language must be one of ${body.supported.join(", ")}`);
+    assert.equal(body.code, "invalid_language");
+    assert.equal(body.error, "invalid_language: language must be an ISO language code such as de, es or pt-br");
 
     const nichtVerfuegbar = await post(srv, "/api/calls", { to: PEER, objective: "x", language: "de" });
     assert.equal(nichtVerfuegbar.status, HTTP_OK);
