@@ -53,6 +53,7 @@ const SCHLUESSEL_DER_ANMELDE_KONFIGURATION = Object.freeze([
   "webhookZustellungSecret",
   "deployToken",
   "statusToken",
+  "probeToken",
 ]);
 
 test("Paket 15: die Anmelde-Konfiguration bietet genau diese Schlüssel an, darunter deployToken", async () => {
