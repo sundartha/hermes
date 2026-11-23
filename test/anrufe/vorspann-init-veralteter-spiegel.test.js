@@ -78,7 +78,9 @@ async function init(srv, sql, { callId, konversation = `conv_${callId}` }) {
   return { status: antwort.status, json: await antwort.json() };
 }
 
-const meldung = (antwort, instanz) => `${JSON.stringify(antwort)} ${instanz.stdout.split("\n").filter((zeile) => zeile.includes(ABGELEHNT)).join(" | ")}`;
+const abgelehnteZeilen = (text) => text.split("\n").filter((zeile) => zeile.includes(ABGELEHNT));
+
+const meldung = (antwort, instanz) => `${JSON.stringify(antwort)} ${abgelehnteZeilen(instanz.stdout).join(" | ")}`;
 
 async function mitVeraltetemSpiegel(t, lauf) {
   const signer = makeTelnyxSigner();

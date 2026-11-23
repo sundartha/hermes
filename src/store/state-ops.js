@@ -488,7 +488,8 @@ const BRUECKENFELDER = Object.freeze(["answeredAt", "elevenlabsConversationId", 
 
 function uebernehmeBrueckenstand(call, stand) {
   if (!call || !stand) return;
-  for (const feld of BRUECKENFELDER) call[feld] ??= stand[feld];
+  const fehlend = BRUECKENFELDER.filter((feld) => !call[feld]);
+  Object.assign(call, Object.fromEntries(fehlend.map((feld) => [feld, stand[feld]])));
 }
 
 export function bindInboundElConversation(state, callId, { conversationId, nowIso, stand }) {
