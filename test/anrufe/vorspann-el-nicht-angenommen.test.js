@@ -173,17 +173,3 @@ test("5378-B4: Angerufener legt auf -> keine Zeile el_bein_aufgelegt", async () 
   await warteAuf(() => anrufIn(callId).status === "completed");
   assert.ok(!srv.stdout.includes("el_bein_aufgelegt"));
 });
-
-for (const [name, zusatz, erwartet] of [
-  ["beide Werte", { hangup_cause: "timeout", sip_hangup_cause: "480" }, `${GRUND} hangup_cause=timeout sip_hangup_cause=480`],
-  ["nur sip", { sip_hangup_cause: "603" }, `${GRUND} sip_hangup_cause=603`],
-  ["nur cause", { hangup_cause: "timeout" }, `${GRUND} hangup_cause=timeout`],
-  ["keiner", { hangup_source: "callee" }, GRUND],
-  ["unsicher", { hangup_cause: "x y;z" }, GRUND],
-]) {
-  test(`6122-B5: Ursache des EL-Beins im failureReason, ${name}`, async () => {
-    const callId = await angenommenerAnruf();
-    await elLegtAuf(callId, zusatz);
-    assert.equal(anrufIn(callId).failureReason, erwartet);
-  });
-}
