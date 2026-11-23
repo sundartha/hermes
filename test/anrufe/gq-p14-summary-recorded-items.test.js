@@ -93,7 +93,8 @@ test("GQ-P14-2: nichts notiert -> der Zusammenfassungs-Prompt ist byte-identisch
   const convo = TRANSCRIPT.map(
     (t) => `${t.role === "agent" ? si.agentRole : si.callerRole}: ${t.text}`,
   ).join("\n");
-  const erwartet = `${si.directionLabel} ${call.direction}\n${si.goalLabel} ${GOAL}\n\n${si.transcriptLabel}\n${convo}`;
+  const anrufdatum = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(call.startedAt));
+  const erwartet = `${si.directionLabel} ${call.direction}\n${si.goalLabel} ${GOAL}\n${si.callDateLabel} ${anrufdatum} (Europe/Berlin)\n\n${si.transcriptLabel}\n${convo}`;
 
   await claude.summarizeCall(call);
 
@@ -180,4 +181,47 @@ test("GQ-P14-7: die Aktionspunkte der Zusammenfassung werden als todo am Anruf a
       ["Angebot per Mail senden", "todo", false],
     ],
   );
+});
+
+async function eingabeFuer(call, startedAt, createdAt) {
+  await claude.summarizeCall({ ...call, id: "call_6028_ohne_notizen", startedAt, createdAt });
+  return userContent();
+}
+
+test("6028-1: Datum und Zeitzone des Anrufs stehen als eigene Zeile zwischen Auftrag und Transkript", async () => {
+  const call = store.getCall("call_gqp14_de");
+  const inhalt = await eingabeFuer(call, "2026-03-10T08:30:00Z", undefined);
+  assert.equal(
+    inhalt,
+    `Richtung: outbound\nAuftrag: ${GOAL}\nAnrufdatum: 2026-03-10 (Europe/Berlin)\n\nTRANSKRIPT:\nAGENT: ${TRANSCRIPT[0].text}\nANRUFER: ${TRANSCRIPT[1].text}`,
+  );
+});
+
+test("6028-1b: die Beschriftung der Zeile folgt der Sprache des Anrufs", async () => {
+  const en = await eingabeFuer(store.getCall("call_gqp14_en"), "2026-03-10T08:30:00Z", undefined);
+  assert.ok(en.includes("\nCall date: 2026-03-10 (Europe/Berlin)\n"));
+  const fr = await eingabeFuer(store.getCall("call_gqp14_fr"), "2026-03-10T08:30:00Z", undefined);
+  assert.ok(fr.includes("\nDate de l'appel : 2026-03-10 (Europe/Berlin)\n"));
+});
+
+test("6028-2: ohne startedAt gilt createdAt, ohne beides entfaellt die Zeile", async () => {
+  const call = store.getCall("call_gqp14_de");
+  const mitErstellung = await eingabeFuer(call, undefined, "2026-03-10T08:30:00Z");
+  assert.ok(mitErstellung.includes("\nAnrufdatum: 2026-03-10 (Europe/Berlin)\n"));
+  const ohne = await eingabeFuer(call, undefined, undefined);
+  assert.ok(!ohne.includes("Anrufdatum"));
+  assert.equal(ohne, `Richtung: outbound\nAuftrag: ${GOAL}\n\nTRANSKRIPT:\nAGENT: ${TRANSCRIPT[0].text}\nANRUFER: ${TRANSCRIPT[1].text}`);
+});
+
+test("6028-3: das Datum wird in der Zeitzone des Mandanten berechnet", async () => {
+  const call = store.getCall("call_gqp14_de");
+  const berlin = await eingabeFuer(call, "2026-03-10T23:30:00Z", undefined);
+  assert.ok(berlin.includes("Anrufdatum: 2026-03-11 (Europe/Berlin)"));
+  store.setTenantGeo(BOOTSTRAP_TENANT_ID, { timezone: "America/New_York" });
+  try {
+    const newYork = await eingabeFuer(call, "2026-03-10T02:30:00Z", undefined);
+    assert.ok(newYork.includes("Anrufdatum: 2026-03-09 (America/New_York)"));
+  } finally {
+    store.setTenantGeo(BOOTSTRAP_TENANT_ID, { timezone: null });
+  }
 });
