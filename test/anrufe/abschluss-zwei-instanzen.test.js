@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { elevenlabsOutbound } from "../../src/elevenlabs/registry.ts";
-import { billThunk, terminateAndBillCall, warteAufOffeneAbrechnungen } from "../../src/telephony/call-termination.ts";
+import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { waitUntil, withFetch } from "../helpers.js";
-import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 
 const MANDANT = "t_abschluss_kunde";
 const ZIEL = "+4915112346139";
@@ -25,19 +25,34 @@ const runnerFuer = (db) => ({
   withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
 });
 
+const terminateAndBillCall = async ({ persistEnd, bill }) => {
+  await persistEnd();
+  await bill();
+};
+const billThunk = (finishCall, store, callId) => () => finishCall(store.getCall(callId));
+
 async function neueInstanz(db) {
-  const pgStore = makePgStore(runnerFuer(db));
+  const pgStore = makePgStoreMitSperre(runnerFuer(db));
   await pgStore.init();
   const freigegeben = [];
-  const abgeschlossen = [];
+  const gesendet = [];
+  const abgerechnet = [];
   const store = {
     ...pgStore,
     setzeAbfrageFrist: async () => {},
     leitungsplaetze: { freigeben: (id) => freigegeben.push(id) },
+    releaseOutboundReserve: async () => {},
+    recordUsageEvent: () => {},
   };
-  const finishCall = (call) => {
-    if (call) abgeschlossen.push(call.id);
-  };
+  const { finishCall } = makeCallFinish({
+    store,
+    config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: async (call) => abgerechnet.push(call.id) },
+    messaging: () => ({ sendSms: async ({ body }) => gesendet.push(body) }),
+    summarizeCall: async () => ({ summary: "Termin vereinbart.", actionItems: [] }),
+    planSummarySms: () => ({ send: true, to: ZIEL, smsFrom: { e164: ABSENDER } }),
+    audit: () => {},
+  });
   const el = elevenlabsOutbound().makeElevenLabsOutbound({
     store,
     config: withConfigNamespaces({ elevenLabsOutbound: { apiKey: "test-key", apiBase: "https://el.test", resultPollMs: 5 } }),
@@ -45,7 +60,7 @@ async function neueInstanz(db) {
     billThunk,
     finishCall,
   });
-  return { store, el, freigegeben, abgeschlossen };
+  return { store, el, freigegeben, gesendet, abgerechnet };
 }
 
 async function aufbau() {
@@ -71,7 +86,6 @@ async function schliesseAb(instanz, callId) {
       await waitUntil(() => instanz.freigegeben.includes(callId));
     },
   );
-  await warteAufOffeneAbrechnungen();
 }
 
 const zeile = async (db, callId) => {
@@ -83,13 +97,15 @@ test("Abschluss in der Datenbank: zwei Instanzen schliessen denselben Anruf ab, 
   const { a, b, callId } = await aufbau();
   await schliesseAb(a, callId);
   await schliesseAb(b, callId);
-  assert.deepEqual([...a.abgeschlossen, ...b.abgeschlossen], [callId]);
+  assert.equal(a.gesendet.length + b.gesendet.length, 1);
+  assert.deepEqual([...a.abgerechnet, ...b.abgerechnet], [callId]);
 });
 
 test("Abschluss in der Datenbank: die Instanz, die das Ende gewinnt, schliesst wie bisher ab", async () => {
   const { db, a, callId } = await aufbau();
   await schliesseAb(a, callId);
-  assert.deepEqual(a.abgeschlossen, [callId]);
+  assert.equal(a.gesendet.length, 1);
+  assert.deepEqual(a.abgerechnet, [callId]);
   const gespeichert = await zeile(db, callId);
   assert.equal(gespeichert.status, "completed");
   assert.equal(gespeichert.ended_at, a.store.getCall(callId).endedAt);
@@ -99,7 +115,8 @@ test("Abschluss in der Datenbank: die verlierende Instanz ruft keinen Abschluss 
   const { db, a, b, callId } = await aufbau();
   await a.store.setCallEndedAt(callId, "failed", "2031-01-02T03:04:05.000Z");
   await schliesseAb(b, callId);
-  assert.deepEqual(b.abgeschlossen, []);
+  assert.equal(b.gesendet.length, 0);
+  assert.deepEqual(b.abgerechnet, []);
   const gespeichert = await zeile(db, callId);
   assert.equal(gespeichert.status, "failed");
   assert.equal(gespeichert.ended_at, "2031-01-02T03:04:05.000Z");
@@ -120,9 +137,8 @@ test("Abschluss in der Datenbank: ein Speichern der eigenen Instanz vor dem Ende
   await a.store.setCallEndedAt(callId, "completed", "2031-02-03T04:05:06.000Z");
   await speichern;
   await a.store.drainFlushes();
-  assert.equal(a.abgeschlossen.length, 0);
   const gespeichert = await zeile(db, callId);
   assert.equal(gespeichert.status, "completed");
   assert.equal(gespeichert.ended_at, "2031-02-03T04:05:06.000Z");
-  assert.equal(billThunk((call) => (call ? "abgerechnet" : "nichts"), a.store, callId)(), "abgerechnet");
+  assert.equal(a.store.getCall(callId).status, "completed");
 });

@@ -11,7 +11,7 @@ import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
-import { anrufZustandVon } from "../begriffe/anruf-zustand.ts";
+import { anrufZustandVon, endeLagAnderswo } from "../begriffe/anruf-zustand.ts";
 
 const SMS_BODY_MAX_CHARS = 1500;
 
@@ -332,7 +332,7 @@ export function makeCallFinish({
   }
 
   async function finishCall(call) {
-    if (!call || finishedCalls.has(call)) return;
+    if (!call || finishedCalls.has(call) || endeLagAnderswo(call)) return;
     finishedCalls.add(call);
     if (lehneUnbekanntenZustandAb(call)) return;
     messeEnde(call);
