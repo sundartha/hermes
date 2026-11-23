@@ -222,3 +222,25 @@ test("Anzeige: Zeile fehlt -> Spiegelstand ohne Fehlerzeile", async () => {
   assert.equal(antwort.body.status, "active");
   assert.equal(zeilen, 0);
 });
+
+test("Anzeige: Kopie und Zeile active mit abweichenden Werten -> die Route zeigt die Werte der Kopie", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await anrufAnlegen(db);
+  const a = await neueInstanz(db);
+  const call = a.createCall({ direction: "outbound", from: "+4930555000322", to: ZIEL, goal: "Test", tenantId: KUNDE });
+  await a.persistCall(call.id);
+  const eigen = await a.leseCall(call.id);
+  eigen.summary = "Eigene Zusammenfassung";
+  eigen.transcript.push({ role: "agent", text: "Eigener Satz", at: JETZT });
+  await db.query(`UPDATE call SET summary = 'Fremde Zusammenfassung', answered_at = '2026-11-22T18:59:00.000Z' WHERE id = $1`, [call.id]);
+  const log = mock.method(console, "error", () => {});
+  const { body } = await abfrage(a, call.id);
+  const zeilen = log.mock.calls.length;
+  log.mock.restore();
+  assert.equal(body.status, "active");
+  assert.equal(body.summary, "Eigene Zusammenfassung");
+  assert.equal(body.transcript.length, 1);
+  assert.equal(body.transcript[0].text, "Eigener Satz");
+  assert.notEqual(body.answeredAt, "2026-11-22T18:59:00.000Z");
+  assert.equal(zeilen, 0);
+});
