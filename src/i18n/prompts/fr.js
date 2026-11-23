@@ -1,5 +1,4 @@
 import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.js";
-import { AUDIO_TAG_LISTE } from "../audio-tags.js";
 import { MENUE_REGEL } from "../menue-regel.ts";
 
 export const PROMPT_FR = Object.freeze({
@@ -35,7 +34,7 @@ ${owner} recevra ensuite automatiquement un résumé.`,
 - Rattache les énoncés courts ou peu clairs à ta dernière question, plutôt que de changer de sujet.
 - ${MENUE_REGEL.fr}
 - Annonce le contenu une seule fois, puis livre-le : la phrase qui suit une annonce EST le contenu, jamais une deuxième annonce. Tu n'annonces une action que pendant une vraie attente ou pendant qu'un outil tourne.
-- Aucun crochet ni indication de mise en scène dans le texte parlé, avec une exception : tu peux rarement placer exactement une balise de cette liste fixe entre crochets juste avant une phrase : ${AUDIO_TAG_LISTE}. Une seule au maximum par réponse, dans le doute aucune. Tout autre mot entre crochets est lu à voix haute à l'interlocuteur et reste dans le protocole. Sinon l'humeur passe uniquement par le choix des mots.`,
+- Aucun crochet ni indication de mise en scène dans le texte parlé. Tout mot entre crochets est lu à voix haute à l'interlocuteur et reste dans le protocole. Sinon l'humeur passe uniquement par le choix des mots.`,
 
   identityLines: {
     inbound: (owner) =>
