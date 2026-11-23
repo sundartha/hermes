@@ -92,6 +92,11 @@ async function schliesseAb(instanz, callId) {
   );
 }
 
+const grundDerZeile = async (db, callId) => {
+  const { rows } = await db.query(`SELECT failure_reason FROM call WHERE id = $1`, [callId]);
+  return rows[0].failure_reason;
+};
+
 const zeile = async (db, callId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [MANDANT]);
   return (await db.query(`SELECT status, ended_at FROM call WHERE id = $1`, [callId])).rows[0];
@@ -148,4 +153,44 @@ test("Abschluss in der Datenbank: ein Speichern der eigenen Instanz vor dem Ende
   assert.equal(gespeichert.status, "completed");
   assert.equal(gespeichert.ended_at, "2031-02-03T04:05:06.000Z");
   assert.equal(a.store.getCall(callId).status, "completed");
+});
+
+test("Abschluss in der Datenbank: ein Speichern waehrend des ausstehenden Endes zeigt Grund und Status nie gemischt", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await neueInstanz(db);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [MANDANT]);
+  await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'active', $1)`, [MANDANT]);
+  const beobachtet = [];
+  const beobachter = {
+    query: async (text, params) => {
+      const ergebnis = await db.query(text, params);
+      if (/INSERT INTO call[\s(]/.test(text))
+        beobachtet.push((await db.query(`SELECT status, failure_reason FROM call WHERE id = $1`, [params[0]])).rows[0]);
+      return ergebnis;
+    },
+    exec: (sql) => db.exec(sql),
+  };
+  const a = await neueInstanz(beobachter);
+  const call = a.store.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: MANDANT });
+  await a.store.persistCall(call.id);
+  call.failureReason = "el_uebergabe_gescheitert";
+  const speichern = a.store.save();
+  await a.store.setCallEndedAt(call.id, "failed", "2031-03-04T05:06:07.000Z");
+  await speichern;
+  await a.store.drainFlushes();
+  assert.ok(beobachtet.length > 0);
+  assert.deepEqual(
+    beobachtet.filter((stand) => stand.failure_reason !== null && stand.status === "active"),
+    [],
+  );
+  assert.deepEqual(await zeile(db, call.id), { status: "failed", ended_at: "2031-03-04T05:06:07.000Z" });
+  assert.equal(await grundDerZeile(db, call.id), "el_uebergabe_gescheitert");
+});
+
+test("Abschluss in der Datenbank: ein Speichern ohne ausstehendes Ende schreibt den Grund des Spiegels", async () => {
+  const { db, a, callId } = await aufbau();
+  a.store.getCall(callId).failureReason = "el_uebergabe_gescheitert";
+  await a.store.save();
+  await a.store.drainFlushes();
+  assert.equal(await grundDerZeile(db, callId), "el_uebergabe_gescheitert");
 });
