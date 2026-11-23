@@ -219,7 +219,7 @@ test("V6 Anrufpause: ein laufender Anruf bleibt unberuehrt und sein Auflegen wir
         (antwort) => antwort.json(),
       );
     assert.deepEqual(await laufend(), { laufend: 1 });
-    const umschaltAnfragen = () => attrappe.anfragen.filter((anfrage) => !anfrage.pfad.startsWith(RUFNUMMER_ABGLEICH_PFAD)).length;
+    const umschaltAnfragen = () => attrappe.anfragen.filter((anfrage) => !(anfrage.methode === "GET" && anfrage.pfad.startsWith(RUFNUMMER_ABGLEICH_PFAD))).length;
     const anfragenVorher = umschaltAnfragen();
     await pauseSetzen(srv, true);
     assert.deepEqual(await laufend(), { laufend: 1 });
