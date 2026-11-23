@@ -26,7 +26,7 @@ const ROLLE_SQL = `SELECT DISTINCT usename FROM pg_stat_activity
   WHERE datname = current_database() AND usename <> current_user`;
 const SPALTEN_SQL = "SELECT column_name FROM information_schema.columns WHERE table_name = 'call'";
 const ALTANRUF_SQL = `INSERT INTO call (id, tenant_id, stream_token, direction, status, from_e164, to_e164, goal, started_at)
-  VALUES ('call_asl_alt', $1, 'tok_asl_alt', 'outbound', 'completed', (SELECT e164 FROM number WHERE tenant_id = $1), $2, 'Altauftrag', now() - interval '10 minutes')`;
+  VALUES ('call_asl_alt', $1, 'tok_asl_alt', 'outbound', 'completed', (SELECT e164 FROM number WHERE tenant_id = $1), $2, 'Altauftrag', to_char((now() - interval '10 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`;
 
 const antwort = async (aufruf) => {
   const res = await aufruf;
