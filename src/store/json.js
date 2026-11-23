@@ -782,6 +782,10 @@ export function markCostCrossCheckAttempted(monthKey) {
   if (loaded.costCrossCheck.lastCheckedMonthKey !== before) save();
 }
 
+export function costCrossCheckZustand() {
+  return { costCrossCheck: load().costCrossCheck };
+}
+
 export function setTenantBudget(tenantId, amounts) {
   const row = ops.setTenantBudget(load(), tenantId, amounts);
   save();

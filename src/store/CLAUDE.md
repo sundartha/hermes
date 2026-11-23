@@ -55,3 +55,4 @@ keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und `
 - Eingang: Andere Bausteine importieren aus `src/store/` nur cost-evidence.js, portal.js, state-ops.js, views.js.
 
 Die Spalte `call.status` hat die Pruefregel `call_status_zustand_check` (Migration `0026_anruf_zustand_pruefregel.sql`, `NOT VALID`: neue und geaenderte Zeilen sind geprueft, Bestandszeilen noch nicht); die erlaubten Werte stehen in `ANRUF_ZUSTAENDE` (`begriffe/anruf-zustand.ts`).
+Der gepruefte Monat der monatlichen Kostengegenprobe (`cost_cross_check`) wird im pg-Store direkt per SQL gelesen und geschrieben (`kostenvergleich-sql.js`, `markCostCrossCheckAttempted` und `costCrossCheckZustand`): ein Upsert, der nie einen frueheren Monat ueber einen spaeteren schreibt, kein Anteil im Gesamt-Flush und kein Spiegel; eine andere Instanz liest den Monat ohne Neustart, ein Fehler wirft und wird als `[pg] kostenvergleich fehlgeschlagen:` gemeldet.

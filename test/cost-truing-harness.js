@@ -31,6 +31,9 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     markCostCrossCheckAttempted(monthKey) {
       markCrossCheckAttempted(state, monthKey);
     },
+    costCrossCheckZustand() {
+      return { costCrossCheck: state.costCrossCheck };
+    },
     recordCallCostEvidence(eingabe) {
       return recordCallCostEvidence(state, eingabe);
     },

@@ -173,7 +173,7 @@ function kostenabgleichBereich(speicher) {
   return {
     abgleichZustand: async () => kostenabgleich.abgleichZustand(await zustandMitAnrufen()),
     sweepKandidaten: (istKandidat) => kandidatenImSpiegel(speicher, istKandidat),
-    querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(speicher.load(), nowIso),
+    querpruefungMonat: async (nowIso) => kostenabgleich.querpruefungMonat(await speicher.costCrossCheckZustand(), nowIso),
     querpruefungSummen: async (eingabe) => kostenabgleich.querpruefungSummen(await zustandMitAnrufen(), eingabe),
   };
 }
