@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mitFesterUhr, FESTE_UHR_MS } from "../helpers.js";
-import { upcomingCalendar } from "../../src/store/views.ts";
+import express from "express";
+import { makeReadRoutes } from "../../src/routes/api-read.ts";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { makePgTestStore, makePgStore, legeMandantAn } from "../pg-helpers.js";
 
 const EIGENTUEMER = "owner";
@@ -128,13 +130,54 @@ test("Ein Fehler der Kalendertabelle wirft und wird gemeldet", async () => {
   );
 });
 
-test(
-  "Ein Termin, der genau jetzt endet, steht noch im anstehenden Kalender",
-  mitFesterUhr(async () => {
-    const jetzt = new Date(FESTE_UHR_MS).toISOString();
-    const davor = new Date(FESTE_UHR_MS - 1).toISOString();
-    const danach = new Date(FESTE_UHR_MS + 1).toISOString();
-    const store = { getCalendar: async () => [{ end: davor }, { end: jetzt }, { end: danach }] };
-    assert.deepEqual(await upcomingCalendar(store, EIGENTUEMER), [{ end: jetzt }, { end: danach }]);
-  }),
-);
+const JETZT = "2030-03-01T12:00:00.000Z";
+
+async function kalenderAmZustand(t, termine) {
+  const store = {
+    load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [], usageEvents: [] }),
+    tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
+    exportTenantData: () => ({ calls: [], actionItems: [], notifications: [] }),
+    exportTenantDataGelesen: () => ({ calls: [], actionItems: [], notifications: [] }),
+    zaehleAnrufeSeit: () => 0,
+    usageOf: () => ({ inputTokens: 0, outputTokens: 0, costCents: 0, calls: 0 }),
+    tenantSubscription: () => ({
+      planSlug: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      periodCreditRevoked: false,
+    }),
+    getCalendar: async () => termine,
+  };
+  const app = express();
+  app.use(
+    makeReadRoutes({
+      store,
+      config: withConfigNamespaces({ claudeModel: "claude-haiku-4-5", voiceEngine: "budget" }),
+      audit: () => {},
+      tenant: {
+        requestTenant: () => EIGENTUEMER,
+        requireTenant: () => EIGENTUEMER,
+        tenantOwnsCall: () => true,
+      },
+    }),
+  );
+  const server = await new Promise((fertig) => {
+    const s = app.listen(0, "127.0.0.1", () => fertig(s));
+  });
+  try {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(JETZT).getTime() });
+    const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}/api/state`);
+    t.mock.timers.reset();
+    return (await antwort.json()).calendar;
+  } finally {
+    t.mock.timers.reset();
+    await new Promise((fertig) => server.close(fertig));
+  }
+}
+
+test("Ein Termin, der genau jetzt endet, steht noch im anstehenden Kalender", async (t) => {
+  const davor = { id: "davor", end: "2030-03-01T11:59:59.999Z" };
+  const genau = { id: "genau", end: JETZT };
+  const danach = { id: "danach", end: "2030-03-01T12:00:00.001Z" };
+  assert.deepEqual(await kalenderAmZustand(t, [davor, genau, danach]), [genau, danach]);
+});
