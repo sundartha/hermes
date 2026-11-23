@@ -1,9 +1,7 @@
 import { KOSTENPROFIL, kostenprofilFuerAnruf } from "../billing/kostenarten.ts";
-import { MS_PER_SECOND } from "../utils/timer.ts";
+import { NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.js";
 
-const NICHT_ERREICHT_FRIST_S = 75;
-
-export const NICHT_ERREICHT_FRIST_MS = NICHT_ERREICHT_FRIST_S * MS_PER_SECOND;
+export { NICHT_ERREICHT_FRIST_MS };
 export const NICHT_ANGENOMMEN_GRUND = "no-answer";
 
 const OHNE_ABFRAGE_FRIST: ReadonlySet<unknown> = new Set([

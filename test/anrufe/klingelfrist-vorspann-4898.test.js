@@ -7,19 +7,8 @@ import { calleeVon, hebeAb, legeAnruf, makeTelnyxSigner, neueAnrufNummer, starte
 
 const TENANT_ID = seedCall().tenantId;
 const WARTE_FRIST_MS = 5_000;
-const KLINGEL_FRIST_MS = 75_000;
-const VERKUERZT_MS = 300;
 const HTTP_OK = 200;
-const ZEITGEBER = [
-  "const echt = globalThis.setTimeout;",
-  "globalThis.setTimeout = (fn, ms, ...rest) => {",
-  `  if (ms !== ${KLINGEL_FRIST_MS}) return echt(fn, ms, ...rest);`,
-  "  console.log('klingelfrist-gestellt ms=' + ms);",
-  "  return echt(async () => {",
-  "    try { await fn(...rest); } finally { console.log('klingelfrist-fertig'); }",
-  `  }, ${VERKUERZT_MS});`,
-  "};",
-].join("\n");
+const SCHRANKEN_ANRUF = 40;
 
 const umgebung = {};
 
@@ -28,7 +17,8 @@ beforeEach(async () => {
   umgebung.signer = makeTelnyxSigner();
   const env = {
     ...vorspannUmgebung({ attrappe: umgebung.attrappe, signer: umgebung.signer, publicUrl: "https://agent.test", kennung: "4898-klingel" }),
-    NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(ZEITGEBER)}`,
+    VORSPANN_KLINGEL_FRIST_MS: "300",
+    FRISTEN_TAKT_MS: "200",
   };
   const seed = seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] });
   umgebung.srv = await startServer({ env, seed });
@@ -39,10 +29,12 @@ afterEach(async () => {
   await umgebung.attrappe.close();
 });
 
-const ausgabe = () => umgebung.srv.stdout;
 const anrufe = () => umgebung.srv.readStore().calls;
 const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
-const fristFertig = () => waitUntil(() => ausgabe().includes("klingelfrist-fertig"), { timeoutMs: WARTE_FRIST_MS });
+async function fristFertig() {
+  const schranke = await legeAnruf(umgebung.srv, neueAnrufNummer(SCHRANKEN_ANRUF));
+  await waitUntil(() => anrufIn(schranke).status !== "active", { timeoutMs: WARTE_FRIST_MS });
+}
 const calleeAufgelegt = (callId) => umgebung.attrappe.pfade.some((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup"));
 
 test("4898 K1: wird das Vorspann-Bein nie abgehoben und kommt kein Webhook, ist der Anruf nach der Frist failed/no-answer und das Bein aufgelegt", async () => {
@@ -62,11 +54,17 @@ test("4898 K1: wird das Vorspann-Bein nie abgehoben und kommt kein Webhook, ist 
   assert.equal(sicht.failureReason, "no-answer");
 });
 
-test("4898 K3: die gestellte Frist ist genau 75000 ms und wird einmal gestellt", async () => {
-  await legeAnruf(umgebung.srv, neueAnrufNummer(1));
+const istCalleeAuflegen = (callId) => (pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup");
+const calleeAuflegeAnfragen = (callId) => {
+  const { pfade } = umgebung.attrappe;
+  return pfade.filter(istCalleeAuflegen(callId)).length;
+};
+
+test("4898 K3: die Klingelfrist feuert genau einmal", async () => {
+  const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(1));
   await fristFertig();
 
-  assert.equal(ausgabe().match(/klingelfrist-gestellt ms=75000/g).length, 1);
+  assert.equal(calleeAuflegeAnfragen(callId), 1);
 });
 
 test("4898 K4: nach dem Abheben aendert der Ablauf der Frist nichts, der Anruf bleibt aktiv und das Bein wird nicht aufgelegt", async () => {
@@ -99,12 +97,6 @@ test("4898: war der Anruf schon per Webhook als nicht angenommen beendet, legt d
   assert.equal(anrufIn(callId).failureReason, "no-answer");
   assert.equal(calleeAufgelegt(callId), false);
 });
-
-const istCalleeAuflegen = (callId) => (pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup");
-const calleeAuflegeAnfragen = (callId) => {
-  const { pfade } = umgebung.attrappe;
-  return pfade.filter(istCalleeAuflegen(callId)).length;
-};
 
 test("4898: war der Anruf schon abgebrochen, bevor die Frist ablaeuft, bleibt er abgebrochen und das Bein wird kein zweites Mal aufgelegt", async () => {
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(4));

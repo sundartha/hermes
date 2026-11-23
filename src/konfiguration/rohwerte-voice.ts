@@ -1,4 +1,4 @@
-import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.js";
+import { ANRUFSTART_WARTEFRIST_MAX_MS, NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.js";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 
@@ -79,6 +79,7 @@ function ausgehend(
     ELEVENLABS_AGENT_ID?: string | undefined;
     ELEVENLABS_RESULT_POLL_MS?: string | undefined;
     VORSPANN_WIEDERGABE_FRIST_MS?: string | undefined;
+    VORSPANN_KLINGEL_FRIST_MS?: string | undefined;
     ANRUFSTART_WARTEFRIST_MS?: string | undefined;
     EL_BRIDGE_START_DEADLINE_MS?: string | undefined;
     ELEVENLABS_OPENING_LINE_LLM_ENABLED?: string | undefined;
@@ -91,6 +92,7 @@ function ausgehend(
   agentId: string;
   resultPollMs: number;
   vorspannWiedergabeFristMs: number;
+  vorspannKlingelFristMs: number;
   anrufstartWartefristMs: number;
   bridgeStartDeadlineMs: number;
   apiKey: string;
@@ -110,6 +112,11 @@ function ausgehend(
       fallback: 20000,
       min: 100,
       max: 120000,
+    }),
+    vorspannKlingelFristMs: numEnv("VORSPANN_KLINGEL_FRIST_MS", env.VORSPANN_KLINGEL_FRIST_MS, {
+      fallback: NICHT_ERREICHT_FRIST_MS,
+      min: 100,
+      max: NICHT_ERREICHT_FRIST_MS,
     }),
     anrufstartWartefristMs: numEnv("ANRUFSTART_WARTEFRIST_MS", env.ANRUFSTART_WARTEFRIST_MS, {
       fallback: ANRUFSTART_WARTEFRIST_MAX_MS,

@@ -9,7 +9,7 @@ import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, elBeinVon, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
 import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, wahlSperrGrund } from "./vorspann-pruefung.js";
-import { armiereKlingelfrist, beiVorspannFrist, setzeVorspannFristen } from "./vorspann-fristen.js";
+import { beiVorspannFrist, setzeKlingelfrist, setzeVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
 
 export const VORSPANN_PFAD = "/voice/vorspann";
@@ -156,7 +156,8 @@ async function setzeFristenGeschuetzt({ call, store, config, now }) {
   }
 }
 
-const beiVorspannFristVon = ({ store, inboundBridges, now, ladeZustand, beineAuf }) => async ({ callId, frist }) => {
+const beiVorspannFristVon = ({ store, inboundBridges, now, ladeZustand, beineAuf, beiKlingel }) => async ({ callId, frist }) => {
+  if (frist === "klingel") return beiKlingel(callId);
   const call = await store.leseCall(callId);
   const melde = { wiedergabe: () => meldeNichtAbgespielt({ call, store }), elBein: () => vermerkeElFrist({ call, store, inboundBridges, now }) };
   await beiVorspannFrist({ frist, call, ladeZustand, melde, beineAuf: (zustand) => beineAuf(call, zustand) });
@@ -237,7 +238,7 @@ export function makeVorspannAblauf({
   awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
-  now, setTimer,
+  now,
 }) {
   const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now, vorspannZustand });
@@ -250,7 +251,7 @@ export function makeVorspannAblauf({
     const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
       await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: callControlId });
-      armiereKlingelfrist({ setTimer, beiFrist: () => beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand }) });
+      await setzeKlingelfrist({ call, store, config, jetzt: now }).catch((fehler) => logFehler("frist", call.id, fehler));
     } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
@@ -329,5 +330,5 @@ export function makeVorspannAblauf({
     }
   }
 
-  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, beiFrist: beiVorspannFristVon({ store, inboundBridges, now, ladeZustand, beineAuf: beineAufFuer }), behandle: (args) => (args.ereignis.ereignis === CALL_CONTROL_EREIGNIS.KLINGELT ? meldeAuftragBisKlingeln({ ...args, jetzt: now() }) : behandle(args)), gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
+  return { pruefe: ({ call }) => pruefeWahl({ call, ausgehendGesperrt }), waehle, beiFrist: beiVorspannFristVon({ store, inboundBridges, now, ladeZustand, beineAuf: beineAufFuer, beiKlingel: (callId) => beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand }) }), behandle: (args) => (args.ereignis.ereignis === CALL_CONTROL_EREIGNIS.KLINGELT ? meldeAuftragBisKlingeln({ ...args, jetzt: now() }) : behandle(args)), gesagterText: (callId, tenantId) => vorspannZustand.leseText({ tenantId, callId }) };
 }
