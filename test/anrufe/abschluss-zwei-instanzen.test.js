@@ -204,3 +204,14 @@ test("Abschluss in der Datenbank: ein Speichern nach geschriebenem Ende schreibt
   assert.equal(await grundDerZeile(db, callId), "el_uebergabe_gescheitert");
   assert.deepEqual(await zeile(db, callId), { status: "failed", ended_at: "2031-04-05T06:07:08.000Z" });
 });
+
+test("Abschluss in der Datenbank: ein Ende mit eigener Zeit auf der verlierenden Instanz zeigt Status und Ende des Gewinners", async () => {
+  const { db, a, b, callId } = await aufbau();
+  await a.store.setCallEndedAt(callId, "failed", "2031-01-02T03:04:05.000Z");
+  await b.store.setCallEndedAt(callId, "completed", "2032-06-07T08:09:10.000Z");
+  const gespiegelt = b.store.getCall(callId);
+  assert.equal(gespiegelt.status, "failed");
+  assert.equal(gespiegelt.endedAt, "2031-01-02T03:04:05.000Z");
+  const gespeichert = await zeile(db, callId);
+  assert.equal(gespeichert.status, "failed");
+});
