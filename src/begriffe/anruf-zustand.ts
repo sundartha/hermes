@@ -12,6 +12,6 @@ export function merkeEndeAnderswo(call: object): void {
   endeAnderswoGeschrieben.add(call);
 }
 
-export function endeLagAnderswo(call: unknown): boolean {
-  return typeof call === "object" && call !== null && endeAnderswoGeschrieben.has(call);
+export function endeLagAnderswo(call: object): boolean {
+  return endeAnderswoGeschrieben.has(call);
 }
