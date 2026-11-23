@@ -7,7 +7,7 @@ import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js"
 
 const ZIEL = "+12722205602";
 const COMMIT = "d".repeat(40);
-const VARIABLEN = ["STAGING_PROBE_ZIEL", "STAGING_TEST_TOKEN", "STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"];
+const VARIABLEN = ["STAGING_PROBE_ZIEL", "STAGING_PROBE_TOKEN", "STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"];
 
 function stubStarten(empfangen) {
   const dienst = createServer((anfrage, rueckgabe) => {
@@ -45,7 +45,7 @@ async function mitStubs(zusatz, lauf) {
       GITHUB_EVENT_NAME: "schedule",
       STAGING_URL: "https://hermes-staging-erpv.onrender.com",
       STAGING_PROBE_ZIEL: ZIEL,
-      STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+      STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
       STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
       STAGING_PROBE_VORNAME: "Anna",
       SLACK_ALERT_URL: `http://127.0.0.1:${slack.address().port}/s`,

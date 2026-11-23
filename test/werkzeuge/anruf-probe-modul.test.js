@@ -39,7 +39,7 @@ function stubben() {
 
 const UMGEBUNG = {
   STAGING_URL: BASIS,
-  STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+  STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
   STAGING_PROBE_ZIEL: ZIEL,
   STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
   STAGING_PROBE_VORNAME: "Anna",
@@ -52,7 +52,7 @@ test("Anrufer-Modul: Adresse, Token, Ziel, Auftraggeber und Vorname kommen aus d
   const aufrufe = stubben();
   assert.equal(modul.uhr, undefined);
   assert.equal(await modul.anrufer.eigeneNummer(), ZIEL);
-  assert.equal(aufrufe[0].url, `${BASIS}/mcp`);
+  assert.equal(aufrufe[0].url, `${BASIS}/intern/probe/mcp`);
   const { headers } = aufrufe[0].optionen;
   assert.equal(headers.authorization, `Bearer ${PROBE_STAGING_TEST_TOKEN}`);
   assert.deepEqual(await modul.anrufer.tagesstand(), { erstversuche: 1, anrufe: 1 });

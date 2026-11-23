@@ -50,7 +50,7 @@ function leseRpc(text) {
 }
 
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
-  const antwort = await abfrage(`${basis}/mcp`, {
+  const antwort = await abfrage(`${basis}/intern/probe/mcp`, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(ABFRAGE_FRIST_MS),
@@ -242,7 +242,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
 
 export const anrufer = anruferBauen({
   basis: env.STAGING_URL,
-  token: env.STAGING_TEST_TOKEN,
+  token: env.STAGING_PROBE_TOKEN,
   ziel: env.STAGING_PROBE_ZIEL,
   sprache: SPRACHE,
   auftraggeber: env.STAGING_PROBE_AUFTRAGGEBER,
