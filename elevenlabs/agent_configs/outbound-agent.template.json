@@ -1020,7 +1020,7 @@
           }
         ],
         "model_id": "eleven_v4_turbo",
-        "voice_id": "NOpBlnGInO9m6vDvFkFC",
+        "voice_id": "cqPdIo76zSHFDcSZpFov",
         "stability": 0.65,
         "similarity_boost": 0.75,
         "agent_output_audio_format": "pcm_16000",
