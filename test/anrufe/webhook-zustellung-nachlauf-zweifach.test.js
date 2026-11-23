@@ -392,6 +392,16 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
+      if (gehalten.length === 0) {
+        await zaun(sql, signer, [a]);
+        const neue = mitschnitt.verbindungen().map((x, nr) => x.slice(vorher[nr] ?? 0));
+        assert.deepEqual(
+          neue.flat().filter((text) => text.includes(ANSPRUCH_ANWEISUNG)),
+          [],
+          "kein gehaltenes BEGIN beim Messpunkt: nach Fristablauf darf der Anspruch nicht mehr schreiben",
+        );
+        return;
+      }
       await mitschnitt.bisBedingung(() => gehalten.some((nr) => anweisungenBisZurueck(mitschnitt, nr, vorher).includes(ZURUECK)));
       const beanspruchend = await warteAufAnspruchsabschnitt(mitschnitt, vorher, gehalten);
       assert.ok(beanspruchend.length >= EINMAL);
