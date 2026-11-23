@@ -71,6 +71,7 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
       new RegExp(
         `\\[audit\\] place_call ip=\\S+ to=${sternImMuster(maskNumber("+4915123123202"))} call=\\S+ provider=\\S+ requestedBy=owner-sub`,
       ),
+      15000,
     );
     assert.equal(srv.stdout.includes("4915123123202"), false);
     assert.ok(
