@@ -41,6 +41,8 @@ import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/in
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 import { sleep } from "../utils/uhr-warten.ts";
+import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
 import { fehlerText } from "../utils/fehler-text.ts";
@@ -555,15 +557,23 @@ async function vermerkeElBein(req: Aufruf, res: Antwort, { store, inboundBridges
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
+async function leseCallVorAntwort(store: Speicher, callId: string, res: Antwort): Promise<AnrufOderLeer> {
+  const lesen = leseCallBestEffort(store, callId, VORSPANN_LOG_PREFIX);
+  const rechtzeitig = await ergebnisOderNull(lesen.then((call) => ({ call })), NUTZUNG_AUFFRISCHEN_FRIST_MS);
+  if (rechtzeitig) return rechtzeitig.call;
+  res.sendStatus(HTTP_OK);
+  return lesen;
+}
+
 async function antworteAufVorspannEreignis(
   req: Aufruf,
   res: Antwort,
   { store, config, webhookEvents, vorspannAblauf }: VoiceDeps,
 ): Promise<void> {
   if (!anfrageGeprueft(req, res, VORSPANN_KOERPER)) return;
-  const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
+  const call = await leseCallVorAntwort(store, queryText(req.query.callId), res);
   if (!call) {
-    res.sendStatus(HTTP_OK);
+    if (!res.headersSent) res.sendStatus(HTTP_OK);
     return;
   }
   const ereignisse = webhookEvents(call.provider);
@@ -577,7 +587,7 @@ async function antworteAufVorspannEreignis(
     },
   });
   const aufgelegt = ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT;
-  if (!aufgelegt) res.sendStatus(HTTP_OK);
+  if (!aufgelegt && !res.headersSent) res.sendStatus(HTTP_OK);
   try {
     await verarbeitung;
   } catch (fehler) {

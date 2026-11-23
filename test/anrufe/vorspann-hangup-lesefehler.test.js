@@ -109,7 +109,7 @@ test("Wird das Auflegen nach der Wiederherstellung erneut zugestellt, ist der An
     assert.equal((await ereignis(signer, b, { callId, art: "call.hangup" })).status, HTTP_OK);
     await zeilenBis(async () => (await sql(GEBUCHT_SQL, [callId])).rows, (zeilen) => zeilen[0].status !== "active" && zeilen[0].gebucht);
     const gebucht = (await sql(GEBUCHT_SQL, [callId])).rows[0];
-    assert.equal(gebucht.status, "ended");
+    assert.equal(gebucht.status, "failed");
     assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
     assert.deepEqual((await sql(GEBUCHT_SQL, [callId])).rows[0], gebucht);
     assert.equal(zaehleMarke([a, b], ZUSTAND_FEHLT), 0);
