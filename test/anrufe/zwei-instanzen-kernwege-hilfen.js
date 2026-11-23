@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 
-import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
-import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import pg from "pg";
 
+import { initBindungsKoerper } from "../_iel-inbound-harness.js";
 import { startCountingAnthropicMock } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
@@ -32,14 +31,12 @@ export async function platziereAuf(instanz, sql, language) {
 
 export async function initAuf(instanz, sql, callId) {
   const { rows } = await sql(ANRUF_SQL, [callId]);
-  const antwort = await abrufMitFrist(`${instanz.localUrl}${ELEVENLABS_INIT_PATH}`, {
+  const antwort = await abrufMitFrist(`${instanz.localUrl}/webhooks/elevenlabs/init`, {
     method: "POST",
-    headers: { "content-type": "application/json", [INIT_TOKEN_HEADER]: INIT_TOKEN },
+    headers: { "content-type": "application/json", "x-hermes-init-token": INIT_TOKEN },
     body: JSON.stringify({
-      agent_id: AGENT_ID,
-      conversation_id: `conv_${callId}`,
+      ...initBindungsKoerper({ bindung: rows[0].stream_token, agentId: AGENT_ID, conversationId: `conv_${callId}` }),
       called_number: rows[0].from_e164,
-      sip_headers: { [EL_CALL_BINDING_SIP_HEADER]: rows[0].stream_token },
     }),
   });
   assert.equal(antwort.status, HTTP_OK);
