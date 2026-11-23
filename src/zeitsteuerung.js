@@ -22,6 +22,7 @@ const TEILLAEUFE = [
   { name: "paid-without-number", logTag: "[paid-no-number]", lauf: (wachen) => wachen.paidWithoutNumberWatch.runPaidWithoutNumberSweep() },
   { name: "provision-retry", logTag: "[provision-retry-sweep]", lauf: (wachen) => wachen.provisionRetryWatch.runProvisionRetrySweep() },
   { name: "price-drift", logTag: "[price-drift]", lauf: (wachen) => wachen.priceDriftWatch.runPriceDriftSweep() },
+  { name: "vorspann-aufraeumen", logTag: "[vorspann-aufraeumen]", lauf: async (wachen) => wachen.vorspannZustand.raeumeAbgelaufene() },
 ];
 
 export async function starteSweepTakt(config, waechter, zeitplan) {

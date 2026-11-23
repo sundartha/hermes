@@ -26,7 +26,7 @@ Die neun Teilläufe des Sweep-Takts (`TEILLAEUFE` in `src/zeitsteuerung.js`, Auf
 | `leitungsplatz`, `budget_reservierung`, `konsult_platz`, `webhook_zustellung`, `login_bremse`, `instanz_lebenszeichen` | eigener Ablauf je Zeile, Löschen im jeweiligen Store | `src/store/leitungsplaetze-pg.js`, `src/store/budget-reserve-pg.js`, `src/store/konsult-plaetze-pg.js`, `src/store/webhook-zustellung.js`, `src/store/login-bremse.js`, `src/store/instanz-besitz.js` |
 | `anruf_schluessel` | mit dem Anruf (`ON DELETE CASCADE`), nur Prüfsummen | `src/db/migrations/0019_anruf_schluessel.sql` |
 | `nummer_schluessel` | mit der Nummer (Trigger auf `number`), nur Prüfsumme und Mandant | `src/db/migrations/0030_nummer_schluessel.sql` |
-| `vorspann_zustand` | Zeile je Vorspann-Anruf: gelöscht beim Auflegen, sonst nach `expires_at` beim nächsten Anlegen; enthält den Satz und das Token der TTS-Ablage | `src/store/vorspann-zustand.js`, `src/db/migrations/0032_vorspann_zustand.sql`, Fristspalten `src/db/migrations/0033_vorspann_fristen.sql` |
+| `vorspann_zustand` | Zeile je Vorspann-Anruf: gelöscht beim Auflegen, sonst nach `expires_at` im Sweep-Takt (alle Mandanten, Teillauf `vorspann-aufraeumen`) und beim nächsten Anlegen; enthält den Satz und das Token der TTS-Ablage | `src/store/vorspann-zustand.js`, `TEILLAEUFE` in `src/zeitsteuerung.js`, `src/db/migrations/0032_vorspann_zustand.sql`, Fristspalten `src/db/migrations/0033_vorspann_fristen.sql` |
 | Archiv der Warteschlange (pg-boss) | Aufbewahrung, Löschen nach Erledigung und Totpost-Aufbewahrung als Konstanten `RETENTION_SECONDS`, `DELETE_AFTER_SECONDS`, `DEAD_LETTER_RETENTION_SECONDS`; Pflege durch pg-boss | `src/queue/adapters/pgboss/queue.ts` |
 
 ## Bewusst unbegrenzt, Entscheidung offen
