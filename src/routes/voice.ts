@@ -557,6 +557,10 @@ async function vermerkeElBein(req: Aufruf, res: Antwort, { store, inboundBridges
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
+function bestaetigeFallsOffen(res: Antwort): void {
+  if (!res.headersSent) res.sendStatus(HTTP_OK);
+}
+
 async function leseCallVorAntwort(store: Speicher, callId: string, res: Antwort): Promise<AnrufOderLeer> {
   const lesen = leseCallBestEffort(store, callId, VORSPANN_LOG_PREFIX);
   const rechtzeitig = await ergebnisOderNull(lesen.then((call) => ({ call })), NUTZUNG_AUFFRISCHEN_FRIST_MS);
@@ -573,7 +577,7 @@ async function antworteAufVorspannEreignis(
   if (!anfrageGeprueft(req, res, VORSPANN_KOERPER)) return;
   const call = await leseCallVorAntwort(store, queryText(req.query.callId), res);
   if (!call) {
-    if (!res.headersSent) res.sendStatus(HTTP_OK);
+    bestaetigeFallsOffen(res);
     return;
   }
   const ereignisse = webhookEvents(call.provider);
@@ -582,11 +586,9 @@ async function antworteAufVorspannEreignis(
     call,
     ereignis,
     zugang: elZugangVon(config),
-    nachLesen: () => {
-      if (!res.headersSent) res.sendStatus(HTTP_OK);
-    },
+    nachLesen: () => bestaetigeFallsOffen(res),
   });
-  if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT && !res.headersSent) res.sendStatus(HTTP_OK);
+  if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT) bestaetigeFallsOffen(res);
   try {
     await verarbeitung;
   } catch (fehler) {
