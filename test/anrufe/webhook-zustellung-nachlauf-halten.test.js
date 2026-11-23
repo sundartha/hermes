@@ -25,6 +25,7 @@ const FRIST = { timeout: 60_000 };
 const OHNE_EIGENE_FRIST = new AbortController().signal;
 const ANRUF = "call_halten1";
 const ANRUF_ZAUN = "call_halten_zaun_";
+const ANRUF_SCHLUSS = "call_halten_schluss";
 const ANRUF_SEKUNDEN = 600;
 const KONVERSATION = "conv_halten1";
 const NACHLAUF_LOG = "[el-inbound] nachlauf gestartet";
@@ -96,6 +97,17 @@ async function zaun(sql, signer, instanz) {
   }
 }
 
+async function schlussZaun(sql, signer, instanz) {
+  await senden(
+    instanz,
+    signierterEndstatus(signer, ANRUF_SCHLUSS, { callId: ANRUF_SCHLUSS, status: "in-progress" }),
+  );
+  await zeilenBis(
+    async () => (await sql(ANGENOMMEN_SQL, [ANRUF_SCHLUSS])).rows[0].answered_at,
+    (wert) => wert !== null,
+  );
+}
+
 async function mitMitschnitt(t, lauf) {
   if (!postgresVorhanden()) return t.skip("kein Postgres");
   const db = await echteDatenbankMitRolle(t);
@@ -120,6 +132,7 @@ async function mitMitschnitt(t, lauf) {
       [ANRUF, true],
       [`${ANRUF_ZAUN}0`, false],
       [`${ANRUF_ZAUN}1`, false],
+      [ANRUF_SCHLUSS, false],
     ]) {
       await sql(SEED_SQL, [
         id,
@@ -171,9 +184,12 @@ test(
     await mitMitschnitt(t, async (aufbau) => {
       const { mitschnitt } = aufbau;
       const { vorher, gehalten } = await fristAblaufenLassen(aufbau);
-      await mitschnitt.bisBedingung(() =>
-        seit(mitschnitt, vorher).some((anweisungen) => anweisungen.includes(ZURUECK)),
-      );
+      if (gehalten.length === KEIN_STAND) await schlussZaun(aufbau.sql, aufbau.signer, aufbau.instanz);
+      else {
+        await mitschnitt.bisBedingung(() =>
+          gehalten.some((nr) => anweisungenBisZurueck(mitschnitt, nr, vorher).includes(ZURUECK)),
+        );
+      }
       const beanspruchend = await warteAufAnspruchsabschnitt(mitschnitt, vorher, gehalten);
       if (beanspruchend.length === KEIN_STAND) {
         const schreibend = seit(mitschnitt, vorher)
