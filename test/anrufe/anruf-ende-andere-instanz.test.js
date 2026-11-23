@@ -72,7 +72,7 @@ test("Anruf auf der anderen Instanz beendet: die anlegende Instanz meldet ihn ni
   await b.endCallRecord(call.id, "completed");
   const nachher = await a.activeCallsForSql(KUNDE);
   assert.deepEqual(nachher, []);
-  assert.equal(findDuplicateOutboundCall(nachher, { to: ZIEL, nowMs: Date.now() }), null);
+  assert.equal(findDuplicateOutboundCall(nachher, { to: ZIEL, nowMs: Date.parse(call.startedAt) }), null);
 });
 
 test("Dublettenantwort von place_call nennt den echten Status des laufenden Anrufs", async () => {
