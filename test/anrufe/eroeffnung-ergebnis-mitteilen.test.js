@@ -78,7 +78,9 @@ for (const fall of FAELLE) {
   test(`4394-1: Anruf mit Auftrag an den Besitzer gibt kurze Begruessung und den Anlass, ohne Frage (${fall.sprache}: ${fall.auftrag})`, async () => {
     const daten = await ausgehenderAnruf(fall);
     const erster = daten.dynamic_variables.eroeffnung_gesagt;
-    assert.equal(daten.conversation_config_override.agent.first_message, "");
+    const anschluss = daten.conversation_config_override.agent.first_message;
+    assert.ok(anschluss.endsWith(" Bitte sprechen Sie."), anschluss);
+    assert.ok(anschluss.includes(fall.auftrag.replace(/\.$/, "")), anschluss);
     assert.equal(erster, fall.erwartet);
     assert.equal(erster.includes("?"), false);
     assert.equal(daten.dynamic_variables.eroeffnung, "");
@@ -89,7 +91,10 @@ test("4394-2: die Begruessung vor dem Anlass ist hoechstens acht Woerter lang un
   const [fall] = FAELLE;
   const daten = await ausgehenderAnruf(fall);
   const erster = daten.dynamic_variables.eroeffnung_gesagt;
-  assert.equal(daten.conversation_config_override.agent.first_message, "");
+  assert.equal(
+    daten.conversation_config_override.agent.first_message,
+    "Ich möchte dir die Ergebnisse der Analyse sagen. Bitte sprechen Sie.",
+  );
   assert.ok(erster.startsWith(`${fall.begruessung} `));
   assert.ok(fall.begruessung.split(/\s+/).length <= MAX_WOERTER_BEGRUESSUNG);
   assert.ok(fall.begruessung.includes("KI-Assistent"));
@@ -99,7 +104,10 @@ test("4394-3: ohne Vornamen entfaellt die Besitzer-Begruessung, der Anruf bleibt
   const [fall] = FAELLE;
   const daten = await ausgehenderAnruf({ ...fall, vorname: "{{vorname}}" });
   const erster = daten.dynamic_variables.eroeffnung_gesagt ?? daten.dynamic_variables.eroeffnung;
-  assert.equal(daten.conversation_config_override.agent.first_message, "");
+  assert.equal(
+    daten.conversation_config_override.agent.first_message,
+    "Ich möchte dir die Ergebnisse der Analyse sagen. Bitte sprechen Sie.",
+  );
   assert.equal(erster.startsWith("Hey"), false);
   assert.ok(erster.includes("KI-Assistent"), erster);
 });
@@ -111,7 +119,9 @@ test("4394-4: weicht die Gespraechssprache von der Offenlegungssprache ab, spric
     auftrag: "Ergebnisse der Analyse mitteilen",
   });
   const erster = daten.dynamic_variables.eroeffnung_gesagt;
-  assert.equal(daten.conversation_config_override.agent.first_message, "");
+  const anschluss = daten.conversation_config_override.agent.first_message;
+  assert.equal(anschluss, "Es geht um Folgendes: Ergebnisse der Analyse mitteilen. Bitte sprechen Sie.");
+  assert.equal(anschluss.includes("Please go ahead"), false);
   assert.equal(
     erster,
     "Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: Ergebnisse der Analyse mitteilen.",

@@ -24,6 +24,7 @@ const FAELLE = [
     ziel: "+4915112345678",
     auftrag: "Termin vereinbaren",
     anlass: "es geht um Folgendes: Termin vereinbaren.",
+    anschluss: "Es geht um Folgendes: Termin vereinbaren. Bitte sprechen Sie.",
     mitVorname:
       "Hallo, es geht um Folgendes: Termin vereinbaren – ich bin Hermes, der KI-Assistent von Jonas Beispiel, und ich fasse das Gespräch für Jonas zusammen.",
     ohneVorname:
@@ -34,6 +35,7 @@ const FAELLE = [
     ziel: "+447700900123",
     auftrag: "arrange an appointment",
     anlass: "here's what I'm calling about: arrange an appointment.",
+    anschluss: "Here's what I'm calling about: arrange an appointment. Please go ahead.",
     mitVorname:
       "Hello, here's what I'm calling about: arrange an appointment – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.",
     ohneVorname:
@@ -44,6 +46,7 @@ const FAELLE = [
     ziel: "+33612345678",
     auftrag: "prendre rendez-vous",
     anlass: "voici l'objet de mon appel : prendre rendez-vous.",
+    anschluss: "Voici l'objet de mon appel : prendre rendez-vous. Je vous écoute.",
     mitVorname:
       "Bonjour, voici l'objet de mon appel : prendre rendez-vous – je suis Hermes, l'assistant IA de Jonas Beispiel, et je résume cette conversation pour Jonas.",
     ohneVorname:
@@ -80,7 +83,7 @@ for (const fall of FAELLE) {
     const daten = await anrufstart(fall, "");
     assert.equal(daten.dynamic_variables.eroeffnung_gesagt, fall.mitVorname);
     assert.equal(daten.dynamic_variables.opening_line, fall.anlass);
-    assert.equal(daten.conversation_config_override.agent.first_message, "");
+    assert.equal(daten.conversation_config_override.agent.first_message, fall.anschluss);
   });
 
   test(`Eroeffnung an Dritte (${fall.sprache}): ein Vorname mit Platzhalter wird nicht gesprochen, der Satz faellt auf den Auftraggeber zurueck`, async () => {
