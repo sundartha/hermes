@@ -68,12 +68,12 @@ interface Rede {
 const alsMs = (wert: number): string => (Number.isFinite(wert) ? String(Math.round(wert)) : KEIN_WERT);
 
 export function meldeAgentErsteRede({ call, conversation }: Rede): void {
-  const zeile = (conversation.transcript ?? []).find((eintrag) => eintrag?.role === "agent" && Boolean(eintrag.message));
+  const zeile = conversation.transcript?.find((eintrag) => eintrag?.role === "agent" && Boolean(eintrag.message));
   if (!zeile) return;
   const start = conversation.metadata?.start_time_unix_secs;
   const sekunden = zeile.time_in_call_secs;
   const redeMs = typeof start === "number" && typeof sekunden === "number" ? (start + sekunden) * MS_JE_SEKUNDE : Number.NaN;
   const seitStart = alsMs(redeMs - Date.parse(call.startedAt));
-  const seitAbheben = alsMs(redeMs - Date.parse(call.answeredAt ?? ""));
+  const seitAbheben = alsMs(redeMs - Date.parse(String(call.answeredAt)));
   console.log(`${LOG_TAG} agent_erste_rede ms_seit_start=${seitStart} ms_seit_abheben=${seitAbheben} call=${call.id}`);
 }
