@@ -207,6 +207,12 @@ async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAu
   await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false });
 }
 
+const setzeKlingelfristGeschuetzt = ({ call, store, config, now, beiFehler }) =>
+  setzeKlingelfrist({ call, store, config, jetzt: now }).catch(async (fehler) => {
+    logFehler("frist", call.id, fehler);
+    await beiFehler();
+  });
+
 async function waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand }) {
   try {
     await vorspannZustand.anlegen({ ...zustandsRef(call), token, text: vorspann.text, ttlMs: VORSPANN_ABLAGE_TTL_MS });
@@ -251,10 +257,7 @@ export function makeVorspannAblauf({
     const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
       await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: callControlId });
-      await setzeKlingelfrist({ call, store, config, jetzt: now }).catch(async (fehler) => {
-        logFehler("frist", call.id, fehler);
-        await beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand });
-      });
+      await setzeKlingelfristGeschuetzt({ call, store, config, now, beiFehler: () => beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand }) });
     } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
