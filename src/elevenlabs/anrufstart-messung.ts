@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 const LOG_TAG = "[el-vorspann]";
 const TEILE = ["ms_tts", "ms_pruefe", "ms_waehle"];
 
@@ -46,16 +44,15 @@ export function meldeAuftragBisKlingeln({
   console.log(`${LOG_TAG} auftrag_bis_klingeln ms=${msSeitStart({ call, jetzt })} call=${call.id}`);
 }
 
-const FIRST_MESSAGE_ANTWORT = z
-  .object({ conversation_config_override: z.object({ agent: z.object({ first_message: z.string() }) }) })
-  .transform((antwort) => antwort.conversation_config_override.agent.first_message);
+const lies = (wert: unknown, schluessel: string): unknown => (typeof wert === "object" && wert !== null ? Reflect.get(wert, schluessel) : undefined);
 const MS_JE_SEKUNDE = 1000;
 const KEIN_WERT = "-";
 
 export function meldeFirstMessageErgebnis({ callId, antwort }: { callId: string; antwort: Record<string, unknown> }): void {
-  const gelesen = FIRST_MESSAGE_ANTWORT.safeParse(antwort);
-  const laenge = gelesen.success ? gelesen.data.length : 0;
-  console.log(`${LOG_TAG} first_message_ergebnis geliefert=${gelesen.success ? "ja" : "nein"} laenge=${String(laenge)} call=${callId}`);
+  const eroeffnung = lies(lies(lies(antwort, "conversation_config_override"), "agent"), "first_message");
+  const geliefert = typeof eroeffnung === "string";
+  const laenge = geliefert ? eroeffnung.length : 0;
+  console.log(`${LOG_TAG} first_message_ergebnis geliefert=${geliefert ? "ja" : "nein"} laenge=${String(laenge)} call=${callId}`);
 }
 
 interface Gespraech {
