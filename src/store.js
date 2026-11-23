@@ -4,7 +4,7 @@ import { anrufpauseSetzen as anrufpauseSetzenImJson } from "./store/state-ops.js
 import { macheSpeicherSperre } from "./store/sperre.js";
 import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
-import { rueckfrageAusZustand } from "./store/rueckfrage-sql.js";
+import { rueckfrageAusZustand, rueckfrageLeser, zustellzeitAusZustand } from "./store/rueckfrage-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
 import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.js";
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
@@ -120,7 +120,7 @@ async function createPgBackend() {
     nutzungAuffrischen,
     anrufpauseGelesen: () => anrufpauseGelesenVon(store.load()),
     mandantSperreGelesen: (tenantId) => mandantSperreGelesenVon(store.load(), tenantId),
-    rueckfrageGelesen: macheRueckfrageSql({ runner }).lesen,
+    ...rueckfrageLeser(macheRueckfrageSql({ runner })),
     anrufpauseSetzen: (an) => anrufpauseSetzen(store, an),
   };
 }
@@ -257,6 +257,8 @@ function jsonBackendAufbauen() {
     mandantSperreGelesen: async (tenantId) => sperreAusZustand(jsonBackend.load(), tenantId),
     rueckfrageGelesen: async (callId, _tenantId, afterEventId) =>
       rueckfrageAusZustand(jsonBackend.load(), callId, afterEventId),
+    zustellzeitGelesen: async (callId, _tenantId, eventId) =>
+      zustellzeitAusZustand(jsonBackend.load(), callId, eventId),
     anrufpauseSetzen: (an) => anrufpauseSetzenImJson(jsonBackend, an),
   });
 }
@@ -327,6 +329,7 @@ export const {
   mandantSperreGelesen,
   stammdatenSchreiben,
   rueckfrageGelesen,
+  zustellzeitGelesen,
   ausfallSql,
   nummernSql,
   nummerNachladen,
