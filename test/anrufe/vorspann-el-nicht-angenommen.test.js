@@ -222,3 +222,17 @@ test("6125-A4: Ziffern der Eroeffnung stehen maskiert im Log, die Laenge bleibt 
   assert.ok(text.slice(0, ANFANG_LAENGE).includes("4711"));
   assert.equal(zeile, `[el-vorspann] eroeffnung laenge=${text.length} anfang=${JSON.stringify(text.slice(0, ANFANG_LAENGE).replace(/\d/g, "#"))} call=${callId} instanz=${INSTANZ}`);
 });
+
+for (const [name, zusatz, erwartet] of [
+  ["beide Werte", { hangup_cause: "timeout", sip_hangup_cause: "480" }, `${GRUND}:hangup_cause=timeout sip_hangup_cause=480 hangup_source=- instanz=${INSTANZ}`],
+  ["nur sip", { sip_hangup_cause: "603" }, `${GRUND}:hangup_cause=- sip_hangup_cause=603 hangup_source=- instanz=${INSTANZ}`],
+  ["nur cause", { hangup_cause: "timeout" }, `${GRUND}:hangup_cause=timeout sip_hangup_cause=- hangup_source=- instanz=${INSTANZ}`],
+  ["keiner", { hangup_source: "callee" }, `${GRUND}:hangup_cause=- sip_hangup_cause=- hangup_source=callee instanz=${INSTANZ}`],
+  ["unsicher", { hangup_cause: "x y;z" }, `${GRUND}:hangup_cause=- sip_hangup_cause=- hangup_source=- instanz=${INSTANZ}`],
+]) {
+  test(`6122-B5: Ursache des EL-Beins im failureReason, ${name}`, async () => {
+    const callId = await angenommenerAnruf();
+    await elLegtAuf(callId, zusatz);
+    assert.equal(anrufIn(callId).failureReason, erwartet);
+  });
+}
