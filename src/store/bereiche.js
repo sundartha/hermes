@@ -299,10 +299,8 @@ export function speicherBereiche(speicher) {
         speicher.timeOutStagedConsult(callId, eingabe),
     },
     rueckfrageAbschluss: {
-      zustellzeitGelesen: async (callId, tenantId, eventId) =>
-        speicher.zustellzeitGelesen?.(callId, tenantId, eventId),
-      zustellungSchreiben: async (callId, tenantId, eventId) =>
-        speicher.zustellungSchreiben?.(callId, tenantId, eventId),
+      zustellzeitGelesen: async (...args) => speicher.zustellzeitGelesen?.(...args),
+      zustellungSchreiben: async (...args) => speicher.zustellungSchreiben?.(...args),
       verwaisteSchliessen: async (callId, eingabe) => {
         if (speicher.leseCall) await speicher.leseCall(callId);
         const { changed } = expireOrphanedConsults(speicher.load(), callId, eingabe);
