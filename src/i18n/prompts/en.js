@@ -230,6 +230,7 @@ At the end, say goodbye in one sentence and then call end_call.`,
   summaryInput: {
     directionLabel: "Direction:",
     goalLabel: "Task:",
+    callDateLabel: "Call date:",
     transcriptLabel: "TRANSCRIPT:",
     agentRole: "AGENT",
     callerRole: "CALLER",

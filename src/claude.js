@@ -310,9 +310,15 @@ export async function summarizeCall(call) {
     heading: loc.prompt.recorded.heading,
     guardrail: loc.prompt.recorded.summaryGuardrail,
   });
+  const callMoment = call.startedAt || call.createdAt;
+  const timeZone = resolveTimezone(store.tenantTimezone(call.tenantId));
+  const callDate = callMoment
+    ? new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(callMoment))
+    : null;
   const summaryInputText =
     `${si.directionLabel} ${call.direction}` +
     (call.goal ? `\n${si.goalLabel} ${call.goal}` : "") +
+    (callDate ? `\n${si.callDateLabel} ${callDate} (${timeZone})` : "") +
     `\n\n${si.transcriptLabel}\n${convo}` +
     (alreadyRecorded ? `\n\n${alreadyRecorded}` : "");
 
