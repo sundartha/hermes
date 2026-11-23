@@ -163,14 +163,18 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 12 == teil % 12')
-          npm test -- "${dateien[@]}" -- --test-concurrency=4
+          mkdir -p .pruefung
+          vmstat 5 > .pruefung/last.log &
+          npm test -- "${dateien[@]}" -- --test-concurrency=2
 
       - name: Protokoll bei Rot hochladen
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: protokoll-tests-${{ matrix.teil }}
-          path: .pruefung/regression.log
+          path: |
+            .pruefung/regression.log
+            .pruefung/last.log
           if-no-files-found: ignore
           retention-days: 14
 
