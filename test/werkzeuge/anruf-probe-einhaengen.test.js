@@ -39,7 +39,7 @@ function aufrufen({ umgebung = {}, argumente = [], fall = {} } = {}) {
     GITHUB_SHA: COMMIT,
     STAGING_URL: BASIS,
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
     STAGING_PROBE_VORNAME: "Anna",
     SLACK_ALERT_URL: "http://127.0.0.1:1/x",
@@ -76,7 +76,7 @@ test("Probe-Schritt: ruft probe.mjs mit Anrufer-Modul, Token, Ziel, absichtlich_
     "STAGING_URL: https://hermes-staging-erpv.onrender.com",
     "PROBE_ANRUFER_MODUL: ${{ github.workspace }}/scripts/anruf-probe/anrufer.mjs",
     "ABSICHTLICH_ROT: ${{ inputs.absichtlich_rot }}",
-    "STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}",
+    "STAGING_PROBE_TOKEN: ${{ secrets.STAGING_PROBE_TOKEN }}",
     "STAGING_PROBE_ZIEL: ${{ vars.STAGING_PROBE_ZIEL }}",
     "STAGING_PROBE_AUFTRAGGEBER: ${{ vars.STAGING_PROBE_AUFTRAGGEBER }}",
     "STAGING_PROBE_VORNAME: ${{ vars.STAGING_PROBE_VORNAME }}",
@@ -93,7 +93,7 @@ test("Auflegen-Schritt: läuft auch bei Abbruch und Fehler und beendet offene Pr
   const auflegen = schritt(job("staging"), "Offene Probe-Anrufe beenden");
   assert.match(auflegen, /if: always\(\)/);
   assert.match(auflegen, /run: node scripts\/anruf-probe\/probe\.mjs auflegen\s*$/m);
-  assert.match(auflegen, /STAGING_TEST_TOKEN: \$\{\{ secrets\.STAGING_TEST_TOKEN \}\}/);
+  assert.match(auflegen, /STAGING_PROBE_TOKEN: \$\{\{ secrets\.STAGING_PROBE_TOKEN \}\}/);
   assert.match(auflegen, /PROBE_ANRUFER_MODUL: /);
 });
 
