@@ -182,3 +182,23 @@ test(
     });
   },
 );
+
+const ZUSTELLZEIT_FEHLER = "[consult-raised] Zustellzeit lesen fehlgeschlagen:";
+const NICHT_ZUGESTELLT = /consult_timeout[^\n]*not_delivered/;
+const UNLESBAR_SQL = `UPDATE call SET consults = '"kaputt"'::jsonb WHERE id = $1`;
+
+test(
+  "Laesst sich die Zustellzeit in der Datenbank nicht lesen, gilt die Rueckfrage nach der Zustellfrist als nicht zugestellt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_4", async ({ a, sql, frageAuf, gestellt }) => {
+      const frage = frageAuf(a);
+      await gestellt();
+      await sql(UNLESBAR_SQL, ["call_kz_4"]);
+      await frage;
+      assert.ok(a.stdout.includes(ZUSTELLZEIT_FEHLER), a.stdout);
+      assert.match(a.stdout, NICHT_ZUGESTELLT, a.stdout);
+    });
+  },
+);
