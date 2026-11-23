@@ -1,170 +1,163 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { makeVorspannAblauf } from "../../src/elevenlabs/vorspann-ablauf.js";
-import { CALL_CONTROL_EREIGNIS } from "../../src/telephony/call-control-ereignis.ts";
 import { vorspannZustand } from "../../src/store.js";
-import { makePostgresVorspannZustand } from "../../src/store/vorspann-zustand.js";
-import { legeMandantAn, makePgTestStore } from "../pg-helpers.js";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { makeTelnyxSigner, nowSeconds } from "../helpers.js";
+import { starteAttrappe } from "./attrappen-server.js";
+import { mitZweiHermesAufPostgres, postgresVorhanden, zeilenBis } from "./hermes-mit-postgres.js";
 
+const ZEITGRENZE_MS = 120_000;
+const HTTP_OK = 200;
+const HTTP_SERVERFEHLER = 500;
 const TTL_MS = 120_000;
+const AUDIO = Buffer.alloc(200_000, 0xab);
 const CALLEE = "cc_callee_einzel";
 const EL = "cc_el_einzel";
+const ZIEL = "+4915112399005";
+const ZEILE_SQL = "SELECT aufgelegt FROM vorspann_zustand WHERE call_id = $1";
+const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()";
+const SPERRTRIGGER_SQL = `CREATE FUNCTION aufgelegt_gesperrt() RETURNS trigger AS $$ BEGIN
+  IF NEW.aufgelegt IS DISTINCT FROM OLD.aufgelegt THEN RAISE EXCEPTION 'aufgelegt gesperrt'; END IF;
+  RETURN NEW; END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER aufgelegt_gesperrt BEFORE UPDATE ON vorspann_zustand FOR EACH ROW EXECUTE FUNCTION aufgelegt_gesperrt()`;
 
-const warte = () => {
-  let frei;
-  const versprechen = new Promise((fertig) => (frei = fertig));
-  return { versprechen, frei };
-};
+const beinFuer = (roh) => (roh.includes('-el"') ? EL : CALLEE);
 
-function baueSzenario(callId, { elScheitert }) {
-  const ref = { tenantId: "t_einzel", callId };
-  const call = { id: callId, tenantId: ref.tenantId, provider: "telnyx", status: "active", elCallControlId: EL };
-  const aufgelegtBeine = [];
-  let elScheitertNoch = elScheitert;
-  let beiElAuflegen = async () => {};
-  const steuerung = {
-    endCallViaCallControl: async (bein) => {
-      aufgelegtBeine.push(bein);
-      if (bein === EL) await beiElAuflegen();
-      if (bein === EL && elScheitertNoch) {
-        elScheitertNoch = false;
-        throw new Error("Auflegen gescheitert");
+function starteAnbieter({ elAuflegen }) {
+  const aufrufe = { wiedergaben: [], auflegen: [] };
+  const server = starteAttrappe(async (anfrage, antwort) => {
+    const teile = [];
+    for await (const stueck of anfrage) teile.push(stueck);
+    const roh = Buffer.concat(teile).toString();
+    if (anfrage.url.startsWith("/v1/text-to-speech/")) {
+      antwort.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+      return antwort.end(AUDIO);
+    }
+    if (anfrage.url.endsWith("/actions/playback_start")) aufrufe.wiedergaben.push(JSON.parse(roh));
+    if (anfrage.url.endsWith("/actions/hangup")) {
+      aufrufe.auflegen.push(anfrage.url.includes(EL) ? EL : CALLEE);
+      if (anfrage.url.includes(EL) && (await elAuflegen())) {
+        antwort.writeHead(HTTP_SERVERFEHLER, { "content-type": "application/json" });
+        return antwort.end("{}");
       }
-    },
-  };
-  const geladen = warte();
-  const bFertig = warte();
-  const veraltet = { ...vorspannZustand };
-  veraltet.lade = async (anfrage) => {
-    const zeile = await vorspannZustand.lade(anfrage);
-    geladen.frei();
-    return zeile;
-  };
-  veraltet.speichere = async (anfrage) => {
-    await bFertig.versprechen;
-    return vorspannZustand.speichere(anfrage);
-  };
-  const store = { leseCall: async () => ({ ...call }), recordFailureReason: () => {} };
-  const bauen = (zustand) =>
-    makeVorspannAblauf({
-      voiceControl: () => steuerung,
-      store,
-      config: {},
-      ttsStore: { release: () => {} },
-      vorspannZustand: zustand,
-      inboundBridges: {},
-      terminateAndBillCall: async ({ hangUp }) => hangUp?.(),
-      awaitAndPersistInboundElResult: async () => {},
-      billThunk: () => () => {},
-      finishCall: () => {},
-      now: () => 1,
-    });
-  const instanzA = bauen(veraltet);
-  const instanzB = bauen(vorspannZustand);
-  const instanzOhneEintrag = bauen({
-    ...vorspannZustand,
-    legeAufgelegtAn: async () => {
-      throw new Error("Eintragen gescheitert");
-    },
-    nimmAufgelegtWeg: async () => {
-      throw new Error("Wegnehmen gescheitert");
-    },
+    }
+    antwort.writeHead(HTTP_OK, { "content-type": "application/json" });
+    antwort.end(JSON.stringify({ data: { sid: "v3:einzel", result: "ok", call_control_id: beinFuer(roh) } }));
   });
-  const ereignisA = () => instanzA.behandle({ call, ereignis: { ereignis: CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE, callControlId: EL } });
-  return {
-    ref,
-    call,
-    aufgelegtBeine,
-    geladen,
-    bFertig,
-    ereignisA,
-    instanzB,
-    instanzOhneEintrag,
-    setzeBeiElAuflegen: (fn) => (beiElAuflegen = fn),
-    legt: () => vorspannZustand.lade(ref).then((zeile) => [...zeile.aufgelegt].sort()),
-  };
+  return server.then((attrappe) => ({ attrappe, aufrufe }));
 }
 
-const lege = async (ref) => {
-  await vorspannZustand.anlegen({ ...ref, token: "tok", text: "Satz", ttlMs: TTL_MS });
-  await vorspannZustand.setzeCallee({ ...ref, calleeId: CALLEE });
-};
-
-const fristB = (s) => s.instanzB.beiFrist({ callId: s.call.id, frist: "wiedergabe" });
-
-const hangup = (s) =>
-  s.instanzB.behandle({ call: s.call, ereignis: { ereignis: CALL_CONTROL_EREIGNIS.AUFGELEGT, callControlId: CALLEE } });
-
-test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachdem B das gescheiterte EL-Auflegen zurueckgenommen hat, bleibt das EL-Bein offen und das Auflegen des Callee-Beins legt es auf", async () => {
-  const s = baueSzenario("call_einzel_1", { elScheitert: true });
-  await lege(s.ref);
-  let laufA;
-  s.setzeBeiElAuflegen(async () => {
-    laufA = s.ereignisA();
-    await s.geladen.versprechen;
+function ereignis(signer, srv, { callId, art: eventType, bein = CALLEE, kennung }) {
+  const rumpf = JSON.stringify({
+    data: { id: `evt-${eventType}-${callId}-${kennung}`, event_type: eventType, payload: { call_control_id: bein, status: "ok" } },
   });
-  await fristB(s);
-  s.bFertig.frei();
-  await laufA;
-  assert.deepEqual(await s.legt(), [CALLEE]);
-  s.aufgelegtBeine.length = 0;
-  await hangup(s);
-  assert.deepEqual(s.aufgelegtBeine, [EL]);
+  const zeitstempel = String(nowSeconds());
+  return abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf), "telnyx-timestamp": zeitstempel },
+    body: rumpf,
+  });
+}
+
+const platziere = (srv) =>
+  abrufMitFrist(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: ZIEL, objective: "Termin am Donnerstag vereinbaren" }),
+  });
+
+async function mitAnbieter(t, verhalten, lauf) {
+  const signer = makeTelnyxSigner();
+  const { attrappe, aufrufe } = await starteAnbieter(verhalten);
+  t.after(() => attrappe.close());
+  const env = {
+    SKIP_TWILIO_SIGNATURE_CHECK: "false",
+    TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
+    ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
+    ELEVENLABS_OUTBOUND_VORSPANN: "true",
+    ELEVENLABS_API_BASE: attrappe.url,
+    TELNYX_API_BASE: attrappe.url,
+  };
+  await mitZweiHermesAufPostgres(t, { env }, (instanzen) => lauf({ ...instanzen, signer, aufrufe }));
+}
+
+async function bisAbgebrochen({ a, sql, signer, aufrufe }, art) {
+  assert.equal((await platziere(a)).status, HTTP_OK);
+  const { rows } = await sql("SELECT id FROM call WHERE to_e164 = $1", [ZIEL]);
+  const callId = rows[0].id;
+  assert.equal((await ereignis(signer, a, { callId, art: "call.answered", kennung: "ab" })).status, HTTP_OK);
+  await zeilenBis(async () => aufrufe.wiedergaben, (liste) => liste.length === 1);
+  return { callId, abbruch: (srv) => ereignis(signer, srv, { callId, art, kennung: "ende" }) };
+}
+
+const verarbeitet = (instanzen) =>
+  instanzen.reduce((summe, srv) => summe + srv.stdout.split('"ereignis":"wiedergabe_ende"').length - 1, 0);
+
+test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachdem B das gescheiterte Auflegen des EL-Beins zurueckgenommen hat, bleibt das EL-Bein offen, und das Hangup des Callee-Beins legt es auf", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  let elScheitertNoch = true;
+  let elFreigeben;
+  const elFrei = new Promise((fertig) => (elFreigeben = fertig));
+  const elAuflegen = async () => {
+    if (!elScheitertNoch) return false;
+    elScheitertNoch = false;
+    await elFrei;
+    return true;
+  };
+  t.after(() => elFreigeben());
+  await mitAnbieter(t, { elAuflegen }, async ({ a, b, sql, signer, aufrufe }) => {
+    const { callId, abbruch } = await bisAbgebrochen({ a, sql, signer, aufrufe }, "call.playback.ended");
+    assert.equal((await abbruch(b)).status, HTTP_OK);
+    await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.includes(EL));
+    const { rows: beide } = await sql(ZEILE_SQL, [callId]);
+    assert.deepEqual(beide[0].aufgelegt.sort(), [CALLEE, EL]);
+    await sql("BEGIN");
+    await sql("SELECT 1 FROM vorspann_zustand WHERE call_id = $1 FOR UPDATE", [callId]);
+    elFreigeben();
+    await zeilenBis(async () => (await sql(WARTENDE_SQL)).rows[0].anzahl, (anzahl) => anzahl >= 1);
+    const veraltet = ereignis(signer, a, { callId, art: "call.playback.ended", bein: EL, kennung: "a" });
+    await zeilenBis(async () => (await sql(WARTENDE_SQL)).rows[0].anzahl, (anzahl) => anzahl >= 2);
+    await sql("COMMIT");
+    assert.equal((await veraltet).status, HTTP_OK);
+    await zeilenBis(async () => verarbeitet([a, b]), (anzahl) => anzahl === 2);
+    assert.deepEqual((await sql(ZEILE_SQL, [callId])).rows[0].aufgelegt, [CALLEE]);
+    assert.equal((await ereignis(signer, b, { callId, art: "call.hangup", kennung: "hangup" })).status, HTTP_OK);
+    await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.filter((bein) => bein === EL).length === 2);
+  });
 });
 
-test("Abnahme 2: Speichert Instanz A am Ereignisende mit veralteter Kopie, bleibt das von B eingetragene Callee-Bein aufgelegt und wird beim Hangup nicht noch einmal aufgelegt", async () => {
-  const s = baueSzenario("call_einzel_2", { elScheitert: false });
-  await lege(s.ref);
-  const laufA = s.ereignisA();
-  await s.geladen.versprechen;
-  await fristB(s);
-  s.bFertig.frei();
-  await laufA;
-  assert.deepEqual(await s.legt(), [CALLEE, EL].sort());
-  s.aufgelegtBeine.length = 0;
-  await hangup(s);
-  assert.deepEqual(s.aufgelegtBeine, []);
+test("Scheitert das Schreiben von aufgelegt in der Zeile, werden beide Beine trotzdem aufgelegt", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, { elAuflegen: async () => false }, async ({ a, sql, signer, aufrufe }) => {
+    const { callId, abbruch } = await bisAbgebrochen({ a, sql, signer, aufrufe }, "call.playback.ended");
+    await sql(SPERRTRIGGER_SQL);
+    assert.equal((await abbruch(a)).status, HTTP_OK);
+    await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.includes(EL) && liste.includes(CALLEE));
+    assert.deepEqual((await sql(ZEILE_SQL, [callId])).rows[0].aufgelegt, []);
+  });
 });
 
-test("Abnahme 3 (Speicher): speichere ohne aufgelegt laesst die Liste, Einzeländerungen fuegen einmalig hinzu und nehmen weg", async () => {
-  const ref = { tenantId: "t_einzel", callId: "call_einzel_3" };
+test("Abnahme 2 und 3 (Speicher): ein Speichern mit veralteter Kopie nimmt ein eingetragenes Bein nicht zurueck, Einzeländerungen sind einmalig und wirken pro Bein", async () => {
+  const ref = { tenantId: "t_einzel", callId: "call_einzel_speicher" };
   await vorspannZustand.anlegen({ ...ref, token: "tok", text: "Satz", ttlMs: TTL_MS });
+  const veraltet = await vorspannZustand.lade(ref);
   await vorspannZustand.legeAufgelegtAn({ ...ref, bein: "a" });
   await vorspannZustand.legeAufgelegtAn({ ...ref, bein: "a" });
   await vorspannZustand.legeAufgelegtAn({ ...ref, bein: "b" });
   await vorspannZustand.speichere({ ...ref, stand: { M: 1 } });
+  assert.deepEqual(veraltet.aufgelegt, []);
   assert.deepEqual((await vorspannZustand.lade(ref)).aufgelegt, ["a", "b"]);
+  assert.deepEqual((await vorspannZustand.lade(ref)).stand, { M: 1 });
   await vorspannZustand.nimmAufgelegtWeg({ ...ref, bein: "a" });
+  assert.deepEqual((await vorspannZustand.lade(ref)).aufgelegt, ["b"]);
+  await vorspannZustand.speichere({ ...ref, stand: { M: 2 } });
   assert.deepEqual((await vorspannZustand.lade(ref)).aufgelegt, ["b"]);
   await vorspannZustand.nimmAufgelegtWeg({ ...ref, bein: "x" });
   assert.deepEqual((await vorspannZustand.lade(ref)).aufgelegt, ["b"]);
-  await vorspannZustand.legeAufgelegtAn({ tenantId: "t_einzel", callId: "call_einzel_ohne", bein: "a" });
+  await vorspannZustand.speichere({ ...ref, stand: {}, aufgelegt: ["c"] });
+  assert.deepEqual((await vorspannZustand.lade(ref)).aufgelegt, ["c"]);
+  await vorspannZustand.legeAufgelegtAn({ tenantId: "t_einzel", callId: "call_ohne_zeile", bein: "a" });
+  assert.equal(await vorspannZustand.lade({ tenantId: "t_einzel", callId: "call_ohne_zeile" }), undefined);
   await vorspannZustand.loesche(ref);
-});
-
-test("Abnahme 3 (Postgres): dieselben Einzeländerungen und speichere ohne aufgelegt in SQL", async () => {
-  const { store, runner } = await makePgTestStore();
-  await legeMandantAn(store, "t_einzel_pg");
-  const zustand = makePostgresVorspannZustand(runner);
-  const ref = { tenantId: "t_einzel_pg", callId: "call_einzel_pg" };
-  await zustand.anlegen({ ...ref, token: "tok", text: "Satz", ttlMs: TTL_MS });
-  await zustand.legeAufgelegtAn({ ...ref, bein: "a" });
-  await zustand.legeAufgelegtAn({ ...ref, bein: "a" });
-  await zustand.legeAufgelegtAn({ ...ref, bein: "b" });
-  await zustand.speichere({ ...ref, stand: { M: 1 } });
-  assert.deepEqual((await zustand.lade(ref)).aufgelegt, ["a", "b"]);
-  assert.deepEqual((await zustand.lade(ref)).stand, { M: 1 });
-  await zustand.nimmAufgelegtWeg({ ...ref, bein: "a" });
-  assert.deepEqual((await zustand.lade(ref)).aufgelegt, ["b"]);
-  await zustand.speichere({ ...ref, stand: {}, aufgelegt: ["c"] });
-  assert.deepEqual((await zustand.lade(ref)).aufgelegt, ["c"]);
-});
-
-test("Scheitert das Eintragen oder Wegnehmen eines Beins im Speicher, werden beide Beine trotzdem aufgelegt", async () => {
-  const s = baueSzenario("call_einzel_4", { elScheitert: true });
-  await lege(s.ref);
-  await s.instanzOhneEintrag.beiFrist({ callId: s.call.id, frist: "wiedergabe" });
-  assert.deepEqual(s.aufgelegtBeine.sort(), [CALLEE, EL]);
-  assert.deepEqual(await s.legt(), []);
 });
