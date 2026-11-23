@@ -303,3 +303,10 @@ test("6161-K2g: Ergebnis ohne Transkript -> der Nachlauf haelt den gemessenen Ab
   await nachlaufMit(gespraech({ zeilen: undefined, metadata }), id);
   assert.equal(nachlaufErgebnis.anruf.fromActualE164, "+4930123456");
 });
+
+test("6161-K2h: Ergebnis ohne Metadaten -> Zeile mit - statt Zahlen, Anruf wird abgeschlossen", async () => {
+  const id = "call_6161_k2h";
+  const ausgabe = await nachlaufMit({ ...gespraech({ zeilen: [AGENT_ZEILE] }), metadata: null }, id);
+  assert.deepEqual(zeilenIn(ausgabe, ZEILEN[0]), [`[el-vorspann] agent_erste_rede ms_seit_start=- ms_seit_abheben=- call=${id}`]);
+  assert.ok(nachlaufErgebnis.anruf.billedAt);
+});
