@@ -27,7 +27,7 @@ import { mitZeitgrenze } from "./webhook-zustellung.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAusfallSql } from "./ausfall-sql.js";
 import { macheProfilSql } from "./profil-sql.js";
-import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
+import { endeAusstehend, macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktiveAnrufeSql } from "./aktive-anrufe-sql.js";
 import { macheAnrufNummernSql } from "./anruf-nummern-sql.js";
@@ -1938,7 +1938,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
-      callRowValues(call, tenantId),
+      callRowValues(endeAusstehend.has(call) ? { ...call, status: "active", endedAt: null } : call, tenantId),
     );
 }
 

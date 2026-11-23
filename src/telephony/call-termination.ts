@@ -1,3 +1,4 @@
+import { endeLagAnderswo } from "../begriffe/anruf-zustand.ts";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.ts";
 
 interface CallRef {
@@ -71,7 +72,10 @@ export function billThunk(
   store: { getCall: (callId: string) => unknown },
   callId: string,
 ): () => unknown {
-  return () => finishCall(store.getCall(callId));
+  return () => {
+    const call = store.getCall(callId);
+    return endeLagAnderswo(call) ? undefined : finishCall(call);
+  };
 }
 
 async function legeCallControlBeineAuf(steuerung: VoiceControl, call: Call): Promise<void> {

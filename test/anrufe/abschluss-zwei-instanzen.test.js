@@ -1,0 +1,128 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { elevenlabsOutbound } from "../../src/elevenlabs/registry.ts";
+import { billThunk, terminateAndBillCall, warteAufOffeneAbrechnungen } from "../../src/telephony/call-termination.ts";
+import { withConfigNamespaces } from "../config-namespaces-helper.js";
+import { waitUntil, withFetch } from "../helpers.js";
+import { makePgStore, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+
+const MANDANT = "t_abschluss_kunde";
+const ZIEL = "+4915112346139";
+const ABSENDER = "+4930555006139";
+const KONVERSATION = "conv_abschluss_6139";
+const HTTP_OK = 200;
+const LAUFZEIT_S = 60;
+const GESPRAECH = {
+  conversation_id: KONVERSATION,
+  status: "done",
+  transcript: [{ role: "agent", message: "Alles klar, bis dann." }],
+  analysis: { call_successful: "success", transcript_summary: "Termin vereinbart." },
+  metadata: { call_duration_secs: LAUFZEIT_S, termination_reason: "Client disconnected: 1000", error: null },
+};
+
+const runnerFuer = (db) => ({
+  withClient: (fn) => fn({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }),
+});
+
+async function neueInstanz(db) {
+  const pgStore = makePgStore(runnerFuer(db));
+  await pgStore.init();
+  const freigegeben = [];
+  const abgeschlossen = [];
+  const store = {
+    ...pgStore,
+    setzeAbfrageFrist: async () => {},
+    leitungsplaetze: { freigeben: (id) => freigegeben.push(id) },
+  };
+  const finishCall = (call) => {
+    if (call) abgeschlossen.push(call.id);
+  };
+  const el = elevenlabsOutbound().makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: { apiKey: "test-key", apiBase: "https://el.test", resultPollMs: 5 } }),
+    terminateAndBillCall,
+    billThunk,
+    finishCall,
+  });
+  return { store, el, freigegeben, abgeschlossen };
+}
+
+async function aufbau() {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  await neueInstanz(db);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [MANDANT]);
+  await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'active', $1)`, [MANDANT]);
+  const a = await neueInstanz(db);
+  const b = await neueInstanz(db);
+  const call = a.store.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: MANDANT });
+  call.elevenlabsConversationId = KONVERSATION;
+  await a.store.persistCall(call.id);
+  await a.store.markAnswered(call.id);
+  await b.store.attachActiveCall(call.id);
+  return { db, a, b, callId: call.id };
+}
+
+async function schliesseAb(instanz, callId) {
+  await withFetch(
+    async () => ({ ok: true, status: HTTP_OK, json: async () => GESPRAECH }),
+    async () => {
+      await instanz.el.abfrageDurchLauf(callId);
+      await waitUntil(() => instanz.freigegeben.includes(callId));
+    },
+  );
+  await warteAufOffeneAbrechnungen();
+}
+
+const zeile = async (db, callId) => {
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [MANDANT]);
+  return (await db.query(`SELECT status, ended_at FROM call WHERE id = $1`, [callId])).rows[0];
+};
+
+test("Abschluss in der Datenbank: zwei Instanzen schliessen denselben Anruf ab, Abrechnung und Zusammenfassung laufen genau einmal", async () => {
+  const { a, b, callId } = await aufbau();
+  await schliesseAb(a, callId);
+  await schliesseAb(b, callId);
+  assert.deepEqual([...a.abgeschlossen, ...b.abgeschlossen], [callId]);
+});
+
+test("Abschluss in der Datenbank: die Instanz, die das Ende gewinnt, schliesst wie bisher ab", async () => {
+  const { db, a, callId } = await aufbau();
+  await schliesseAb(a, callId);
+  assert.deepEqual(a.abgeschlossen, [callId]);
+  const gespeichert = await zeile(db, callId);
+  assert.equal(gespeichert.status, "completed");
+  assert.equal(gespeichert.ended_at, a.store.getCall(callId).endedAt);
+});
+
+test("Abschluss in der Datenbank: die verlierende Instanz ruft keinen Abschluss auf und schreibt nichts", async () => {
+  const { db, a, b, callId } = await aufbau();
+  await a.store.setCallEndedAt(callId, "failed", "2031-01-02T03:04:05.000Z");
+  await schliesseAb(b, callId);
+  assert.deepEqual(b.abgeschlossen, []);
+  const gespeichert = await zeile(db, callId);
+  assert.equal(gespeichert.status, "failed");
+  assert.equal(gespeichert.ended_at, "2031-01-02T03:04:05.000Z");
+});
+
+test("Abschluss in der Datenbank: der Spiegel der verlierenden Instanz zeigt Status und Ende des Gewinners", async () => {
+  const { a, b, callId } = await aufbau();
+  await a.store.setCallEndedAt(callId, "failed", "2031-01-02T03:04:05.000Z");
+  await schliesseAb(b, callId);
+  const gespiegelt = b.store.getCall(callId);
+  assert.equal(gespiegelt.status, "failed");
+  assert.equal(gespiegelt.endedAt, "2031-01-02T03:04:05.000Z");
+});
+
+test("Abschluss in der Datenbank: ein Speichern der eigenen Instanz vor dem Ende macht sie nicht zur Verliererin", async () => {
+  const { db, a, callId } = await aufbau();
+  const speichern = a.store.save();
+  await a.store.setCallEndedAt(callId, "completed", "2031-02-03T04:05:06.000Z");
+  await speichern;
+  await a.store.drainFlushes();
+  assert.equal(a.abgeschlossen.length, 0);
+  const gespeichert = await zeile(db, callId);
+  assert.equal(gespeichert.status, "completed");
+  assert.equal(gespeichert.ended_at, "2031-02-03T04:05:06.000Z");
+  assert.equal(billThunk((call) => (call ? "abgerechnet" : "nichts"), a.store, callId)(), "abgerechnet");
+});

@@ -1,4 +1,5 @@
 import * as ops from "./state-ops.js";
+import { merkeEndeAnderswo } from "../begriffe/anruf-zustand.ts";
 import { MS_PER_DAY } from "../utils/timer.ts";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
@@ -40,6 +41,7 @@ const GRENZE = (tage) => new Date(Date.now() - Math.max(tage, 0) * MS_PER_DAY).t
 
 const ENDE_FELDER = ["status", "endedAt", "consults"];
 const ENDE_SQL = `UPDATE call SET status = $3, ended_at = $4, consults = $5, failure_reason = COALESCE(failure_reason, $6) WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+const ENDE_STAND_SQL = `SELECT status, ended_at AS "endedAt" FROM call WHERE tenant_id = $1 AND id = $2`;
 const ENDE_WERTE = (call) => [call.status, call.endedAt, call.consults ? JSON.stringify(call.consults) : null, call.failureReason ?? null];
 
 const ZAEHLER = {
@@ -82,12 +84,14 @@ const LEBENSLAUF = {
     sql: ENDE_SQL,
     werte: ENDE_WERTE,
     aendern: ops.endCallRecord,
+    bedingt: true,
   },
   ende: {
     felder: ENDE_FELDER,
     sql: ENDE_SQL,
     werte: ENDE_WERTE,
     aendern: ops.setCallEndedAt,
+    bedingt: true,
   },
 };
 
@@ -153,25 +157,39 @@ async function aufbewahrenJeMandant(client, { retentionDays, diagnosticRetention
 }
 
 export const unbestaetigteZeilen = new WeakSet();
+export const endeAusstehend = new WeakSet();
+
+async function schreibeZeile({ einreihen, call, callId, sql, werte, bedingt, alt }) {
+  let gewinner;
+  if (bedingt) endeAusstehend.add(call);
+  try {
+    await einreihen(async (client) => {
+      await client.query(KONTEXT_SQL, [call.tenantId]);
+      const { rowCount } = await client.query(sql, [call.tenantId, callId, ...werte(call)]);
+      if (bedingt && rowCount === 0) gewinner = (await client.query(ENDE_STAND_SQL, [call.tenantId, callId])).rows[0];
+    });
+  } catch (err) {
+    Object.assign(call, alt);
+    throw err;
+  } finally {
+    endeAusstehend.delete(call);
+  }
+  if (gewinner) {
+    Object.assign(call, { status: gewinner.status, endedAt: gewinner.endedAt });
+    merkeEndeAnderswo(call);
+  }
+}
 
 export function macheAnrufeSql({ runner, einreihen, lese, anhaengen }) {
   const nachlesen = (callId) => einreihen((client) => anhaengen(callId, client));
   const schreibart = (tabelle, art) => async (state, callId, ...args) => {
-    const { felder, sql, werte, aendern } = tabelle[art];
+    const { felder, sql, werte, aendern, bedingt } = tabelle[art];
     if (!ops.getCall(state, callId)) await nachlesen(callId);
     const vorher = ops.getCall(state, callId);
     const alt = vorher && Object.fromEntries(felder.map((feld) => [feld, structuredClone(vorher[feld])]));
     const { call, changed } = aendern(state, callId, ...args);
     if (!changed) return call;
-    try {
-      await einreihen(async (client) => {
-        await client.query(KONTEXT_SQL, [call.tenantId]);
-        await client.query(sql, [call.tenantId, callId, ...werte(call)]);
-      });
-    } catch (err) {
-      Object.assign(call, alt);
-      throw err;
-    }
+    await schreibeZeile({ einreihen, call, callId, sql, werte, bedingt, alt });
     return call;
   };
   const lebenslauf = (art) => schreibart(LEBENSLAUF, art);
