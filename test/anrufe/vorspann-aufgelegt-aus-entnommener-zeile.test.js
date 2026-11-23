@@ -74,6 +74,7 @@ test("Hangup eines Beins, dessen Zeile eine andere Instanz inzwischen entnommen 
     await sql("DELETE FROM vorspann_zustand WHERE call_id = $1", [callId]);
     await sql("COMMIT");
     assert.equal((await antwort).status, HTTP_OK);
+    await zeilenBis(async () => a.stdout, (text) => text.includes(`[vorspann] verarbeitet {"callId":"${callId}","ereignis":"aufgelegt"}`));
     assert.equal(zaehleMarke([a], "ereignis fehlgeschlagen"), 0);
     assert.deepEqual(elAuflegen(aufrufe), []);
     assert.deepEqual(calleeAuflegen(aufrufe), []);
