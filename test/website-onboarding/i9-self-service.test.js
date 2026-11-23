@@ -82,7 +82,7 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
   });
   await store.persistCall(ownerCall.id);
   await store.persistCall(bCall.id);
-  ops.addCalendarEvent(s, {
+  await store.addCalendarEvent({
     tenantId: TENANT_B,
     title: "B-Termin",
     startIso: "2030-02-01T10:00:00.000Z",

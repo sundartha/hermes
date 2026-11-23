@@ -27,7 +27,7 @@ test("Owner-only-pg: frischer Zustand byte-identisch (Bestands-Invariante haelt)
   const { store } = await makePgTestStore();
   const s = store.load();
   assert.deepEqual(s.settings[BOOTSTRAP_TENANT_ID], defaultSettings());
-  assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
+  assert.deepEqual(await store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
   assert.equal(s.tenants.length, 1);
   assert.equal(s.tenants[0].id, BOOTSTRAP_TENANT_ID);
   assert.ok(!s.tenants[0].ownerName, "frischer Owner-Tenant traegt keinen ownerName (P2b)");
@@ -48,7 +48,6 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
 
   const iso1 = "2030-02-01T10:00:00.000Z";
   const iso2 = "2030-02-01T11:00:00.000Z";
-  ops.addCalendarEvent(s, { tenantId: TENANT_B, title: "B-Termin", startIso: iso1, endIso: iso2 });
   ops.trackUsage(s, TENANT_B, tokensOf(1_000_000, 0), PRICES);
   s.numbers.push({
     id: "num_b",
@@ -77,6 +76,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   ops.addActionItem(s, co.id, "Owner-Item");
 
   await store.save();
+  await store.addCalendarEvent({ tenantId: TENANT_B, title: "B-Termin", startIso: iso1, endIso: iso2 });
   store.updateSettings(TENANT_B, { agentName: "B-Agent" });
   await store.drainFlushes();
   const r = await reopen(db);
@@ -85,10 +85,10 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   assert.equal(rs.settings[TENANT_B].agentName, "B-Agent");
   assert.equal(rs.settings[BOOTSTRAP_TENANT_ID].agentName, defaultSettings().agentName);
   assert.deepEqual(
-    r.getCalendar(TENANT_B).map((e) => e.title),
+    (await r.getCalendar(TENANT_B)).map((e) => e.title),
     ["B-Termin"],
   );
-  assert.deepEqual(r.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
+  assert.deepEqual(await r.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
   assert.equal(rs.usage[TENANT_B].inputTokens, 1_000_000);
   assert.equal(rs.usage[BOOTSTRAP_TENANT_ID].inputTokens, 0);
   assert.equal(r.findTenantByNumber("+49999000111"), TENANT_B);

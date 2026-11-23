@@ -121,9 +121,9 @@ export function numberStatusFor(state: Zustand, tenantId: string): string {
   return NUMBER_DISPLAY_STATUS.NONE;
 }
 
-export function upcomingCalendar(
-  store: { getCalendar: (tenantId: string) => { end: string }[] },
+export async function upcomingCalendar(
+  store: { getCalendar: (tenantId: string) => { end: string }[] | Promise<{ end: string }[]> },
   tenantId: string,
-): { end: string }[] {
-  return store.getCalendar(tenantId).filter((event) => event.end >= new Date().toISOString());
+): Promise<{ end: string }[]> {
+  return (await store.getCalendar(tenantId)).filter((event) => event.end >= new Date().toISOString());
 }

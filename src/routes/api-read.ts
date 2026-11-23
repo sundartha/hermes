@@ -10,7 +10,7 @@ import { speicherBereiche } from "../store.js";
 
 interface Speicher {
   load: () => Zustand;
-  getCalendar: (tenantId: string) => { end: string }[];
+  getCalendar: (tenantId: string) => { end: string }[] | Promise<{ end: string }[]>;
   usageOf: (tenantId: string) => { inputTokens: number; outputTokens: number; calls: number };
   getCall: (id: string | undefined) => unknown;
   leseCallUngebunden: (id: string, optionen?: { fuerAnzeige?: boolean }) => Promise<AnrufSicht | null | undefined>;
@@ -54,7 +54,7 @@ interface Mandant {
 }
 
 const aktiveNummerVon: (state: Zustand, tenantId: string) => string | null = activeNumberFor;
-const kalenderAb: (store: Speicher, tenantId: string) => unknown[] = upcomingCalendar;
+const kalenderAb: (store: Speicher, tenantId: string) => Promise<unknown[]> = upcomingCalendar;
 
 export const STATE_CALLS = 30,
   STATE_ACTION_ITEMS = 50,
@@ -121,7 +121,7 @@ async function zeigeZustand({
     settings: ctx.settings,
     calls: await markiereWartende(store, anrufe.map(publicCall)),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
-    calendar: kalenderAb(store, tenantId).slice(0, STATE_CALENDAR),
+    calendar: (await kalenderAb(store, tenantId)).slice(0, STATE_CALENDAR),
     usage: usageView({
       usage: store.usageOf(tenantId),
       quota: tenantQuotaView(store, tenantId),

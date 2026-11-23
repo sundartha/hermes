@@ -49,7 +49,7 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
     budgetPeriodKey: null,
     budgetPeriodBaselineCents: 0,
   });
-  assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
+  assert.deepEqual(await store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
 });
 
 test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionItemIds", async () => {
@@ -190,25 +190,25 @@ test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
 
 test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
-  store.addCalendarEvent({
+  await store.addCalendarEvent({
     tenantId: BOOTSTRAP_TENANT_ID,
     title: "Termin",
     startIso: "2030-01-01T10:00:00.000Z",
     endIso: "2030-01-01T11:00:00.000Z",
   });
-  const cal = store.getCalendar(BOOTSTRAP_TENANT_ID);
+  const cal = await store.getCalendar(BOOTSTRAP_TENANT_ID);
   for (let i = 1; i < cal.length; i++) assert.ok(cal[i - 1].start <= cal[i].start);
   assert.ok(
-    store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
+    await store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
   );
   assert.equal(
-    store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"),
+    await store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"),
     null,
   );
   await store.save();
   const reopened = await reopen(db);
   assert.ok(
-    reopened.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
+    await reopened.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
   );
 });
 
@@ -336,7 +336,7 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
   const db = await neuePglite();
   await reopen(db);
   const second = await reopen(db);
-  assert.equal(second.getCalendar(BOOTSTRAP_TENANT_ID).length, demoCalendar().length);
+  assert.equal((await second.getCalendar(BOOTSTRAP_TENANT_ID)).length, demoCalendar().length);
 });
 
 test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {
