@@ -450,9 +450,12 @@ test("T8a: Netzwerkfehler folgt der Tenant-Sprache, fehlende/unbekannte Sprache 
     assertNeutralText(text, `${lang}.UPSTREAM_UNREACHABLE`);
   }
   const worldDefaultText = localeFor(undefined).mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE];
-  for (const language of [undefined, "xx"]) {
+  for (const [language, erwartet] of [
+    [undefined, worldDefaultText],
+    ["xx", localeFor("en").mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]],
+  ]) {
     const text = await networkErrorText({ language });
-    assert.equal(text, worldDefaultText, `language=${language}`);
+    assert.equal(text, erwartet, `language=${language}`);
     assertNeutralText(text, `language=${language}`);
   }
 });
