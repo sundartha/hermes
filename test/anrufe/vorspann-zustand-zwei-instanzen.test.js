@@ -11,7 +11,7 @@ import { mitZweiHermesAufPostgres, postgresVorhanden, zeilenBis } from "./hermes
 
 const ZEITGRENZE_MS = 120_000;
 const HTTP_OK = 200;
-const TTL_S = 120;
+const TTL_S = 135;
 const TTL_UNTERGRENZE_S = 100;
 const AUDIO = Buffer.alloc(200_000, 0xab);
 const TOKEN_FORMAT = /^[A-Za-z0-9_-]{43}$/;
