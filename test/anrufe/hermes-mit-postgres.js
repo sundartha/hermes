@@ -131,6 +131,9 @@ export async function mitZweiHermesAufPostgres(t, { env = {}, mandantGepinnt }, 
     const a = await starte();
     const b = await starte();
     return await lauf({ a, b, starte, anbieter, db, sql });
+  } catch (fehler) {
+    gibInstanzAusgabeAus(gestartet);
+    throw fehler;
   } finally {
     await Promise.all(gestartet.map((instanz) => instanz.stop()));
     await anbieter.schliessen();
@@ -430,3 +433,10 @@ export function gibDatenbankFrei(db) {
 export const ANRUF_SPERREN_SQL = `SELECT count(*)::int AS anzahl FROM pg_locks
   WHERE locktype = 'advisory' AND classid = ${ANRUF_SPERRE_NAMENSRAUM}
   AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`;
+
+function gibInstanzAusgabeAus(instanzen) {
+  instanzen.forEach((instanz, index) => {
+    console.log(`--- Ausgabe Instanz ${index + 1} ---`);
+    console.log(instanz.stdout);
+  });
+}
