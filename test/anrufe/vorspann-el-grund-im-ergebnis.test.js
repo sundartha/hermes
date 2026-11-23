@@ -14,6 +14,7 @@ const EINMAL = 1;
 const NUMMER_PRAEFIX = "+4915112392";
 const AUDIO_BYTES = 200_000;
 const GRUND = "el_uebergabe_gescheitert";
+const INSTANZ = "inst-6125";
 
 const warteAuf = (bedingung) => warteAufEreignis([umgebung.srv.ereignisse, umgebung.attrappe.ereignisse], bedingung, { timeoutMs: WARTE_FRIST_MS });
 const koerper = (anfrage) => JSON.parse(anfrage.roh);
@@ -83,6 +84,7 @@ beforeEach(async () => {
     SKIP_TWILIO_SIGNATURE_CHECK: "false",
     TELNYX_PUBLIC_KEY: umgebung.signer.publicKeyBase64,
     PUBLIC_URL: "https://agent.test",
+    RENDER_INSTANCE_ID: INSTANZ,
   };
   umgebung.srv = await startServer({ env, seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }) });
 });
@@ -129,11 +131,11 @@ async function elLegtAuf(callId, zusatz) {
 }
 
 for (const [name, zusatz, erwartet] of [
-  ["beide Werte", { hangup_cause: "timeout", sip_hangup_cause: "480" }, `${GRUND} hangup_cause=timeout sip_hangup_cause=480`],
-  ["nur sip", { sip_hangup_cause: "603" }, `${GRUND} sip_hangup_cause=603`],
-  ["nur cause", { hangup_cause: "timeout" }, `${GRUND} hangup_cause=timeout`],
-  ["keiner", { hangup_source: "callee" }, GRUND],
-  ["unsicher", { hangup_cause: "x y;z" }, GRUND],
+  ["beide Werte", { hangup_cause: "timeout", sip_hangup_cause: "480" }, `${GRUND}:hangup_cause=timeout sip_hangup_cause=480 hangup_source=- instanz=${INSTANZ}`],
+  ["nur sip", { sip_hangup_cause: "603" }, `${GRUND}:hangup_cause=- sip_hangup_cause=603 hangup_source=- instanz=${INSTANZ}`],
+  ["nur cause", { hangup_cause: "timeout" }, `${GRUND}:hangup_cause=timeout sip_hangup_cause=- hangup_source=- instanz=${INSTANZ}`],
+  ["keiner", { hangup_source: "callee" }, `${GRUND}:hangup_cause=- sip_hangup_cause=- hangup_source=callee instanz=${INSTANZ}`],
+  ["unsicher", { hangup_cause: "x y;z" }, `${GRUND}:hangup_cause=- sip_hangup_cause=- hangup_source=- instanz=${INSTANZ}`],
 ]) {
   test(`6122-B5: Ursache des EL-Beins im failureReason, ${name}`, async () => {
     const callId = await angenommenerAnruf();
