@@ -213,7 +213,7 @@ test("3365-K21: Init eines Vorspann-Anrufs -> first_message leer, eroeffnung_ges
   assert.equal(antwort.status, HTTP_OK);
   const { conversation_config_override: override, dynamic_variables: variablen } = antwort.json;
   const { agent } = override;
-  assert.equal(agent.first_message, "");
+  assert.match(agent.first_message, /Termin am Donnerstag vereinbaren\. \S/);
   assert.equal(agent.language, "en");
   assert.deepEqual(Object.keys(agent).sort(), ["first_message", "language"]);
   assert.equal(typeof override.tts.voice_id, "string");
@@ -227,7 +227,7 @@ test("3365-K21: Init eines Vorspann-Anrufs in der Offenlegungssprache -> first_m
   const antwort = await init(anrufIn(callId));
   const { agent } = antwort.json.conversation_config_override;
   assert.equal(agent.language, "de");
-  assert.equal(agent.first_message, "");
+  assert.match(agent.first_message, /Termin am Donnerstag vereinbaren\. \S/);
   assert.equal(antwort.json.dynamic_variables.eroeffnung_gesagt, gesprochen);
 });
 

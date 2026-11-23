@@ -178,7 +178,7 @@ for (const [fall, extra] of [
     const { text: gesprochen } = koerper(sprachAnfragen().at(-1));
     assert.equal(anrufIn(callId).calleeIsOwner === true, extra.to === EIGENE_NUMMER);
     const antwort = await init(anrufIn(callId));
-    assert.equal(antwort.conversation_config_override.agent.first_message, "");
+    assert.match(antwort.conversation_config_override.agent.first_message, /Termin am Donnerstag vereinbaren\. \S/);
     assert.equal(antwort.dynamic_variables.eroeffnung_gesagt, gesprochen);
     await beendeAnruf(callId);
   });
