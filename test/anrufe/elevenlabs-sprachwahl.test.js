@@ -29,7 +29,6 @@ const CASES = Object.freeze([
     }),
     language: "de",
     voiceProfile: VOICE_PROFILE_DE,
-    voiceId: VOICE_ID_DE,
     disclosureStart: "Guten Tag,",
   },
   {
@@ -41,7 +40,6 @@ const CASES = Object.freeze([
     }),
     language: "fr",
     voiceProfile: VOICE_PROFILE_FR,
-    voiceId: VOICE_ID_DE,
     disclosureStart: "Bonjour,",
   },
   {
@@ -50,7 +48,6 @@ const CASES = Object.freeze([
     stateOf: () => ({ tenants: [{ id: TENANT_OHNE_SPRACHE }], settings: {} }),
     language: "en",
     voiceProfile: VOICE_PROFILE_EN,
-    voiceId: VOICE_ID_DE,
     disclosureStart: "Hello,",
   },
 ]);
@@ -86,7 +83,6 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
 
     const locale = localeFor(language);
     assert.equal(locale.voiceProfile, kase.voiceProfile, `Stimmprofil im Fall "${kase.name}"`);
-    assert.equal(kase.voiceId, VOICE_ID_DE, `eine Stimme fuer alle Sprachen im Fall "${kase.name}"`);
 
     const disclosure = disclosureFor(language);
     assert.ok(
