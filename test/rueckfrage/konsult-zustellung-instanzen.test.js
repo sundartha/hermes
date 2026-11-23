@@ -202,3 +202,64 @@ test(
     });
   },
 );
+
+const TORWAECHTER_SCHLUESSEL = 604401;
+const TORWAECHTER_SQL = `CREATE FUNCTION zustellung_tor() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN PERFORM pg_advisory_lock(${TORWAECHTER_SCHLUESSEL}); PERFORM pg_advisory_unlock(${TORWAECHTER_SCHLUESSEL}); RETURN NULL; END $$;
+  CREATE TRIGGER zustellung_tor BEFORE UPDATE OF consults ON call FOR EACH STATEMENT EXECUTE FUNCTION zustellung_tor()`;
+const TOR_ZU_SQL = `SELECT pg_advisory_lock(${TORWAECHTER_SCHLUESSEL})`;
+const TOR_AUF_SQL = `SELECT pg_advisory_unlock(${TORWAECHTER_SCHLUESSEL})`;
+const WARTENDE_ZUSTELLUNG_SQL = `SELECT count(*)::int AS anzahl FROM pg_stat_activity
+  WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE call SET consults = (%'`;
+const STATUS_SETZEN_SQL = `UPDATE call SET consults = jsonb_set(consults, '{0,status}', to_jsonb($2::text)) WHERE id = $1`;
+
+const ZUSTELLUNG_NACH_STATUSWECHSEL = [
+  ["answered", "beantwortet"],
+  ["expired", "abgelaufen"],
+];
+
+test(
+  "Bleibt die Rueckfrage bis zur Zustellmarke offen, setzt der Abruf ueber Instanz B askDeliveredAt",
+  { timeout: ZEITGRENZE_MS },
+  async (t) => {
+    if (!postgresVorhanden()) return;
+    await mitInstanzen(t, "call_kz_offen", async ({ b, sql, hole, frageAuf, gestellt }) => {
+      const frage = frageAuf(b);
+      await gestellt();
+      assert.equal((await hole(b)).event, "consult");
+      const [danach] = (await sql(FRAGEN_SQL, ["call_kz_offen"])).rows[0].consults;
+      assert.equal(danach.status, "open");
+      assert.match(danach.askDeliveredAt, /^\d{4}-\d{2}-\d{2}T/);
+      await frage;
+    });
+  },
+);
+
+for (const [status, bezeichnung] of ZUSTELLUNG_NACH_STATUSWECHSEL) {
+  test(
+    `Wird die Rueckfrage zwischen Lesen und Zustellmarke ${bezeichnung} (${status}), bleibt askDeliveredAt leer`,
+    { timeout: ZEITGRENZE_MS },
+    async (t) => {
+      if (!postgresVorhanden()) return;
+      const anrufId = `call_kz_${status}`;
+      await mitInstanzen(t, anrufId, async ({ a, b, sql, hole, frageAuf, gestellt }) => {
+        const frage = frageAuf(a);
+        await gestellt();
+        await sql(TORWAECHTER_SQL);
+        await sql(TOR_ZU_SQL);
+        const abruf = hole(b);
+        await zeilenBis(
+          async () => (await sql(WARTENDE_ZUSTELLUNG_SQL)).rows[0].anzahl,
+          (anzahl) => anzahl > 0,
+        );
+        await sql(STATUS_SETZEN_SQL, [anrufId, status]);
+        await sql(TOR_AUF_SQL);
+        assert.equal((await abruf).event, "consult");
+        const [danach] = (await sql(FRAGEN_SQL, [anrufId])).rows[0].consults;
+        assert.equal(danach.status, status);
+        assert.equal(danach.askDeliveredAt, undefined);
+        await frage;
+      });
+    },
+  );
+}
