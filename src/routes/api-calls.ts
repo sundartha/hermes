@@ -37,7 +37,8 @@ import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../ele
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { beginneAnrufstartMessung } from "../elevenlabs/anrufstart-messung.ts";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor, supportedLanguageOf } from "../i18n/locales.ts";
+import { localeFor } from "../i18n/locales.ts";
+import { sprachcodeOf } from "../i18n/sprachcode.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.ts";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
@@ -45,7 +46,7 @@ import { ANRUFSTART_SPERR_TORE, makeAnrufstartAuftrag } from "../elevenlabs/anru
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
-import { unsupportedLanguageBody } from "./_call-request.ts";
+import { invalidLanguageBody } from "./_call-request.ts";
 import {
   antworteFehler,
   HTTP_BAD_GATEWAY,
@@ -63,7 +64,6 @@ export type WaehleAnruf = (call: Anruf, bestanden: GatesBestanden) => Promise<Wa
 
 type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
-const sprachePruefen: (wert: unknown) => string | null = supportedLanguageOf;
 const sprachtexteFuer: (language: string) => unknown = localeFor;
 const gateTexteFuer: (language: string) => { gates: { queueUnavailable: string } } = localeFor;
 const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | GatesBestanden> = runOutboundGates;
@@ -856,8 +856,8 @@ export function makeCallRoutes({
     if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
     if (isTrunkZeroFormatError(to)) return res.status(HTTP_BAD_REQUEST).json({ error: E164_FORMAT_ERROR });
 
-    const requestedLanguage = b.language ? sprachePruefen(b.language) : null;
-    if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(unsupportedLanguageBody());
+    const requestedLanguage = b.language ? sprachcodeOf(b.language) : null;
+    if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(invalidLanguageBody());
 
     const callId = newId("call");
     const ctx: Kontext = { req, to, objective, b, callId };

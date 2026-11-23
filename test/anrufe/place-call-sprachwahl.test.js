@@ -94,12 +94,11 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
   it("P4a-A3: 'zz' und 'pt' werden mit 400 unsupported_language abgelehnt - kein Anruf, kein Datensatz", async () => {
     await withVorspann(async ({ srv }) => {
       const vorAnzahl = srv.readStore().calls.length;
-      for (const code of ["zz", "pt"]) {
+      for (const code of ["zz9", "p"]) {
         const res = await placeCall(srv, { language: code });
         assert.equal(res.status, HTTP_BAD_REQUEST, `code=${code}`);
         const json = await res.json();
-        assert.equal(json.code, "unsupported_language");
-        assert.ok(json.error.includes("de") && json.error.includes("fr") && json.error.includes("en"));
+        assert.equal(json.code, "invalid_language");
       }
       assert.equal(srv.readStore().calls.length, vorAnzahl);
       assert.equal(wahlen(srv).length, 0);
@@ -112,9 +111,9 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
       assert.equal(gross.status, HTTP_OK, JSON.stringify(await gross.json()));
       assert.equal(outboundCall(srv).language, "de");
 
-      const region = await placeCall(srv, { to: FR_TARGET, language: "de-DE" });
+      const region = await placeCall(srv, { to: FR_TARGET, language: "de_DE" });
       assert.equal(region.status, HTTP_BAD_REQUEST);
-      assert.equal((await region.json()).code, "unsupported_language");
+      assert.equal((await region.json()).code, "invalid_language");
     });
   });
 
