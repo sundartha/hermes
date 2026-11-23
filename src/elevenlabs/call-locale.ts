@@ -1,4 +1,4 @@
-import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.ts";
+import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
@@ -40,7 +40,14 @@ function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord,
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-function disclosureLanguageOf(state: MandantZustand, { tenantId, numberRecord, to }: Zugriff & { to: string | null }): string {
+const OHNE_EIGENE_TEXTE_OFFENLEGUNG = "en";
+
+function disclosureLanguageOf(
+  state: MandantZustand,
+  { tenantId, numberRecord, to, callLanguage }: Zugriff & { to: string | null; callLanguage?: string | undefined },
+): string {
+  const fremdeStartsprache = callLanguage !== undefined && !SUPPORTED_LANGUAGES.includes(callLanguage);
+  if (fremdeStartsprache) return calleeLanguage(to) ?? OHNE_EIGENE_TEXTE_OFFENLEGUNG;
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -60,7 +67,7 @@ export function callLocaleFor(
   { tenantId, numberRecord, ownerName, to, callLanguage }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
-  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to }));
+  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage }));
   return {
     language: gespraech.language,
     disclosureLanguage: offenlegung.language,
