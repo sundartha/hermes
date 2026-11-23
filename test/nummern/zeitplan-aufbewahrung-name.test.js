@@ -33,6 +33,7 @@ const SWEEP_NAMEN = [
   "paid-without-number",
   "provision-retry",
   "price-drift",
+  "vorspann-aufraeumen",
 ];
 
 test(
