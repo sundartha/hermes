@@ -212,9 +212,12 @@ async function beiKlingelfrist({ callId, ladeZustand, store, voiceControl, beiAu
   const zustand = call.status === "active" ? await ladeZustand(call) : undefined;
   if (!zustand || zustand.abgehoben) return;
   await legeBeinAuf(voiceControl(call.provider), callId, zustand.calleeId);
+  await beiEntnommenerZeile({ vorspannZustand, call, folge: (aufgelegt) => beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false, aufgelegt }) });
+}
+
+async function beiEntnommenerZeile({ vorspannZustand, call, folge }) {
   const zeile = await vorspannZustand.entnimm(zustandsRef(call));
-  if (!zeile) return;
-  await beiAufgelegt({ call, zustand, vomElBein: false, abgehoben: false, aufgelegt: new Set(zeile.aufgelegt) });
+  if (zeile) await folge(new Set(zeile.aufgelegt));
 }
 
 const setzeKlingelfristGeschuetzt = ({ call, store, config, now, beiFehler }) =>
@@ -330,10 +333,7 @@ export function makeVorspannAblauf({
 
   const BEHANDLER = Object.freeze({
     [CALL_CONTROL_EREIGNIS.ABGEHOBEN]: (args) => (args.vomElBein ? beiElAngenommen(args) : beiAbgehoben(args)),
-    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: async (args) => {
-      const zeile = await vorspannZustand.entnimm(zustandsRef(args.call));
-      if (zeile) await beiAufgelegt({ ...args, aufgelegt: new Set(zeile.aufgelegt) });
-    },
+    [CALL_CONTROL_EREIGNIS.AUFGELEGT]: (args) => beiEntnommenerZeile({ vorspannZustand, call: args.call, folge: (aufgelegt) => beiAufgelegt({ ...args, aufgelegt }) }),
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: (args) => (args.vomElBein ? undefined : beiWiedergabeEnde(args)),
   });
 
