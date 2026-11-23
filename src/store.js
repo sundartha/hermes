@@ -180,6 +180,8 @@ export const vorspannZustand = {
   beanspruecheMarke: (anfrage) => aktiverVorspannZustand().beanspruecheMarke(anfrage),
   entnimm: (anfrage) => aktiverVorspannZustand().entnimm(anfrage),
   speichere: (anfrage) => aktiverVorspannZustand().speichere(anfrage),
+  legeAufgelegtAn: (anfrage) => aktiverVorspannZustand().legeAufgelegtAn(anfrage),
+  nimmAufgelegtWeg: (anfrage) => aktiverVorspannZustand().nimmAufgelegtWeg(anfrage),
 };
 
 const aktiveKonsultPlaetze = () => offenesBackend?.konsultPlaetze ?? speicherKonsultPlaetze;

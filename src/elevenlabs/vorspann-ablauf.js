@@ -82,17 +82,23 @@ const zustandVon = (zeile) => zeile && { ...zeile, stand: standAusObjekt(zeile.s
 
 const speichereZustand = ({ vorspannZustand, call, zustand }) =>
   vorspannZustand
-    .speichere({ ...zustandsRef(call), stand: standNachObjekt(zustand.stand), aufgelegt: [...zustand.aufgelegt] })
+    .speichere({ ...zustandsRef(call), stand: standNachObjekt(zustand.stand) })
     .catch((fehler) => logFehler("zustand", call.id, fehler));
+
+const aendereAufgelegt = (aenderung, { vorspannZustand, call, bein }) =>
+  vorspannZustand[aenderung]({ ...zustandsRef(call), bein }).catch((fehler) => logFehler("zustand", call.id, fehler));
 
 async function legeBeideBeineAuf({ call, zustand, steuerung, now, vorspannZustand }) {
   zustand.stand.set(STAND.ABGEBROCHEN, now());
   const beine = [zustand.calleeId, elBeinVon(call, zustand)].filter(Boolean);
-  beine.forEach((bein) => zustand.aufgelegt.add(bein));
   await speichereZustand({ vorspannZustand, call, zustand });
   await Promise.all(
     beine.map(async (bein) => {
-      if (!(await legeBeinAuf(steuerung, call.id, bein))) zustand.aufgelegt.delete(bein);
+      zustand.aufgelegt.add(bein);
+      await aendereAufgelegt("legeAufgelegtAn", { vorspannZustand, call, bein });
+      if (await legeBeinAuf(steuerung, call.id, bein)) return;
+      zustand.aufgelegt.delete(bein);
+      await aendereAufgelegt("nimmAufgelegtWeg", { vorspannZustand, call, bein });
     }),
   );
   await speichereZustand({ vorspannZustand, call, zustand });

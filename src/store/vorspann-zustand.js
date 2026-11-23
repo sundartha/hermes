@@ -14,7 +14,9 @@ const ABGEHOBEN_SQL = `UPDATE vorspann_zustand SET abgehoben = true WHERE call_i
 const MARKE_SQL = `UPDATE vorspann_zustand SET stand = stand || jsonb_build_object($2::text, $3::bigint)
   WHERE call_id = $1 AND NOT stand ? $2::text RETURNING stand`;
 const ENTNEHMEN_SQL = `DELETE FROM vorspann_zustand WHERE call_id = $1 RETURNING callee_id, token, text, stand, aufgelegt, abgehoben`;
-const SPEICHERN_SQL = `UPDATE vorspann_zustand SET stand = $2::jsonb || stand, aufgelegt = $3::jsonb WHERE call_id = $1`;
+const SPEICHERN_SQL = `UPDATE vorspann_zustand SET stand = $2::jsonb || stand, aufgelegt = COALESCE($3::jsonb, aufgelegt) WHERE call_id = $1`;
+const AUFGELEGT_ANLEGEN_SQL = `UPDATE vorspann_zustand SET aufgelegt = CASE WHEN aufgelegt ? $2::text THEN aufgelegt ELSE aufgelegt || to_jsonb($2::text) END WHERE call_id = $1`;
+const AUFGELEGT_WEGNEHMEN_SQL = `UPDATE vorspann_zustand SET aufgelegt = aufgelegt - $2::text WHERE call_id = $1`;
 
 const zeileVon = (zeile) => zeile && { calleeId: zeile.callee_id, token: zeile.token, text: zeile.text, stand: zeile.stand, aufgelegt: zeile.aufgelegt, abgehoben: zeile.abgehoben, elBeinId: zeile.el_bein_id };
 
@@ -56,7 +58,13 @@ export function makePostgresVorspannZustand(runner) {
       (await imMandanten(tenantId, [[MARKE_SQL, [callId, marke, ms]]]))[0]?.stand,
     entnimm: async ({ tenantId, callId }) => zeileVon((await imMandanten(tenantId, [[ENTNEHMEN_SQL, [callId]]]))[0]),
     speichere: async ({ tenantId, callId, stand, aufgelegt }) => {
-      await imMandanten(tenantId, [[SPEICHERN_SQL, [callId, JSON.stringify(stand), JSON.stringify(aufgelegt)]]]);
+      await imMandanten(tenantId, [[SPEICHERN_SQL, [callId, JSON.stringify(stand), aufgelegt && JSON.stringify(aufgelegt)]]]);
+    },
+    legeAufgelegtAn: async ({ tenantId, callId, bein }) => {
+      await imMandanten(tenantId, [[AUFGELEGT_ANLEGEN_SQL, [callId, bein]]]);
+    },
+    nimmAufgelegtWeg: async ({ tenantId, callId, bein }) => {
+      await imMandanten(tenantId, [[AUFGELEGT_WEGNEHMEN_SQL, [callId, bein]]]);
     },
   };
 }
@@ -101,7 +109,13 @@ export function makeSpeicherVorspannZustand() {
       return zeile;
     },
     speichere: async (anfrage) => {
-      ersetze(anfrage, (zeile) => ({ stand: { ...anfrage.stand, ...zeile.stand }, aufgelegt: [...anfrage.aufgelegt] }));
+      ersetze(anfrage, (zeile) => ({ stand: { ...anfrage.stand, ...zeile.stand }, aufgelegt: anfrage.aufgelegt ? [...anfrage.aufgelegt] : zeile.aufgelegt }));
+    },
+    legeAufgelegtAn: async (anfrage) => {
+      ersetze(anfrage, (zeile) => ({ aufgelegt: zeile.aufgelegt.includes(anfrage.bein) ? zeile.aufgelegt : [...zeile.aufgelegt, anfrage.bein] }));
+    },
+    nimmAufgelegtWeg: async (anfrage) => {
+      ersetze(anfrage, (zeile) => ({ aufgelegt: zeile.aufgelegt.filter((bein) => bein !== anfrage.bein) }));
     },
   };
 }
