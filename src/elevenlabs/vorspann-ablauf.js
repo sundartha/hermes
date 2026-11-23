@@ -314,8 +314,7 @@ export function makeVorspannAblauf({
     vorspannZustand,
     legeBeideBeineAuf: legeBeideBeineAufMitUhr,
     vermerkeElFehler: vermerkeElFehlerFuer, vermerkeNichtAbgespielt: (call) => vermerkeNichtAbgespielt({ call, store }),
-    logFehler,
-    now,
+    logFehler, now,
   });
 
   async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben, aufgelegt = zustand.aufgelegt }) {
@@ -343,8 +342,10 @@ export function makeVorspannAblauf({
   });
 
   async function behandle({ call, ereignis, zugang }) {
+    let geladen = false;
     try {
       const zustand = await ladeZustand(call);
+      geladen = true;
       const vomElBein = ereignis.callControlId === (zustand ? elBeinVon(call, zustand) : call.elCallControlId);
       if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein, now });
       zustand.calleeId ??= await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: ereignis.callControlId });
@@ -353,6 +354,7 @@ export function makeVorspannAblauf({
       await speichereZustand({ vorspannZustand, call, zustand });
     } catch (fehler) {
       logFehler("ereignis", call.id, fehler);
+      if (!geladen && ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT) throw fehler;
     }
   }
 
