@@ -307,6 +307,9 @@ const backend = new Proxy(
   { get: (_ziel, name) => (...argumente) => geoeffnetesBackend()[name](...argumente) },
 );
 
+export const zustellungSchreiben = async (...argumente) =>
+  geoeffnetesBackend().zustellungSchreiben?.(...argumente);
+
 export let webhookZustellung = null;
 export let stripeEreignisRegister = null;
 
@@ -338,7 +341,6 @@ export const {
   stammdatenSchreiben,
   rueckfrageGelesen,
   zustellzeitGelesen,
-  zustellungSchreiben,
   ausfallSql,
   nummernSql,
   nummerNachladen,
