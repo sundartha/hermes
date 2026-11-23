@@ -16,6 +16,8 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { ANTHROPIC_SCHLUESSEL_BEISPIEL } from "../gemeinsam/erfundene-geheimnisse.js";
+import { starteAttrappe as starteModellAttrappe } from "./attrappen-server.js";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -75,10 +77,9 @@ async function starteAttrappe() {
 
 const umgebung = {};
 
-beforeEach(async () => {
-  umgebung.attrappe = await starteAttrappe();
-  umgebung.signer = makeTelnyxSigner();
+async function startePruefServer(zusatzEnv = {}) {
   const env = {
+    ...zusatzEnv,
     ...elInboundInitSpawnEnv(AGENT_ID),
     ELEVENLABS_OUTBOUND_ENABLED: "true",
     ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
@@ -102,6 +103,12 @@ beforeEach(async () => {
     tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME, privateNumber: EIGENE_NUMMER }],
   });
   umgebung.srv = await startServer({ env, seed });
+}
+
+beforeEach(async () => {
+  umgebung.attrappe = await starteAttrappe();
+  umgebung.signer = makeTelnyxSigner();
+  await startePruefServer();
 });
 
 afterEach(async () => {
@@ -205,4 +212,38 @@ test("6126-K1: Anlass mit Satzende und grossem Anfang -> genau ein Punkt, Anlass
 test("6126-K1: Anlass mit innerem Satzzeichen -> das Zeichen bleibt, genau ein Punkt vor der Aufforderung", async () => {
   const { agent } = await anschlussFuer({ language: "en", objective: "Ask about the price of 2.50 euros on Friday" });
   assert.equal(agent.first_message, "Here's what I'm calling about: Ask about the price of 2.50 euros on Friday. Please go ahead.");
+});
+
+test("6126-K1: vom Eroeffnungsmodell erzeugte Anlasszeile mit zwei Schlusspunkten -> genau ein Punkt vor der Aufforderung", async () => {
+  const modell = await starteModellAttrappe((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(HTTP_OK, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "msg_6126",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-5",
+          content: [{ type: "tool_use", id: "tu_6126", name: "eroeffnungszeile", input: { reason: "Ich rufe an, um den Termin zu bestätigen.." } }],
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          usage: { input_tokens: 60, output_tokens: 25 },
+        }),
+      );
+    });
+  });
+  try {
+    await umgebung.srv.stop();
+    await startePruefServer({
+      ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
+      ANTHROPIC_BASE_URL: modell.url,
+      ANTHROPIC_API_KEY: ANTHROPIC_SCHLUESSEL_BEISPIEL,
+      LLM_BREAKER_THRESHOLD: "100",
+    });
+    const { agent } = await anschlussFuer({ language: "de", objective: "Termin bestätigen" });
+    assert.equal(agent.first_message, "Ich rufe an, um den Termin zu bestätigen. Bitte sprechen Sie.");
+  } finally {
+    await modell.close();
+  }
 });
