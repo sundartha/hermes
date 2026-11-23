@@ -346,11 +346,7 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
 
   const leseAnrufMitClient = (id, client) => leseAusDatenbank(id, (state, gelesen) => anrufEinsetzen({ state, eigene }, gelesen), client);
   const leseAnruf = (id) => leseAnrufMitClient(id);
-  const leseAnrufUngebunden = async (id) => {
-    const bekannt = ops.getCall(requireState(), id);
-    if (bekannt && eigene.has(bekannt.id)) return bekannt;
-    return leseAusDatenbank(id, (_state, gelesen) => gelesen);
-  };
+  const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (_state, gelesen) => gelesen);
   const leseAnrufFuerAnzeige = (id) => anzeigeAbgleich({ runner, eigene, lese: leseAnrufUngebunden, anrufLesen }, id);
   return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden, leseAnrufFuerAnzeige };
 }
