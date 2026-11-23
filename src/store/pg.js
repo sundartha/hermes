@@ -347,8 +347,16 @@ function macheAnrufSuche({ runner, requireState, gebunden, eigene }) {
   const leseAnrufMitClient = (id, client) => leseAusDatenbank(id, (state, gelesen) => anrufEinsetzen({ state, eigene }, gelesen), client);
   const leseAnruf = (id) => leseAnrufMitClient(id);
   const leseAnrufUngebunden = (id) => leseAusDatenbank(id, (_state, gelesen) => gelesen);
+  const leseAnrufAusDatenbank = async (id) => {
+    try {
+      return await mitZeitgrenze(runner, { arbeit: (frisch) => anrufLesen(frisch, id), nurFrist: true });
+    } catch (err) {
+      console.error("[pg] leseCall fehlgeschlagen:", err.message);
+      throw err;
+    }
+  };
   const leseAnrufFuerAnzeige = (id) => anzeigeAbgleich({ runner, eigene, lese: leseAnrufUngebunden, anrufLesen }, id);
-  return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden, leseAnrufFuerAnzeige };
+  return { attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufMitClient, leseAnrufUngebunden, leseAnrufAusDatenbank, leseAnrufFuerAnzeige };
 }
 
 async function anzeigeAbgleich({ runner, eigene, lese, anrufLesen }, id) {
@@ -419,7 +427,7 @@ function nummerMethoden({ requireState, runner, nummernSql }) {
   };
 }
 
-function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, leseAnrufFuerAnzeige, einreihen, anrufe, posteingang, posteingangAnrufe }) {
+function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiveCallRow, attachActiveCallImMandanten, attachActiveCallByKey, leseAnruf, leseAnrufUngebunden, leseAnrufAusDatenbank, leseAnrufFuerAnzeige, einreihen, anrufe, posteingang, posteingangAnrufe }) {
   return {
     createCall(input) {
       const call = ops.createCall(requireState(), { ...input, instanz: EIGENE_KENNUNG });
@@ -449,6 +457,7 @@ function anrufStatusMethoden({ requireState, save, gebunden, eigene, attachActiv
     },
     anrufHierBewacht: (id) => gebunden.has(id),
     leseCall: leseAnruf,
+    leseCallAusDatenbank: leseAnrufAusDatenbank,
     leseCallUngebunden: (id, { fuerAnzeige = false } = {}) => (fuerAnzeige ? leseAnrufFuerAnzeige(id) : leseAnrufUngebunden(id)),
     attachActiveCall(wert, { schluessel, mandant } = {}) {
       if (schluessel) return attachActiveCallByKey(SCHLUESSEL_ARTEN[schluessel], wert);
