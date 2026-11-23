@@ -2,7 +2,7 @@ import { Router } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "../mcp-tools.js";
-import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
+import { HERMES_SERVER_INFO, MCP_BASE_INSTRUCTIONS } from "../mcp-server-info.js";
 import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { createRateLimiter } from "../middleware.ts";
@@ -42,7 +42,7 @@ export function makeInternProbeMcpRoutes({ config, store, bearerAbgewiesen }) {
 
   async function bediene(req, res) {
     const language = await bereiche.mandantProfil.tenantLanguage(BOOTSTRAP_TENANT_ID);
-    const server = new McpServer(HERMES_SERVER_INFO, mcpServerOptions({ uiEnabled: false, consultLoop: false }));
+    const server = new McpServer(HERMES_SERVER_INFO, { instructions: MCP_BASE_INSTRUCTIONS });
     registerTools(nurProbeWerkzeuge(server), {
       identity: PROBE_IDENTITAET,
       scopedTenant: BOOTSTRAP_TENANT_ID,
