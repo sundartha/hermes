@@ -39,7 +39,7 @@ function aufrufen({ umgebung = {}, argumente = [], fall = {} } = {}) {
     GITHUB_SHA: COMMIT,
     STAGING_URL: BASIS,
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
     STAGING_PROBE_VORNAME: "Anna",
     SLACK_ALERT_URL: "http://127.0.0.1:1/x",
