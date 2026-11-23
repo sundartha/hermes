@@ -8,6 +8,7 @@ import {
   PROBE_STAGING_TEST_TOKEN,
   PROBE_TELNYX_SCHLUESSEL,
 } from "../gemeinsam/erfundene-geheimnisse.js";
+import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { KLINGELN_GRENZE_S, urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
@@ -134,7 +135,7 @@ test("Anrufer: ohne eingehenden Gegenanruf fehlt der Wert", async () => {
 });
 
 test("Anrufer: ein Gegenanruf außerhalb des Zeitfensters zählt nicht, ein älterer wird übersprungen", async () => {
-  assert.equal(await geklingelt([{ id: "g1", nachMs: 60001 }]), undefined);
+  assert.equal(await geklingelt([{ id: "g1", nachMs: 300001 }]), undefined);
   assert.equal(
     await geklingelt([
       { id: "alt", nachMs: -3600000 },
@@ -142,6 +143,67 @@ test("Anrufer: ein Gegenanruf außerhalb des Zeitfensters zählt nicht, ein ält
     ]),
     3,
   );
+});
+
+test("Anrufer: Gegenanruf 90 s nach dem Start ist klingeln_zu_spaet", async () => {
+  const sekunden = await geklingelt([{ id: "g1", nachMs: 90000 }]);
+  assert.equal(sekunden, 90);
+  assert.deepEqual(urteilen({ ...GUT, klingelnSekunden: sekunden }).gerissen, ["klingeln_zu_spaet"]);
+});
+
+test("Anrufer: Gegenanruf genau am Rand des Klingel-Fensters zählt, danach nicht", async () => {
+  assert.equal(await geklingelt([{ id: "g1", nachMs: 300000 }]), 300);
+  assert.equal(await geklingelt([{ id: "g1", nachMs: 300001 }]), undefined);
+});
+
+function anruferMitStimmen(nachMs) {
+  const uhr = { jetzt: () => JETZT, warte: async () => undefined };
+  const abfrage = async (url, optionen) => {
+    const { name, arguments: argumente } = JSON.parse(optionen.body).params;
+    if (name === "place_call") return antwort({ call_id: "c1", status: "dialing" });
+    if (name === "list_calls") {
+      return antwort({
+        calls: [
+          { id: "c1", direction: "outbound" },
+          { id: "g1", direction: "inbound" },
+        ],
+      });
+    }
+    if (argumente.call_id === "c1") return antwort(stand());
+    const gegen = { started_at: new Date(JETZT + nachMs).toISOString() };
+    const koerper = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        isError: false,
+        structuredContent: { ...stand(), ...gegen },
+        _meta: { [STIMMEN_ANZAHL_META_KEY]: 7 },
+      },
+    });
+    return { ok: true, status: 200, text: async () => koerper };
+  };
+  return anruferBauen({
+    basis: BASIS,
+    token: PROBE_STAGING_TEST_TOKEN,
+    ziel: ZIEL,
+    sprache: "de",
+    auftraggeber: "Probe GmbH",
+    vorname: "Anna",
+    abfrage,
+    uhr,
+  });
+}
+
+async function stimmenNach(nachMs) {
+  const anrufer = anruferMitStimmen(nachMs);
+  await anrufer.anrufen({ ziel: ZIEL });
+  return anrufer.stimmenAnzahl();
+}
+
+test("Anrufer: Stimmen-Zählung nimmt einen Gegenanruf nach 90 s nicht", async () => {
+  assert.equal(await stimmenNach(4000), 7);
+  assert.equal(await stimmenNach(60000), 7);
+  assert.equal(await stimmenNach(90000), undefined);
 });
 
 test("Anrufer: der Rückgabewert von anrufen bleibt ohne klingelnSekunden", async () => {
