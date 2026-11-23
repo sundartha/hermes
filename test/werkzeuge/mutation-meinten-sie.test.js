@@ -12,8 +12,8 @@ const mutant = (schluessel, ergebnis, test) => ({ schluessel, mutation: "StringL
 
 function urteil(mutanten) {
   const zusammenfassung = join(mkdtempSync(join(tmpdir(), "mutation-meinten-")), "zusammenfassung.md");
-  const vorher = { PR_TEXT: process.env.PR_TEXT, GITHUB_STEP_SUMMARY: process.env.GITHUB_STEP_SUMMARY, ROTPROBE_GRUEN: process.env.ROTPROBE_GRUEN };
-  Object.assign(process.env, { PR_TEXT, GITHUB_STEP_SUMMARY: zusammenfassung });
+  const vorher = { PR_TEXT: process.env.PR_TEXT, GITHUB_STEP_SUMMARY: process.env.GITHUB_STEP_SUMMARY, TEIL: process.env.TEIL, TEILE: process.env.TEILE, ROTPROBE_GRUEN: process.env.ROTPROBE_GRUEN };
+  Object.assign(process.env, { PR_TEXT, GITHUB_STEP_SUMMARY: zusammenfassung, TEIL: "0", TEILE: "1" });
   delete process.env.ROTPROBE_GRUEN;
   const log = console.log;
   console.log = () => {};
