@@ -265,3 +265,9 @@ test("Ein beendeter Anruf, der in der Datenbank schon dieselbe Konversation hael
   await b.drainFlushes();
   assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ERSTE);
 });
+
+test("Eine Bindung auf einen unbekannten Anruf wirft nicht", async () => {
+  const { b } = await zweiInstanzen();
+  const ergebnis = b.bindInboundElConversation("call_unbekannt_6110", { conversationId: ERSTE, nowIso: JETZT_ISO });
+  assert.equal(ergebnis.changed, false);
+});
