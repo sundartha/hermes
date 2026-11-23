@@ -9,7 +9,7 @@ import { pgStartUmgebung } from "../gemeinsam/pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
 import { makeTelnyxSigner, nowSeconds, startServer } from "../helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
-import { anweisungenSeit, warteAufAnspruchsverbindung } from "./anspruchsverbindung.js";
+import { anweisungenBisZurueck, warteAufAnspruchsabschnitt } from "./anspruchsverbindung-abschnitt.js";
 import { starteAnweisungsMitschnitt } from "./anweisungs-mitschnitt.js";
 import { starteDatenbankRelais } from "./datenbank-relais.js";
 import { postgresVorhanden } from "./hermes-mit-postgres.js";
@@ -356,8 +356,8 @@ test("Nach Ablauf der Frist sendet die Anspruchsverbindung nach dem Fortsetzen n
       const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
-      const spaeter = beanspruchend.flatMap((nr) => anweisungenSeit(mitschnitt, nr, vorher));
+      const beanspruchend = await warteAufAnspruchsabschnitt(mitschnitt, vorher, gehalten);
+      const spaeter = beanspruchend.flatMap((nr) => anweisungenBisZurueck(mitschnitt, nr, vorher));
       assert.ok(beanspruchend.length >= EINMAL);
       assert.deepEqual(spaeter.filter((text) => text !== ZURUECK), []);
     } finally {
@@ -392,11 +392,11 @@ test("Nach Ablauf der Frist kommt auf der wartenden Anspruchsverbindung nach dem
       const gehalten = gehalteneBeginne(mitschnitt);
       relais.fortsetzen();
       await relais.abwarten();
-      await mitschnitt.bisBedingung(() => gehalten.some((nr) => anweisungenSeit(mitschnitt, nr, vorher).includes(ZURUECK)));
-      const beanspruchend = await warteAufAnspruchsverbindung(mitschnitt, vorher, gehalten);
+      await mitschnitt.bisBedingung(() => gehalten.some((nr) => anweisungenBisZurueck(mitschnitt, nr, vorher).includes(ZURUECK)));
+      const beanspruchend = await warteAufAnspruchsabschnitt(mitschnitt, vorher, gehalten);
       assert.ok(beanspruchend.length >= EINMAL);
       for (const nr of beanspruchend) {
-        const spaeter = anweisungenSeit(mitschnitt, nr, vorher);
+        const spaeter = anweisungenBisZurueck(mitschnitt, nr, vorher);
         assert.ok(spaeter.includes(ZURUECK), JSON.stringify(spaeter));
       }
     } finally {
