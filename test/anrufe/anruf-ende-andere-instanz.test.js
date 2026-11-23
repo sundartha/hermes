@@ -154,6 +154,7 @@ test("Dublettenantwort des MCP-Werkzeugs place_call nennt den echten Status, ein
     assert.equal(neu.structuredContent.status, "dialing");
   } finally {
     await srv.stop();
+    await idp.close();
   }
 });
 
