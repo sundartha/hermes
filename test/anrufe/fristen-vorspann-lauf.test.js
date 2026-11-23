@@ -131,3 +131,53 @@ test("Fristentakt: ein Takt ruft nach der Uebergabe auch die Vorspann-Runde, auc
   await new Promise((erfuellen) => setImmediate(erfuellen));
   assert.deepEqual(betrieb.geholt.map((anfrage) => anfrage.art), ["hoechstdauer", "reserve", "abfrage", "uebergabe", "vorspann"]);
 });
+
+function takt({ hierKaputt }) {
+  const handles = [];
+  const gelesen = [];
+  const uhr = { setzeTakt: (aufgabe) => (handles.push(aufgabe), { unref: () => {} }), loescheTakt: () => {} };
+  const store = {
+    faelligeFristen: async (anfrage) => {
+      gelesen.push(anfrage.art);
+      if (anfrage.art === "hoechstdauer") throw new Error("db weg");
+      return [];
+    },
+    attachActiveCall: async () => null,
+    getCall: () => null,
+    setzeGeldFrist: async () => {},
+    setzeReserveFrist: async () => {},
+    setzeUebergabeFrist: async () => {},
+    leereVorspannFrist: async () => {},
+  };
+  const abgelaufeneHier = () => {
+    if (hierKaputt) throw new Error("hier kaputt");
+    return [];
+  };
+  starteFristenTakt({ store, beende: async () => {}, abgelaufeneHier, limitJeMandant: 1, leaseMs: 1, taktMs: 1, uhr, vorspann: { bei: async () => {} } });
+  return { tick: handles[0], gelesen };
+}
+
+const nachRunde = () => new Promise((erfuellen) => setImmediate(erfuellen));
+
+test("Fristentakt: laufen alle Runden ohne Abbruch, steht kein Abbruch im Log", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  const { tick } = takt({ hierKaputt: false });
+  tick();
+  await nachRunde();
+  tick();
+  await nachRunde();
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("[fristen] Takt abgebrochen")), []);
+});
+
+test("Fristentakt: wirft die erste Runde, steht der Abbruch mit ihrem Fehler im Log und die Vorspann-Runde laeuft trotzdem", async (t) => {
+  const zeilen = [];
+  t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+  const { tick, gelesen } = takt({ hierKaputt: true });
+  tick();
+  await nachRunde();
+  tick();
+  await nachRunde();
+  assert.deepEqual(zeilen.filter((zeile) => zeile.startsWith("[fristen] Takt abgebrochen")), ["[fristen] Takt abgebrochen: Error: hier kaputt"]);
+  assert.equal(gelesen.filter((art) => art === "vorspann").length, 2);
+});
