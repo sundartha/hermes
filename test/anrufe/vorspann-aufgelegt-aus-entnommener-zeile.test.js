@@ -1,85 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { makeVorspannAblauf } from "../../src/elevenlabs/vorspann-ablauf.js";
-import { makeSpeicherVorspannZustand } from "../../src/store/vorspann-zustand.js";
-import { CALL_CONTROL_EREIGNIS } from "../../src/telephony/call-control-ereignis.ts";
+import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { nowSeconds } from "../helpers.js";
+import { postgresVorhanden, zeilenBis } from "./hermes-mit-postgres.js";
+import { CALLEE_BEIN, EL_BEIN, HTTP_OK, elAuflegen, mitAnbieter, platziereUndHebeAb } from "./vorspann-zwei-instanzen-hilfen.js";
 
-const CALLEE = "cc_callee_6086";
-const EL = "cc_el_6086";
-const CALL = { id: "call_6086", tenantId: "tenant_6086", provider: "telnyx", status: "active", elCallControlId: EL };
-const BRUECKE_MS = 1;
+const ZEITGRENZE_MS = 120_000;
+const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()";
+const ZEILE_SPERREN_SQL = "SELECT 1 FROM vorspann_zustand WHERE call_id = $1 FOR UPDATE";
+const AUFGELEGT_SETZEN_SQL = "UPDATE vorspann_zustand SET aufgelegt = $2::jsonb WHERE call_id = $1";
+const calleeAuflegen = (aufrufe) => aufrufe.auflegen.filter((url) => url.includes(CALLEE_BEIN));
 
-async function ablaufMitAnderemSchreiber({ aufgelegt, zwischen, abgehoben = true }) {
-  const zeilen = makeSpeicherVorspannZustand();
-  const ref = { tenantId: CALL.tenantId, callId: CALL.id };
-  await zeilen.anlegen({ ...ref, token: "tok_6086", text: "Hallo" });
-  await zeilen.setzeCallee({ ...ref, calleeId: CALLEE });
-  await zeilen.beanspruecheMarke({ ...ref, marke: "BRUECKE", ms: BRUECKE_MS });
-  if (abgehoben) await zeilen.beanspruecheAbgehoben(ref);
-  for (const bein of aufgelegt) await zeilen.legeAufgelegtAn({ ...ref, bein });
-  const vorspannZustand = {
-    ...zeilen,
-    lade: async (anfrage) => {
-      const kopie = await zeilen.lade(anfrage);
-      await zwischen(zeilen, ref);
-      return kopie;
-    },
-  };
-  const aufgelegtBeine = [];
-  const ablauf = makeVorspannAblauf({
-    voiceControl: () => ({ endCallViaCallControl: async (bein) => aufgelegtBeine.push(bein) }),
-    store: { leseCall: async () => CALL, save: () => {}, endCallRecord: () => {}, recordFailureReason: () => {} },
-    config: {},
-    ttsStore: { release: () => {} },
-    vorspannZustand,
-    inboundBridges: {},
-    ausgehendGesperrt: async () => false,
-    terminateAndBillCall: async ({ hangUp }) => hangUp?.(),
-    awaitAndPersistInboundElResult: async () => {},
-    billThunk: () => async () => {},
-    finishCall: async () => {},
-    now: () => BRUECKE_MS,
+function hangup(signer, srv, { callId, bein }) {
+  const rumpf = JSON.stringify({
+    data: { id: `evt-hangup-${callId}-${bein}`, event_type: "call.hangup", payload: { call_control_id: bein, status: "ok" } },
   });
-  return { ablauf, aufgelegtBeine };
-}
-
-const aufgelegtEreignis = (bein) => ({ ereignis: CALL_CONTROL_EREIGNIS.AUFGELEGT, callControlId: bein });
-
-const FAELLE = [
-  { name: "Callee legt auf, EL-Bein wurde nach gescheitertem Auflegen von anderer Instanz herausgenommen: EL-Bein wird aufgelegt", vorher: [EL], bein: CALLEE, erwartet: [EL] },
-  { name: "EL-Bein legt auf, Callee-Bein wurde nach gescheitertem Auflegen von anderer Instanz herausgenommen: Callee-Bein wird aufgelegt", vorher: [CALLEE], bein: EL, erwartet: [CALLEE] },
-];
-
-for (const { name, vorher, bein, erwartet } of FAELLE) {
-  test(name, async () => {
-    const { ablauf, aufgelegtBeine } = await ablaufMitAnderemSchreiber({
-      aufgelegt: vorher,
-      zwischen: async (zeilen, ref) => zeilen.nimmAufgelegtWeg({ ...ref, bein: vorher[0] }),
-    });
-    await ablauf.behandle({ call: CALL, ereignis: aufgelegtEreignis(bein), zugang: {} });
-    assert.deepEqual(aufgelegtBeine, erwartet);
-  });
-
-  test(`Ohne Zwischenaenderung wird das andere, schon aufgelegte Bein nicht noch einmal aufgelegt (${bein})`, async () => {
-    const { ablauf, aufgelegtBeine } = await ablaufMitAnderemSchreiber({ aufgelegt: vorher, zwischen: async () => {} });
-    await ablauf.behandle({ call: CALL, ereignis: aufgelegtEreignis(bein), zugang: {} });
-    assert.deepEqual(aufgelegtBeine, []);
+  const zeitstempel = String(nowSeconds());
+  return abrufMitFrist(`${srv.localUrl}/voice/vorspann?callId=${callId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "telnyx-signature-ed25519": signer.sign(zeitstempel, rumpf), "telnyx-timestamp": zeitstempel },
+    body: rumpf,
   });
 }
 
-test("Klingelfrist: EL-Bein, das eine andere Instanz nach gescheitertem Auflegen herausgenommen hat, wird mit dem Callee-Bein aufgelegt", async () => {
-  const { ablauf, aufgelegtBeine } = await ablaufMitAnderemSchreiber({
-    aufgelegt: [EL],
-    abgehoben: false,
-    zwischen: async (zeilen, ref) => zeilen.nimmAufgelegtWeg({ ...ref, bein: EL }),
+async function hangupMitZwischenaenderung({ a, sql, signer, aufrufe }, { vorher, bein }) {
+  const { callId } = await platziereUndHebeAb({ a, b: a, sql, signer, aufrufe });
+  await sql(AUFGELEGT_SETZEN_SQL, [callId, JSON.stringify([vorher])]);
+  await sql("BEGIN");
+  await sql(ZEILE_SPERREN_SQL, [callId]);
+  const antwort = hangup(signer, a, { callId, bein });
+  await zeilenBis(async () => (await sql(WARTENDE_SQL)).rows[0].anzahl, (anzahl) => anzahl >= 1);
+  await sql(AUFGELEGT_SETZEN_SQL, [callId, "[]"]);
+  await sql("COMMIT");
+  assert.equal((await antwort).status, HTTP_OK);
+}
+
+test("Hangup des Callee-Beins legt das EL-Bein auf, auch wenn eine andere Instanz es nach dem Laden aus aufgelegt herausgenommen hat", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, async (srv) => {
+    await hangupMitZwischenaenderung(srv, { vorher: EL_BEIN, bein: CALLEE_BEIN });
+    await zeilenBis(async () => srv.aufrufe, (aufrufe) => elAuflegen(aufrufe).length === 1);
   });
-  await ablauf.beiFrist({ callId: CALL.id, frist: "klingel" });
-  assert.deepEqual(aufgelegtBeine, [CALLEE, EL]);
 });
 
-test("Klingelfrist ohne Zwischenaenderung: schon aufgelegtes EL-Bein wird nicht noch einmal aufgelegt", async () => {
-  const { ablauf, aufgelegtBeine } = await ablaufMitAnderemSchreiber({ aufgelegt: [EL], abgehoben: false, zwischen: async () => {} });
-  await ablauf.beiFrist({ callId: CALL.id, frist: "klingel" });
-  assert.deepEqual(aufgelegtBeine, [CALLEE]);
+test("Hangup des EL-Beins legt das Callee-Bein auf, auch wenn eine andere Instanz es nach dem Laden aus aufgelegt herausgenommen hat", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, async (srv) => {
+    await hangupMitZwischenaenderung(srv, { vorher: CALLEE_BEIN, bein: EL_BEIN });
+    await zeilenBis(async () => srv.aufrufe, (aufrufe) => calleeAuflegen(aufrufe).length === 1);
+  });
+});
+
+test("Hangup eines Beins legt das andere Bein nicht noch einmal auf, wenn es wirklich schon aufgelegt ist", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, async ({ a, sql, signer, aufrufe }) => {
+    const { callId } = await platziereUndHebeAb({ a, b: a, sql, signer, aufrufe });
+    await sql(AUFGELEGT_SETZEN_SQL, [callId, JSON.stringify([EL_BEIN])]);
+    assert.equal((await hangup(signer, a, { callId, bein: CALLEE_BEIN })).status, HTTP_OK);
+    await zeilenBis(async () => (await sql("SELECT count(*)::int AS anzahl FROM vorspann_zustand WHERE call_id = $1", [callId])).rows[0].anzahl, (anzahl) => anzahl === 0);
+    assert.deepEqual(elAuflegen(aufrufe), []);
+  });
 });
