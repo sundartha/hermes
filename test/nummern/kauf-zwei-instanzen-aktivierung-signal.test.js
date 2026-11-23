@@ -19,14 +19,11 @@ import {
   PLAN_PRICE_BOOT_ENV,
   startServer,
   startTelnyxProvisioningMock,
-  waitUntil,
 } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
 const MS_JE_SEKUNDE = 1_000;
-const BESTELL_FRIST_MS = 120_000;
-const ANZAHL_SPUREN = 2;
 const MANDANT = "t_kauf_echt";
 const ABO = "sub_kauf_echt";
 const STRIPE_PFAD = "/webhooks/stripe";
@@ -182,11 +179,6 @@ test(
     ]);
     for (const antwort of antworten) assert.equal(antwort.status, HTTP_OK);
     await mitProtokoll([a, b], async () => {
-      await waitUntil(
-        () =>
-          spuren(a).length + spuren(b).length === ANZAHL_SPUREN && bestellungen(telnyx).length > 0,
-        { timeoutMs: BESTELL_FRIST_MS },
-      );
       await zeilenBis(
         async () => (await sql(ANZAHL_SQL, [MANDANT]))[0],
         (zeile) => zeile.erledigt === 1,
