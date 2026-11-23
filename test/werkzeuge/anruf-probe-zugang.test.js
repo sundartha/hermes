@@ -87,3 +87,76 @@ test("Workflow: beide Probe-Schritte reichen STAGING_PROBE_TOKEN durch und nicht
 test("Workflow: der Lastlauf behält STAGING_TEST_TOKEN", () => {
   assert.ok(schritt("Lastlauf").includes("STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}"));
 });
+
+test("Anrufer schickt in keinem Minutenfenster mehr als 29 Aufrufe an die enge Probe-Schnittstelle", async () => {
+  const MINUTE_MS = 60_000;
+  const START_MS = Date.parse("2026-11-23T12:00:00.000Z");
+  const GRENZE = 29;
+  const ANZAHL_LISTE = 30;
+  const ENDE_NACH_MS = 45_000;
+  const TAG_MS = 24 * 60 * MINUTE_MS;
+  let jetzt = START_MS;
+  const uhr = {
+    jetzt: () => jetzt,
+    warte: async (ms) => {
+      jetzt += ms;
+    },
+  };
+  const eintraege = Array.from({ length: ANZAHL_LISTE }, (_, index) => ({
+    id: `alt-${index}`,
+    direction: index < 5 ? "outbound" : "inbound",
+    counterparty: ZIEL,
+    status: "completed",
+  }));
+  const zeitpunkte = [];
+  let platziertMs;
+  const antwort = (structuredContent) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { structuredContent } }),
+  });
+  const abfrage = async (_url, optionen) => {
+    zeitpunkte.push(jetzt);
+    const { name, arguments: argumente } = JSON.parse(optionen.body).params;
+    if (name === "get_agent_number") return antwort({ number: ZIEL });
+    if (name === "list_calls") return antwort({ calls: eintraege });
+    if (name === "place_call") {
+      platziertMs = jetzt;
+      return antwort({ call_id: "probe-1" });
+    }
+    if (name === "get_call_result") {
+      const fertig = jetzt - platziertMs >= ENDE_NACH_MS;
+      return antwort({ result_summary: fertig ? "Es wurde begrüßt." : "" });
+    }
+    const eigener = argumente.call_id === "probe-1";
+    const startMs = { "probe-1": platziertMs, "alt-0": START_MS - TAG_MS }[argumente.call_id] ?? START_MS - 1000;
+    const fertig = !eigener || jetzt - platziertMs >= ENDE_NACH_MS;
+    return antwort({
+      status: fertig ? "completed" : "in_progress",
+      started_at: new Date(startMs).toISOString(),
+      answered_at: new Date(startMs + 2000).toISOString(),
+      duration_s: 40,
+      last_transcript_lines: [],
+    });
+  };
+  const { anruferBauen } = await import("../../scripts/anruf-probe/anrufer.mjs");
+  const anrufer = anruferBauen({
+    basis: BASIS,
+    token: PROBE_ZUGANG_SCHLUESSEL,
+    ziel: ZIEL,
+    sprache: "de",
+    auftraggeber: "Probe GmbH",
+    vorname: "Anna",
+    abfrage,
+    uhr,
+  });
+  await anrufer.eigeneNummer();
+  const stand = await anrufer.tagesstand();
+  assert.equal(stand.anrufe, 4);
+  await anrufer.anrufen({ ziel: ZIEL });
+  assert.equal(await anrufer.ergebnisVorgetragen(), true);
+  const je = new Map();
+  for (const ms of zeitpunkte) je.set(Math.floor(ms / MINUTE_MS), (je.get(Math.floor(ms / MINUTE_MS)) ?? 0) + 1);
+  assert.ok(zeitpunkte.length > GRENZE, "Lauf muss mehr als ein Fenster füllen");
+  for (const [fenster, anzahl] of je) assert.ok(anzahl <= GRENZE, `Fenster ${fenster}: ${anzahl} Aufrufe`);
+});

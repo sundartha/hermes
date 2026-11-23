@@ -207,8 +207,8 @@ test("Anruf: läuft er nach genau 60000 ms noch, wird hart aufgelegt, danach ein
   assert.equal(von("cancel_call").length, 1);
   assert.equal(von("cancel_call")[0].zeit, JETZT + 60000);
   assert.deepEqual(von("cancel_call")[0].argumente, { call_id: "c1" });
-  assert.equal(von("get_call_status").length, 32);
-  assert.equal(uhr.zeit, JETZT + 60000);
+  assert.equal(von("get_call_status").length, 26);
+  assert.equal(uhr.zeit, JETZT + 62000);
   assert.equal(messung.status, "cancelled");
   assert.deepEqual(urteilen(messung).gerissen.includes("status"), true);
 });
