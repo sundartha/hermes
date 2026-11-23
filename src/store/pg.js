@@ -551,7 +551,8 @@ function anrufBelegMethoden({ requireState, save, runner }) {
   };
 }
 
-function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
+function rueckfrageRechercheMethoden({ requireState, save, anrufe, runner }) {
+  const rueckfrageSql = macheRueckfrageSql({ runner });
   return {
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
@@ -573,9 +574,10 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
       if (result.changed) save();
       return result;
     },
-    markConsultAskDelivered(callId, eventId) {
+    async markConsultAskDelivered(callId, eventId, tenantId) {
       const result = ops.markConsultAskDelivered(requireState(), callId, eventId);
       if (result.changed) save();
+      await rueckfrageSql.zustellungSetzen(callId, tenantId, eventId);
       return result;
     },
     ackConsult(callId, input) {

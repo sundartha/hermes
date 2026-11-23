@@ -16,6 +16,8 @@ const EL_CONSULT_STAGES = Object.freeze({
   answerDeadlineMs: config.tenancy.elConsultAnswerMs,
 });
 
+const ZUSTELLZEIT_FEHLER = "[consult-raised] Zustellzeit lesen fehlgeschlagen:";
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const rejected = (reason) => ({ kind: CONSULT_RESULT.REJECTED, facts: [], reason });
@@ -89,6 +91,17 @@ export function makeConsultRaised({
     return keyFactsOf(call).slice(from, from + consult.answeredFacts);
   }
 
+  async function zustellzeitUebernehmen(call, consultId) {
+    const consult = consultById(call, consultId);
+    if (consult.askDeliveredAt) return;
+    try {
+      const gelesen = await bereiche.rueckfrage.zustellzeitGelesen(call.id, call.tenantId, consultId);
+      if (gelesen) consult.askDeliveredAt = gelesen;
+    } catch (fehler) {
+      console.error(ZUSTELLZEIT_FEHLER, fehler.message);
+    }
+  }
+
   async function awaitAnswer({ callId, consultId }) {
     const startedAtMs = Date.now();
     for (;;) {
@@ -99,6 +112,7 @@ export function makeConsultRaised({
       if (consult.status === CONSULT_STATUS.ANSWERED)
         return { kind: CONSULT_RESULT.ANSWERED, facts: answeredFacts(call, consult) };
       if (consult.status !== CONSULT_STATUS.OPEN) return timedOut(consult.status);
+      await zustellzeitUebernehmen(call, consultId);
       const nowMs = Date.now();
       const ageMs = nowMs - startedAtMs;
       const stage = expiredStage(consult, ageMs, stages);

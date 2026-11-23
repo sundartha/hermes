@@ -211,7 +211,7 @@ interface Bereiche {
     ) => Promise<{ outcome: string; mergedFacts: number }>;
     emitConsult: (callId: string, fragen: unknown[]) => Promise<unknown>;
     noteConsultPoll: (callId: string) => Promise<unknown>;
-    markConsultAskDelivered: (callId: string, eventId: string) => Promise<unknown>;
+    markConsultAskDelivered: (callId: string, eventId: string, tenantId: string) => Promise<unknown>;
   };
   konto: { tenantPrivateNumberLesen: (tenantId: string | undefined) => Promise<string | null | undefined> };
   mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
@@ -996,7 +996,7 @@ export function makeCallRoutes({
       signal: null,
     });
     if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
-      await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
+      await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId, call.tenantId);
     return res.json(event);
   }
 
