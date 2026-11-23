@@ -186,7 +186,7 @@ test("Gelingt das Auflegen eines Beins nicht, bleibt es in der Zeile als nicht a
 
 test("Ist die Zeile beim Ablauf der Wiedergabefrist verschwunden, wirft die Frist nichts und tut nichts", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
-  await mitAnbieter(t, { umgebung: { VORSPANN_WIEDERGABE_FRIST_MS: "1500", FRISTEN_TAKT_MS: "200" } }, async ({ a, sql, signer, aufrufe }) => {
+  await mitAnbieter(t, { umgebung: { VORSPANN_WIEDERGABE_FRIST_MS: "1500", FRISTEN_TAKT_MS: "200" } }, async ({ a, b, sql, signer, aufrufe }) => {
     assert.equal((await platziere(a)).status, HTTP_OK);
     const erster = await callIdVon(sql);
     assert.equal((await ereignis(signer, a, { callId: erster, art: "call.answered" })).status, HTTP_OK);
@@ -195,8 +195,8 @@ test("Ist die Zeile beim Ablauf der Wiedergabefrist verschwunden, wirft die Fris
     assert.equal((await platziere(a, ZWEITES_ZIEL)).status, HTTP_OK);
     const zweiter = await callIdVon(sql, ZWEITES_ZIEL);
     assert.equal((await ereignis(signer, a, { callId: zweiter, art: "call.answered" })).status, HTTP_OK);
-    await zeilenBis(async () => a.stdout, (text) => text.includes(`rueckfall grund=vorspann_nicht_abgespielt call=${zweiter}`));
-    assert.equal(a.stdout.includes("[guard] unhandledRejection"), false);
+    await zeilenBis(async () => a.stdout + b.stdout, (text) => text.includes(`rueckfall grund=vorspann_nicht_abgespielt call=${zweiter}`));
+    assert.equal((a.stdout + b.stdout).includes("[guard] unhandledRejection"), false);
     assert.equal((await sql(STATUS_SQL, [erster])).rows[0].status, "active");
   });
 });
@@ -205,8 +205,8 @@ const FRIST_KURZ_MS = "1500";
 const FRIST_LANG_MS = "600000";
 const FRISTEN_TAKT_KURZ_MS = "200";
 const FRISTEN_SQL = `SELECT (EXTRACT(EPOCH FROM (frist_el_bein_at - frist_wiedergabe_at)) * 1000)::int AS abstand_ms,
-  frist_wiedergabe_at > now() + interval '590 seconds' AS wiedergabe_weit,
-  frist_wiedergabe_at < now() + interval '610 seconds' AS wiedergabe_nah
+  frist_wiedergabe_at > now() + interval '90 seconds' AS wiedergabe_weit,
+  frist_wiedergabe_at < now() + interval '110 seconds' AS wiedergabe_nah
   FROM vorspann_zustand WHERE call_id = $1`;
 
 const meldeMitStatus = (signer, srv, { callId, art }) => {
@@ -268,10 +268,10 @@ test("5928-4b K7: kommt nach dem Wiedergabe-Ende auf B kein EL-Bein und ist A be
 
 test("5928-4b K7: nach dem Abheben stehen Wiedergabe- und EL-Bein-Frist in der Zeile, je mit ihrer eigenen Dauer ab jetzt", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
-  await mitAnbieter(t, { umgebung: fristUmgebung(FRIST_LANG_MS, "700000") }, async (srv) => {
+  await mitAnbieter(t, { umgebung: fristUmgebung("100000", "120000") }, async (srv) => {
     const callId = await hebeAufAAb(srv);
     const { rows } = await srv.sql(FRISTEN_SQL, [callId]);
-    assert.deepEqual(rows, [{ abstand_ms: 100000, wiedergabe_weit: true, wiedergabe_nah: true }]);
+    assert.deepEqual(rows, [{ abstand_ms: 20000, wiedergabe_weit: true, wiedergabe_nah: true }]);
   });
 });
 
