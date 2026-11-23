@@ -27,6 +27,7 @@ test("pg: Widerruf (false) NACH Einwilligung ueberlebt den Reload - beide Felder
   ops.registerTenant(s, TENANT_REVOKED, { firstName: "Lea" });
   store.setNewsletterConsent(TENANT_REVOKED, true);
   store.setNewsletterConsent(TENANT_REVOKED, false);
+  await store.drainFlushes();
 
   const store2 = makePgStore(runner);
   await store2.init();
