@@ -6,7 +6,8 @@ const vorlage = JSON.parse(readFileSync("elevenlabs/agent_configs/outbound-agent
 const konfig = vorlage.agent.conversation_config;
 
 test("Agent-Vorlage fuehrt die Sprachwechsel-Systemfunktion language_detection", () => {
-  const werkzeug = konfig.agent.prompt.built_in_tools.language_detection;
+  const { built_in_tools: eingebaut } = konfig.agent.prompt;
+  const werkzeug = eingebaut.language_detection;
   assert.equal(werkzeug.type, "system");
   assert.equal(werkzeug.name, "language_detection");
 });
