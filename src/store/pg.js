@@ -1452,14 +1452,16 @@ function mitSpeichernBeiAenderung(save) {
 }
 const KONVERSATION_SPEICHERN_SQL = `WITH vorher AS (SELECT elevenlabs_conversation_id AS id, el_bound_at AS bound_at FROM call WHERE tenant_id = $1 AND id = $2),
   neu AS (UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = COALESCE(el_bound_at, $4) WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND (elevenlabs_conversation_id IS NULL OR elevenlabs_conversation_id = $3) RETURNING 1)
-  SELECT vorher.id, vorher.bound_at FROM vorher`;
+  SELECT (SELECT count(*) FROM neu)::int AS geschrieben, vorher.id, vorher.bound_at FROM vorher`;
+const NICHT_GESCHRIEBEN = "nicht-geschrieben";
 async function konversationsIdSchreiben(runner, call) {
   return runner.withClient(async (client) => {
     await setTenant(client, call.tenantId);
     try {
       const { rows } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
       const gehalten = rows[0];
-      if (!gehalten || !gehalten.id || gehalten.id === call.elevenlabsConversationId) return true;
+      if (gehalten?.geschrieben === 1) return true;
+      if (!gehalten || !gehalten.id || gehalten.id === call.elevenlabsConversationId) return NICHT_GESCHRIEBEN;
       return { conversationId: gehalten.id, boundAt: gehalten.bound_at };
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
@@ -1474,6 +1476,11 @@ function bindungErstNachBestaetigung({ call, alt, runner, save }) {
     (gehalten) => {
       if (gehalten === true) {
         uebernehmen();
+        return true;
+      }
+      if (gehalten === NICHT_GESCHRIEBEN) {
+        uebernehmen();
+        save();
         return true;
       }
       ops.uebernehmeGehalteneBindung(call, gehalten);

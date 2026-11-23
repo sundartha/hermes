@@ -208,3 +208,43 @@ test("Der Init antwortet 200, wenn die Zeile noch nicht in der Datenbank steht",
     assert.equal((await gegenInit(url, ZWEITE)).status, HTTP_OK);
   });
 });
+
+test("Fehlt die Zeile beim Binden, kommt die Bindung mit dem naechsten Flush in die Datenbank", async () => {
+  const { b, runner, callId } = await zweiInstanzen();
+  await runner.withClient(async (client) => {
+    await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+    await client.query("DELETE FROM call WHERE id = $1", [callId]);
+  });
+  assert.equal(await b.bindInboundElConversation(callId, { conversationId: ZWEITE, nowIso: JETZT_ISO }).dauerhaft, true);
+  await b.drainFlushes();
+  assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ZWEITE);
+});
+
+test("Ist der Anruf beendet, kommt die Bindung mit dem naechsten Flush in die Datenbank", async () => {
+  const { a, runner, callId } = await zweiInstanzen();
+  await runner.withClient(async (client) => {
+    await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+    await client.query("UPDATE call SET status = 'completed' WHERE id = $1", [callId]);
+  });
+  assert.equal(await a.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
+  await a.drainFlushes();
+  assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ERSTE);
+});
+
+test("Hat das bedingte UPDATE die Bindung geschrieben, folgt kein weiterer Flush", async () => {
+  const { runner, callId } = await zweiInstanzen();
+  let zugriffe = 0;
+  const zaehlend = {
+    withClient: (arbeit) => {
+      zugriffe += 1;
+      return runner.withClient(arbeit);
+    },
+  };
+  const b = makePgStore(zaehlend);
+  await b.init();
+  assert.ok(b.getCall(callId) ?? (await b.attachActiveCall(callId)));
+  const vorher = zugriffe;
+  assert.equal(await b.bindInboundElConversation(callId, { conversationId: ZWEITE, nowIso: JETZT_ISO }).dauerhaft, true);
+  await b.drainFlushes();
+  assert.equal(zugriffe - vorher, 1);
+});
