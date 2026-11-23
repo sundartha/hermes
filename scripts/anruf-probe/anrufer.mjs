@@ -35,6 +35,8 @@ const STIMMEN_NACHLAUF_FRIST_MS =
   STIMMEN_NACHLAUF_QUELLEN.stimmenFristMs;
 const GEGEN_VORLAUF_MS = 5000;
 const GEGEN_NACHLAUF_MS = DAUER_GRENZE_S * MS_JE_SEKUNDE;
+const KLINGELN_FENSTER_FAKTOR = 5;
+const KLINGELN_NACHLAUF_MS = KLINGELN_FENSTER_FAKTOR * GEGEN_NACHLAUF_MS;
 const ECHTE_UHR = Object.freeze({
   jetzt: () => Date.now(),
   warte: (ms) => new Promise((fertig) => setTimeout(fertig, ms)),
@@ -116,12 +118,12 @@ function wiederholungen(starts) {
   }).length;
 }
 
-async function gegenAnruf(ruf, probeStartMs) {
+async function gegenAnruf(ruf, probeStartMs, nachlaufMs) {
   const { calls } = await ruf("list_calls", {});
   for (const anruf of calls.filter((eintrag) => eintrag.direction === "inbound")) {
     const gegen = await ruf("get_call_status", { call_id: anruf.id });
     const nach = Date.parse(gegen.started_at) - probeStartMs;
-    if (nach >= -GEGEN_VORLAUF_MS && nach <= GEGEN_NACHLAUF_MS) return gegen;
+    if (nach >= -GEGEN_VORLAUF_MS && nach <= nachlaufMs) return gegen;
   }
   return undefined;
 }
@@ -131,9 +133,9 @@ const stimmenAnzahlVon = (gegen) => gegen?._meta?.[STIMMEN_ANZAHL_META_KEY];
 const klingelnSekundenVon = (gegen, probeStartMs) =>
   gegen === undefined ? undefined : (Date.parse(gegen.started_at) - probeStartMs) / MS_JE_SEKUNDE;
 
-async function gegenLesen({ ruf, uhr, probeStartMs, lesen }) {
+async function gegenLesen({ ruf, uhr, probeStartMs, lesen, nachlaufMs }) {
   for (let gewartetMs = 0; ; gewartetMs += TAKT_MS) {
-    const wert = lesen(await gegenAnruf(ruf, probeStartMs), probeStartMs);
+    const wert = lesen(await gegenAnruf(ruf, probeStartMs, nachlaufMs), probeStartMs);
     if (wert !== undefined || gewartetMs >= STIMMEN_NACHLAUF_FRIST_MS) return wert;
     await uhr.warte(TAKT_MS);
   }
@@ -202,8 +204,8 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
       return offene.length;
     },
     ergebnisVorgetragen: () => ergebnisAbwarten(probeCallId),
-    stimmenAnzahl: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: stimmenAnzahlVon }),
-    klingelnSekunden: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: klingelnSekundenVon }),
+    stimmenAnzahl: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: stimmenAnzahlVon, nachlaufMs: GEGEN_NACHLAUF_MS }),
+    klingelnSekunden: () => gegenLesen({ ruf, uhr, probeStartMs, lesen: klingelnSekundenVon, nachlaufMs: KLINGELN_NACHLAUF_MS }),
     anrufen: async ({ ziel: nummer }) => {
       const platziert = await ruf("place_call", {
         to: normalisiert(nummer),
