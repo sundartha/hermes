@@ -484,11 +484,19 @@ export const markInboundElFallback = markOnceAt("elFallbackAt");
 
 export const markInboundElNachlaufStarted = markOnceAt("elNachlaufStartedAt");
 
-export function bindInboundElConversation(state, callId, { conversationId, nowIso }) {
+const BRUECKENFELDER = Object.freeze(["answeredAt", "elevenlabsConversationId", "elBoundAt"]);
+
+function uebernehmeBrueckenstand(call, stand) {
+  if (!call || !stand) return;
+  for (const feld of BRUECKENFELDER) call[feld] ??= stand[feld];
+}
+
+export function bindInboundElConversation(state, callId, { conversationId, nowIso, stand }) {
   const call = getCall(state, callId);
   const eingabeGueltig =
     typeof conversationId === "string" && conversationId !== "" && istKanonischerIsoZeitpunkt(nowIso);
   if (!eingabeGueltig) return { call, changed: false, bound: false };
+  uebernehmeBrueckenstand(call, stand);
   const zustand = bridgeStateOf(call);
   if (zustand === BRIDGE_STATE.GEBUNDEN) {
     return { call, changed: false, bound: call.elevenlabsConversationId === conversationId };
