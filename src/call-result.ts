@@ -155,3 +155,8 @@ export function resultCardView(result: Partial<ErgebnisKarte> | null | undefined
     next_step: card.nextStep ?? null,
   };
 }
+
+export function mapStatus(call: { status: string; answeredAt?: string | null; queued?: boolean }): string {
+  if (call.status === "active") return call.answeredAt ? "in_progress" : call.queued ? "queued" : "dialing";
+  return call.status;
+}

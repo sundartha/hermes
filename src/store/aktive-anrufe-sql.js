@@ -45,17 +45,19 @@ export function macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }) {
     async fuer(state, tenantId) {
       const stand = standVon(state, tenantId);
       stand.offen += 1;
-      let zeilen;
+      let gelesen;
+      let nurHier;
       try {
-        zeilen = await ausDatenbank(tenantId);
+        gelesen = zeilenZuAnrufen(await ausDatenbank(tenantId), [], []);
+        const inDatenbank = new Set(gelesen.map((call) => call.id));
+        const kandidaten = ops.activeCallsFor(state, tenantId).filter((call) => !inDatenbank.has(call.id));
+        const beendet = await beendeteIds(kandidaten);
+        nurHier = kandidaten.filter((call) => !beendet.has(call.id));
       } catch (err) {
         stand.offen -= 1;
         stand.zuletztGelesen = false;
         throw err;
       }
-      const gelesen = zeilenZuAnrufen(zeilen, [], []);
-      const inDatenbank = new Set(gelesen.map((call) => call.id));
-      const nurHier = ops.activeCallsFor(state, tenantId).filter((call) => !inDatenbank.has(call.id));
       stand.aktive = [...gelesen, ...nurHier];
       stand.offen -= 1;
       stand.zuletztGelesen = true;

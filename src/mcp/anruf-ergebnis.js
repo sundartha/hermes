@@ -1,13 +1,10 @@
 import { STIMMEN_ANZAHL_META_KEY } from "../ui/widget-i18n.js";
-import { resultCardView } from "../call-result.ts";
+import { mapStatus, resultCardView } from "../call-result.ts";
 import { localeFor } from "../i18n/locales.ts";
 import { maskRestrictedText } from "../restricted-data.ts";
 import { failureReasonBase } from "../telephony/failure-reason.ts";
 
-export function mapStatus(call) {
-  if (call.status === "active") return call.answeredAt ? "in_progress" : call.queued ? "queued" : "dialing";
-  return call.status;
-}
+export { mapStatus };
 
 export function callOutcomeView(call) {
   return { status: mapStatus(call), failure_reason: failureReasonBase(call.failureReason) };
