@@ -14,7 +14,7 @@ const { poolAufPglite } = await import("../abrechnung/server-mit-testdatenbank.j
 const db = await pgliteAlsRolleOhneSuperuser();
 poolAufPglite(db);
 const speicher = await import("../../src/store.js").then(oeffneSpeicherAn);
-const { runSweepTick } = await import("../../src/zeitsteuerung.js");
+const { runSweepTick } = await import("../../src/boot.js");
 
 const kontext = (tenantId) => db.query("SELECT set_config('app.current_tenant', $1, false)", [tenantId]);
 const nichts = async () => ({});
