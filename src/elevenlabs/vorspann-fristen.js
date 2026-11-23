@@ -7,8 +7,9 @@ const ERLEDIGT = Object.freeze({ wiedergabe: STAND.WIEDERGABE, elBein: STAND.EL_
 
 export function setzeVorspannFristen({ call, store, config, jetzt }) {
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
+  const ab = jetzt();
   const setze = (frist, ms) =>
-    store.setzeVorspannFrist({ tenantId: call.tenantId, callId: call.id, frist, faelligAt: new Date(jetzt() + ms).toISOString() });
+    store.setzeVorspannFrist({ tenantId: call.tenantId, callId: call.id, frist, faelligAt: new Date(ab + ms).toISOString() });
   return Promise.all([setze("wiedergabe", vorspannWiedergabeFristMs), setze("elBein", bridgeStartDeadlineMs)]);
 }
 

@@ -43,8 +43,8 @@ const anrufIn = (callId) => umgebung.srv.readStore().calls.find((eintrag) => ein
 const aufgelegt = (bein) => umgebung.attrappe.pfade.filter((pfad) => pfad.includes(bein) && pfad.endsWith("/actions/hangup")).length;
 const beideAufgelegt = (callId) => aufgelegt(calleeVon(callId)) === 1 && aufgelegt(elVon(callId)) === 1;
 
-function meldeWiedergabeEnde(callId) {
-  const roh = JSON.stringify({ data: { id: `evt-5928-4b-${callId}`, event_type: "call.playback.ended", payload: { call_control_id: calleeVon(callId), status: "completed" } } });
+function sende(callId, typ, bein) {
+  const roh = JSON.stringify({ data: { id: `evt-5928-4b-${typ}-${callId}`, event_type: typ, payload: { call_control_id: bein, status: "completed" } } });
   const zeit = String(nowSeconds());
   return abrufMitFrist(`${umgebung.srv.localUrl}/voice/vorspann?callId=${callId}`, {
     method: "POST",
@@ -58,18 +58,64 @@ test("5928-4b K7: ohne Wiedergabe-Ende legt der Fristen-Takt beide Beine auf und
   await hebeAb(umgebung.srv, umgebung.signer, callId);
   await waitUntil(() => beideAufgelegt(callId), { timeoutMs: WARTE_FRIST_MS });
 
+  const spaeter = await legeAnruf(umgebung.srv, neueAnrufNummer(14));
+  await hebeAb(umgebung.srv, umgebung.signer, spaeter);
+  await waitUntil(() => beideAufgelegt(spaeter), { timeoutMs: WARTE_FRIST_MS });
+
   assert.equal(anrufIn(callId).failureReason, "vorspann_nicht_abgespielt");
   assert.equal(umgebung.srv.stdout.includes("vorspann-frist-timer"), false);
   assert.equal(umgebung.srv.stdout.split(`rueckfall grund=vorspann_nicht_abgespielt call=${callId}`).length - 1, 1);
+  assert.equal(umgebung.srv.stdout.includes(`rueckfall grund=el_frist call=${callId}`), false);
+  assert.equal(beideAufgelegt(callId), true);
 });
 
 test("5928-4b K7: ohne EL-Annahme legt der Fristen-Takt beide Beine auf und vermerkt el_frist, im Prozess laeuft kein Timer dafuer", async () => {
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(11));
   await hebeAb(umgebung.srv, umgebung.signer, callId);
-  await meldeWiedergabeEnde(callId);
+  await sende(callId, "call.playback.ended", calleeVon(callId));
   await waitUntil(() => beideAufgelegt(callId), { timeoutMs: WARTE_FRIST_MS });
 
   assert.equal(anrufIn(callId).failureReason, "el_frist");
   assert.equal(umgebung.srv.stdout.includes("vorspann-frist-timer"), false);
   assert.equal(umgebung.srv.stdout.split(`rueckfall grund=el_frist call=${callId}`).length - 1, 1);
+});
+
+const elGewaehlt = (callId) => umgebung.attrappe.waehlbefehle.includes(`vorspann-${callId}-el`);
+
+test("5928-4b K7: war der Anruf vor Ablauf der Frist schon beendet, legt die Frist nichts mehr auf und vermerkt nichts", async () => {
+  const beendet = await legeAnruf(umgebung.srv, neueAnrufNummer(12));
+  await hebeAb(umgebung.srv, umgebung.signer, beendet);
+  await waitUntil(() => elGewaehlt(beendet), { timeoutMs: WARTE_FRIST_MS });
+  const abbruch = await abrufMitFrist(`${umgebung.srv.localUrl}/api/calls/${beendet}/cancel`, { method: "POST" });
+  assert.equal(abbruch.status, 200);
+  await waitUntil(() => aufgelegt(calleeVon(beendet)) >= 1 && aufgelegt(elVon(beendet)) >= 1, { timeoutMs: WARTE_FRIST_MS });
+  const vorher = [aufgelegt(calleeVon(beendet)), aufgelegt(elVon(beendet))];
+
+  const spaeter = await legeAnruf(umgebung.srv, neueAnrufNummer(13));
+  await hebeAb(umgebung.srv, umgebung.signer, spaeter);
+  await waitUntil(() => beideAufgelegt(spaeter), { timeoutMs: WARTE_FRIST_MS });
+
+  assert.deepEqual([aufgelegt(calleeVon(beendet)), aufgelegt(elVon(beendet))], vorher);
+  assert.equal(anrufIn(beendet).status, "cancelled");
+  assert.equal(anrufIn(beendet).failureReason ?? null, null);
+});
+
+const bruecken = (callId) => umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/bridge")).length;
+
+test("5928-4b K7: ist die Bruecke vor Ablauf der Fristen geschlagen, legen die Fristen nichts auf und vermerken nichts", async () => {
+  const verbunden = await legeAnruf(umgebung.srv, neueAnrufNummer(15));
+  await hebeAb(umgebung.srv, umgebung.signer, verbunden);
+  await waitUntil(() => elGewaehlt(verbunden), { timeoutMs: WARTE_FRIST_MS });
+  await sende(verbunden, "call.playback.ended", calleeVon(verbunden));
+  await sende(verbunden, "call.answered", elVon(verbunden));
+  await waitUntil(() => bruecken(verbunden) === 1, { timeoutMs: WARTE_FRIST_MS });
+
+  const spaeter = await legeAnruf(umgebung.srv, neueAnrufNummer(16));
+  await hebeAb(umgebung.srv, umgebung.signer, spaeter);
+  await waitUntil(() => beideAufgelegt(spaeter), { timeoutMs: WARTE_FRIST_MS });
+
+  assert.equal(aufgelegt(calleeVon(verbunden)), 0);
+  assert.equal(aufgelegt(elVon(verbunden)), 0);
+  assert.equal(anrufIn(verbunden).status, "active");
+  assert.equal(anrufIn(verbunden).failureReason ?? null, null);
 });
