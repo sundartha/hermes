@@ -162,7 +162,7 @@ jobs:
         env:
           ART: ${{ inputs.art }}
           STAGING_STATUS_TOKEN: ${{ secrets.STAGING_STATUS_TOKEN }}
-          STAGING_PROBE_TOKEN: ${{ secrets.STAGING_PROBE_TOKEN }}
+          STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
           STAGING_METRIK_URL: ${{ secrets.STAGING_METRIK_URL }}
           STAGING_METRIK_TOKEN: ${{ secrets.STAGING_METRIK_TOKEN }}
