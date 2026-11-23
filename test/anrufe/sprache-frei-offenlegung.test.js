@@ -20,9 +20,9 @@ const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
-async function eroeffnungFuer({ to, language }) {
+async function eroeffnungFuer({ to, language, env = {} }) {
   const srv = await startServer({
-    env: { ...VORSPANN_ENV },
+    env: { ...VORSPANN_ENV, ...env },
     seed: seedState({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
@@ -62,6 +62,18 @@ describe("Offenlegung bei Startsprache ohne eigene Texte", () => {
     const eroeffnung = await eroeffnungFuer({ to: ES_NUMMER, language: "de" });
     assert.ok(eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
     assert.ok(!eroeffnung.includes("the AI assistant of"), JSON.stringify(eroeffnung));
+  });
+});
+
+describe("Offenlegung mit Render-Standard WORLD_DEFAULT_LANGUAGE_ENABLED=false", () => {
+  it("SO-6: Startsprache es, Land ohne Eintrag (ES) -> Offenlegungssatz englisch, nicht deutsch", async () => {
+    const eroeffnung = await eroeffnungFuer({
+      to: ES_NUMMER,
+      language: "es",
+      env: { WORLD_DEFAULT_LANGUAGE_ENABLED: "false" },
+    });
+    assert.ok(eroeffnung.includes("the AI assistant of"), JSON.stringify(eroeffnung));
+    assert.ok(!eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
   });
 });
 
