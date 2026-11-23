@@ -180,6 +180,8 @@ const gespraech = ({ zeilen, metadata = { start_time_unix_secs: KONVERSATION_STA
 });
 const AGENT_ZEILE = { role: "agent", message: AGENT_TEXT, time_in_call_secs: ERSTE_REDE_NACH_S };
 
+const nachlaufErgebnis = {};
+
 async function nachlaufMit(gespraechAntwort, id, nachlaeufe = EINMAL) {
   const el = await starteAnbieterAttrappe();
   const telnyx = await startTelnyxProvisioningMock();
@@ -197,6 +199,7 @@ async function nachlaufMit(gespraechAntwort, id, nachlaeufe = EINMAL) {
       }
     }
     await waitForStoreState(srv, (stand) => Boolean(stand.calls.find((eintrag) => eintrag.id === id)?.billedAt), WARTE.timeoutMs);
+    nachlaufErgebnis.anruf = srv.readStore().calls.find((eintrag) => eintrag.id === id);
     return srv.stdout;
   } finally {
     await srv.stop();
@@ -292,4 +295,11 @@ test("6161-K2f: leerer Eintrag vor der Agent-Zeile -> Zeile mit Zahlen, Anruf wi
   const id = "call_6161_k2f";
   const ausgabe = await nachlaufMit(gespraech({ zeilen: [null, AGENT_ZEILE] }), id);
   assert.deepEqual(zeilenIn(ausgabe, ZEILEN[0]), [`[el-vorspann] agent_erste_rede ms_seit_start=5000 ms_seit_abheben=4000 call=${id}`]);
+});
+
+test("6161-K2g: Ergebnis ohne Transkript -> der Nachlauf haelt den gemessenen Absender trotzdem fest", async () => {
+  const id = "call_6161_k2g";
+  const metadata = { start_time_unix_secs: KONVERSATION_START_S, phone_call: { direction: "inbound", call_id: "sip_6161", agent_number: "+4930123456" } };
+  await nachlaufMit(gespraech({ zeilen: undefined, metadata }), id);
+  assert.equal(nachlaufErgebnis.anruf.fromActualE164, "+4930123456");
 });
