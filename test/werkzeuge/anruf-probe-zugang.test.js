@@ -139,7 +139,7 @@ test("Anrufer schickt in keinem Minutenfenster mehr als 29 Aufrufe an die enge P
       last_transcript_lines: [],
     });
   };
-  const { anruferBauen } = await import("../../scripts/anruf-probe/anrufer.mjs");
+  const { anruferBauen, ROUTEN_ABSTAND_MS } = await import("../../scripts/anruf-probe/anrufer.mjs");
   const anrufer = anruferBauen({
     basis: BASIS,
     token: PROBE_ZUGANG_SCHLUESSEL,
@@ -149,6 +149,7 @@ test("Anrufer schickt in keinem Minutenfenster mehr als 29 Aufrufe an die enge P
     vorname: "Anna",
     abfrage,
     uhr,
+    abstandMs: ROUTEN_ABSTAND_MS,
   });
   await anrufer.eigeneNummer();
   const stand = await anrufer.tagesstand();
@@ -159,4 +160,88 @@ test("Anrufer schickt in keinem Minutenfenster mehr als 29 Aufrufe an die enge P
   for (const ms of zeitpunkte) je.set(Math.floor(ms / MINUTE_MS), (je.get(Math.floor(ms / MINUTE_MS)) ?? 0) + 1);
   assert.ok(zeitpunkte.length > GRENZE, "Lauf muss mehr als ein Fenster füllen");
   for (const [fenster, anzahl] of je) assert.ok(anzahl <= GRENZE, `Fenster ${fenster}: ${anzahl} Aufrufe`);
+});
+
+test("Anrufer: nach vollem Tagesstand bleibt die echte Pause von 10 s unter der Stillstandsgrenze", async () => {
+  const START_MS = Date.parse("2026-11-23T12:00:00.000Z");
+  const ANZAHL_LISTE = 30;
+  const ERSTE_ZEILE_S = 30;
+  const ZWEITE_ZEILE_S = 40;
+  const ENDE_S = 50;
+  const MS = 1000;
+  const TAG_MS = 24 * 60 * 60 * MS;
+  let jetzt = START_MS;
+  let platziertMs;
+  const uhr = { jetzt: () => jetzt, warte: async (ms) => void (jetzt += ms) };
+  const antwort = (structuredContent) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { structuredContent } }),
+  });
+  const eintraege = Array.from({ length: ANZAHL_LISTE }, (_, index) => ({
+    id: `alt-${index}`,
+    direction: "inbound",
+    counterparty: ZIEL,
+    status: "completed",
+  }));
+  const abfrage = async (_url, optionen) => {
+    const { name, arguments: argumente } = JSON.parse(optionen.body).params;
+    const call_id = argumente.call_id;
+    if (name === "list_calls") return antwort({ calls: eintraege });
+    if (name === "place_call") {
+      platziertMs = jetzt;
+      return antwort({ call_id: "probe-1" });
+    }
+    const seit = platziertMs === undefined ? 0 : (jetzt - platziertMs) / MS;
+    const zeilen = [
+      ...(seit >= ERSTE_ZEILE_S ? ["Gegenseite: Hallo"] : []),
+      ...(seit >= ZWEITE_ZEILE_S ? ["Gegenseite: Ja, bitte"] : []),
+    ];
+    const start = platziertMs ?? (call_id === "alt-0" ? START_MS - TAG_MS : START_MS);
+    return antwort({
+      status: seit >= ENDE_S ? "completed" : "in_progress",
+      started_at: new Date(start).toISOString(),
+      answered_at: new Date(start + 2 * MS).toISOString(),
+      duration_s: ENDE_S,
+      last_transcript_lines: zeilen,
+    });
+  };
+  const { anruferBauen, ROUTEN_ABSTAND_MS } = await import("../../scripts/anruf-probe/anrufer.mjs");
+  const anrufer = anruferBauen({
+    basis: BASIS,
+    token: PROBE_ZUGANG_SCHLUESSEL,
+    ziel: ZIEL,
+    sprache: "de",
+    auftraggeber: "Probe GmbH",
+    vorname: "Anna",
+    abfrage,
+    uhr,
+    abstandMs: ROUTEN_ABSTAND_MS,
+  });
+  await anrufer.tagesstand();
+  const messung = await anrufer.anrufen({ ziel: ZIEL });
+  assert.ok(messung.stillstandSekunden >= 10, `Stillstand ${messung.stillstandSekunden}`);
+  assert.ok(messung.stillstandSekunden < 20, `Stillstand ${messung.stillstandSekunden}`);
+  const { urteilen } = await import("../../scripts/anruf-probe/urteil.mjs");
+  assert.equal(urteilen(messung).gerissen.includes("stillstand"), false);
+});
+
+test("Anrufer der Probe: der Produktionspfad wartet zwischen zwei Aufrufen bis zum Abstand von 2100 ms", async (t) => {
+  const ABSTAND_MS = 2100;
+  const TOLERANZ_MS = 50;
+  const wartezeiten = [];
+  t.mock.method(globalThis, "setTimeout", (fertig, ms) => {
+    wartezeiten.push(ms);
+    fertig();
+  });
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { structuredContent: { number: ZIEL } } }),
+  });
+  const { anrufer } = await import("../../scripts/anruf-probe/anrufer.mjs");
+  await anrufer.eigeneNummer();
+  await anrufer.eigeneNummer();
+  const abstaende = wartezeiten.filter((ms) => ms <= ABSTAND_MS && ms > ABSTAND_MS - TOLERANZ_MS);
+  assert.equal(abstaende.length, 1, `Wartezeiten ${wartezeiten}`);
 });

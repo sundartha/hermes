@@ -12,8 +12,9 @@ const ABFRAGE_FRIST_MS = 10_000;
 const TAKT_MS = 2000;
 const MS_JE_SEKUNDE = 1000;
 const SEKUNDEN_JE_MINUTE = 60;
-const FENSTER_MS = SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
-const FENSTER_AUFRUFE = 25;
+const ROUTE_AUFRUFE_JE_MINUTE = 30;
+const ROUTE_PUFFER_MS = 100;
+export const ROUTEN_ABSTAND_MS = (SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE) / ROUTE_AUFRUFE_JE_MINUTE + ROUTE_PUFFER_MS;
 const ENDSTATUS = Object.freeze(["completed", "failed", "cancelled", "no_answer", "busy"]);
 const GEGENSEITE = Object.freeze(["Gegenseite: ", "Other party: ", "Interlocuteur: "]);
 const PROBEN_LAENGEN_IM_PUFFER = 2;
@@ -152,21 +153,19 @@ function startLeser(ruf) {
   };
 }
 
-function drossel(uhr) {
-  const zeiten = [];
+function drossel(uhr, abstandMs) {
+  let letzter;
   return async () => {
-    const grenze = uhr.jetzt() - FENSTER_MS;
-    while (zeiten.length > 0 && zeiten[0] <= grenze) zeiten.shift();
-    if (zeiten.length >= FENSTER_AUFRUFE) {
-      await uhr.warte(zeiten[0] - grenze);
-      zeiten.shift();
+    if (abstandMs > 0 && letzter !== undefined) {
+      const rest = letzter + abstandMs - uhr.jetzt();
+      if (rest > 0) await uhr.warte(rest);
     }
-    zeiten.push(uhr.jetzt());
+    letzter = uhr.jetzt();
   };
 }
 
-export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
-  const platz = drossel(uhr);
+export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR, abstandMs = 0 }) {
+  const platz = drossel(uhr, abstandMs);
   const aufruf = async (angaben) => {
     await platz();
     return werkzeug({ abfrage, basis, token, ...angaben });
@@ -276,4 +275,5 @@ export const anrufer = anruferBauen({
   auftraggeber: env.STAGING_PROBE_AUFTRAGGEBER,
   vorname: env.STAGING_PROBE_VORNAME,
   abfrage: (...argumente) => fetch(...argumente),
+  abstandMs: ROUTEN_ABSTAND_MS,
 });
