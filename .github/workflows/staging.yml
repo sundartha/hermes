@@ -97,7 +97,7 @@ jobs:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           PROBE_ANRUFER_MODUL: ${{ github.workspace }}/scripts/anruf-probe/anrufer.mjs
           ABSICHTLICH_ROT: ${{ inputs.absichtlich_rot }}
-          STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
+          STAGING_PROBE_TOKEN: ${{ secrets.STAGING_PROBE_TOKEN }}
           STAGING_PROBE_ZIEL: ${{ vars.STAGING_PROBE_ZIEL }}
           STAGING_PROBE_AUFTRAGGEBER: ${{ vars.STAGING_PROBE_AUFTRAGGEBER }}
           STAGING_PROBE_VORNAME: ${{ vars.STAGING_PROBE_VORNAME }}
@@ -130,7 +130,7 @@ jobs:
         env:
           STAGING_URL: https://hermes-staging-erpv.onrender.com
           PROBE_ANRUFER_MODUL: ${{ github.workspace }}/scripts/anruf-probe/anrufer.mjs
-          STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
+          STAGING_PROBE_TOKEN: ${{ secrets.STAGING_PROBE_TOKEN }}
           STAGING_PROBE_ZIEL: ${{ vars.STAGING_PROBE_ZIEL }}
         run: node scripts/anruf-probe/probe.mjs auflegen
 
@@ -162,7 +162,7 @@ jobs:
         env:
           ART: ${{ inputs.art }}
           STAGING_STATUS_TOKEN: ${{ secrets.STAGING_STATUS_TOKEN }}
-          STAGING_TEST_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
+          STAGING_PROBE_TOKEN: ${{ secrets.STAGING_PROBE_TOKEN }}
           STAGING_TELNYX_PRIVATE_KEY: ${{ secrets.STAGING_TELNYX_PRIVATE_KEY }}
           STAGING_METRIK_URL: ${{ secrets.STAGING_METRIK_URL }}
           STAGING_METRIK_TOKEN: ${{ secrets.STAGING_METRIK_TOKEN }}
