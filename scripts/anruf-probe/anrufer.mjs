@@ -11,6 +11,9 @@ import { ABSTAND_MS, normalisiert } from "./wiederholung.mjs";
 const ABFRAGE_FRIST_MS = 10_000;
 const TAKT_MS = 2000;
 const MS_JE_SEKUNDE = 1000;
+const SEKUNDEN_JE_MINUTE = 60;
+const FENSTER_MS = SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE;
+const FENSTER_AUFRUFE = 25;
 const ENDSTATUS = Object.freeze(["completed", "failed", "cancelled", "no_answer", "busy"]);
 const GEGENSEITE = Object.freeze(["Gegenseite: ", "Other party: ", "Interlocuteur: "]);
 const PROBEN_LAENGEN_IM_PUFFER = 2;
@@ -141,11 +144,36 @@ async function gegenLesen({ ruf, uhr, probeStartMs, lesen, nachlaufMs }) {
   }
 }
 
+function startLeser(ruf) {
+  const bekannt = new Map();
+  return async (anruf) => {
+    if (!bekannt.has(anruf.id)) bekannt.set(anruf.id, startMs(await ruf("get_call_status", { call_id: anruf.id })));
+    return bekannt.get(anruf.id);
+  };
+}
+
+function drossel(uhr) {
+  const zeiten = [];
+  return async () => {
+    const grenze = uhr.jetzt() - FENSTER_MS;
+    while (zeiten.length > 0 && zeiten[0] <= grenze) zeiten.shift();
+    if (zeiten.length >= FENSTER_AUFRUFE) {
+      await uhr.warte(zeiten[0] - grenze);
+      zeiten.shift();
+    }
+    zeiten.push(uhr.jetzt());
+  };
+}
+
 export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
-  const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
+  const platz = drossel(uhr);
+  const aufruf = async (angaben) => {
+    await platz();
+    return werkzeug({ abfrage, basis, token, ...angaben });
+  };
+  const ruf = (name, argumente) => aufruf({ name, argumente });
   const zielNorm = normalisiert(ziel);
-  const abbrechen = (callId) =>
-    werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
+  const abbrechen = (callId) => aufruf({ name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
   let probeStartMs = Number.NaN;
   let probeCallId;
@@ -182,7 +210,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     tagesstand: async () => {
       const { calls } = await ruf("list_calls", {});
       const heute = new Date(uhr.jetzt()).toISOString().slice(0, TAG_LAENGE);
-      const startVon = async (anruf) => startMs(await ruf("get_call_status", { call_id: anruf.id }));
+      const startVon = startLeser(ruf);
       const tag = (ms) => new Date(ms).toISOString().slice(0, TAG_LAENGE);
       if (calls.length >= LISTE_OBERGRENZE) {
         const tage = [];
