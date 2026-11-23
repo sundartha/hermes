@@ -3,9 +3,9 @@ import { PROVISION_NUMBER_JOB } from "../begriffe/nummern-vergabe.js";
 import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
 import { innerhalbFrist } from "./einstellungen-sql.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
+import { AUFTRAG_SPALTEN, KONTEXT_SQL, alsAuftrag, offeneLesen } from "./offene-auftraege-sql.js";
 
 const FEHLER = "[pg] nummernkauf fehlgeschlagen:";
-const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 const SPERRE_SQL = `SELECT id FROM tenant WHERE id = $1 FOR UPDATE`;
 const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2) AND id <> $3`;
 const PLATTFORM_SPERRE_SQL = `SELECT pg_advisory_xact_lock(5787, 1)`;
@@ -14,11 +14,7 @@ const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country
   VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`;
 const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz)
   VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7, $8) ON CONFLICT DO NOTHING`;
-const AUFTRAG_SPALTEN = "id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz";
 const AUFTRAG_LESEN_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
-const MANDANTEN_SQL = `SELECT id FROM tenant ORDER BY id`;
-const OFFENE_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND status = $2 ORDER BY id`;
-const NUMMERN_ZU_AUFTRAEGEN_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND id = ANY($2)`;
 const UEBERNEHMEN_SQL = `UPDATE provisioning_job SET instanz = $1
   WHERE tenant_id = $2 AND id = $3 AND status = $4 AND instanz IS NOT DISTINCT FROM $5
   RETURNING ${AUFTRAG_SPALTEN}`;
@@ -29,20 +25,6 @@ const NACHLADEN_FEHLER = "[pg] nummer nachladen fehlgeschlagen:";
 const SCHLUESSEL_SQL = `SELECT tenant_id FROM nummer_schluessel WHERE e164_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')`;
 const NUMMER_LESEN_SQL = `SELECT * FROM number WHERE tenant_id = $1 AND e164 = $2`;
 const NICHT_ZAEHLEND = [NUMBER_STATUS.RELEASED, NUMBER_STATUS.FAILED];
-
-function alsAuftrag(zeile) {
-  return {
-    id: zeile.id,
-    tenantId: zeile.tenant_id,
-    numberId: zeile.number_id,
-    kind: zeile.kind,
-    status: zeile.status,
-    idempotencyKey: zeile.idempotency_key,
-    attempts: zeile.attempts,
-    lastError: zeile.last_error ?? null,
-    createdAt: zeile.created_at instanceof Date ? zeile.created_at.toISOString() : zeile.created_at,
-  };
-}
 
 async function unterMandantenSperre(client, tenantId, arbeit) {
   await client.query("BEGIN");
@@ -107,30 +89,6 @@ async function imMandanten(client, tenantId, arbeit) {
     console.error(FEHLER, fehler.message);
     throw fehler;
   }
-}
-
-async function offeneLesen(client, zeileZuNummer) {
-  const { rows: mandanten } = await client.query(MANDANTEN_SQL);
-  const gefunden = [];
-  for (const { id } of mandanten) {
-    await client.query("BEGIN");
-    try {
-      await client.query(KONTEXT_SQL, [id]);
-      const { rows } = await client.query(OFFENE_SQL, [id, PROVISIONING_JOB_STATUS.QUEUED]);
-      const nummern = rows.length
-        ? (await client.query(NUMMERN_ZU_AUFTRAEGEN_SQL, [id, rows.map((zeile) => zeile.number_id)])).rows
-        : [];
-      await client.query("COMMIT");
-      for (const zeile of rows) {
-        const nummer = nummern.find((eine) => eine.id === zeile.number_id);
-        gefunden.push({ job: alsAuftrag(zeile), nummer: nummer ? zeileZuNummer(nummer) : null, instanz: zeile.instanz ?? null });
-      }
-    } catch (fehler) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw fehler;
-    }
-  }
-  return gefunden;
 }
 
 async function auftragUebernehmen(client, zeileZuNummer, { tenantId, jobId, alt, neu }) {
