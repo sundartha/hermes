@@ -577,9 +577,10 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe, runner }) {
     async markConsultAskDelivered(callId, eventId) {
       const result = ops.markConsultAskDelivered(requireState(), callId, eventId);
       if (result.changed) save();
-      if (result.call) await rueckfrageSql.zustellungSetzen(callId, result.call.tenantId, eventId);
       return result;
     },
+    zustellungSchreiben: (callId, tenantId, eventId) =>
+      rueckfrageSql.zustellungSetzen(callId, tenantId, eventId),
     ackConsult(callId, input) {
       const result = ops.ackConsult(requireState(), callId, input);
       if (result.changed) save();

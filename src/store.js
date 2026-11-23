@@ -259,6 +259,7 @@ function jsonBackendAufbauen() {
       rueckfrageAusZustand(jsonBackend.load(), callId, afterEventId),
     zustellzeitGelesen: async (callId, _tenantId, eventId) =>
       zustellzeitAusZustand(jsonBackend.load(), callId, eventId),
+    zustellungSchreiben: async () => {},
     anrufpauseSetzen: (an) => anrufpauseSetzenImJson(jsonBackend, an),
   });
 }
@@ -330,6 +331,7 @@ export const {
   stammdatenSchreiben,
   rueckfrageGelesen,
   zustellzeitGelesen,
+  zustellungSchreiben,
   ausfallSql,
   nummernSql,
   nummerNachladen,
