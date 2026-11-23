@@ -24,6 +24,7 @@ import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
+import { meldeVorspannEroeffnung } from "./vorspann-erzeugen.js";
 import { ermittleStimmenAnzahl } from "./wirksame-stimme.ts";
 
 const PROVIDER_DONE = "done";
@@ -780,6 +781,9 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
   };
 }
 
+const uebergebeneEroeffnung = ({ conversation_config_override: override, dynamic_variables: variablen }) =>
+  String(override.agent.first_message || variablen.eroeffnung || variablen.eroeffnung_gesagt || "");
+
 function makeInitInhalt(inhaltsAnfrageFor) {
   return function initInhaltFor(call, eroeffnungGesagt) {
     const anfrage = inhaltsAnfrageFor(call);
@@ -794,7 +798,9 @@ function makeInitInhalt(inhaltsAnfrageFor) {
       calleeIsOwner: call.calleeIsOwner === true,
       disclosureLanguage: anfrage.locale.disclosureLanguage,
     });
-    return eroeffnungGesagt ? initiationContent({ ...anfrage, eroeffnungGesagt }) : inhalt;
+    const gesendet = eroeffnungGesagt ? initiationContent({ ...anfrage, eroeffnungGesagt }) : inhalt;
+    meldeVorspannEroeffnung({ callId: call.id, text: uebergebeneEroeffnung(gesendet) });
+    return gesendet;
   };
 }
 

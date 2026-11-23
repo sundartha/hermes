@@ -8,7 +8,7 @@ import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "./inbound-uebergabe-gescheitert.ts";
 import { EL_CALL_BINDING_SIP_HEADER, elSipZiel } from "./inbound-sip-uri.ts";
 import { STAND, elBeinVon, makeVorspannBruecke, messeSeit, standAusObjekt, standNachObjekt } from "./vorspann-bruecke.js";
-import { NICHT_ABGESPIELT_URSACHE, meldeVorspannRueckfall } from "./vorspann-erzeugen.js";
+import { NICHT_ABGESPIELT_URSACHE, instanzKennung, meldeVorspannRueckfall, mitInstanz } from "./vorspann-erzeugen.js";
 import { VORSPANN_ABLAGE_TTL_MS, VORSPANN_WAHL_GRUND, vorspannZeileTtlMs, wahlSperrGrund } from "./vorspann-pruefung.js";
 import { beiVorspannFrist, setzeKlingelfrist, setzeVorspannFristen } from "./vorspann-fristen.js";
 import { behandleOhneZustand } from "./vorspann-ohne-zustand.js";
@@ -20,16 +20,17 @@ const LOG_TAG = "[el-vorspann]";
 const EL_NICHT_ANGENOMMEN = "el_nicht_angenommen";
 const KEIN_WERT = "-";
 
+const ursacheText = ({ hangupCause, sipHangupCause, hangupSource }) =>
+  `hangup_cause=${hangupCause ?? KEIN_WERT} sip_hangup_cause=${sipHangupCause ?? KEIN_WERT} hangup_source=${hangupSource ?? KEIN_WERT}`;
+
 const meldeElBeinAufgelegt = (callId, { hangupCause, sipHangupCause, hangupSource }) =>
-  console.log(
-    `${LOG_TAG} el_bein_aufgelegt hangup_cause=${hangupCause ?? KEIN_WERT} sip_hangup_cause=${sipHangupCause ?? KEIN_WERT} hangup_source=${hangupSource ?? KEIN_WERT} call=${callId}`,
-  );
+  console.log(mitInstanz(`${LOG_TAG} el_bein_aufgelegt ${ursacheText({ hangupCause, sipHangupCause, hangupSource })} call=${callId}`));
 
 const meldeStart = (callId, stand, jetzt) =>
   messeSeit({ callId, messung: "playback_start", bezug: "ms_seit_abheben", stand, seit: STAND.ABGEHOBEN, jetzt });
 
 const logFehler = (aktion, callId, fehler) =>
-  console.error(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`);
+  console.error(mitInstanz(`${LOG_TAG} ${aktion} fehlgeschlagen call=${callId}: ${fehler.message}`));
 
 function meldeWiedergabeStartFehler(callId, fehler) {
   logFehler("abheben", callId, fehler);
@@ -134,9 +135,11 @@ async function vermerkeElFehler({ call, store, inboundBridges, now, rueckfall = 
 
 async function vermerkeElNichtAngenommen({ ereignis, ...args }) {
   meldeElBeinAufgelegt(args.call.id, ereignis);
-  const ursache = [ereignis.hangupCause && `hangup_cause=${ereignis.hangupCause}`, ereignis.sipHangupCause && `sip_hangup_cause=${ereignis.sipHangupCause}`];
-  const grund = [INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, ...ursache].filter(Boolean).join(" ");
-  await vermerkeElFehler({ ...args, rueckfall: EL_NICHT_ANGENOMMEN, grund });
+  await vermerkeElFehler({
+    ...args,
+    rueckfall: EL_NICHT_ANGENOMMEN,
+    grund: `${INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT}:${ursacheText(ereignis)} instanz=${instanzKennung()}`,
+  });
 }
 
 const vermerkeElFrist = (args) =>

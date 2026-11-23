@@ -174,7 +174,7 @@ test("5902-K4: Rueckfall ohne Ursache (EL-Bein nicht angenommen) bleibt ohne urs
   await warteAuf(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && anfrage.roh.includes(`vorspann-${callId}-el`)));
   await verarbeitet();
   await sende(callId, "call.hangup", { bein: elVon(callId) });
-  const zeileOhne = `[el-vorspann] rueckfall grund=el_nicht_angenommen call=${callId}\n`;
-  await warteAuf(() => umgebung.srv.stdout.includes(zeileOhne));
-  assert.ok(umgebung.srv.stdout.includes(zeileOhne));
+  const zeileOhne = new RegExp(`\\[el-vorspann\\] rueckfall grund=el_nicht_angenommen call=${callId} instanz=\\S+\\n`);
+  await warteAuf(() => zeileOhne.test(umgebung.srv.stdout));
+  assert.match(umgebung.srv.stdout, zeileOhne);
 });

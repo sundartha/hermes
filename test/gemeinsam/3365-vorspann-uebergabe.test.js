@@ -220,7 +220,7 @@ test("3365-D1: EL-Bein legt vor der Bruecke auf -> Uebergabe vermerkt, Angerufen
   assert.equal(bruecken(attrappe, callId).length, 0);
   assert.deepEqual(aufleger(attrappe, callId), [1, 0]);
   await warteAuf(() => anrufIn(callId).status === "failed");
-  assert.equal(anrufIn(callId).failureReason, GRUND);
+  assert.equal(anrufIn(callId).failureReason.split(":")[0], GRUND);
 });
 
 test("3365-D1: EL-Bein legt nach der Bruecke auf -> nichts vermerkt, Anruf completed", async () => {

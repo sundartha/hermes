@@ -266,7 +266,7 @@ test("3365-B1: EL-Bein legt vor der Bruecke auf -> Vermerk el_nicht_angenommen m
   await warteAuf(() => attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)));
   await sende(callId, "call.hangup", elVon(callId));
   await warteAuf(() => srv.stdout.includes(elNichtAngenommenLog(callId)));
-  await warteAuf(() => anrufIn(callId).failureReason === GRUND);
+  await warteAuf(() => anrufIn(callId).failureReason?.startsWith(`${GRUND}:`));
   assert.ok(anrufIn(callId).elFallbackAt);
 });
 
