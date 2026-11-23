@@ -59,7 +59,8 @@ test("Anrufer ruft die enge Probe-Schnittstelle mit dem Probe-Wert auf, nicht /m
   const modul = await import("../../scripts/anruf-probe/anrufer.mjs");
   assert.equal(await modul.anrufer.eigeneNummer(), ZIEL);
   assert.equal(aufrufe[0].url, `${BASIS}/intern/probe/mcp`);
-  assert.equal(aufrufe[0].optionen.headers.authorization, `Bearer ${PROBE_ZUGANG_SCHLUESSEL}`);
+  const { headers } = aufrufe[0].optionen;
+  assert.equal(headers.authorization, `Bearer ${PROBE_ZUGANG_SCHLUESSEL}`);
 });
 
 test("Ohne STAGING_PROBE_TOKEN im Push-Lauf: Aufräumen übersprungen mit dem neuen Namen", async () => {
