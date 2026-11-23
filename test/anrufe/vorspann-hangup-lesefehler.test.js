@@ -15,6 +15,7 @@ const EL_BEIN = "cc_el_lesefehler";
 const ZIEL = "+4915112399004";
 const ZUSTAND_FEHLT = "rueckfall grund=zustand_fehlt";
 const STATUS_SQL = "SELECT status, failure_reason FROM call WHERE id = $1";
+const GEBUCHT_SQL = "SELECT status, billed_at AS gebucht FROM call WHERE id = $1";
 const TABELLE_WEG = "ALTER TABLE vorspann_zustand RENAME TO vorspann_zustand_weg";
 const TABELLE_DA = "ALTER TABLE vorspann_zustand_weg RENAME TO vorspann_zustand";
 
@@ -106,9 +107,28 @@ test("Wird das Auflegen nach der Wiederherstellung erneut zugestellt, ist der An
     assert.equal((await ereignis(signer, b, { callId, art: "call.hangup" })).status, HTTP_NICHT_ERREICHBAR);
     await sql(TABELLE_DA);
     assert.equal((await ereignis(signer, b, { callId, art: "call.hangup" })).status, HTTP_OK);
-    await zeilenBis(async () => (await sql(STATUS_SQL, [callId])).rows, (zeilen) => zeilen[0].status !== "active");
-    assert.equal((await sql("SELECT count(*)::int AS anzahl FROM call WHERE id = $1 AND status <> 'active'", [callId])).rows[0].anzahl, 1);
+    await zeilenBis(async () => (await sql(GEBUCHT_SQL, [callId])).rows, (zeilen) => zeilen[0].status !== "active" && zeilen[0].gebucht);
+    const gebucht = (await sql(GEBUCHT_SQL, [callId])).rows[0];
+    assert.equal(gebucht.status, "ended");
+    assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
+    assert.deepEqual((await sql(GEBUCHT_SQL, [callId])).rows[0], gebucht);
     assert.equal(zaehleMarke([a, b], ZUSTAND_FEHLT), 0);
+  });
+});
+
+test("Wird das Auflegen nach der Wiederherstellung erneut zugestellt, legt Hermes das Gegenbein auf", { timeout: ZEITGRENZE_MS }, async (t) => {
+  if (!postgresVorhanden()) return;
+  await mitAnbieter(t, async ({ a, b, sql, signer, aufrufe }) => {
+    assert.equal((await platziere(a)).status, HTTP_OK);
+    const callId = await callIdVon(sql);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.answered" })).status, HTTP_OK);
+    await zeilenBis(async () => aufrufe.wiedergaben, (liste) => liste.length === 1);
+    await sql(TABELLE_WEG);
+    assert.equal((await ereignis(signer, b, { callId, art: "call.hangup" })).status, HTTP_NICHT_ERREICHBAR);
+    assert.deepEqual(aufrufe.auflegen, []);
+    await sql(TABELLE_DA);
+    assert.equal((await ereignis(signer, b, { callId, art: "call.hangup" })).status, HTTP_OK);
+    assert.deepEqual(await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.length === 1), [`/v2/calls/${EL_BEIN}/actions/hangup`]);
   });
 });
 
