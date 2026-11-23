@@ -79,7 +79,7 @@ function assertUnterscheidbar(werteJeFall, merkmal) {
 
 const merkmalJeFall = (lies) => CASES.map((kase) => ({ name: kase.name, wert: lies(kase) }));
 
-test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestimmen Sprache, Stimme und Offenlegungssatz", () => {
+test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestimmen Sprache und Offenlegungssatz, die Stimme ist in jeder Sprache dieselbe eine", () => {
   for (const kase of CASES) {
     const language = bestandsSpracheFor(kase);
     assert.equal(language, kase.language, `aufgeloeste Sprache im Fall "${kase.name}"`);
@@ -132,7 +132,7 @@ async function callLocaleSeam() {
   return resolve;
 }
 
-test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
+test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers mit der einen Stimme - Deutsch und deutscher Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
   for (const kase of CASES)
     assert.equal(bestandsSpracheFor(kase), kase.language, `Bestands-Aufloesung "${kase.name}"`);
   assertUnterscheidbar(
@@ -157,7 +157,7 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     assert.equal(
       gewaehlt?.voiceId,
       VOICE_ID_DE,
-      `Fall "${kase.name}": die Stimme folgt der Sprache (eine Stimme fuer alle Sprachen) - sonst spricht der Agent Deutsch mit ` +
+      `Fall "${kase.name}": die Stimme ist fuer alle Sprachen dieselbe eine - sonst spricht der Agent Deutsch mit ` +
         "amerikanischer Stimme.",
     );
     assert.equal(
