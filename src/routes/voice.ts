@@ -586,14 +586,12 @@ async function antworteAufVorspannEreignis(
       if (!res.headersSent) res.sendStatus(HTTP_OK);
     },
   });
-  const aufgelegt = ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT;
-  if (!aufgelegt && !res.headersSent) res.sendStatus(HTTP_OK);
+  if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT && !res.headersSent) res.sendStatus(HTTP_OK);
   try {
     await verarbeitung;
   } catch (fehler) {
-    if (!aufgelegt) throw fehler;
     if (!res.headersSent) res.status(HTTP_SERVICE_UNAVAILABLE).end();
-    console.error(VORSPANN_LOG_PREFIX, "neu_zustellen", fehlerText(fehler));
+    console.error(VORSPANN_LOG_PREFIX, fehlerText(fehler));
     return;
   }
   console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
