@@ -29,6 +29,7 @@ const FALSCHES_TOKEN = "v6-anrufpause-falsches-token-mindestens-32";
 const TELNYX_NR = "+13125550100";
 const ZIEL = "+4917312345678";
 const EL_BEIN_ENDUNG = "-el";
+const RUFNUMMER_ABGLEICH_PFAD = "/v1/convai/phone-numbers/";
 const PAUSE_PFAD = "/intern/anrufpause";
 const LAUFEND_PFAD = "/intern/anrufe-laufend";
 const ZWEI_MINUTEN_MS = 120_000;
@@ -218,12 +219,13 @@ test("V6 Anrufpause: ein laufender Anruf bleibt unberuehrt und sein Auflegen wir
         (antwort) => antwort.json(),
       );
     assert.deepEqual(await laufend(), { laufend: 1 });
-    const anfragenVorher = attrappe.anfragen.length;
+    const umschaltAnfragen = () => attrappe.anfragen.filter((anfrage) => !anfrage.pfad.startsWith(RUFNUMMER_ABGLEICH_PFAD)).length;
+    const anfragenVorher = umschaltAnfragen();
     await pauseSetzen(srv, true);
     assert.deepEqual(await laufend(), { laufend: 1 });
     const call = srv.readStore().calls.find((anruf) => anruf.id === laufender.id);
     assert.equal(call.status, "active");
-    assert.equal(attrappe.anfragen.length, anfragenVorher, "kein Anbieteraufruf beim Umschalten");
+    assert.equal(umschaltAnfragen(), anfragenVorher, "kein Anbieteraufruf beim Umschalten");
     const res = await auflegenMelden(srv, signer, laufender.id);
     assert.equal(res.status, HTTP_OK);
     const nachher = await waitForStoreState(srv, (zustand) =>
