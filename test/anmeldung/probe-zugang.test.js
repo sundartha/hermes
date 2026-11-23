@@ -132,6 +132,13 @@ test("Probe-Zugang: ein Wert unter 32 Zeichen schaltet die Route nicht ein", asy
   });
 });
 
+test("Probe-Zugang: Leerzeichen um den gesetzten Wert werden abgeschnitten", async () => {
+  await mitServer({ HERMES_PROBE_TOKEN: ` ${TOKEN} ` }, async ({ probe }) => {
+    const res = await probe(TOKEN, toolCall("get_agent_number"));
+    assert.equal(res.status, HTTP_OK);
+  });
+});
+
 test("Probe-Zugang: ein Wert mit genau 32 Zeichen schaltet die Route ein", async () => {
   const genau = TOKEN.slice(0, MINDESTLAENGE);
   await mitServer({ HERMES_PROBE_TOKEN: genau }, async ({ probe }) => {
@@ -148,6 +155,20 @@ test("Probe-Zugang: tools/list nennt genau die sechs freigegebenen Werkzeuge, al
     assert.deepEqual(tools.map((t) => t.name).sort(), SECHS_WERKZEUGE);
     const place = tools.find((t) => t.name === "place_call");
     assert.doesNotMatch(place.description, /consult/i);
+  });
+});
+
+test("Probe-Zugang: initialize kennt weder die Rückfrage-Schleife noch die Oberfläche", async () => {
+  await mitServer({}, async ({ probe }) => {
+    const init = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "probe", version: "1" } },
+    };
+    const { result } = await readRpcMessage(await probe(TOKEN, init));
+    assert.doesNotMatch(result.instructions, /await_call_event|consult/i);
+    assert.equal(Object.hasOwn(result.capabilities, "extensions"), false);
   });
 });
 
