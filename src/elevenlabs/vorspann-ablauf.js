@@ -251,7 +251,10 @@ export function makeVorspannAblauf({
     const callControlId = await waehleBein({ steuerung, call, token, vorspann, config, ttsStore, vorspannZustand });
     if (call.status === "active") {
       await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: callControlId });
-      await setzeKlingelfrist({ call, store, config, jetzt: now }).catch((fehler) => logFehler("frist", call.id, fehler));
+      await setzeKlingelfrist({ call, store, config, jetzt: now }).catch(async (fehler) => {
+        logFehler("frist", call.id, fehler);
+        await beiKlingelfrist({ callId: call.id, ladeZustand, store, voiceControl, beiAufgelegt, vorspannZustand });
+      });
     } else await verwirfBein({ steuerung, call, callControlId, token, ttsStore, vorspannZustand });
     return { callControlId };
   }
