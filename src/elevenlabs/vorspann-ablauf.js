@@ -308,10 +308,7 @@ export function makeVorspannAblauf({
   }
 
   const { beiElAngenommen, beiWiedergabeEnde } = makeVorspannBruecke({
-    voiceControl,
-    store,
-    ttsStore,
-    vorspannZustand,
+    voiceControl, store, ttsStore, vorspannZustand,
     legeBeideBeineAuf: legeBeideBeineAufMitUhr,
     vermerkeElFehler: vermerkeElFehlerFuer, vermerkeNichtAbgespielt: (call) => vermerkeNichtAbgespielt({ call, store }),
     logFehler, now,
