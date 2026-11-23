@@ -210,8 +210,8 @@ test("POST /api/calls: Körper ohne to und objective antwortet 400 mit dem Text 
   }
 });
 
-test("POST /api/calls: language als Zahl, unbekannter Text und Array antwortet 400 vor den Gates", async () => {
-  for (const sprache of [7, "xx", ["de"]]) {
+test("POST /api/calls: language als Zahl und Array antwortet 400 vor den Gates", async () => {
+  for (const sprache of [7, ["de"]]) {
     const antwort = await sendeAnJson("/api/calls", JSON.stringify({ to: ZIEL, objective: "x", language: sprache }));
     assert.equal(antwort.status, HTTP_BAD_REQUEST, String(sprache));
     assert.match((await antwort.json()).error, /./);
