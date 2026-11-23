@@ -574,10 +574,10 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe, runner }) {
       if (result.changed) save();
       return result;
     },
-    async markConsultAskDelivered(callId, eventId, tenantId) {
+    async markConsultAskDelivered(callId, eventId) {
       const result = ops.markConsultAskDelivered(requireState(), callId, eventId);
       if (result.changed) save();
-      await rueckfrageSql.zustellungSetzen(callId, tenantId, eventId);
+      if (result.call) await rueckfrageSql.zustellungSetzen(callId, result.call.tenantId, eventId);
       return result;
     },
     ackConsult(callId, input) {
