@@ -36,7 +36,7 @@ async function kaufeErsatz({ store, deps }, number) {
     await provisionNumber(store.load(), deps, { numberId: number.id, ...searchParamsForCountry(number.country) });
     return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
   } catch (err) {
-    deps.logger.error(`${LOG_PREFIX} Kauf fehlgeschlagen number=${number.id}: ${Reflect.get(Object(err), "message")}`);
+    deps.logger.error(`${LOG_PREFIX} Kauf fehlgeschlagen number=${number.id}: ${String(Reflect.get(Object(err), "message"))}`);
     return TAUSCH_ERGEBNIS.KAUF_FEHLGESCHLAGEN;
   } finally {
     store.save();
@@ -50,7 +50,7 @@ async function sichereRegistrierung({ store, bereiche, deps }, sipRegistrar, num
     await store.drainFlushes();
     return TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
   } catch (err) {
-    deps.logger.error(`${LOG_PREFIX} Registrierung fehlgeschlagen number=${number.id}: ${Reflect.get(Object(err), "message")}`);
+    deps.logger.error(`${LOG_PREFIX} Registrierung fehlgeschlagen number=${number.id}: ${String(Reflect.get(Object(err), "message"))}`);
     return TAUSCH_ERGEBNIS.REGISTRIERUNG_FEHLGESCHLAGEN;
   }
 }
@@ -104,7 +104,7 @@ async function tauscheEinen(kontext, alt) {
     if (config.provisioning.provisioningEnabled) Object.assign(eintrag, await tausche(kontext, alt));
     else eintrag.ergebnis = TAUSCH_ERGEBNIS.DRY_RUN;
   } catch (err) {
-    deps.logger.error(`${LOG_PREFIX} Fehler tenant=${alt.tenantId}: ${Reflect.get(Object(err), "message")}`);
+    deps.logger.error(`${LOG_PREFIX} Fehler tenant=${alt.tenantId}: ${String(Reflect.get(Object(err), "message"))}`);
   }
   logge(deps.logger, eintrag);
   return eintrag;
@@ -130,6 +130,6 @@ export async function runNummerntausch({
 
 export function starteNummerntausch({ logger = console, ...optionen }) {
   return runNummerntausch({ logger, ...optionen }).catch((err) => {
-    logger.error(`${LOG_PREFIX} Lauf abgebrochen: ${Reflect.get(Object(err), "message")}`);
+    logger.error(`${LOG_PREFIX} Lauf abgebrochen: ${String(Reflect.get(Object(err), "message"))}`);
   });
 }
