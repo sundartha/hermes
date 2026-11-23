@@ -1460,8 +1460,7 @@ async function konversationsIdSchreiben(runner, call) {
       const { rows } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
       const gehalten = rows[0];
       if (!gehalten || gehalten.geschrieben === 1 || !gehalten.id || gehalten.id === call.elevenlabsConversationId) return true;
-      call.elevenlabsConversationId = gehalten.id;
-      call.elBoundAt = gehalten.bound_at ? new Date(gehalten.bound_at).toISOString() : null;
+      ops.uebernehmeGehalteneBindung(call, { conversationId: gehalten.id, boundAt: gehalten.bound_at });
       return false;
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
