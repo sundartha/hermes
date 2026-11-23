@@ -89,6 +89,6 @@ test("3365-K23: die Logzeilen nennen nur Grund und Anruf-Kennung", (t) => {
   meldeVorspannBereit("call_2");
   const zeilen = log.mock.calls.map((aufruf) => aufruf.arguments);
   assert.equal(zeilen.length, 2);
-  assert.match(zeilen[0][0], /^\[el-vorspann\] rueckfall grund=tts_quote call=call_1 instanz=\S+$/);
+  assert.match(zeilen[0][0], /^\[el-vorspann\] rueckfall grund=tts_quote call=call_1 instanz=-$/);
   assert.deepEqual(zeilen[1], ["[el-vorspann] bereit call=call_2"]);
 });
