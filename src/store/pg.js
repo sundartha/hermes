@@ -1450,12 +1450,13 @@ function mitSpeichernBeiAenderung(save) {
     return ergebnis;
   };
 }
-const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = $4 WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
+const KONVERSATION_SPEICHERN_SQL = `UPDATE call SET elevenlabs_conversation_id = $3, el_bound_at = $4 WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND (elevenlabs_conversation_id IS NULL OR elevenlabs_conversation_id = $3)`;
 async function konversationsIdSchreiben(runner, call) {
-  await runner.withClient(async (client) => {
+  return runner.withClient(async (client) => {
     await setTenant(client, call.tenantId);
     try {
-      await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
+      const { rowCount } = await client.query(KONVERSATION_SPEICHERN_SQL, [call.tenantId, call.id, call.elevenlabsConversationId, call.elBoundAt]);
+      return rowCount === 1;
     } finally {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
     }
@@ -1885,7 +1886,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          consults=${CONSULTS_BEIM_SCHREIBEN_SQL}, context=EXCLUDED.context,
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
          estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
-         elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id,
+         elevenlabs_conversation_id=COALESCE(call.elevenlabs_conversation_id, EXCLUDED.elevenlabs_conversation_id),
          answered_unclear_reason=EXCLUDED.answered_unclear_reason,
          appointment_date=EXCLUDED.appointment_date, appointment_time=EXCLUDED.appointment_time,
          amount=EXCLUDED.amount, currency=EXCLUDED.currency,
@@ -1900,7 +1901,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          cost_profile=EXCLUDED.cost_profile,
          el_detector_counts=EXCLUDED.el_detector_counts,
          webhook_anchors=EXCLUDED.webhook_anchors,
-         el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
+         el_bound_at=COALESCE(call.el_bound_at, EXCLUDED.el_bound_at), el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
       callRowValues(call, tenantId),
