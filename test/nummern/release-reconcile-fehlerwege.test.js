@@ -3,7 +3,7 @@ import { test, mock } from "node:test";
 import express from "express";
 
 import { makePgTestStore } from "../pg-helpers.js";
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
+import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";

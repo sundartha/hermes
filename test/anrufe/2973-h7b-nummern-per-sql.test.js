@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { TAUSCH_ERGEBNIS } from "../../src/store.js";
-import { runNummerntausch } from "../../src/worker/nummerntausch.js";
+import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { legeMandantAn, makePgStore, makePgTestStore } from "../pg-helpers.js";
 

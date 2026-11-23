@@ -8,7 +8,7 @@ process.env.TELNYX_API_KEY = "KEYtest-tausch-id-offen";
 
 const { withConfigNamespaces } = await import("../config-namespaces-helper.js");
 const { makePgTestStore } = await import("../pg-helpers.js");
-const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { runNummerntausch } = await import("../../src/worker/nummerntausch.ts");
 const { numberProvisioning } = await import("../../src/telephony/registry.js");
 
 const TENANT = "t_tausch_id_offen";

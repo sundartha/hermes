@@ -16,7 +16,7 @@ const JSON_KOPF = { "content-type": "application/json" };
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "" });
 const { config } = await import("../../src/config.ts");
 const store = await import("../../src/store.js");
-const { runNummerntausch } = await import("../../src/worker/nummerntausch.js");
+const { runNummerntausch } = await import("../../src/worker/nummerntausch.ts");
 
 async function mandantMitDeutscherNummer() {
   store.load().tenants.push({ id: TENANT, status: "active", kycLevel: "card", ownerName: "Tausch Tester" });
