@@ -281,3 +281,15 @@ test("6161-K2d: Ergebnis ohne Transkript -> keine Zeile agent_erste_rede, Anruf 
   const ausgabe = await nachlaufMit(gespraech({ zeilen: undefined }), id);
   assert.deepEqual(zeilenIn(ausgabe, ZEILEN[0]), []);
 });
+
+test("6161-K2e: Redezeit des Anbieters ist keine Zahl -> Zeile mit - statt einer falschen Zahl", async () => {
+  const id = "call_6161_k2e";
+  const ausgabe = await nachlaufMit(gespraech({ zeilen: [{ role: "agent", message: AGENT_TEXT, time_in_call_secs: null }] }), id);
+  assert.deepEqual(zeilenIn(ausgabe, ZEILEN[0]), [`[el-vorspann] agent_erste_rede ms_seit_start=- ms_seit_abheben=- call=${id}`]);
+});
+
+test("6161-K2f: leerer Eintrag vor der Agent-Zeile -> Zeile mit Zahlen, Anruf wird abgeschlossen", async () => {
+  const id = "call_6161_k2f";
+  const ausgabe = await nachlaufMit(gespraech({ zeilen: [null, AGENT_ZEILE] }), id);
+  assert.deepEqual(zeilenIn(ausgabe, ZEILEN[0]), [`[el-vorspann] agent_erste_rede ms_seit_start=5000 ms_seit_abheben=4000 call=${id}`]);
+});
