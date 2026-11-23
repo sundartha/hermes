@@ -206,6 +206,7 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
   summaryInput: {
     directionLabel: "Richtung:",
     goalLabel: "Auftrag:",
+    callDateLabel: "Anrufdatum:",
     transcriptLabel: "TRANSKRIPT:",
     agentRole: "AGENT",
     callerRole: "ANRUFER",

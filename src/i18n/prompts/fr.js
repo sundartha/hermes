@@ -205,6 +205,7 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
   summaryInput: {
     directionLabel: "Sens :",
     goalLabel: "Mission :",
+    callDateLabel: "Date de l'appel :",
     transcriptLabel: "TRANSCRIPTION :",
     agentRole: "ASSISTANT",
     callerRole: "APPELANT",
