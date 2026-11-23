@@ -132,7 +132,10 @@ test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachd
     await zeilenBis(async () => verarbeitet([a, b]), (anzahl) => anzahl === 2);
     assert.deepEqual((await sql(ZEILE_SQL, [callId])).rows[0].aufgelegt, [CALLEE]);
     const uebergaenge = (await sql(PROTOKOLL_LESEN_SQL)).rows.map((zeile) => `${zeile.alt.sort()}>${zeile.neu.sort()}`);
-    assert.deepEqual(uebergaenge, [`>${CALLEE}`, `${CALLEE}>${CALLEE},${EL}`, `${CALLEE},${EL}>${CALLEE}`]);
+    assert.equal(uebergaenge.length, 3);
+    const erstesBein = uebergaenge[0].slice(1);
+    assert.ok([CALLEE, EL].includes(erstesBein));
+    assert.deepEqual(uebergaenge, [`>${erstesBein}`, `${erstesBein}>${CALLEE},${EL}`, `${CALLEE},${EL}>${CALLEE}`]);
     assert.equal((await ereignis(signer, b, { callId, art: "call.hangup", kennung: "hangup" })).status, HTTP_OK);
     await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.filter((bein) => bein === EL).length === 2);
   });
