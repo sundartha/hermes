@@ -65,7 +65,7 @@ import { evidenceRetentionEnabled } from "./call-result.ts";
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.ts";
 import { probeMailBoot } from "./mail-boot-probe.js";
 import { elevenlabsNummern } from "./elevenlabs/nummern-port.ts";
-import { starteNummerntausch } from "./worker/nummerntausch.js";
+import { starteNummerntausch } from "./worker/nummerntausch.ts";
 import { numberProvisioning, inboundSignatureVerifier } from "./telephony/registry.js";
 import { makeGracefulShutdown } from "./abschalten.js";
 import { warteAufOffeneAbrechnungen } from "./telephony/call-termination.ts";
