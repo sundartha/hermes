@@ -20,6 +20,7 @@ import { STDIN_FUER_ELTERNWAECHTER } from "./gemeinsam/elternwaechter.mjs";
 import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { vorspannFuerStart, vorspannSeedNummer } from "./gemeinsam/vorspann-fahrzeug.js";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
+import { laufendeAusgaben } from "./gemeinsam/instanz-ausgabe.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
@@ -981,6 +982,8 @@ export async function startServer({
     if (name === "store.json") ereignisse.emit(EREIGNIS_AENDERUNG, "speicher");
   });
   child.once("exit", () => speicherWache.close());
+  laufendeAusgaben.add(output);
+  child.once("exit", () => laufendeAusgaben.delete(output));
 
   const port = await new Promise((resolve, reject) => {
     const timer = setTimeout(

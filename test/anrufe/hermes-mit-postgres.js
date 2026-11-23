@@ -3,6 +3,7 @@ import pg from "pg";
 
 import { ANRUF_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.js";
 import { echtWarten } from "../echt-warten.js";
+import { fristAblaufMeldung } from "../gemeinsam/instanz-ausgabe.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
@@ -145,6 +146,7 @@ export async function zeilenBis(lies, genug) {
   const ende = Date.now() + SQL_FRIST_MS;
   let zeilen = await lies();
   while (!genug(zeilen)) {
+    if (Date.now() >= ende) throw new Error(fristAblaufMeldung(zeilen));
     assert.ok(Date.now() < ende, `Zustand per SQL nicht erreicht: ${JSON.stringify(zeilen)}`);
     await echtWarten(SQL_TAKT_MS);
     zeilen = await lies();
