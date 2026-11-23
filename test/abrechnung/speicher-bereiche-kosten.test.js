@@ -41,7 +41,7 @@ test("kostenabgleich: abgleichZustand liefert genau Anrufe und Belege als diesel
 
 test("kostenabgleich: querpruefungMonat nennt den Vormonat, solange er nicht geprueft ist", async () => {
   const zustand = { costCrossCheck: { lastCheckedMonthKey: null } };
-  const speicher = { load: () => zustand };
+  const speicher = { costCrossCheckZustand: async () => zustand };
   const { kostenabgleich } = speicherBereiche(speicher);
   assert.equal(await kostenabgleich.querpruefungMonat("2026-08-15T12:00:00.000Z"), "2026-07");
   zustand.costCrossCheck.lastCheckedMonthKey = "2026-06";

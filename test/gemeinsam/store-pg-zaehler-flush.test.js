@@ -101,16 +101,16 @@ test("markCostCrossCheckAttempted persistiert den Monatsschluessel ueber einen N
   await store.drainFlushes();
 
   const geoeffnet = await neuGeoeffnet(runner);
-  assert.equal(geoeffnet.load().costCrossCheck.lastCheckedMonthKey, MONATSSCHLUESSEL);
+  assert.equal((await geoeffnet.costCrossCheckZustand()).costCrossCheck.lastCheckedMonthKey, MONATSSCHLUESSEL);
 });
 
-test("markCostCrossCheckAttempted flusht beim zweiten Aufruf mit unveraendertem Stand nicht", async () => {
+test("markCostCrossCheckAttempted schreibt beim zweiten Aufruf mit unveraendertem Stand genau eine Zeile statt den Bestand", async () => {
   const { store, zaehler } = await mitFlushZaehler();
   store.markCostCrossCheckAttempted(MONATSSCHLUESSEL);
   const { flushes } = await flushesDurch(store, zaehler, () =>
     store.markCostCrossCheckAttempted(MONATSSCHLUESSEL),
   );
-  assert.equal(flushes, 0);
+  assert.equal(flushes, 1);
 });
 
 test("markMeterEventsSent persistiert die Meter-Markierung ueber einen Neustart", async () => {

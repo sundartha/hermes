@@ -31,14 +31,16 @@ function abgleichIstDurchgelaufen() {
 async function sweepAm(jetztIso, bisherGeprueft) {
   laufendesHermes();
   abgleichZeilen.length = 0;
-  store.load().costCrossCheck.lastCheckedMonthKey = bisherGeprueft;
-  store.save();
-  await store.drainFlushes();
+  await laufendesHermes().db.query(
+    `INSERT INTO cost_cross_check (id, last_checked_month_key) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET last_checked_month_key = EXCLUDED.last_checked_month_key`,
+    [bisherGeprueft],
+  );
   mock.timers.setTime(Date.parse(jetztIso));
   for (const lauf of sweepTakte) lauf();
   await abgleichIstDurchgelaufen();
   await store.drainFlushes();
-  return store.load().costCrossCheck.lastCheckedMonthKey;
+  return (await store.costCrossCheckZustand()).costCrossCheck.lastCheckedMonthKey;
 }
 
 function keinAbgleichGelaufen() {

@@ -8,7 +8,7 @@ import { tenantLanguage as tenantLanguageOf } from "./views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
 import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { emptyPlatformTtsUsage, emptyCostCrossCheck } from "./leerzustaende.js";
+import { emptyPlatformTtsUsage } from "./leerzustaende.js";
 import { migrate } from "../db/migrate.js";
 import {
   hydratedCostCents,
@@ -36,6 +36,7 @@ import { macheAnrufePosteingangSql } from "./posteingang-anrufe-sql.js";
 import { macheAktionspunkteSql, ausstehendeSchreiben, inDatenbankMerken } from "./posteingang-sql.js";
 import { CONSULTS_BEIM_SCHREIBEN_SQL, macheRueckfrageSql } from "./rueckfrage-sql.js";
 import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
+import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
@@ -206,7 +207,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -667,7 +668,7 @@ function aktionKalenderMethoden({ requireState, save, posteingang }) {
   };
 }
 
-function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern, anrufSuche }) {
+function kostenBudgetMethoden({ requireState, save, kostenvergleich, aktiveAnrufe, anrufNummern, anrufSuche }) {
   return {
     numberHasActiveCall: async (e164) =>
       ops.activeCallOnNumber(requireState(), e164) || anrufNummern.aktivBelegt(e164),
@@ -734,11 +735,10 @@ function kostenBudgetMethoden({ requireState, save, aktiveAnrufe, anrufNummern, 
       return result.warning;
     },
 
-    markCostCrossCheckAttempted(monthKey) {
-      const current = requireState();
-      const before = current.costCrossCheck.lastCheckedMonthKey;
-      ops.markCrossCheckAttempted(current, monthKey);
-      if (current.costCrossCheck.lastCheckedMonthKey !== before) save();
+    markCostCrossCheckAttempted: (monthKey) => kostenvergleich.markieren(monthKey),
+
+    async costCrossCheckZustand() {
+      return { costCrossCheck: { lastCheckedMonthKey: await kostenvergleich.lesen() } };
     },
   };
 }
@@ -1088,7 +1088,6 @@ async function hydrate(client) {
   state.platformTtsUsage = await hydratePlatformTtsUsage(client);
   ops.usageFor(state, ops.PLATFORM_TTS_COST_CENTER_ID).ttsCharacters =
     await hydratePlatformKostenstelleZeichen(client);
-  state.costCrossCheck = await hydrateCostCrossCheck(client);
   state.anrufpause = await hydrateAnrufpause(client);
   state.platformNumberUse = await hydratePlatformNumberUse(client);
   state.outageAlerts = await hydrateOutageAlerts(client);
@@ -1115,14 +1114,6 @@ async function hydratePlatformKostenstelleZeichen(client) {
     await client.query(`SELECT kostenstelle_zeichen FROM platform_tts_usage WHERE id = 1`)
   ).rows;
   return rows.length === 0 ? 0 : Number(rows[0].kostenstelle_zeichen);
-}
-
-async function hydrateCostCrossCheck(client) {
-  const rows = (
-    await client.query(`SELECT last_checked_month_key FROM cost_cross_check WHERE id = 1`)
-  ).rows;
-  if (rows.length === 0) return emptyCostCrossCheck();
-  return { lastCheckedMonthKey: rows[0].last_checked_month_key };
 }
 
 async function hydrateAnrufpause(client) {
@@ -1665,7 +1656,6 @@ async function flush(client, state, { preFlush, gebunden }) {
       await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke, gebunden });
     }
     await flushPlatformTtsUsage(client, state);
-    await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
     inDatenbankMerken(geschrieben);
     for (const [call, abdruck] of abdruecke) geschriebeneAnrufe.set(call, abdruck);
@@ -1989,14 +1979,6 @@ async function flushPlatformTtsUsage(client, state) {
      ON CONFLICT (id) DO UPDATE SET cycle_key=EXCLUDED.cycle_key, characters=EXCLUDED.characters,
        warned_cycle=EXCLUDED.warned_cycle, kostenstelle_zeichen=EXCLUDED.kostenstelle_zeichen`,
     [row.cycleKey, row.characters, row.warnedCycle, kostenstelleZeichen],
-  );
-}
-
-async function flushCostCrossCheck(client, row) {
-  await client.query(
-    `INSERT INTO cost_cross_check (id, last_checked_month_key) VALUES (1,$1)
-     ON CONFLICT (id) DO UPDATE SET last_checked_month_key=EXCLUDED.last_checked_month_key`,
-    [row.lastCheckedMonthKey],
   );
 }
 

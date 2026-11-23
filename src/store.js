@@ -449,6 +449,7 @@ export const {
   recordTenantTtsCharacters,
   recordRelayTtsCharacters,
   markCostCrossCheckAttempted,
+  costCrossCheckZustand,
   usageOf,
   addNotification,
   pruneOldData,
