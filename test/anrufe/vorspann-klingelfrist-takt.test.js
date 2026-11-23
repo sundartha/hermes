@@ -4,7 +4,6 @@ import { afterEach, beforeEach, test } from "node:test";
 
 import { BASE_ENV, OWNER_TEST_FIRST_NAME, ROOT, makeTelnyxSigner, seedCall, seedState, startServer, waitUntil } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { echtWarten } from "../echt-warten.js";
 import { kindUmgebung } from "../gemeinsam/kind-umgebung.mjs";
 import { calleeVon, hebeAb, legeAnruf, neueAnrufNummer, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 import { ereignis as meldeEreignis, starteAnbieter } from "./vorspann-zwei-instanzen-hilfen.js";
@@ -17,7 +16,7 @@ const KLINGEL_FRIST_MS = 1637;
 const TAKT_MS = 200;
 const STANDARD_KLINGEL_MS = 75_000;
 const HTTP_OK = 200;
-const NACH_FRIST_MS = 4_000;
+const KLINGEL_LEER_SQL = "SELECT frist_klingel_at FROM vorspann_zustand WHERE call_id = $1";
 const ZEITGEBER = [
   "const echt = globalThis.setTimeout;",
   "globalThis.setTimeout = (fn, ms, ...rest) => {",
@@ -46,9 +45,15 @@ afterEach(async () => {
   await umgebung.attrappe.close();
 });
 
-const anrufIn = (callId) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === callId);
-const calleeAufgelegt = (callId) =>
-  umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup")).length;
+const anrufIn = (callId) => {
+  const { calls } = umgebung.srv.readStore();
+  return calls.find((eintrag) => eintrag.id === callId);
+};
+const istCalleeAuflegen = (callId) => (pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup");
+const calleeAufgelegt = (callId) => {
+  const { pfade } = umgebung.attrappe;
+  return pfade.filter(istCalleeAuflegen(callId)).length;
+};
 
 test("5928-4c K7: wird das Bein nicht abgehoben, legt der Fristen-Takt es nach der Klingelfrist einmal auf und der Anruf endet no-answer, ohne Timer im Prozess", async () => {
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(20));
@@ -157,7 +162,7 @@ test("5928-4c K7: hebt der Angerufene vor der Klingelfrist ab, bleibt der Anruf 
     const callId = await platziere(a, sql);
     assert.equal((await meldeEreignis(signer, b, { callId, art: "call.answered", kennung: "k" })).status, HTTP_OK);
     await zeilenBis(async () => aufrufe.wiedergaben, (liste) => liste.length === 1);
-    await echtWarten(NACH_FRIST_MS);
+    await zeilenBis(async () => (await sql(KLINGEL_LEER_SQL, [callId])).rows, (zeilen) => zeilen[0]?.frist_klingel_at === null);
     assert.deepEqual((await sql(STATUS_SQL, [callId])).rows, [{ status: "active", failure_reason: null }]);
     assert.deepEqual(aufrufe.auflegen, []);
   });

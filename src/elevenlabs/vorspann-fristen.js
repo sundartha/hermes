@@ -3,11 +3,12 @@ import { STAND } from "./vorspann-bruecke.js";
 const ERLEDIGT = Object.freeze({ wiedergabe: STAND.WIEDERGABE, elBein: STAND.EL_BEIN });
 
 export function setzeKlingelfrist({ call, store, config, jetzt }) {
+  const { vorspannKlingelFristMs } = config.voice.elevenLabsOutbound;
   return store.setzeVorspannFrist({
     tenantId: call.tenantId,
     callId: call.id,
     frist: "klingel",
-    faelligAt: new Date(jetzt() + config.voice.elevenLabsOutbound.vorspannKlingelFristMs).toISOString(),
+    faelligAt: new Date(jetzt() + vorspannKlingelFristMs).toISOString(),
   });
 }
 
