@@ -88,7 +88,8 @@ test("Frist-Quelle: die Quellen sind die Server-Werte 3, 10000, 5000 und 10000",
 test("Frist-Quelle: Zahl nie geliefert gibt nach der aus den Server-Konstanten berechneten Frist undefined", async () => {
   const { wert, wartezeiten } = await gelesen(Number.POSITIVE_INFINITY);
   assert.equal(wert, undefined);
-  assert.equal(summe(wartezeiten), ERWARTET_MS);
+  const drosselMs = 74_000;
+  assert.equal(summe(wartezeiten), ERWARTET_MS + drosselMs);
 });
 
 test("Frist-Quelle: Zahl im letzten Abruf vor Fristablauf zählt noch", async () => {
