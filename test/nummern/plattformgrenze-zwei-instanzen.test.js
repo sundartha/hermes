@@ -152,7 +152,7 @@ async function ausloesenUndAbarbeiten(instanz, mandant) {
 }
 
 const ABGELEHNT = { ok: false, reason: "already_provisioned" };
-const WARTENDE_SPERREN = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted";
+const WARTENDE_SPERREN = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted AND locktype = 'advisory' AND classid = 5787 AND objid = 1 AND database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 const SCHRANKE_VERSUCHE = 20_000;
 
 function schrankeVorDemEinfuegen(beobachter) {
