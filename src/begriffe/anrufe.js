@@ -17,3 +17,5 @@ export const ANRUFSTART_JOB = "anrufstart";
 export const RECIPIENT_NAME_MAX_LENGTH = 80;
 
 export const ANRUFSTART_WARTEFRIST_MAX_MS = 120_000;
+
+export const NICHT_ERREICHT_FRIST_MS = 75_000;

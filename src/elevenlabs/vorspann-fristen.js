@@ -1,9 +1,15 @@
 import { STAND } from "./vorspann-bruecke.js";
-import { NICHT_ERREICHT_FRIST_MS } from "./nicht-erreicht-frist.ts";
-
-export const armiereKlingelfrist = ({ setTimer, beiFrist }) => setTimer(beiFrist, NICHT_ERREICHT_FRIST_MS);
 
 const ERLEDIGT = Object.freeze({ wiedergabe: STAND.WIEDERGABE, elBein: STAND.EL_BEIN });
+
+export function setzeKlingelfrist({ call, store, config, jetzt }) {
+  return store.setzeVorspannFrist({
+    tenantId: call.tenantId,
+    callId: call.id,
+    frist: "klingel",
+    faelligAt: new Date(jetzt() + config.voice.elevenLabsOutbound.vorspannKlingelFristMs).toISOString(),
+  });
+}
 
 export function setzeVorspannFristen({ call, store, config, jetzt }) {
   const { vorspannWiedergabeFristMs, bridgeStartDeadlineMs } = config.voice.elevenLabsOutbound;
