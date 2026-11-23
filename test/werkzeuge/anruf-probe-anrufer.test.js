@@ -66,11 +66,11 @@ function attrappe(werkzeuge) {
 
 const PLATZIERT = () => antwort({ call_id: "c1", status: "dialing" });
 
-test("Eigene Nummer: tools/call get_agent_number als POST mit Bearer an /mcp, SSE-Antwort wird gelesen", async () => {
+test("Eigene Nummer: tools/call get_agent_number als POST mit Bearer an /intern/probe/mcp, SSE-Antwort wird gelesen", async () => {
   const { anrufer, aufrufe } = attrappe({ get_agent_number: () => antwort({ number: ZIEL }, { sse: true }) });
   assert.equal(await anrufer.eigeneNummer(), ZIEL);
   const [aufruf] = aufrufe;
-  assert.equal(aufruf.url, `${BASIS}/mcp`);
+  assert.equal(aufruf.url, `${BASIS}/intern/probe/mcp`);
   assert.equal(aufruf.optionen.method, "POST");
   assert.equal(aufruf.optionen.redirect, "error");
   assert.equal(aufruf.optionen.headers.authorization, `Bearer ${PROBE_STAGING_TEST_TOKEN}`);

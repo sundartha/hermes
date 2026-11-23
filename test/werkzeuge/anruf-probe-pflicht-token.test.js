@@ -22,7 +22,7 @@ function aufrufen(umgebung) {
     GITHUB_SHA: "d".repeat(40),
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
     STAGING_PROBE_VORNAME: "Anna",
     SLACK_ALERT_URL: "http://127.0.0.1:1/x",
@@ -37,22 +37,22 @@ function aufrufen(umgebung) {
   return new Promise((fertig) => kind.on("close", (code) => fertig({ code, ausgabe })));
 }
 
-test("Fehlt STAGING_TEST_TOKEN: Push-Lauf übersprungen und rot, ohne Anruf", async () => {
-  const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "push", STAGING_TEST_TOKEN: "" });
+test("Fehlt STAGING_PROBE_TOKEN: Push-Lauf übersprungen und rot, ohne Anruf", async () => {
+  const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "push", STAGING_PROBE_TOKEN: "" });
   assert.equal(ergebnis.code, 1);
-  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_test_token_fehlt/);
+  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_probe_token_fehlt/);
   assert.ok(!ergebnis.ausgabe.includes("probe_ziel_unerlaubt"));
   assert.ok(!ergebnis.ausgabe.includes("ANRUF"));
 });
 
-test("Fehlt STAGING_TEST_TOKEN: Zeitplan-Lauf rot, ohne Anruf", async () => {
-  const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "schedule", STAGING_TEST_TOKEN: "" });
+test("Fehlt STAGING_PROBE_TOKEN: Zeitplan-Lauf rot, ohne Anruf", async () => {
+  const ergebnis = await aufrufen({ GITHUB_EVENT_NAME: "schedule", STAGING_PROBE_TOKEN: "" });
   assert.equal(ergebnis.code, 1);
-  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_test_token_fehlt/);
+  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_probe_token_fehlt/);
   assert.ok(!ergebnis.ausgabe.includes("ANRUF"));
 });
 
-test("STAGING_TEST_TOKEN ist gesetzt: Wert wird maskiert, Probe läuft", async () => {
+test("STAGING_PROBE_TOKEN ist gesetzt: Wert wird maskiert, Probe läuft", async () => {
   const ergebnis = await aufrufen({});
   assert.equal(ergebnis.code, 0);
   assert.ok(ergebnis.ausgabe.includes(`::add-mask::${PROBE_STAGING_TEST_TOKEN}`));

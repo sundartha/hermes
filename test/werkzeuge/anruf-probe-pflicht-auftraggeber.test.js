@@ -22,7 +22,7 @@ function aufrufen(umgebung) {
     GITHUB_SHA: "d".repeat(40),
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
     STAGING_PROBE_VORNAME: "Anna",
     SLACK_ALERT_URL: "http://127.0.0.1:1/x",
