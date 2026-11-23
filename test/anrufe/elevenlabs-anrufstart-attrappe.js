@@ -67,9 +67,18 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
   const instanzen = new Map();
   const besitzer = new Map();
   const aufgelegteAnrufe = new Set();
+  const laeufe = new Set();
   const besitzerVon = (callId) => besitzer.get(callId) ?? [...instanzen.values()].at(-1);
   const elGewaehlt = (callId) =>
     anfragen.some((a) => a.pfad === WAHL_PFAD && gewaehlterBefehl(a) === `vorspann-${callId}${EL_BEIN_ENDUNG}`);
+
+  function imHintergrund(lauf) {
+    const festgehalten = new Promise((fertig) => setImmediate(fertig))
+      .then(lauf)
+      .catch(meldeFehler)
+      .finally(() => laeufe.delete(festgehalten));
+    laeufe.add(festgehalten);
+  }
 
   async function nimmAn(callId, hermes) {
     await sende(hermes.url, callId, { typ: "call.answered", bein: calleeVon(callId) });
@@ -86,14 +95,14 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
     const hermes = instanzen.get(new URL(anfrage.body.webhook_url).host);
     if (hermes && calleeBein) {
       besitzer.set(callId, hermes);
-      setImmediate(() => nimmAn(callId, hermes).catch(meldeFehler));
+      imHintergrund(() => nimmAn(callId, hermes));
     }
     jsonAntwort(res, { data: { call_control_id: `cc_${calleeBein ? "callee" : "el"}_${callId}`, result: "ok" } });
   }
 
   function beantworteAufgelegt([, bein, callId], res) {
     aufgelegteAnrufe.add(callId);
-    setImmediate(() => sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein }).catch(meldeFehler));
+    imHintergrund(() => sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein }));
     jsonAntwort(res, { data: { result: "ok" } });
   }
 
@@ -147,6 +156,9 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
       const callId = konversation.slice(KONVERSATION_VORSATZ.length);
       return sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein: calleeVon(callId) });
     },
-    schliessen: attrappe.close,
+    schliessen: async () => {
+      while (laeufe.size > 0) await Promise.allSettled([...laeufe]);
+      await attrappe.close();
+    },
   };
 }
