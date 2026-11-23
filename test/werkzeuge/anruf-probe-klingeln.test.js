@@ -8,7 +8,6 @@ import {
   PROBE_STAGING_TEST_TOKEN,
   PROBE_TELNYX_SCHLUESSEL,
 } from "../gemeinsam/erfundene-geheimnisse.js";
-import { STIMMEN_ANZAHL_META_KEY } from "../../src/ui/widget-i18n.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { KLINGELN_GRENZE_S, urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
@@ -177,7 +176,7 @@ function anruferMitStimmen(nachMs) {
       result: {
         isError: false,
         structuredContent: { ...stand(), ...gegen },
-        _meta: { [STIMMEN_ANZAHL_META_KEY]: 7 },
+        _meta: { "hermes/stimmen_anzahl": 7 },
       },
     });
     return { ok: true, status: 200, text: async () => koerper };
