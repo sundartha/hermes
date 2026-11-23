@@ -40,8 +40,11 @@ afterEach(async () => {
   await umgebung.attrappe.close();
 });
 
-const anrufIn = (callId) => umgebung.srv.readStore().calls.find((eintrag) => eintrag.id === callId);
-const aufgelegt = (callId) => umgebung.attrappe.pfade.filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup")).length;
+const anrufe = () => umgebung.srv.readStore().calls;
+const anrufIn = (callId) => anrufe().find((eintrag) => eintrag.id === callId);
+const waehlbefehle = () => umgebung.attrappe.waehlbefehle;
+const pfade = () => umgebung.attrappe.pfade;
+const aufgelegt = (callId) => pfade().filter((pfad) => pfad.includes(calleeVon(callId)) && pfad.endsWith("/actions/hangup")).length;
 
 test("6072: scheitert das Schreiben der Klingelfrist, legt Hermes das Bein auf und der Anruf endet als no-answer ohne Annahme", async () => {
   await starte({ NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(SCHREIBFEHLER)}` });
@@ -58,7 +61,7 @@ test("6072: scheitert das Schreiben der Klingelfrist, legt Hermes das Bein auf u
 test("6072: gelingt das Schreiben der Klingelfrist, klingelt das Bein weiter und der Anruf bleibt aktiv", async () => {
   await starte({});
   const callId = await legeAnruf(umgebung.srv, neueAnrufNummer(21));
-  await waitUntil(() => umgebung.attrappe.waehlbefehle.includes(`vorspann-${callId}`), { timeoutMs: WARTE_FRIST_MS });
+  await waitUntil(() => waehlbefehle().includes(`vorspann-${callId}`), { timeoutMs: WARTE_FRIST_MS });
 
   assert.equal(anrufIn(callId).status, "active");
   assert.equal(aufgelegt(callId), 0);
