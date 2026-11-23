@@ -417,6 +417,6 @@ export function languageForCountry(country: string | number | boolean | null | u
 const LOCALE_BY_LANGUAGE = new Map<string | undefined, (typeof LOCALES)[Sprache]>(Object.entries(LOCALES));
 
 export function localeFor(language: string | undefined): (typeof LOCALES)[Sprache] {
-  if (language === undefined) return LOCALES[DEFAULT_LANGUAGE];
+  if (!language) return LOCALES[DEFAULT_LANGUAGE];
   return LOCALE_BY_LANGUAGE.get(language) ?? LOCALES.en;
 }
