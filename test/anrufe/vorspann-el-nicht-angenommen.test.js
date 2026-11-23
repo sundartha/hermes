@@ -207,7 +207,7 @@ test("6125-A3: Anrufstart loggt Laenge und ersten 40 Zeichen der uebergebenen Er
   const { srv } = umgebung;
   const callId = await angenommenerAnruf();
   const antwort = await initAntwort(callId);
-  const text = antwort.dynamic_variables.eroeffnung_gesagt;
+  const text = antwort.conversation_config_override.agent.first_message;
   const zeile = srv.stdout.split("\n").find((eintrag) => eintrag.includes("[el-vorspann] eroeffnung ") && eintrag.includes(`call=${callId}`));
   assert.equal(zeile, `[el-vorspann] eroeffnung laenge=${text.length} anfang=${JSON.stringify(text.slice(0, ANFANG_LAENGE))} call=${callId} instanz=${INSTANZ}`);
   assert.ok(text.length > ANFANG_LAENGE);
@@ -217,7 +217,7 @@ test("6125-A4: Ziffern der Eroeffnung stehen maskiert im Log, die Laenge bleibt 
   const { srv } = umgebung;
   const callId = await angenommenerAnruf("Tisch 4711 reservieren");
   const antwort = await initAntwort(callId);
-  const text = antwort.dynamic_variables.eroeffnung_gesagt;
+  const text = antwort.conversation_config_override.agent.first_message;
   const zeile = srv.stdout.split("\n").find((eintrag) => eintrag.includes("[el-vorspann] eroeffnung ") && eintrag.includes(`call=${callId}`));
   assert.ok(text.slice(0, ANFANG_LAENGE).includes("4711"));
   assert.equal(zeile, `[el-vorspann] eroeffnung laenge=${text.length} anfang=${JSON.stringify(text.slice(0, ANFANG_LAENGE).replace(/\d/g, "#"))} call=${callId} instanz=${INSTANZ}`);
