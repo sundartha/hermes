@@ -5,7 +5,7 @@ import pg from "pg";
 
 import { config as basisKonfiguration } from "../../src/config.ts";
 import { createQueue } from "../../src/queue/registry.ts";
-import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.js";
+import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
 import { speicherBereiche } from "../../src/store.js";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
