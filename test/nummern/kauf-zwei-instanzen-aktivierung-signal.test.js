@@ -25,7 +25,8 @@ import {
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
 const MS_JE_SEKUNDE = 1_000;
-const SIGNAL_FRIST_MS = 120_000;
+const BESTELL_FRIST_MS = 120_000;
+const ANZAHL_SPUREN = 2;
 const MANDANT = "t_kauf_echt";
 const ABO = "sub_kauf_echt";
 const STRIPE_PFAD = "/webhooks/stripe";
@@ -123,6 +124,9 @@ async function mitProtokoll(prozesse, schritt) {
   }
 }
 
+const bestellungen = (telnyx) =>
+  telnyx.requests.filter((anfrage) => anfrage.method === "POST" && anfrage.path === BESTELL_PFAD);
+
 const spuren = (prozess) => [...prozess.stdout.matchAll(SPUR)].map((treffer) => treffer[1]);
 
 async function aufbau(t) {
@@ -178,9 +182,10 @@ test(
     ]);
     for (const antwort of antworten) assert.equal(antwort.status, HTTP_OK);
     await mitProtokoll([a, b], async () => {
-      await waitUntil(() => spuren(a).length + spuren(b).length === 2, {
-        timeoutMs: SIGNAL_FRIST_MS,
-      });
+      await waitUntil(
+        () => spuren(a).length + spuren(b).length === ANZAHL_SPUREN && bestellungen(telnyx).length > 0,
+        { timeoutMs: BESTELL_FRIST_MS },
+      );
       await zeilenBis(
         async () => (await sql(ANZAHL_SQL, [MANDANT]))[0],
         (zeile) => zeile.erledigt === 1,
@@ -191,10 +196,7 @@ test(
       auftraege: 1,
       erledigt: 1,
     });
-    const bestellungen = telnyx.requests.filter(
-      (anfrage) => anfrage.method === "POST" && anfrage.path === BESTELL_PFAD,
-    );
-    assert.equal(bestellungen.length, 1);
+    assert.equal(bestellungen(telnyx).length, 1);
     const alle = [...spuren(a), ...spuren(b)].sort();
     assert.equal(alle.filter((spur) => spur === "queued").length, 1);
     assert.ok(ANDERE_SPUR.includes(alle.find((spur) => spur !== "queued")), alle.join(","));
