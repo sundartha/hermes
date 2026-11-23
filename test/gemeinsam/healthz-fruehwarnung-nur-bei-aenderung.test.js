@@ -100,3 +100,16 @@ test("Haengender Anruf, Rueckgang auf null und neuer haengender Anruf loggen zwe
     Array(2).fill("[fruehwarnung] webhooksAbgewiesen=0 anrufeUeberHoechstdauer=1"),
   );
 });
+
+test("Healthz nennt die Instanzkennung", async () => {
+  const router = express.Router();
+  registerPublicRoutes({
+    app: router,
+    config: { server: { deployedCommit: "b8c0ffee", webDistDir: "kein-web" }, telemetry: { telemetryInstanceId: "srv-abc-xyz" } },
+    store: {},
+  });
+  await mitRoutenServer(router, async (basis) => {
+    const antwort = await abrufMitFrist(`${basis}/healthz`);
+    assert.equal((await antwort.json()).instanz, "srv-abc-xyz");
+  });
+});
