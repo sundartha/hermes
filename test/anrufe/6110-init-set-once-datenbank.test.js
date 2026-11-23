@@ -248,3 +248,20 @@ test("Hat das bedingte UPDATE die Bindung geschrieben, folgt kein weiterer Flush
   await b.drainFlushes();
   assert.equal(zugriffe - vorher, 1);
 });
+
+async function beendeterAnrufMitErsterBindung() {
+  const lage = await zweiInstanzen();
+  assert.equal(await lage.a.bindInboundElConversation(lage.callId, { conversationId: ERSTE, nowIso: JETZT_ISO }).dauerhaft, true);
+  await lage.runner.withClient(async (client) => {
+    await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+    await client.query("UPDATE call SET status = 'completed' WHERE id = $1", [lage.callId]);
+  });
+  return lage;
+}
+
+test("Ein beendeter Anruf, der in der Datenbank schon dieselbe Konversation haelt, lehnt die erneute Bindung nicht ab", async () => {
+  const { b, runner, callId } = await beendeterAnrufMitErsterBindung();
+  assert.equal(await b.bindInboundElConversation(callId, { conversationId: ERSTE, nowIso: SPAETER_ISO }).dauerhaft, true);
+  await b.drainFlushes();
+  assert.equal((await zeileLesen(runner, callId)).elevenlabs_conversation_id, ERSTE);
+});
