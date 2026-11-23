@@ -78,7 +78,7 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
     await withVorspann(async ({ srv }) => {
       const inhalt = await vorspannInit(srv, { language: "fr" });
       const eroeffnung = inhalt.dynamic_variables.eroeffnung_gesagt;
-      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+      assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
       assert.equal(typeof eroeffnung, "string");
       assert.ok(
         eroeffnung.startsWith(disclosurePrefixFor("de")),
@@ -121,7 +121,7 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
     await withVorspann(async ({ srv }) => {
       const inhalt = await vorspannInit(srv);
       assert.equal(inhalt.conversation_config_override.agent.language, "de");
-      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+      assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
       assert.equal(inhalt.dynamic_variables.eroeffnung, "", "nach dem Vorspann traegt die Eroeffnungsvariable keinen Satz");
     });
   });
@@ -130,7 +130,7 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
     await withVorspann(async ({ srv }) => {
       const inhalt = await vorspannInit(srv, { to: FR_TARGET });
       assert.equal(inhalt.conversation_config_override.agent.language, "de", "die Gespraechssprache folgt dem Auftraggeber");
-      assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+      assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
       const eroeffnung = inhalt.dynamic_variables.eroeffnung_gesagt;
       assert.ok(
         eroeffnung?.startsWith(disclosurePrefixFor("fr")),

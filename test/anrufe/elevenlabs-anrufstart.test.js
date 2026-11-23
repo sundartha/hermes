@@ -481,7 +481,7 @@ test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert firs
             overridePfade.every((pfad) => OVERRIDE_ALLOWED_LEAF_PATHS.has(pfad)),
             `conversation_config_override darf ausschliesslich ${[...OVERRIDE_ALLOWED_LEAF_PATHS].join(", ")} setzen (agent.language/tts.voice_id) - gefunden: ${overridePfade.join(", ") || "(keine)"}. Eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert, der Satz duerfte nie daran haengen, und jeder dritte Pfad baut den Agenten pro Anruf unbemerkt um.`,
           );
-          assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+          assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
           assert.ok(
             inhalt.dynamic_variables.eroeffnung_gesagt.includes(OWNER_NAME),
             "der Offenlegungssatz traegt den Auftraggeber-Namen und steht in eroeffnung_gesagt (Absolute Regel 2)",
@@ -591,7 +591,7 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
       await ctx.test("der daraus gerenderte Offenlegungssatz steht vollstaendig am Anfang", () => {
         const sprache = inhalt.conversation_config_override.agent.language;
         assert.ok(LOCALES[sprache], `unbekannte Anruf-Sprache ${JSON.stringify(sprache)}`);
-        assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+        assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
         const pflichtsatz = `${KI_HINWEIS_VOR_NAME[sprache]} ${LOCALES[sprache].disclosureOwnerFallback}`;
         assert.ok(
           variablen.eroeffnung_gesagt.includes(pflichtsatz),

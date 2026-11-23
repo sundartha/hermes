@@ -52,7 +52,7 @@ for (const fall of FAELLE) {
   test(`4065-1: Anruf an den Besitzer beginnt mit Begruessung und einer einzigen Frage (${fall.sprache})`, async () => {
     const daten = await ausgehenderAnruf(fall);
     const erster = daten.dynamic_variables.eroeffnung_gesagt;
-    assert.equal(daten.conversation_config_override.agent.first_message, "");
+    assert.match(daten.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
     assert.equal(erster, fall.erwartet);
     assert.equal(erster.includes("?"), false);
     assert.equal(daten.dynamic_variables.eroeffnung, "");

@@ -124,7 +124,7 @@ test("Fahrzeug Init: initInhaltFuer liefert fuer einen Vorspann-Anruf first_mess
     const antwort = await post(srv.localUrl);
     const { callId } = await antwort.json();
     const inhalt = await initInhaltFuer(srv, { callId });
-    assert.equal(inhalt.conversation_config_override.agent.first_message, "");
+    assert.equal(inhalt.conversation_config_override.agent.first_message, "Here's what I'm calling about: Termin vereinbaren. Please go ahead.");
     assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(OFFENLEGUNG), inhalt.dynamic_variables.eroeffnung_gesagt);
   } finally {
     await srv.stop();

@@ -141,7 +141,7 @@ test("3395-R5: Fremdziel gleicher Sprache - Eroeffnung, Offenlegung und Anrufbea
         "Wie sieht es damit aus? Ich versuche es später noch einmal. Auf Wiederhören.",
     );
     assert.equal(v.callee_relation, "");
-    assert.deepEqual(ueberVon(inhalt).agent, { language: "de", first_message: "" });
+    assert.deepEqual(ueberVon(inhalt).agent, { language: "de", first_message: "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren. Bitte sprechen Sie." });
     assert.equal(ueberVon(inhalt).tts.voice_id, "cqPdIo76zSHFDcSZpFov");
   });
 });
@@ -151,7 +151,7 @@ test("3395-R5: franzoesisches Ziel bei deutschem Mandanten - Pflichtsatz franzoe
     const inhalt = await vorspannInit(srv, { to: FR_ZIEL, objective: "Ist der Tisch frei?" });
     const gesprochen = `${FR_PFLICHT} ${DE_RUECKFALL}`;
     assert.equal(ueberVon(inhalt).agent.language, "de");
-    assert.equal(ueberVon(inhalt).agent.first_message, "");
+    assert.equal(ueberVon(inhalt).agent.first_message, "Ich rufe an, um ein kurzes Anliegen zu klären. Bitte sprechen Sie.");
     assert.equal(variablenVon(inhalt).eroeffnung_gesagt, gesprochen);
     assert.equal(variablenVon(inhalt).eroeffnung, "");
     assert.equal(variablenVon(inhalt).opening_line, "ich rufe an, um ein kurzes Anliegen zu klären.");
@@ -168,7 +168,7 @@ test("3395-R5: Sprachwunsch und Mandantensprache bestimmen Gespraechssprache und
   const wunsch = await einAnruf({ sprache: "fr" }, { objective: "Book a table", language: "en" });
   assert.equal(ueberVon(mandant.start).agent.language, "fr");
   assert.equal(ueberVon(wunsch.start).agent.language, "en");
-  assert.equal(ueberVon(mandant.start).agent.first_message, "");
+  assert.equal(ueberVon(mandant.start).agent.first_message, "Voici l'objet de mon appel : Réserver une table. Je vous écoute.");
   assert.ok(variablenVon(mandant.start).eroeffnung_gesagt.startsWith("Guten Tag"));
   assert.equal(ueberVon(mandant.start).tts.voice_id, ueberVon(wunsch.start).tts.voice_id);
   assert.equal(variablenVon(mandant.start).opening_line, "voici l'objet de mon appel : Réserver une table.");
