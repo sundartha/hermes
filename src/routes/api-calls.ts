@@ -998,9 +998,11 @@ export function makeCallRoutes({
       afterEventId: CONSULT_ABFRAGE.parse(pruefeAbfrage(res, { schema: CONSULT_ABFRAGE }, req.query)).after,
       signal: null,
     });
-    if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
-      await bereiche.rueckfrage.markConsultAskDelivered(call.id, event.eventId);
-      await bereiche.rueckfrageAbschluss.zustellungSchreiben(call.id, call.tenantId, event.eventId);
+    const { eventId } = event;
+    if (event.event === CONSULT_EVENT.CONSULT && eventId) {
+      await bereiche.rueckfrage.markConsultAskDelivered(call.id, eventId);
+      await bereiche.rueckfrageAbschluss.zustellungSchreiben(call.id, call.tenantId, eventId);
+    }
     return res.json(event);
   }
 
