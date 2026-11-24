@@ -141,3 +141,16 @@ test("Die Notiz einer Bindung steht nach dem Flush in der Datenbank", async () =
   await flushen(a);
   assert.deepEqual((await db.query("SELECT note FROM platform_number_use")).rows, [{ note: "Testnotiz" }]);
 });
+
+test("Eine geschlossene Bindung derselben Nummer neben einer offenen bleibt mit Freigabezeit gespeichert", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await neueInstanz(db);
+  const b = await neueInstanz(db);
+  const offene = binden(a, E164);
+  await flushen(a);
+  const geschlossene = { ...binden(b, E164), id: "pnu_b", releasedAt: "2026-11-22T10:00:00.000Z" };
+  b.load().platformNumberUse.splice(0, 1, geschlossene);
+  await flushen(b);
+  const zeilen = (await db.query("SELECT id, released_at FROM platform_number_use ORDER BY id")).rows;
+  assert.deepEqual(zeilen.map((zeile) => [zeile.id, alsText(zeile.released_at)]), [[offene.id, null], ["pnu_b", "2026-11-22T10:00:00.000Z"]]);
+});
