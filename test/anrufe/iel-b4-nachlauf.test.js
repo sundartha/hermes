@@ -146,6 +146,39 @@ test("IEL-B4-2P: Positiv-Kontrolle - dieselbe Fixture als Outbound-EL-Call schre
   assert.deepEqual(ops.callActionItems(state, call.id).map((item) => item.text), [NEXT_STEP_TEXT]);
 });
 
+const ERGEBNIS_SICHERN_FEHLER_FRAGMENT = "Anbieter-Ergebnis nicht gesichert";
+
+test("IEL-B4-2Q: leseCall liefert beim Diagnose-Schreiben null -> kein Absturz, kein Fehler-Log, Anruf wird dennoch abgerechnet", async () => {
+  const state = ops.makeDefaultState();
+  const call = seedOutboundElCall(state, { answeredVorS: GESPRAECH_S });
+  const harness = baueHarness(state);
+  const anbieter = makeAnbieter(async () => okAntwort(CONVERSATION_DONE_WITH_ANALYSIS));
+
+  const echtLeseCall = harness.store.leseCall;
+  const echtRecordZaehlung = harness.store.recordElDetectorCounts;
+  let nullAbJetzt = false;
+  harness.store.leseCall = (id) => (nullAbJetzt ? Promise.resolve(null) : echtLeseCall(id));
+  harness.store.recordElDetectorCounts = (id, zusatz) => {
+    nullAbJetzt = true;
+    return echtRecordZaehlung(id, zusatz);
+  };
+
+  const fehlerZeilen = [];
+  const echtConsoleError = console.error;
+  console.error = (...teile) => fehlerZeilen.push(teile.map(String).join(" "));
+  try {
+    await mitAnbieter({ state, anbieter }, async () => {
+      await harness.el.abfrageDurchLauf(call.id);
+      await warteAufEreignis([harness.ereignisse], () => harness.gebucht.length === 1, WARTE);
+    });
+  } finally {
+    console.error = echtConsoleError;
+  }
+
+  assert.deepEqual(fehlerZeilen.filter((zeile) => zeile.includes(ERGEBNIS_SICHERN_FEHLER_FRAGMENT)), []);
+  assert.ok(call.billedAt);
+});
+
 test("IEL-B4-3: Inbound done 90 s nach dem Carrier-Ende -> endedAt ist der Nachlauf-Marker, gebucht wird bis dorthin", async () => {
   const state = ops.makeDefaultState();
   const call = seedInboundElCall(state, { answeredVorS: GESPRAECH_S, nachlaufVorS: ENDE_NACH_S });
