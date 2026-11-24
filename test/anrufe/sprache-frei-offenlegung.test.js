@@ -49,7 +49,9 @@ describe("Offenlegung bei Startsprache ohne eigene Texte", () => {
 
   it("SO-2: Startsprache es, Land ohne Eintrag (ES) -> Offenlegungssatz englisch am Anfang", async () => {
     const eroeffnung = await eroeffnungFuer({ to: ES_NUMMER, language: "es" });
-    assert.ok(eroeffnung.includes("the AI assistant of"), JSON.stringify(eroeffnung));
+    // PR 6200: der unverdrahtete es/pt-Offenlegungstext lautet jetzt "Hello, this is an AI
+    // assistant calling on behalf of ..." statt der alten Formel "the AI assistant of" – gewollt.
+    assert.ok(eroeffnung.includes("an AI assistant calling on behalf of"), JSON.stringify(eroeffnung));
     assert.ok(!eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
   });
 
@@ -72,7 +74,9 @@ describe("Offenlegung mit Render-Standard WORLD_DEFAULT_LANGUAGE_ENABLED=false",
       language: "es",
       env: { WORLD_DEFAULT_LANGUAGE_ENABLED: "false" },
     });
-    assert.ok(eroeffnung.includes("the AI assistant of"), JSON.stringify(eroeffnung));
+    // PR 6200: der unverdrahtete es/pt-Offenlegungstext lautet jetzt "Hello, this is an AI
+    // assistant calling on behalf of ..." statt der alten Formel "the AI assistant of" – gewollt.
+    assert.ok(eroeffnung.includes("an AI assistant calling on behalf of"), JSON.stringify(eroeffnung));
     assert.ok(!eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
   });
 });
