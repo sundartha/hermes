@@ -110,3 +110,34 @@ test("Zeiten, die die Datenbank als Text liefert, bleiben beim Nachladen unverae
   await b.plattformBindungenNachladen();
   assert.equal(geladen.releasedAt, "2026-11-22T10:00:00.000Z");
 });
+
+test("Nachladen nimmt die Bindung der anderen Instanz neben einer schon vorhandenen auf", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await neueInstanz(db);
+  const b = await neueInstanz(db);
+  binden(b, E164);
+  await flushen(b);
+  binden(a, ZWEITE);
+  await flushen(a);
+  await b.plattformBindungenNachladen();
+  assert.deepEqual(b.load().platformNumberUse.map((bindung) => bindung.e164), [E164, ZWEITE]);
+});
+
+test("Nachladen oeffnet eine lokal geschlossene Bindung nicht wieder", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const b = await neueInstanz(db);
+  const bindung = binden(b, E164);
+  await flushen(b);
+  bindung.releasedAt = "2026-11-22T10:00:00.000Z";
+  await b.plattformBindungenNachladen();
+  const [geladen] = b.load().platformNumberUse;
+  assert.equal(geladen.releasedAt, "2026-11-22T10:00:00.000Z");
+});
+
+test("Die Notiz einer Bindung steht nach dem Flush in der Datenbank", async () => {
+  const db = await pgliteAlsRolleOhneSuperuser();
+  const a = await neueInstanz(db);
+  binden(a, E164).note = "Testnotiz";
+  await flushen(a);
+  assert.deepEqual((await db.query("SELECT note FROM platform_number_use")).rows, [{ note: "Testnotiz" }]);
+});
