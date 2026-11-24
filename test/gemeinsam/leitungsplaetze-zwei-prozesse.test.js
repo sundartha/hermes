@@ -5,7 +5,7 @@ import test from "node:test";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "./echtes-postgres.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
-import { postgresVorhanden, seedeMandant, starteAnAnbieter, starteAttrappeMitGespraechsende, zeilenBis, zeilenNachNachlauf } from "../anrufe/hermes-mit-postgres.js";
+import { postgresVorhanden, seedeMandant, starteAnAnbieter, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 import { waitForLog, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
@@ -15,7 +15,6 @@ const WARTEGRENZE_MS = 5_000;
 const WARTEGRENZE_PUFFER_MS = 3_000;
 const ABWEISUNG_FRIST_MS = 2 * WARTEGRENZE_MS + WARTEGRENZE_PUFFER_MS;
 const ELEVENLABS_PLAETZE = 4;
-const GEWAEHLT_NACHLAUF_MS = 1_500;
 const ZIEL_VORWAHL = "+49151123401";
 const ZIEL_STELLEN = 3;
 const MANDANT_IDS = [0, 1, 2].map((index) => `tenant_lp_pg_${index}`).join(",");
@@ -125,9 +124,10 @@ test(
         { anbieter: "telnyx", anzahl: ELEVENLABS_PLAETZE },
         { anbieter: "warteschlange", anzahl: 6 - ELEVENLABS_PLAETZE },
       ]);
-      const abfrage = async () => (await sql(ANRUFE_GEWAEHLT_SQL)).rows[0];
-      await zeilenBis(abfrage, (zeile) => zeile.gesamt === 6 && zeile.gewaehlt === ELEVENLABS_PLAETZE);
-      const anrufe = await zeilenNachNachlauf(abfrage, GEWAEHLT_NACHLAUF_MS);
+      const anrufe = await zeilenBis(
+        async () => (await sql(ANRUFE_GEWAEHLT_SQL)).rows[0],
+        (zeile) => zeile.gesamt === 6 && zeile.gewaehlt === ELEVENLABS_PLAETZE,
+      );
       assert.deepEqual(anrufe, { gesamt: 6, gewaehlt: ELEVENLABS_PLAETZE }, "die zwei Wartenden sind angelegt und nie gewaehlt");
     });
   },
