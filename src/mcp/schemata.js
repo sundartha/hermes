@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { SUPPORTED_LANGUAGES } from "../i18n/locales.ts";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
 
 const CALL_SUBJECT_OUTPUT = {
@@ -240,9 +239,9 @@ export function placeCallRequestSchema(begriffe) {
       .string()
       .optional()
       .describe(
-        `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
+        "The language the agent SPEAKS in this call - any language code, e.g. es or pt-br. " +
           "Start language, default de; set it first if the person called speaks another. " +
-          "The agent may switch during the call. An unsupported code is REJECTED with an " +
+          "The agent may switch to any language during the call. A malformed code is REJECTED with an " +
           "error instead of being ignored. This does NOT change the language of the mandatory " +
           "AI disclosure - that always follows the person being called.",
       ),
