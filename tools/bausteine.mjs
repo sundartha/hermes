@@ -13,6 +13,7 @@ const ORDNER_ENDE = "/";
 const VORSCHLAEGE = 3;
 const LEER = "nichts";
 const TYPESCRIPT = /\.([cm]?)ts$/;
+const JAVASCRIPT = /\.[cm]?js$/;
 const MAX_AUSGABE = 268_435_456;
 
 export function javascriptPfad(datei) {
@@ -41,7 +42,8 @@ export function karteAus(roh) {
     return bausteinAus(eintrag, schichtVon.get(eintrag.baustein));
   });
   const altlast = new Set(roh.altlast.map(({ von, nach }) => paar(von, nach)));
-  return { bausteine, nachName: new Map(bausteine.map((eintrag) => [eintrag.baustein, eintrag])), altlast };
+  const javascriptBestand = new Set(roh.javascriptBestand ?? []);
+  return { bausteine, nachName: new Map(bausteine.map((eintrag) => [eintrag.baustein, eintrag])), altlast, javascriptBestand };
 }
 
 export function zuordnung(karte, pfad) {
@@ -102,6 +104,17 @@ function richtungsBefund(karte, { von, nach }, [quelle, ziel]) {
   ];
 }
 
+function javascriptBefunde(karte, dateien) {
+  const vorhanden = new Set(dateien);
+  const neu = dateien
+    .filter((pfad) => JAVASCRIPT.test(pfad) && !karte.javascriptBestand.has(pfad))
+    .map((pfad) => `Neue .js-Datei ${pfad} nicht erlaubt: neue Dateien nur .ts. Leg sie mit npm run neu -- <route|fachdatei|test> <baustein oder bereich> <name> als .ts an; die Bestandsliste javascriptBestand in ${KARTE} wächst nie.`);
+  const verwaist = [...karte.javascriptBestand]
+    .filter((pfad) => !vorhanden.has(pfad))
+    .map((pfad) => `Eintrag ${pfad} steht in javascriptBestand in ${KARTE}, die Datei gibt es nicht mehr als .js: aus der Liste streichen (die Liste sinkt nur).`);
+  return [...neu, ...verwaist];
+}
+
 export function bausteinPruefung(karte, { dateien, importe }) {
   const zuordnungen = dateien.flatMap((pfad) => zuordnungsBefund(karte, pfad, importe));
   const eingaenge = [];
@@ -115,7 +128,7 @@ export function bausteinPruefung(karte, { dateien, importe }) {
     richtung.push(...richtungsBefund(karte, kanteImGraph, beide));
   }
   const behoben = [...karte.altlast].filter((eintrag) => !genutzt.has(eintrag)).length;
-  return { zuordnung: zuordnungen, eingaenge: [...new Set(eingaenge)], richtung: [...new Set(richtung)], behoben };
+  return { zuordnung: zuordnungen, javascript: javascriptBefunde(karte, dateien), eingaenge: [...new Set(eingaenge)], richtung: [...new Set(richtung)], behoben };
 }
 
 export function srcImporte(modules) {
@@ -133,12 +146,13 @@ function quelldateien() {
 }
 
 function zusammenfassung(roh, { dateien, behoben }) {
+  const bestand = `${(roh.javascriptBestand ?? []).length} .js-Dateien im Bestand (javascriptBestand in ${KARTE}, sinkt nur)`;
   const altlast = `${roh.altlast.length} Bausteinpaare mit Importen gegen die Schichtfolge eingefroren`;
-  return `${dateien} Quelldateien in ${roh.bausteine.length} Bausteinen, alle Importe zwischen Bausteinen über Eingänge und in Schichtrichtung; ${altlast} in ${KARTE}, ${behoben} davon ohne Import und können gestrichen werden`;
+  return `${dateien} Quelldateien in ${roh.bausteine.length} Bausteinen, alle Importe zwischen Bausteinen über Eingänge und in Schichtrichtung; ${altlast} in ${KARTE}, ${behoben} davon ohne Import und können gestrichen werden; ${bestand}`;
 }
 
 export function bausteinBefunde(modules) {
-  const leer = { zuordnung: [], eingaenge: [], richtung: [], zusammenfassung: undefined };
+  const leer = { zuordnung: [], javascript: [], eingaenge: [], richtung: [], zusammenfassung: undefined };
   if (!existsSync(KARTE)) return leer;
   const roh = JSON.parse(readFileSync(KARTE, "utf8"));
   const dateien = quelldateien();

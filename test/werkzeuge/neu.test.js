@@ -10,8 +10,9 @@ import { bausteinPruefung, karteAus, srcImporte } from "../../tools/bausteine.mj
 const WURZEL = resolve(import.meta.dirname, "../..");
 const NEU = join(WURZEL, "tools/neu.mjs");
 const KARTE = "tools/bausteine.json";
-const ROUTE = "src/routes/intern-anrufpause.js";
-const FACHDATEI = "src/billing/probe-abruf.js";
+const ALTE_ROUTE = "src/routes/intern-anrufpause.js";
+const ROUTE = "src/routes/intern-anrufpause.ts";
+const FACHDATEI = "src/billing/probe-abruf.ts";
 const TEST = "test/rueckfrage/probe-test.test.js";
 const ALLE = [ROUTE, FACHDATEI, TEST];
 const EXIT_OK = 0;
@@ -38,11 +39,11 @@ function wegwerfWurzel() {
   for (const eintrag of KOPIERT) cpSync(join(WURZEL, eintrag), join(root, eintrag), { recursive: true });
   symlinkSync(join(WURZEL, "node_modules"), join(root, "node_modules"));
   mkdirSync(join(root, "test"));
-  rmSync(join(root, ROUTE));
+  rmSync(join(root, ALTE_ROUTE));
   const karte = JSON.parse(readFileSync(join(root, KARTE), "utf8"));
   for (const baustein of karte.bausteine) {
     for (const schluessel of ["quellen", "eingaenge"]) {
-      if (Array.isArray(baustein[schluessel])) baustein[schluessel] = baustein[schluessel].filter((pfad) => pfad !== ROUTE);
+      if (Array.isArray(baustein[schluessel])) baustein[schluessel] = baustein[schluessel].filter((pfad) => pfad !== ALTE_ROUTE);
     }
   }
   writeFileSync(join(root, KARTE), JSON.stringify(karte, undefined, 2));
@@ -63,8 +64,8 @@ before(() => {
 
 test("die Art route erzeugt die Router-Form wie in der Fixture, mit webAuthMw und ohne Öffentlich-Eintrag", () => {
   const text = inhalt(wurzel, ROUTE);
-  assert.equal(text, readFileSync(join(WURZEL, "test/fixtures/neu-intern-anrufpause.js.txt"), "utf8"));
-  assert.match(text, /export function makeInternAnrufpauseRoutes\(\{ webAuthMw \}\) \{/);
+  assert.equal(text, readFileSync(join(WURZEL, "test/fixtures/neu-intern-anrufpause.ts.txt"), "utf8"));
+  assert.match(text, /export function makeInternAnrufpauseRoutes\(\{ webAuthMw \}: \{ webAuthMw: RequestHandler \}\): Router \{/);
   assert.match(text, /router\.post\(INTERN_ANRUFPAUSE_PATH, webAuthMw,/);
   assert.doesNotMatch(inhalt(wurzel, "src/route-policy.js"), /probe-abruf|api\/intern-anrufpause/);
 });
