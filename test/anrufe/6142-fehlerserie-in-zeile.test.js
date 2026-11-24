@@ -150,3 +150,12 @@ test("Fehlerserie in der Zeile: schlaegt die Datenbank beim Zaehlen fehl, steht 
   assert.equal(await statusDerZeile(db, callId), "active");
   assert.ok(zeilen.some((zeile) => zeile.includes("[fristen] Fehlerserie schreiben fehlgeschlagen:") && zeile.includes("db weg")));
 });
+
+test("Fehlerserie in der Zeile: ein Zuruecksetzen bei Zaehler 0 trifft keine Zeile, bei Zaehler 1 liefert es 0", async () => {
+  const { callId } = await aufbau();
+  const anfrage = (permanent) => ({ callId, tenantId: mandant, permanent });
+  assert.equal(await speicher.fortschreibeFehlerserie(anfrage(false)), undefined);
+  assert.equal(await speicher.fortschreibeFehlerserie(anfrage(true)), 1);
+  assert.equal(await speicher.fortschreibeFehlerserie(anfrage(false)), 0);
+  assert.equal(await speicher.fortschreibeFehlerserie(anfrage(false)), undefined);
+});

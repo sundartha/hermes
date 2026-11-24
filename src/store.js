@@ -102,7 +102,7 @@ async function createPgBackend() {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeAbfrage(anfrage);
     },
-    fortschreibeFehlerserie: async (anfrage) => (await store.drainFlushes(), makePostgresFristen(runner).fortschreibeFehlerserie(anfrage)),
+    fortschreibeFehlerserie: (anfrage) => makePostgresFristen(runner).fortschreibeFehlerserie(anfrage),
     setzeUebergabeFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeUebergabe(anfrage);
@@ -242,8 +242,10 @@ function jsonBackendAufbauen() {
       jsonBackend.save();
     },
     fortschreibeFehlerserie: async (anfrage) => {
-      const serie = fortschreibeFehlerserieImSpiegel(jsonBackend.load(), anfrage);
-      jsonBackend.save();
+      const spiegel = jsonBackend.load();
+      const vorher = spiegel.calls.find((eintrag) => eintrag.id === anfrage.callId)?.permanentFehlerSerie;
+      const serie = fortschreibeFehlerserieImSpiegel(spiegel, anfrage);
+      if (serie !== vorher) jsonBackend.save();
       return serie;
     },
     setzeUebergabeFrist: async (anfrage) => {

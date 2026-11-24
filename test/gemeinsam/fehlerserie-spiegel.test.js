@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import { jsonSpeicherImDatenordner } from "./json-speicher-im-datenordner.js";
 
 const MANDANT = "t_fehlerserie_json";
 const DRITTER_FEHLER = 3;
 
-const { speicher } = await jsonSpeicherImDatenordner("hermes-fehlerserie-");
+const { config, speicher } = await jsonSpeicherImDatenordner("hermes-fehlerserie-");
 await speicher.oeffneSpeicher();
 
 const anruf = (status = "active") => {
@@ -39,4 +41,20 @@ test("Fehlerserie im JSON-Speicher: ein beendeter oder unbekannter Anruf bleibt 
   assert.equal(await speicher.fortschreibeFehlerserie({ callId: beendet.id, tenantId: MANDANT, permanent: true }), undefined);
   assert.equal(beendet.permanentFehlerSerie, undefined);
   assert.equal(await speicher.fortschreibeFehlerserie({ callId: "call_gibt_es_nicht", tenantId: MANDANT, permanent: true }), undefined);
+});
+
+test("Fehlerserie im JSON-Speicher: nur eine geaenderte Serie wird auf die Platte geschrieben", async () => {
+  const call = anruf();
+  const datei = path.join(config.server.dataDir, "store.json");
+  const anfrage = (permanent) => ({ callId: call.id, tenantId: MANDANT, permanent });
+  const schreibungen = [];
+  for (const [permanent, erwartet] of [[true, true], [false, true], [false, false], [true, true]]) {
+    fs.rmSync(datei, { force: true });
+    await speicher.fortschreibeFehlerserie(anfrage(permanent));
+    schreibungen.push([permanent, fs.existsSync(datei), erwartet]);
+  }
+  assert.deepEqual(
+    schreibungen.map(([permanent, geschrieben]) => [permanent, geschrieben]),
+    schreibungen.map(([permanent, , erwartet]) => [permanent, erwartet]),
+  );
 });
