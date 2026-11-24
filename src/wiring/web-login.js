@@ -44,14 +44,15 @@ const RELEASE_RECONCILE_INTERVAL_MS = 6 * MS_PER_HOUR;
 
 const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * MS_PER_HOUR;
 
-async function scheduleSweep(zeitplan, { name, logTag, intervalMs }, sweep) {
+async function scheduleSweep(zeitplan, { name, logTag, intervalMs, ersterLaufAbwarten = false }, sweep) {
   const meldeFehler = (error) => console.error(logTag, error.message);
-  void sweep().catch(meldeFehler);
+  const ersterLauf = sweep().catch(meldeFehler);
+  if (ersterLaufAbwarten) await ersterLauf;
   await zeitplan.plane(name, intervalMs, { lauf: sweep, beiFehler: meldeFehler });
 }
 
 function scheduleReleaseReconcile(zeitplan, deps) {
-  return scheduleSweep(zeitplan, { name: "did-release", logTag: "[did-release]", intervalMs: RELEASE_RECONCILE_INTERVAL_MS }, () =>
+  return scheduleSweep(zeitplan, { name: "did-release", logTag: "[did-release]", intervalMs: RELEASE_RECONCILE_INTERVAL_MS, ersterLaufAbwarten: true }, () =>
     runReleaseReconcile({ ...deps, nowMs: Date.now() }),
   );
 }

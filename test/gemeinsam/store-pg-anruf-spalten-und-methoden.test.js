@@ -114,7 +114,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "numberHasActiveCall",
   "numberRecordByE164", "nummerNachladen", "nummernSql", "nummerntauschKandidaten", "oeffneKostenAbgleichErneut", "pendingConsult", "pendingMeterEvents",
   "persistCall",
-  "planMinutesExceeded", "plattformBindungenNachladen", "plattformBindungenSchreiben", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
+  "planMinutesExceeded", "platformTtsUsageView", "pruneOldData", "purgeTranscript", "recordActualSender",
   "recordAnsweredUnclearReason", "recordBridgedAt", "recordCallCostEvidence", "recordCallCostTruingResult",
   "recordCallEstimatedCostCents", "recordCallLookup", "recordCalleeConfirmedTimezone", "recordCostProfile",
   "recordElDetectorCounts", "recordElevenlabsConversationId", "recordFailureReason",
@@ -134,6 +134,9 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "trueUpAnsweredAt", "tryReserveOutboundBudget", "unsubscribeNewsletterRecipientByToken", "updateSettings",
   "usageOf", "withStoreLock", "zaehleAnrufeSeit",
 ];
+
+ERWARTETE_SPEICHER_METHODEN.push("mitPlattformBindungen", "plattformBindungenNachladen", "plattformBindungenSchreiben");
+ERWARTETE_SPEICHER_METHODEN.sort();
 
 test("Speicher-Methodenliste: der Teststore liefert genau diese Schluessel, keinen doppelt", async () => {
   const { store } = await makePgTestStore();
