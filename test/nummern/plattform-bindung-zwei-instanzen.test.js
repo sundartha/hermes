@@ -117,7 +117,8 @@ test("Eine Bindung, die Instanz A geloest hat, haelt die Freigabe auf Instanz B 
   const { b, db } = await zweiInstanzen({ vorherBindungen: [{ id: "pnu_alt", e164: KUNDEN_NUMMER }] });
   nummerAnlegen(b);
   await b.plattformBindungenNachladen();
-  assert.equal(b.load().platformNumberUse[0].releasedAt, null);
+  const [geladen] = b.load().platformNumberUse;
+  assert.equal(geladen.releasedAt, null);
   await db.query(`UPDATE platform_number_use SET released_at = $1 WHERE id = 'pnu_alt'`, [GESCHLOSSEN_ZEIT]);
   const { ergebnis, freigaben } = await freigebenBeiLoeschung(b);
   assert.deepEqual(freigaben, [`ext_${KUNDEN_NUMMER}`]);
@@ -196,12 +197,9 @@ test("Wechselt die Bootstrap-Nummer, schliesst der Start die alte Bindung in der
 test("Eine Bindung, die Instanz A erst nach der Auswahl setzt, haelt die Freigabe unter der Sperre noch auf", async () => {
   const { b, db } = await zweiInstanzen();
   const nummer = nummerAnlegen(b);
-  const sperre = b.withStoreLock;
-  b.withStoreLock = async (arbeit) => {
-    await bindungAnlegen(db, { id: "pnu_spaet", e164: KUNDEN_NUMMER });
-    return sperre(arbeit);
-  };
-  const { ergebnis, freigaben } = await freigebenBeiLoeschung(b);
+  const lauf = freigebenBeiLoeschung(b);
+  await bindungAnlegen(db, { id: "pnu_spaet", e164: KUNDEN_NUMMER });
+  const { ergebnis, freigaben } = await lauf;
   assert.deepEqual(freigaben, []);
   assert.deepEqual(ergebnis, { released: 0, aborted: 1 });
   assert.equal(nummer.status, "active");
