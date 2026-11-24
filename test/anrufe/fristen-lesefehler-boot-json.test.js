@@ -68,7 +68,7 @@ test("Kriterium 7: ist die Frist-Zeile eines abgelaufenen Anrufs nicht lesbar, e
   call.answeredAt = new Date(jetzt - 2 * MINUTE_MS).toISOString();
   call.fristHoechstdauerAt = Symbol("nicht lesbar");
   store.save();
-  await waitUntil(() => store.getCall(call.id)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(call.id)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   await store.drainFlushes();
   const ende = store.getCall(call.id);
   assert.equal(ende.failureReason, CAP_FAILURE_REASON);

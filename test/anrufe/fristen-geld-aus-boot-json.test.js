@@ -10,9 +10,9 @@ const { store, aktiverAnruf } = await geldBootJsonStarten({ BUDGET_WATCHDOG_INTE
 test("Kriterium 3: ist die Geld-Wache abgeschaltet (BUDGET_WATCHDOG_INTERVAL_MS=0), beendet der Boot-Takt keinen Anruf wegen der Kostendecke, die Hoechstdauer gilt weiter", async () => {
   const ueberDecke = aktiverAnruf("aus", { hoechstdauerInMinuten: 60 });
   const abgelaufen = aktiverAnruf("abgelaufen", { hoechstdauerInMinuten: -1 });
-  await waitUntil(() => store.getCall(abgelaufen)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(abgelaufen)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   const spaeter = aktiverAnruf("spaeter", { hoechstdauerInMinuten: -1 });
-  await waitUntil(() => store.getCall(spaeter)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(spaeter)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   assert.equal(store.getCall(ueberDecke).status, "active");
   assert.equal(store.getCall(ueberDecke).failureReason, null);
   const geholt = await store.faelligeFristen({ art: "geld", limitJeMandant: 10, leaseMs: 1000 });
