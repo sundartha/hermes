@@ -142,8 +142,8 @@ export async function mitZweiHermesAufPostgres(t, { env = {}, mandantGepinnt }, 
   }
 }
 
-export async function zeilenBis(lies, genug) {
-  const ende = Date.now() + SQL_FRIST_MS;
+export async function zeilenBis(lies, genug, fristMs = SQL_FRIST_MS) {
+  const ende = Date.now() + fristMs;
   let zeilen = await lies();
   while (!genug(zeilen)) {
     if (Date.now() >= ende) throw new Error(fristAblaufMeldung(zeilen));
