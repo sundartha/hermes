@@ -7,6 +7,7 @@ import { POSTGRES_VARIABLE } from "./echtes-postgres.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
 import { postgresVorhanden, seedeMandant, starteAnAnbieter, starteAttrappeMitGespraechsende, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 
+const NEGATIV_WARTEN_MS = 5_000;
 const MANDANT = { id: "tenant_pruef", sub: "sub-pruef", e164: "+4930555000399" };
 const ENV = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
@@ -76,9 +77,9 @@ test("Reserve von Anruf A bleibt, bis seine Kosten in usage stehen; Anruf B uebe
     anbieter.beendeGespraech(id, [{ role: "agent", message: "Auf Wiederhoeren." }]);
 
     await zeilenBis(async () => (await sql(SCHREIBER_WARTET_SQL)).rows, (z) => z.length > 0);
-    await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 0).catch(() => null);
+    await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 0, NEGATIV_WARTEN_MS).catch(() => null);
     const zweite = rufeAn(b);
-    await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 1).catch(() => null);
+    await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 1, NEGATIV_WARTEN_MS).catch(() => null);
     await sperre.query("COMMIT");
     const antwortB = await zweite;
 
