@@ -2,7 +2,7 @@ const ANBIETER_STOERUNG = {
   healthzMs: 2000,
   messungen: 5,
   messTaktMs: 500,
-  anbieterAufrufFristMs: 10_000,
+  anbieterAufrufFristMs: 20_000,
 };
 
 export const SCHWELLEN = Object.freeze({
