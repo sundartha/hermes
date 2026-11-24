@@ -45,11 +45,14 @@ function workflowNamen(text) {
 
 function skriptNamen(text, datei) {
   const gefunden = [
-    ["umgebung", namen(text, /\benv\.(STAGING_[A-Z0-9_]+)/g)],
+    ["umgebung", namen(text, new RegExp(`\\benv\\.(${NAME})`, "g"))],
     ["umgebung", namen(text, /["'](STAGING_[A-Z0-9_]+)["']/g)],
   ];
   if (datei.startsWith("scripts/anruf-probe/"))
-    gefunden.push(["anrufprobe", namen(text, new RegExp(`\\benv\\.(${NAME})`, "g"))]);
+    gefunden.push(
+      ["anrufprobe", namen(text, new RegExp(`\\benv\\.(${NAME})`, "g"))],
+      ["anrufprobe", namen(text, /["'](STAGING_[A-Z0-9_]+)["']/g)],
+    );
   return gefunden;
 }
 
@@ -65,7 +68,7 @@ function pruefe(wurzel) {
     ...dateien(wurzel, ".github/workflows", /\.ya?ml$/).map((datei) => [datei, workflowNamen]),
     ...dateien(wurzel, "scripts", SKRIPTE).map((datei) => [datei, skriptNamen]),
   ];
-  return quellen.flatMap(([datei, lesen]) => {
+  const meldungen = quellen.flatMap(([datei, lesen]) => {
     const gefunden = lesen(readFileSync(join(wurzel, datei), "utf8"), datei);
     return gefunden.flatMap(([art, treffer]) =>
       treffer
@@ -73,6 +76,7 @@ function pruefe(wurzel) {
         .map((name) => `${datei}: ${name} steht nicht in ${LISTE}`),
     );
   });
+  return [...new Set(meldungen)];
 }
 
 function probeRepo(dateiInhalte) {
@@ -147,9 +151,21 @@ test("Ein unbekannter env.X der Anrufprobe wird gemeldet, ein bekannter nicht", 
   ]);
 });
 
-test("Ein env.X außerhalb der Anrufprobe ohne STAGING_-Vorsilbe bleibt unbeachtet", () => {
-  const wurzel = probeRepo({ "scripts/anderes.mjs": "const a = env.ZUFALL_NAME;\n" });
-  assert.deepEqual(pruefe(wurzel), []);
+test("Ein unbekanntes env.X in einem beliebigen Skript nennt Datei und Namen", () => {
+  const wurzel = probeRepo({
+    "scripts/anderes.mjs": "const a = process.env.ZUFALL_NAME;\nconst b = env.GITHUB_SHA;\n",
+  });
+  assert.deepEqual(pruefe(wurzel), [`scripts/anderes.mjs: ZUFALL_NAME steht nicht in ${LISTE}`]);
+});
+
+test("Rotprobe: Die echte Zeile mit dem alten Namen in Anführungszeichen wird gemeldet", () => {
+  const wurzel = probeRepo({
+    "scripts/anruf-probe/probe.mjs":
+      'const PFLICHT_AUFLEGEN = ["STAGING_PROBE_ZIEL", "STAGING_TEST_TOKEN"];\n',
+  });
+  assert.deepEqual(pruefe(wurzel), [
+    `scripts/anruf-probe/probe.mjs: STAGING_TEST_TOKEN steht nicht in ${LISTE}`,
+  ]);
 });
 
 test("Ein in Anführungszeichen genannter STAGING_-Name im Skript wird geprüft", () => {
