@@ -86,11 +86,11 @@ const AUSGEHEND = {
   elBoundAt: null,
 };
 
-async function initMitInhalt(inhalt) {
+async function initMitInhalt(inhalt, namen = { ownerName: "", firstName: "" }) {
   const store = {
     aktiveAnrufeAlle: async () => [{ ...AUSGEHEND, answeredAt: ABGEHOBEN }],
     getCall: () => AUSGEHEND,
-    tenantContext: () => ({ ownerName: "", firstName: "" }),
+    tenantContext: () => namen,
     bindInboundElConversation: () => ({ bound: true, changed: true, call: AUSGEHEND }),
   };
   const config = { voice: { elevenLabsInbound: { initWebhookToken: INIT_TOKEN }, elevenLabsOutbound: { agentId: AGENT_ID } } };
@@ -165,5 +165,17 @@ test("6166-K3: eingehender Anruf -> Zeile antwort enthaelt weder Namen des Inhab
     assert.equal(zeile, `[el-init] antwort call=${CALL_ID} status=200 sprache=${agent.language} erste_rede=${JSON.stringify(agent.first_message.replaceAll(INHABER, "***").slice(0, FIRST_MESSAGE_ZEICHEN))}`);
   } finally {
     await srv.stop();
+  }
+});
+
+test("6166-K3b: Namen in erste_rede als Tabelle: Wortteile, laengster Name zuerst, Nicht-Texte als Namen ignoriert", async () => {
+  const faelle = [
+    [{ ownerName: "Jonas Beispiel", firstName: "Jonas" }, "Hallo Beispiel", "Hallo ***"],
+    [{ ownerName: "Anna", firstName: "Anna Maria" }, "Anna Maria", "***"],
+    [{ ownerName: 5, firstName: null }, "Stryker was here", "Stryker was here"],
+  ];
+  for (const [namen, text, erwartet] of faelle) {
+    const ergebnis = await initMitInhalt(() => override({ language: "de", first_message: text }), namen);
+    assert.deepEqual(ergebnis.zeile, [`[el-init] antwort call=call_6166_aus status=200 sprache=de erste_rede=${JSON.stringify(erwartet)}`], text);
   }
 });
