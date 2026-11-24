@@ -436,7 +436,7 @@ function sichereEroeffnung(teile) {
 }
 
 function drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }) {
-  if (locale.language === locale.disclosureLanguage) {
+  if (locale.providerLanguage === locale.disclosureLanguage) {
     const { text, pflichtsatz } = drittEroeffnungText({
       language: locale.language,
       ownerName: owner,
@@ -471,7 +471,7 @@ function openingLinesOf({ call, locale }) {
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
-  if (locale.language === locale.disclosureLanguage) return "";
+  if (locale.providerLanguage === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
@@ -494,7 +494,7 @@ function conversationConfigOverride({ call, locale, offenlegung, firstName, owne
   const { ersteNachricht } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
   return {
     agent: {
-      language: locale.language,
+      language: locale.providerLanguage,
       ...(ersteNachricht === null ? {} : { first_message: ersteNachricht }),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
