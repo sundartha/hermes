@@ -7,6 +7,8 @@ import { inDatenbankBeendet } from "./reattach.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
+export const ZOMBIE_ALTER_MS = 10 * 60 * 1000;
+
 export const BUDGET_FAILURE_REASON = "budget-exhausted";
 
 export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
@@ -254,11 +256,9 @@ export function makeCallLifecycle({
   const ohneWeg = (call: Call, grund?: string) =>
     loescheOhneAuflegeweg(call, { store, hangUpAction, voiceControl, endActiveCall }, grund);
 
-  const prozessStartMs = Date.now();
-
   async function terminateExpiredCall(call: Call): Promise<void> {
     await ohneWeg(call, CAP_FAILURE_REASON);
-    const zombie = classifyCallTime(call, prozessStartMs, MAX_CALL_DURATION_CAP_S).expired;
+    const zombie = classifyCallTime(call, Date.now() - ZOMBIE_ALTER_MS, MAX_CALL_DURATION_CAP_S).expired;
     await terminateCappedCall(call.id, call.twilioSid, zombie ? "failed" : "completed");
   }
 
