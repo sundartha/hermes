@@ -584,10 +584,6 @@ for (const fall of PERMANENT_ERROR_FAELLE) {
     const store = {
       ...spyStore(call),
       load: () => ({ calls: [call] }),
-      fortschreibeFehlerserie: async ({ permanent }) => {
-        call.permanentFehlerSerie = permanent ? (call.permanentFehlerSerie ?? 0) + 1 : 0;
-        return call.permanentFehlerSerie;
-      },
       setCallEndedAt: (_id, status, endedAtIso) => {
         call.status = status;
         call.endedAt = endedAtIso;
