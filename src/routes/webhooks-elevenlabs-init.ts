@@ -57,6 +57,7 @@ interface Speicher {
   getCall(callId: string): Anruf | null | undefined;
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
+  tenantContext(tenantId: string): { ownerName: unknown; firstName: unknown };
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string; stand?: Anruf }): Bindung;
 }
 
@@ -114,7 +115,7 @@ const INIT_LOG_TAG = "el-init";
 const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";
-const ANRUF_JE_ANTWORT = new WeakMap<Response, string>();
+const ANRUF_JE_ANTWORT = new WeakMap<Response, { id: string; namen: unknown[] }>();
 const INIT_KOERPER = z.object({}).passthrough().catch({});
 const KEINE_NUMMER: readonly unknown[] = Object.freeze([undefined, null, ""]);
 export const INIT_FEHLVERSUCHE_PRO_MIN = 30;
@@ -127,16 +128,17 @@ function initTokenGueltig(config: Konfiguration, req: Request): boolean {
   return safeEqual(req.get(INIT_TOKEN_HEADER) ?? "", erwartet);
 }
 
-function meldeEingang(res: Response, call: Anruf | null): void {
+function meldeEingang({ res, call, store }: { res: Response; call: Anruf | null; store: Speicher }): void {
   if (!call) return;
-  ANRUF_JE_ANTWORT.set(res, call.id);
+  const { ownerName, firstName } = store.tenantContext(call.tenantId);
+  ANRUF_JE_ANTWORT.set(res, { id: call.id, namen: [ownerName, firstName] });
   console.log(`[${INIT_LOG_TAG}] eingang call=${call.id}`);
 }
 
 function sendeAntwort({ res, status, antwort }: { res: Response; status: number; antwort: unknown }): Response {
-  const anrufId = ANRUF_JE_ANTWORT.get(res);
-  const anruf = anrufId ? ` call=${anrufId}` : "";
-  console.log(`[${INIT_LOG_TAG}] antwort${anruf} status=${String(status)}${eroeffnungsFelder(antwort)}`);
+  const eintrag = ANRUF_JE_ANTWORT.get(res);
+  const anruf = eintrag ? ` call=${eintrag.id}` : "";
+  console.log(`[${INIT_LOG_TAG}] antwort${anruf} status=${String(status)}${eroeffnungsFelder(antwort, eintrag?.namen ?? [])}`);
   return res.status(status).json(antwort);
 }
 
@@ -350,7 +352,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
   const zuordnung = await zuordnungFuer({ store, config, body, nowMs });
-  meldeEingang(res, zuordnung.call);
+  meldeEingang({ res, call: zuordnung.call, store });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 
