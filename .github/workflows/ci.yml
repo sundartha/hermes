@@ -84,6 +84,19 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run typecheck
 
+      - name: Typabdeckung (Untergrenze, Ratsche)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          vorher=$(git show "$BASIS:package.json" | node -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); process.stdout.write(String(p.typeCoverage?.atLeast ?? ""))')
+          jetzt=$(node -e 'process.stdout.write(String(require("./package.json").typeCoverage.atLeast))')
+          echo "Untergrenze der Typabdeckung: $jetzt, auf der Basis ${vorher:-keine}"
+          if [ -n "$vorher" ] && node -e 'process.exit(Number(process.argv[1]) < Number(process.argv[2]) ? 0 : 1)' "$jetzt" "$vorher"; then
+            echo "Die Untergrenze der Typabdeckung darf nur steigen."
+            exit 1
+          fi
+          npm run typecheck:abdeckung
+
       - name: Syntax
         if: ${{ !cancelled() }}
         run: find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
