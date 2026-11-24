@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { javascriptPfad } from "./bausteine.mjs";
 import { QUERSCHNITT_ORDNER } from "./eslint-rules/tests.js";
 
 const KARTE = "tools/bausteine.json";
@@ -18,7 +19,7 @@ const KOPF_REGEL = /^\^(src\/[\w/.-]+?)\\\.\[jt\]s\$$/;
 const BEGRIFF = /^export const (\w+)/m;
 const GRUPPE = /\(([^)|]+)(?:\|[^)]*)?\)/g;
 
-const ROUTE = `import { Router } from "express";
+const ROUTE = `import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.ts";
@@ -29,7 +30,7 @@ const NICHT_GEBAUT = "not_implemented";
 
 const KOERPER = z.object({}).strict();
 
-export function make%PASCAL%Routes({ webAuthMw }) {
+export function make%PASCAL%Routes({ webAuthMw }: { webAuthMw: RequestHandler }): Router {
   const router = Router();
 
   router.post(%KONSTANTE%_PATH, webAuthMw, (req, res) => {
@@ -50,7 +51,7 @@ const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
 
 export const %KONSTANTE%_BEGRIFF = %BEGRIFF%;
 
-export async function hole%PASCAL%(url, { signal } = {}) {
+export async function hole%PASCAL%(url: string, { signal }: { signal?: AbortSignal } = {}): Promise<unknown> {
   const antwort = await anfrage(url, { fristMs: FRIST_MS, signal });
   return antwort.json();
 }
@@ -107,7 +108,7 @@ function karteneintrag(karte, baustein) {
 
 function planeRoute(wurzel, baustein, name) {
   karteneintrag(lies(wurzel, KARTE), baustein);
-  const datei = `src/routes/${name}.js`;
+  const datei = `src/routes/${name}.ts`;
   const werte = { NAME: name, PASCAL: pascal(name), KONSTANTE: name.toUpperCase().replaceAll("-", "_") };
   return { datei, inhalt: ausfuellen(ROUTE, werte), karte: { baustein, eingang: true } };
 }
@@ -115,7 +116,7 @@ function planeRoute(wurzel, baustein, name) {
 function planeFachdatei(wurzel, baustein, name) {
   const [ordner] = karteneintrag(lies(wurzel, KARTE), baustein).quellen.filter((quelle) => quelle.endsWith("/"));
   if (!ordner) throw new Abbruch(`Der Baustein ${baustein} hat in ${KARTE} keinen Ordner für neue Dateien.`);
-  const datei = `${ordner}${name}.js`;
+  const datei = `${ordner}${name}.ts`;
   const begriffe = `src/begriffe/${baustein}.js`;
   const quelle = [begriffe, begriffe.replace(/\.js$/, ".ts")].find((pfad) => existsSync(join(wurzel, pfad)));
   const begriff = quelle && BEGRIFF.exec(readFileSync(join(wurzel, quelle), "utf8"));
@@ -193,7 +194,7 @@ function lesen(argv) {
 export function neu(argv) {
   const { wurzel, art, ziel, name } = lesen(argv);
   const plan = PLANER[art](wurzel, ziel, name);
-  if (existsSync(join(wurzel, plan.datei))) throw new Abbruch(`${plan.datei} gibt es schon.`);
+  if ([plan.datei, javascriptPfad(plan.datei)].some((pfad) => existsSync(join(wurzel, pfad)))) throw new Abbruch(`${plan.datei} gibt es schon.`);
   mkdirSync(join(wurzel, dirname(plan.datei)), { recursive: true });
   writeFileSync(join(wurzel, plan.datei), plan.inhalt);
   if (plan.karte) {

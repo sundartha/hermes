@@ -276,7 +276,7 @@ export function verstoesseAus(graph) {
 }
 
 function bausteinkarteBefunde(graph = abhaengigkeiten(process.cwd())) {
-  const { zuordnung, eingaenge, richtung, zusammenfassung } = bausteinBefunde(graph.modules);
+  const { zuordnung, javascript, eingaenge, richtung, zusammenfassung } = bausteinBefunde(graph.modules);
   const veraltet = [...expectedBlocks(process.cwd())]
     .filter(([ordner, block]) => {
       const pfad = join(ordner, FOLDER_INSTRUCTIONS);
@@ -284,7 +284,7 @@ function bausteinkarteBefunde(graph = abhaengigkeiten(process.cwd())) {
       return withBlock(text, block) !== text;
     })
     .map(([ordner]) => `${ordner}${FOLDER_INSTRUCTIONS} passt nicht mehr zu tools/bausteine.json: npm run hinweise ausführen.`);
-  return { befunde: [...zuordnung, ...eingaenge, ...richtung, ...veraltet], zusammenfassung };
+  return { befunde: [...zuordnung, ...javascript, ...eingaenge, ...richtung, ...veraltet], zusammenfassung };
 }
 
 function betrifftDatei(befund, datei) {
