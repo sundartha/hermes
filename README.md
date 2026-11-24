@@ -184,6 +184,10 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_agent_
 - **Latenz:** Budget-Engine bleibt Turn-basiert (1–3 s).
 - **Frische Demo:** `data/store.json` löschen setzt Calls/Items/Budgetzähler zurück.
 
+## Typabdeckung
+
+Die CI misst mit `npm run typecheck:abdeckung` den Anteil der Ausdrücke mit bekanntem Typ (type-coverage) und bricht, wenn er unter der Untergrenze `typeCoverage.atLeast` in `package.json` liegt. Der Wert steigt nur; die CI lehnt eine Senkung gegenüber der Basis ab.
+
 ## Bewusste Prototyp-Abweichungen (vs. Produkt-PRD)
 
 - MCP-Auth: drei Modi über `MCP_AUTH` — Legacy/statisches Bearer-Token (`MCP_AUTH_TOKEN`, leer = `/mcp` nur von localhost), oder `oauth` (OAuth 2.1 Resource Server für den claude.ai-Login-Flow). Setup/Rollout siehe `PLAN-SECURITY.md`.
