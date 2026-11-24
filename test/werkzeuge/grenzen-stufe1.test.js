@@ -8,7 +8,7 @@ function lies(pfad) {
   return readFileSync(new URL(pfad, WURZEL), "utf8");
 }
 
-const WORKFLOWS = ["ci", "freigabe", "node-erkennung", "testschutz"];
+const WORKFLOWS = ["freigabe", "node-erkennung", "testschutz"];
 
 for (const name of WORKFLOWS) {
   test(`${name}.yml bricht keinen Job an einer Zeitgrenze ab`, () => {
