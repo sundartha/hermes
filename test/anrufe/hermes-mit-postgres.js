@@ -154,6 +154,11 @@ export async function zeilenBis(lies, genug) {
   return zeilen;
 }
 
+export async function zeilenNachNachlauf(lies, nachlaufMs) {
+  await echtWarten(nachlaufMs);
+  return lies();
+}
+
 export function anrufeSql(sql, anzahl) {
   return zeilenBis(
     async () => (await sql(ANRUFE_SQL)).rows,
