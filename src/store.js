@@ -358,6 +358,7 @@ export const {
   newsletterAbgleichen,
   plattformBindungenNachladen,
   plattformBindungenSchreiben,
+  mitPlattformBindungen,
   load,
   save,
   drainFlushes,

@@ -441,6 +441,13 @@ function plattformBindungMethoden({ requireState, plattformNutzung }) {
   return {
     plattformBindungenNachladen: () => plattformNutzung.nachladen(requireState().platformNumberUse),
     plattformBindungenSchreiben: () => plattformNutzung.schreiben(requireState().platformNumberUse),
+    async mitPlattformBindungen(arbeit) {
+      const spiegel = requireState().platformNumberUse;
+      await plattformNutzung.nachladen(spiegel);
+      const ergebnis = arbeit();
+      await plattformNutzung.schreiben(spiegel);
+      return ergebnis;
+    },
   };
 }
 

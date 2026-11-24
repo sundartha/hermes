@@ -46,6 +46,10 @@ export async function plattformBindungenNachladen() {}
 
 export async function plattformBindungenSchreiben() {}
 
+export async function mitPlattformBindungen(arbeit) {
+  return arbeit();
+}
+
 export function load() {
   if (state) return state;
   let raw;

@@ -658,13 +658,6 @@ export async function healBootstrapStore({ config, store, messaging }) {
   return decision;
 }
 
-export async function bindungenAbleiten({ store }) {
-  await store.plattformBindungenNachladen?.();
-  const offene = derivePlatformNumberBindings({ store });
-  await store.plattformBindungenSchreiben?.();
-  return offene;
-}
-
 export function derivePlatformNumberBindings({ store }) {
   const alertSender = resolveBootstrapAlertSender(store);
   const open = syncPlatformBindings(store.load(), [
@@ -756,7 +749,7 @@ export async function bootServer({
   }
 
   await healBootstrapStore({ config, store, messaging });
-  const openPlatformBindings = await bindungenAbleiten({ store });
+  const openPlatformBindings = await store.mitPlattformBindungen(() => derivePlatformNumberBindings({ store }));
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
