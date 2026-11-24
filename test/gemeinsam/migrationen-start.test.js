@@ -48,6 +48,7 @@ const ERWARTETE_MIGRATIONEN = [
   { version: "33", name: "0033_vorspann_fristen" },
   { version: "34", name: "0034_nummer_lebend" },
   { version: "35", name: "0035_offener_auftrag_schluessel" },
+  { version: "36", name: "0036_anruf_fehlerserie" },
 ];
 
 async function kontenZaehlen(verbindung) {
@@ -167,6 +168,7 @@ test(
         "0033_vorspann_fristen",
         "0034_nummer_lebend",
         "0035_offener_auftrag_schluessel",
+        "0036_anruf_fehlerserie",
       ],
       "ein Name je Datei: 0001_ausgang",
     );

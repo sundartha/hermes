@@ -16,6 +16,7 @@ import {
   setzeGeldImSpiegel,
   setzeHoechstdauerImSpiegel,
   setzeAbfrageImSpiegel,
+  fortschreibeFehlerserieImSpiegel,
   setzeUebergabeImSpiegel,
   setzeReserveImSpiegel,
 } from "./store/fristen-sql.js";
@@ -102,6 +103,10 @@ async function createPgBackend() {
     setzeAbfrageFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeAbfrage(anfrage);
+    },
+    fortschreibeFehlerserie: async (anfrage) => {
+      await store.drainFlushes();
+      return makePostgresFristen(runner).fortschreibeFehlerserie(anfrage);
     },
     setzeUebergabeFrist: async (anfrage) => {
       await store.drainFlushes();
@@ -241,6 +246,11 @@ function jsonBackendAufbauen() {
       setzeAbfrageImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
     },
+    fortschreibeFehlerserie: async (anfrage) => {
+      const serie = fortschreibeFehlerserieImSpiegel(jsonBackend.load(), anfrage);
+      jsonBackend.save();
+      return serie;
+    },
     setzeUebergabeFrist: async (anfrage) => {
       setzeUebergabeImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
@@ -326,6 +336,7 @@ export const {
   setzeGeldFrist,
   setzeReserveFrist,
   setzeAbfrageFrist,
+  fortschreibeFehlerserie,
   setzeUebergabeFrist,
   setzeVorspannFrist,
   leereVorspannFrist,

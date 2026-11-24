@@ -536,6 +536,11 @@ export function storeOpsFacade(state) {
     getCall: (id) => stateOps.getCall(state, id),
     leseCall: async (id) => stateOps.getCall(state, id),
     anrufHierBewacht: (id) => stateOps.getCall(state, id)?.status === "active",
+    fortschreibeFehlerserie: async ({ callId, permanent }) => {
+      const call = stateOps.getCall(state, callId);
+      call.permanentFehlerSerie = permanent ? (call.permanentFehlerSerie ?? 0) + 1 : 0;
+      return call.permanentFehlerSerie;
+    },
     addTranscript: (id, rolle, text) => stateOps.addTranscript(state, id, rolle, text),
     recordProviderCallResult: (id, ergebnis) => stateOps.recordProviderCallResult(state, id, ergebnis),
     recordProviderCollectedFields: (id, felder) => stateOps.recordProviderCollectedFields(state, id, felder),
