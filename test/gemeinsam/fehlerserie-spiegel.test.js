@@ -58,3 +58,15 @@ test("Fehlerserie im JSON-Speicher: nur eine geaenderte Serie wird auf die Platt
     schreibungen.map(([permanent, , erwartet]) => [permanent, erwartet]),
   );
 });
+
+test("Fehlerserie im JSON-Speicher: eine geaenderte Serie wird auch dann gespeichert, wenn ein neuerer Anruf denselben Stand hat", async () => {
+  const a = anruf();
+  const b = anruf();
+  await speicher.fortschreibeFehlerserie({ callId: b.id, tenantId: MANDANT, permanent: true });
+  const datei = path.join(config.server.dataDir, "store.json");
+  fs.rmSync(datei, { force: true });
+  await speicher.fortschreibeFehlerserie({ callId: a.id, tenantId: MANDANT, permanent: true });
+  assert.equal(fs.existsSync(datei), true);
+  const gespeichert = JSON.parse(fs.readFileSync(datei, "utf8")).calls.find((eintrag) => eintrag.id === a.id);
+  assert.equal(gespeichert.permanentFehlerSerie, 1);
+});
