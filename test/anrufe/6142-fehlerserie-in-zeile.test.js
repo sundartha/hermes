@@ -88,7 +88,8 @@ async function aufbau(zweiteUeberschreibung) {
 
 const statusDerZeile = async (db, callId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [mandant]);
-  return (await db.query(`SELECT status FROM call WHERE id = $1`, [callId])).rows[0].status;
+  const { rows } = await db.query(`SELECT status FROM call WHERE id = $1`, [callId]);
+  return rows[0].status;
 };
 
 async function pollen(instanz, callId, antwort) {
