@@ -99,8 +99,6 @@ describe("Startsprache frei waehlbar ueber POST /api/calls", () => {
       const antwort = await res.text();
       assert.equal(res.status, HTTP_OK, antwort);
       const inhalt = await initInhaltFuer(srv, { callId: JSON.parse(antwort).callId });
-      // PR 6200: die angefragte Sprache wird jetzt an agent.language durchgereicht statt auf
-      // Englisch reduziert zu werden, solange ElevenLabs sie unterstuetzt (hier es) – gewollt.
       assert.equal(inhalt.conversation_config_override.agent.language, "es");
     });
   });

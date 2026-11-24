@@ -37,8 +37,8 @@ function primaererSprachcode(code: string): string {
   return code.split("-")[0] ?? code;
 }
 
-function providerSpracheVon(textSprache: string, callLanguage: string | undefined): string {
-  if (callLanguage === undefined) return textSprache;
+function providerSpracheVon(textSprache: string, callLanguage: string | null | undefined): string {
+  if (!callLanguage) return textSprache;
   const basis = primaererSprachcode(callLanguage);
   return AN_ANBIETER_DURCHGEREICHTE_SPRACHEN.includes(basis) ? basis : textSprache;
 }

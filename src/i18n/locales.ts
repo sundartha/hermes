@@ -394,28 +394,6 @@ export const LOCALES = Object.freeze({
 
 export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 
-export const DISCLOSURE_OWNER_FALLBACK_PT = DISCLOSURE_OWNER_FALLBACK_EN;
-export const DISCLOSURE_OWNER_FALLBACK_ES = DISCLOSURE_OWNER_FALLBACK_EN;
-
-export const UNVERDRAHTETE_PT_ES_OFFENLEGUNG_ALS_EN_PLATZHALTER = Object.freeze({
-  pt: Object.freeze({
-    language: "pt",
-    disclosure: makeDisclosure(
-      (ownerName: string) => `Hello, this is an AI assistant calling on behalf of ${ownerName}. ${SUMMARY_NOTICE.en}`,
-      DISCLOSURE_OWNER_FALLBACK_PT,
-    ),
-    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_PT,
-  }),
-  es: Object.freeze({
-    language: "es",
-    disclosure: makeDisclosure(
-      (ownerName: string) => `Hello, this is an AI assistant calling on behalf of ${ownerName}. ${SUMMARY_NOTICE.en}`,
-      DISCLOSURE_OWNER_FALLBACK_ES,
-    ),
-    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_ES,
-  }),
-});
-
 const DISCLOSURE_NAME_SENTINEL = "\u0000";
 export function disclosurePrefixFor(language: string): string {
   return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL, 1).join("");
