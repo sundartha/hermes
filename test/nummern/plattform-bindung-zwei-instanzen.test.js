@@ -8,7 +8,6 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { legeMandantAn, makePgStore, makePgTestStore } from "../pg-helpers.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { TAUSCH_ERGEBNIS } from "../../src/store.js";
-import { syncPlatformBindings } from "../../src/store/state-ops.js";
 import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 
 const KUNDE = "t_pnu_kunde";
@@ -225,12 +224,19 @@ test("Speichern auf Instanz B oeffnet eine Bindung nicht wieder, die Instanz A g
   assert.deepEqual((await db.query(BINDUNG_ABFRAGE)).rows, [{ id: "pnu_alt", purpose: ZWECK_ANI, offen: false }]);
 });
 
-const alarmWunsch = (e164) => [{ purpose: ALARM_ZWECK, e164, provider: "telnyx" }];
+const neueBindung = (id, e164) => ({
+  id, e164, purpose: ALARM_ZWECK, provider: "telnyx", tenantId: null, providerNumberId: null,
+  boundAt: GESCHLOSSEN_ZEIT, releasedAt: null, note: null,
+});
+const offeneBindungen = (store) => store.load().platformNumberUse.filter((bindung) => bindung.releasedAt === null);
 
 test("Ableiten legt die Bindung in der Tabelle an und gibt die offenen Bindungen zurueck", async () => {
   const { b, db } = await zweiInstanzen();
-  const offene = await b.mitPlattformBindungen(() => syncPlatformBindings(b.load(), alarmWunsch(KUNDEN_NUMMER)));
-  assert.deepEqual(offene.map((bindung) => bindung.purpose), [ALARM_ZWECK]);
+  const offene = await b.mitPlattformBindungen(() => {
+    b.load().platformNumberUse.push(neueBindung("pnu_neu", KUNDEN_NUMMER));
+    return offeneBindungen(b);
+  });
+  assert.deepEqual(offene.map((bindung) => bindung.id), ["pnu_neu"]);
   const zeilen = (await db.query(BINDUNG_ABFRAGE)).rows;
   assert.deepEqual(zeilen.map((zeile) => [zeile.purpose, zeile.offen]), [[ALARM_ZWECK, true]]);
 });
@@ -238,7 +244,7 @@ test("Ableiten legt die Bindung in der Tabelle an und gibt die offenen Bindungen
 test("Ableiten uebernimmt die offene Bindung einer anderen Instanz statt eine zweite anzulegen", async () => {
   const { b, db } = await zweiInstanzen();
   await bindungAnlegen(db, { id: "pnu_alarm_a", e164: KUNDEN_NUMMER, purpose: ALARM_ZWECK });
-  const offene = await b.mitPlattformBindungen(() => syncPlatformBindings(b.load(), alarmWunsch(KUNDEN_NUMMER)));
+  const offene = await b.mitPlattformBindungen(() => offeneBindungen(b));
   assert.deepEqual(offene.map((bindung) => bindung.id), ["pnu_alarm_a"]);
   assert.deepEqual((await db.query(BINDUNG_ABFRAGE)).rows, [{ id: "pnu_alarm_a", purpose: ALARM_ZWECK, offen: true }]);
 });
@@ -247,7 +253,10 @@ test("Wechselt die Nummer, schliesst das Ableiten die alte Bindung in der Tabell
   const { b, db } = await zweiInstanzen({
     vorherBindungen: [{ id: "pnu_alarm_alt", e164: KUNDEN_NUMMER, purpose: ALARM_ZWECK }],
   });
-  await b.mitPlattformBindungen(() => syncPlatformBindings(b.load(), alarmWunsch(NEUE_NUMMER)));
+  await b.mitPlattformBindungen(() => {
+    for (const bindung of offeneBindungen(b)) bindung.releasedAt = GESCHLOSSEN_ZEIT;
+    b.load().platformNumberUse.push(neueBindung("pnu_alarm_neu", NEUE_NUMMER));
+  });
   const alarm = (
     await db.query(`SELECT id, e164, released_at IS NULL AS offen FROM platform_number_use ORDER BY e164`)
   ).rows;
@@ -255,7 +264,7 @@ test("Wechselt die Nummer, schliesst das Ableiten die alte Bindung in der Tabell
     alarm.map((zeile) => [zeile.id, zeile.e164, zeile.offen]),
     [
       ["pnu_alarm_alt", KUNDEN_NUMMER, false],
-      [alarm[1].id, NEUE_NUMMER, true],
+      ["pnu_alarm_neu", NEUE_NUMMER, true],
     ],
   );
 });
