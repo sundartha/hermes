@@ -161,7 +161,8 @@ async function ausgangMelden(ergebnis) {
     gewaehltMerken();
     return zeile("Erstversuch rot, Wiederholung grün");
   }
-  zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}`);
+  const grund = ergebnis.zweit.grund === undefined ? "" : ` grund=${ergebnis.zweit.grund}`;
+  zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}${grund}`);
   await alarmSenden(ergebnis.seit);
   throw new Ende("probe_rot");
 }
