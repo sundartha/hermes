@@ -90,6 +90,7 @@ const KARTE_KLEIN = {
   ],
   altlast: [],
 };
+const KARTE_BESTAND = { ...KARTE_KLEIN, javascriptBestand: ["src/anrufe/a.js", "src/i18n/index.js", "src/i18n/intern.js", "src/store.js", "src/store/intern.js"] };
 const STORE = { "src/store.js": "export const STORE = 1;\n", "src/store/intern.js": "export const INTERN = 1;\n" };
 const AM_EINGANG_VORBEI = 'import { INTERN } from "../store/intern.js";\n\nexport const WERT = INTERN;\n';
 const SAUBER = 'import { STORE } from "../store.js";\n\nexport const WERT = STORE;\n';
@@ -116,7 +117,7 @@ test("ein Verstoß einer anderen Datei wird nicht der bearbeiteten Datei angelas
 });
 
 test("ein Import an einem Eingang des Bausteins vorbei wird aus der Bausteinkarte gemeldet", () => {
-  const ordner = kleinerBaum({ ...I18N, "src/anrufe/a.js": 'import { TEXT } from "../i18n/index.js";\n\nexport const WERT = TEXT;\n' }, KARTE_KLEIN);
+  const ordner = kleinerBaum({ ...I18N, "src/anrufe/a.js": 'import { TEXT } from "../i18n/index.js";\n\nexport const WERT = TEXT;\n' }, KARTE_BESTAND);
   still(hook(ordner, "src/anrufe/a.js"), "ueber den Eingang");
   writeFileSync(join(ordner, "src/anrufe/a.js"), 'import { INTERN } from "../i18n/intern.js";\n\nexport const WERT = INTERN;\n');
   const lauf = hook(ordner, "src/anrufe/a.js");
