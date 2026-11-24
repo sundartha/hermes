@@ -39,6 +39,7 @@ import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheTtsZaehlerSql } from "./tts-zaehler-sql.js";
 import { empfaengerAbmelden, empfaengerAnhaengen, empfaengerBestaetigen, empfaengerEntfernen } from "./newsletter-liste-sql.ts";
+import { machePlattformNutzungSql } from "./plattform-nutzung-sql.js";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
@@ -207,7 +208,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
 
   const suche = macheAnrufSuche({ runner, requireState, gebunden, eigene });
 
-  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), ttsZaehler: macheTtsZaehlerSql({ einreihen, runner }), kalender: macheKalenderSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
+  const kontext = { requireState, save, runner, gebunden, eigene, kostenvergleich: macheKostenvergleichSql({ einreihen }), ttsZaehler: macheTtsZaehlerSql({ einreihen, runner }), plattformNutzung: machePlattformNutzungSql({ einreihen, runner }), kalender: macheKalenderSql({ einreihen }), ...suche, einstellungen, profil, mandant, einreihen, anrufe: macheAnrufeSql({ runner, einreihen, lese: suche.leseAnrufUngebunden, anhaengen: suche.leseAnrufMitClient }), anrufExport: macheAnrufExport({ runner, zeilenZuAnrufen }), aktiveAnrufe: macheAktiveAnrufeSql({ runner, zeilenZuAnrufen, eigene }), anrufNummern: macheAnrufNummernSql({ runner }), anrufSuche: macheAnrufSucheSql({ runner, zeilenZuAnrufen }), posteingangAnrufe: macheAnrufePosteingangSql({ runner, zeilenZuAnrufen }), posteingang: macheAktionspunkteSql({ runner, einreihen, save, leseCallUngebunden: suche.leseAnrufUngebunden }) };
 
   return {
     init,
@@ -227,6 +228,7 @@ export function makePgStore(runner, { prepareSchema = migrate, einstellungenFris
     ...mandantEinstellungenMethoden(kontext),
     ...verwaltungMethoden(kontext),
     ...nummerMethoden({ requireState, runner, nummernSql }),
+    ...plattformBindungMethoden(kontext),
   };
 }
 
@@ -432,6 +434,13 @@ function nummerMethoden({ requireState, runner, nummernSql }) {
       else state.numbers.push(nummer);
       return true;
     },
+  };
+}
+
+function plattformBindungMethoden({ requireState, plattformNutzung }) {
+  return {
+    plattformBindungenNachladen: () => plattformNutzung.nachladen(requireState().platformNumberUse),
+    plattformBindungenSchreiben: () => plattformNutzung.schreiben(requireState().platformNumberUse),
   };
 }
 
@@ -1086,7 +1095,6 @@ async function hydrate(client) {
   }
   state.profiles = await hydrateProfiles(client);
   state.anrufpause = await hydrateAnrufpause(client);
-  state.platformNumberUse = await hydratePlatformNumberUse(client);
   state.outageAlerts = await hydrateOutageAlerts(client);
   await hydrateSubIndex(client, state);
   return state;
@@ -1100,22 +1108,6 @@ async function hydrateProfiles(client) {
 async function hydrateAnrufpause(client) {
   const { rows } = await client.query(`SELECT an FROM platform_anrufpause WHERE id = 1`);
   return rows[0]?.an === true;
-}
-
-async function hydratePlatformNumberUse(client) {
-  const rows = (
-    await client.query(
-      `SELECT id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note
-         FROM platform_number_use ORDER BY bound_at`,
-    )
-  ).rows;
-  return rows.map((row) => ({
-    id: row.id, e164: row.e164, purpose: row.purpose, provider: row.provider,
-    tenantId: row.tenant_id, providerNumberId: row.provider_number_id,
-    boundAt: row.bound_at instanceof Date ? row.bound_at.toISOString() : row.bound_at,
-    releasedAt: row.released_at instanceof Date ? row.released_at.toISOString() : (row.released_at ?? null),
-    note: row.note,
-  }));
 }
 
 async function hydrateOutageAlerts(client) {
@@ -1656,7 +1648,6 @@ async function flush(client, state, { preFlush, gebunden }) {
     const geschrieben = [];
     const abdruecke = [];
     await flushTenants(client, state.tenants);
-    await flushPlatformNumberUse(client, state.platformNumberUse);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, state, { tenantId: tenant.id, geschrieben, abdruecke, gebunden });
@@ -1954,22 +1945,6 @@ async function flushTranscript(client, tenantId, call) {
     await client.query(
       `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`,
       [call.id, tenantId, seg.role, seg.text, seg.at],
-    );
-  }
-}
-
-async function flushPlatformNumberUse(client, bindings) {
-  for (const binding of bindings) {
-    await client.query(
-      `INSERT INTO platform_number_use
-         (id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET
-         e164=EXCLUDED.e164, purpose=EXCLUDED.purpose, provider=EXCLUDED.provider,
-         tenant_id=EXCLUDED.tenant_id, provider_number_id=EXCLUDED.provider_number_id,
-         released_at=EXCLUDED.released_at, note=EXCLUDED.note`,
-      [binding.id, binding.e164, binding.purpose, binding.provider, binding.tenantId ?? null,
-       binding.providerNumberId ?? null, binding.boundAt, binding.releasedAt ?? null, binding.note ?? null],
     );
   }
 }

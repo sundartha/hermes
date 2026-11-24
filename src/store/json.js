@@ -42,6 +42,9 @@ export async function nummerNachladen() {
 }
 
 export async function newsletterAbgleichen() {}
+export async function plattformBindungenNachladen() {}
+
+export async function plattformBindungenSchreiben() {}
 
 export function load() {
   if (state) return state;

@@ -356,6 +356,8 @@ export const {
   nummernSql,
   nummerNachladen,
   newsletterAbgleichen,
+  plattformBindungenNachladen,
+  plattformBindungenSchreiben,
   load,
   save,
   drainFlushes,

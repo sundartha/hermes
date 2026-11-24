@@ -24,6 +24,7 @@ const binden = (store, e164) => {
 };
 
 async function flushen(store) {
+  await store.plattformBindungenSchreiben();
   store.save();
   await store.drainFlushes();
 }

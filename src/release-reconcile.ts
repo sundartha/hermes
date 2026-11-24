@@ -20,6 +20,8 @@ export interface ReleaseStore {
   save: () => unknown;
   withStoreLock: <T>(fn: () => T) => Promise<T>;
   numberHasActiveCall?: ((e164: string | null) => Promise<boolean>) | undefined;
+  plattformBindungenNachladen?: (() => Promise<unknown>) | undefined;
+  plattformBindungenSchreiben?: (() => Promise<unknown>) | undefined;
 }
 
 export interface ReleaseProvisioner {
@@ -88,7 +90,8 @@ async function providerReleaseOrGone(provisioner: ReleaseProvisioner, number: Re
 }
 
 async function stillReleasableUnderLock(store: ReleaseStore, numberId: string) {
-  const number = await store.withStoreLock(() => {
+  const number = await store.withStoreLock(async () => {
+    await store.plattformBindungenNachladen?.();
     const state = store.load();
     const num = findNumber(state, numberId);
     const releasable =
@@ -152,7 +155,7 @@ export async function performNumberRelease({
   if (sipRegistrar && number.providerAgentPhoneNumberId)
     await sipRegistrar.removeRegistration(number.providerAgentPhoneNumberId);
   try {
-    await store.withStoreLock(() => {
+    await store.withStoreLock(async () => {
       const state = store.load();
       const num = findNumber(state, number.id);
       if (num?.status === NUMBER_STATUS.ACTIVE) {
@@ -164,6 +167,7 @@ export async function performNumberRelease({
           throw err;
         }
       }
+      await store.plattformBindungenSchreiben?.();
       store.save();
     });
   } catch (err) {
@@ -225,6 +229,7 @@ export async function runReleaseReconcile({
   aborted: number;
   observed: number;
 }> {
+  await store.plattformBindungenNachladen?.();
   const buckets = classifyNumbersForRelease(store.load(), { nowMs, graceMs });
   const candidates = buckets.release;
   for (const { number, reason } of buckets.hold)
@@ -254,6 +259,7 @@ export async function releaseTenantNumbersOnErase({
   tenantId,
   sipRegistrar,
 }: ReleaseDeps & { tenantId: string }): Promise<{ released: number; aborted: number }> {
+  await store.plattformBindungenNachladen?.();
   const { release, hold } = tenantNumbersForErase(store.load(), tenantId);
   let released = 0;
   let aborted = 0;
