@@ -114,6 +114,7 @@ const INIT_LOG_TAG = "el-init";
 const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";
+const ANRUF_JE_ANTWORT = new WeakMap<Response, string>();
 const INIT_KOERPER = z.object({}).passthrough().catch({});
 const KEINE_NUMMER: readonly unknown[] = Object.freeze([undefined, null, ""]);
 export const INIT_FEHLVERSUCHE_PRO_MIN = 30;
@@ -126,8 +127,15 @@ function initTokenGueltig(config: Konfiguration, req: Request): boolean {
   return safeEqual(req.get(INIT_TOKEN_HEADER) ?? "", erwartet);
 }
 
+function meldeEingang(res: Response, call: Anruf | null): void {
+  if (!call) return;
+  ANRUF_JE_ANTWORT.set(res, call.id);
+  console.log(`[${INIT_LOG_TAG}] eingang call=${call.id}`);
+}
+
 function sendeAntwort({ res, status, antwort }: { res: Response; status: number; antwort: unknown }): Response {
-  const anruf = typeof res.locals.initAnrufId === "string" ? ` call=${res.locals.initAnrufId}` : "";
+  const anrufId = ANRUF_JE_ANTWORT.get(res);
+  const anruf = anrufId ? ` call=${anrufId}` : "";
   console.log(`[${INIT_LOG_TAG}] antwort${anruf} status=${String(status)}${eroeffnungsFelder(antwort)}`);
   return res.status(status).json(antwort);
 }
@@ -342,10 +350,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
   const zuordnung = await zuordnungFuer({ store, config, body, nowMs });
-  if (zuordnung.call) {
-    res.locals.initAnrufId = zuordnung.call.id;
-    console.log(`[${INIT_LOG_TAG}] eingang call=${zuordnung.call.id}`);
-  }
+  meldeEingang(res, zuordnung.call);
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 

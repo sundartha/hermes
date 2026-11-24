@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 
-import { eroeffnungsFelder } from "../../src/elevenlabs/anrufstart-messung.ts";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.ts";
@@ -18,6 +17,7 @@ const AGENT_ID = "agent_6166_init";
 const INIT_TOKEN = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN;
 const CALL_ID = "call_6166_ein";
 const TOKEN = "2".padStart(32, "0");
+const ABGEHOBEN = "2026-01-01T10:00:00.000Z";
 const FIRST_MESSAGE_ZEICHEN = 40;
 
 const zeilen = (ausgabe, tag) => ausgabe.split("\n").filter((zeile) => zeile.startsWith(`[el-init] ${tag}`));
@@ -75,59 +75,60 @@ test("6166-K1b: Init 404 -> Zeile antwort mit Status 404, mit Anruf nach eingang
   });
 });
 
-test("6166-K1c: Init 500 -> Zeile antwort mit Status 500 und dem Anruf", async () => {
-  const anruf = {
-    id: "call_6166_aus",
-    from: "+15005550006",
-    to: "+491737250000",
-    tenantId: "t",
-    answeredAt: new Date().toISOString(),
-    costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    streamToken: TOKEN,
-    elBoundAt: null,
+const AUSGEHEND = {
+  id: "call_6166_aus",
+  from: "+15005550006",
+  to: "+491737250000",
+  tenantId: "t",
+  costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
+  streamToken: TOKEN,
+  elBoundAt: null,
+};
+
+async function initMitInhalt(inhalt) {
+  const store = {
+    aktiveAnrufeAlle: async () => [{ ...AUSGEHEND, answeredAt: ABGEHOBEN }],
+    getCall: () => AUSGEHEND,
+    bindInboundElConversation: () => ({ bound: true, changed: true, call: AUSGEHEND }),
   };
-  const store = { aktiveAnrufeAlle: async () => [anruf] };
   const config = { voice: { elevenLabsInbound: { initWebhookToken: INIT_TOKEN }, elevenLabsOutbound: { agentId: AGENT_ID } } };
   const app = express();
   app.use(express.json());
-  app.use(
-    makeElevenLabsInitWebhookRoutes({
-      store,
-      config,
-      bridges: { clearDeadlines() {} },
-      outboundInitInhalt: () => {
-        throw new Error("boom");
-      },
-      vorspannText: () => null,
-    }),
-  );
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: { clearDeadlines() {} }, outboundInitInhalt: inhalt, vorspannText: () => null }));
   const server = http.createServer(app);
   await new Promise((fertig) => server.listen(0, "127.0.0.1", fertig));
   const gelogt = [];
   const original = console.log;
-  console.log = (text) => gelogt.push(String(text));
   const fehler = console.error;
+  console.log = (text) => gelogt.push(String(text));
   console.error = () => {};
   try {
     const antwort = await abrufMitFrist(`http://127.0.0.1:${server.address().port}${ELEVENLABS_INIT_PATH}`, {
       method: "POST",
       headers: kopf,
-      body: JSON.stringify(koerper({ called_number: anruf.from })),
+      body: JSON.stringify(koerper({ called_number: AUSGEHEND.from })),
     });
-    assert.equal(antwort.status, HTTP_SERVER_FEHLER);
+    return { status: antwort.status, zeile: gelogt.filter((zeile) => zeile.startsWith("[el-init] antwort")) };
   } finally {
     console.log = original;
     console.error = fehler;
     server.closeAllConnections();
     await new Promise((fertig) => server.close(fertig));
   }
-  assert.deepEqual(gelogt.filter((zeile) => zeile.startsWith("[el-init] antwort")), ["[el-init] antwort call=call_6166_aus status=500"]);
+}
+
+test("6166-K1c: Init 500 -> Zeile antwort mit Status 500 und dem Anruf", async () => {
+  const ergebnis = await initMitInhalt(() => {
+    throw new Error("boom");
+  });
+  assert.equal(ergebnis.status, HTTP_SERVER_FEHLER);
+  assert.deepEqual(ergebnis.zeile, ["[el-init] antwort call=call_6166_aus status=500"]);
 });
 
 const override = (agent) => ({ conversation_config_override: { agent } });
 const ERSTE_40 = "a".repeat(FIRST_MESSAGE_ZEICHEN);
 
-test("6166-K2: Startsprache und erste 40 Zeichen first_message als Tabelle, ohne eines von beiden keine Felder", () => {
+test("6166-K2: Startsprache und erste 40 Zeichen first_message als Tabelle, ohne eines von beiden keine Felder", async () => {
   const faelle = [
     [override({ language: "pt", first_message: `${ERSTE_40}b` }), ` sprache=pt erste_rede="${ERSTE_40}"`],
     [override({ language: "de", first_message: ERSTE_40 }), ` sprache=de erste_rede="${ERSTE_40}"`],
@@ -136,7 +137,11 @@ test("6166-K2: Startsprache und erste 40 Zeichen first_message als Tabelle, ohne
     [override({ first_message: "Hallo" }), ""],
     [override({ language: 5, first_message: "Hallo" }), ""],
     [override({ language: "de", first_message: 5 }), ""],
-    [{ error: "intern" }, ""],
+    [{}, ""],
   ];
-  for (const [antwort, erwartet] of faelle) assert.equal(eroeffnungsFelder(antwort), erwartet, JSON.stringify(antwort));
+  for (const [antwort, erwartet] of faelle) {
+    const ergebnis = await initMitInhalt(() => antwort);
+    assert.equal(ergebnis.status, HTTP_OK);
+    assert.deepEqual(ergebnis.zeile, [`[el-init] antwort call=call_6166_aus status=200${erwartet}`], JSON.stringify(antwort));
+  }
 });
