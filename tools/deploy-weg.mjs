@@ -8,7 +8,7 @@ import {
   COMMIT_MUSTER,
   TEIL_MUSTER,
 } from "./deploy-weg/ausgabe.mjs";
-import { deploy } from "./deploy-weg/deploy.mjs";
+import { anrufpause, deploy } from "./deploy-weg/deploy.mjs";
 import { einstellungenLesen } from "./deploy-weg/einstellungen.mjs";
 import { entscheiden } from "./deploy-weg/entscheiden.mjs";
 import {
@@ -17,7 +17,6 @@ import {
   hoertestIssueAnlegenOderErsetzen,
   monatspruefung,
 } from "./deploy-weg/hoertest.mjs";
-import { anrufpause } from "./deploy-weg/anrufpause.mjs";
 import { staging } from "./deploy-weg/staging.mjs";
 import { updateNachkontrolle, VORHER, zurueckrollen } from "./deploy-weg/zurueckrollen.mjs";
 
