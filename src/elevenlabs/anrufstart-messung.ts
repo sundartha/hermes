@@ -44,7 +44,7 @@ export function meldeAuftragBisKlingeln({
   console.log(`${LOG_TAG} auftrag_bis_klingeln ms=${msSeitStart({ call, jetzt })} call=${call.id}`);
 }
 
-const lies = (wert: unknown, schluessel: string): unknown => (typeof wert === "object" && wert !== null ? Reflect.get(wert, schluessel) : undefined);
+const lies = (wert: unknown, schluessel: string): unknown => Reflect.get(Object(wert), schluessel);
 const MS_JE_SEKUNDE = 1000;
 const KEIN_WERT = "-";
 

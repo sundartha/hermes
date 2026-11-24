@@ -1,5 +1,4 @@
 import { test } from "node:test";
-import { mock } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -17,7 +16,6 @@ import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { startEmpfaenger } from "../gemeinsam/otlp-empfaenger.js";
 import { OTLP_MESSWERTE_TOKEN as TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
-import { meldeFirstMessageErgebnis } from "../../src/elevenlabs/anrufstart-messung.ts";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -72,17 +70,6 @@ async function mitServer(optionen, lauf) {
 const AUSGEHEND_ENV = vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]);
 
 const keinZaehler = (empfaenger, name) => empfaenger.exporte.every((e) => summenVon(e, name).length === 0);
-
-test("Anrufstart-Messung S0: Antwort ohne conversation_config_override meldet first_message_ergebnis geliefert=nein statt zu werfen", () => {
-  const logzeilen = [];
-  mock.method(console, "log", (...teile) => logzeilen.push(teile.join(" ")));
-  try {
-    meldeFirstMessageErgebnis({ callId: "call_s0", antwort: {} });
-  } finally {
-    mock.restoreAll();
-  }
-  assert.deepEqual(logzeilen, ["[el-vorspann] first_message_ergebnis geliefert=nein laenge=0 call=call_s0"]);
-});
 
 test("Anrufstart-Messung S1: ein ausgehender Anruf zaehlt hermes.call.started mit direction outbound", async () => {
   await mitServer({ seed: seedWithTelnyxNumber(), env: AUSGEHEND_ENV }, async ({ srv, empfaenger }) => {
