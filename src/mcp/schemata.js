@@ -241,8 +241,8 @@ export function placeCallRequestSchema(begriffe) {
       .describe(
         "The language the agent SPEAKS in this call - any language code, e.g. es or pt-br. " +
           "Start language, default de; set it first if the person called speaks another. " +
-          "The agent may switch to any language during the call. A malformed code is REJECTED with an " +
-          "error instead of being ignored. This does NOT change the language of the mandatory " +
+          "The agent may switch during the call, to any language. A malformed code is REJECTED with an " +
+          "error. This does NOT change the language of the mandatory " +
           "AI disclosure - that always follows the person being called.",
       ),
     max_duration_s: maxDurationField(begriffe.MAX_CALL_DURATION_CAP_S),
