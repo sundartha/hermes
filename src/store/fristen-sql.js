@@ -75,7 +75,7 @@ const SETZEN_RESERVE_SQL =
 const SETZEN_ABFRAGE_SQL =
   "UPDATE call SET frist_abfrage_at = $3, frist_abfrage_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
 const FEHLERSERIE_SQL =
-  "UPDATE call SET permanent_fehler_serie = CASE WHEN $3::boolean THEN permanent_fehler_serie + 1 ELSE 0 END WHERE tenant_id = $1 AND id = $2 AND status = 'active' RETURNING permanent_fehler_serie";
+  "UPDATE call SET permanent_fehler_serie = CASE WHEN $3::boolean THEN permanent_fehler_serie + 1 ELSE 0 END WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND ($3::boolean OR permanent_fehler_serie <> 0) RETURNING permanent_fehler_serie";
 const SETZEN_UEBERGABE_SQL = `UPDATE call SET frist_uebergabe_versuche = 0,
   frist_uebergabe_at = CASE WHEN $3::timestamptz IS NULL THEN NULL ELSE LEAST(COALESCE(frist_uebergabe_at, $3::timestamptz), $3::timestamptz) END
   WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
