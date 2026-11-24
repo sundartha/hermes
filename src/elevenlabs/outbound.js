@@ -22,7 +22,7 @@ import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
-import { permanentErrorStreakExceeded } from "./fehlerserie.js";
+import { permanentErrorStreakExceeded } from "./fehlerserie.ts";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 import { meldeVorspannEroeffnung } from "./vorspann-erzeugen.js";
@@ -50,7 +50,7 @@ const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
 const PERMANENT_FETCH_STATUS = Object.freeze([HTTP_UNAUTHORIZED, HTTP_NOT_FOUND]);
 
-export { PERMANENT_ERROR_STREAK_LIMIT } from "./fehlerserie.js";
+export { PERMANENT_ERROR_STREAK_LIMIT } from "./fehlerserie.ts";
 
 const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 
