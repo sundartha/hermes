@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 
 import { STRIPE_ROUTEN_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 import { fakeProvisioner } from "../helpers.js";
@@ -8,6 +8,9 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { legeMandantAn, makePgStore, makePgTestStore } from "../pg-helpers.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
 import { TAUSCH_ERGEBNIS } from "../../src/store.js";
+import express from "express";
+import { webLoginBasisKonfiguration } from "../gemeinsam/web-login-konfiguration.js";
+import { wireWebLogin } from "../../src/wiring/web-login.js";
 import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 
 const KUNDE = "t_pnu_kunde";
@@ -267,4 +270,53 @@ test("Wechselt die Nummer, schliesst das Ableiten die alte Bindung in der Tabell
       ["pnu_alarm_neu", NEUE_NUMMER, true],
     ],
   );
+});
+
+async function abgleichWarnungen(store, runner) {
+  const plaene = [];
+  const warnungen = [];
+  const stumm = [
+    mock.method(console, "log", () => {}),
+    mock.method(console, "error", () => {}),
+    mock.method(console, "warn", (...args) => warnungen.push(args.join(" "))),
+  ];
+  try {
+    const { zeitplaeneAnmelden } = await wireWebLogin({
+      app: express(),
+      config: webLoginBasisKonfiguration("https://api.workos.test"),
+      store,
+      audit: () => {},
+      provision: async () => ({}),
+      zeitplan: { plane: async (name, intervallMs, lauf) => plaene.push({ name, lauf }) },
+      createPortalRunner: () => runner,
+      stripeWebhookPath: "/webhooks/stripe",
+      appPath: "/app",
+    });
+    await zeitplaeneAnmelden();
+    warnungen.length = 0;
+    await plaene.find((plan) => plan.name === "did-release").lauf.lauf();
+  } finally {
+    for (const attrappe of stumm) attrappe.mock.restore();
+  }
+  return warnungen;
+}
+
+test("Der Abgleich haelt eine Nummer nicht zurueck, deren Bindung Instanz A geschlossen hat", async () => {
+  const { store: b, runner, db } = await makePgTestStore();
+  await legeMandantAn(b, KUNDE);
+  await bindungAnlegen(db, { id: "pnu_abgleich", e164: KUNDEN_NUMMER });
+  await b.init();
+  const nummer = nummerAnlegen(b);
+  const mandant = b.load().tenants.find((eintrag) => eintrag.id === KUNDE);
+  mandant.status = "suspended";
+  mandant.suspendedAt = new Date(JETZT_MS - 30 * 24 * 3600 * MS_JE_SEKUNDE).toISOString();
+  const zustand = b.load();
+  zustand.numberAssignments.push({ id: "a_abgleich", numberId: nummer.id, tenantId: KUNDE, assignedAt: "x", releasedAt: null });
+  await b.plattformBindungenNachladen();
+  assert.equal(zustand.platformNumberUse[0].releasedAt, null);
+  await schliessen(db, "pnu_abgleich");
+  const warnungen = await abgleichWarnungen(b, runner);
+  const beobachtet = warnungen.filter((zeile) => zeile.includes("OBSERVE-ONLY"));
+  assert.ok(beobachtet.some((zeile) => zeile.includes(nummer.id)), warnungen.join("|"));
+  assert.ok(!warnungen.some((zeile) => zeile.includes("HOLD")), warnungen.join("|"));
 });
