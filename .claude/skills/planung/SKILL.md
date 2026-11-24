@@ -35,6 +35,7 @@ Bevor ein Häppchen geschnitten wird, ermittelst du mit Befehlen, worauf es aufs
 
 - **Design**: welche Bereiche zusammenspielen, über welchen Eingang je Bereich, welche Daten wohin fließen, und bei einer schwer umkehrbaren Entscheidung die ernsthaft verworfene Alternative mit Grund. Keine erfundenen Alternativen, wo es nur einen Weg gibt.
 - **Häppchen**: nummeriert, je 100–300 geänderte Zeilen, je Häppchen Dateien, Abnahmekriterien, Abnahmetest und Vorgänger. Ein Umbau ohne neues Verhalten ist ein eigenes Häppchen ohne neue Tests.
+- **Umbenennungen**: Eine Umbenennung (Geheimnis, Schlüssel, Name, den mehrere Dateien lesen) und jede Serie „Häppchen n von m“, die einen Namen ändert, geschieht nur atomar in einem Merge oder hinter einem Schalter, nie verteilt über mehrere Merges. Namen von Geheimnissen stehen allein in `tools/geheimnisse.json`.
 
 ### Durchstich zuerst (klein und groß)
 
