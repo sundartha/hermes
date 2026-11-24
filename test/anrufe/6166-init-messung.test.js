@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 
+import * as ops from "../../src/store/state-ops.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.ts";
@@ -54,7 +55,7 @@ test("6166-K1: Init 200 -> eine Zeile eingang nach der Zuordnung, eine Zeile ant
     await waitForLog(srv, /\[el-init\] antwort /);
     assert.deepEqual(zeilen(srv.stdout, "eingang"), [`[el-init] eingang call=${CALL_ID}`]);
     assert.deepEqual(zeilen(srv.stdout, "antwort"), [
-      `[el-init] antwort call=${CALL_ID} status=200 sprache=${agent.language} erste_rede=${JSON.stringify(agent.first_message.slice(0, FIRST_MESSAGE_ZEICHEN))}`,
+      `[el-init] antwort call=${CALL_ID} status=200 sprache=${agent.language} erste_rede=${JSON.stringify(agent.first_message.replaceAll("Jonas Beispiel", "***").slice(0, FIRST_MESSAGE_ZEICHEN))}`,
     ]);
     const log = srv.stdout.split("\n");
     assert.ok(log.findIndex((zeile) => zeile.startsWith("[el-init] eingang")) < log.findIndex((zeile) => zeile.startsWith("[el-init] gebunden")));
@@ -89,6 +90,7 @@ async function initMitInhalt(inhalt) {
   const store = {
     aktiveAnrufeAlle: async () => [{ ...AUSGEHEND, answeredAt: ABGEHOBEN }],
     getCall: () => AUSGEHEND,
+    tenantContext: () => ({ ownerName: "", firstName: "" }),
     bindInboundElConversation: () => ({ bound: true, changed: true, call: AUSGEHEND }),
   };
   const config = { voice: { elevenLabsInbound: { initWebhookToken: INIT_TOKEN }, elevenLabsOutbound: { agentId: AGENT_ID } } };
@@ -143,5 +145,27 @@ test("6166-K2: Startsprache und erste 40 Zeichen first_message als Tabelle, ohne
     const ergebnis = await initMitInhalt(() => antwort);
     assert.equal(ergebnis.status, HTTP_OK);
     assert.deepEqual(ergebnis.zeile, [`[el-init] antwort call=call_6166_aus status=200${erwartet}`], JSON.stringify(antwort));
+  }
+});
+
+const INHABER = "Anna Schmidt";
+
+test("6166-K3: eingehender Anruf -> Zeile antwort enthaelt weder Namen des Inhabers noch Vor- oder Nachnamen, stattdessen ***", async () => {
+  const seed = spawnSeedWartenderElCall({ callId: CALL_ID, bindungsToken: TOKEN, answeredVorS: 1 });
+  seed.tenants = ops.makeDefaultState().tenants.map((tenant) => ({ ...tenant, ownerName: INHABER, firstName: "Anna" }));
+  const srv = await startServer({ env: elInboundInitSpawnEnv(AGENT_ID), seed });
+  try {
+    const antwort = await sende(srv, koerper());
+    assert.equal(antwort.status, HTTP_OK);
+    const agent = (await antwort.json()).conversation_config_override.agent;
+    assert.ok(agent.first_message.includes(INHABER));
+    await waitForLog(srv, /\[el-init\] antwort /);
+    const [zeile] = zeilen(srv.stdout, "antwort");
+    assert.ok(!zeile.includes("Anna"), zeile);
+    assert.ok(!zeile.includes("Schmidt"), zeile);
+    assert.ok(zeile.includes("***"), zeile);
+    assert.equal(zeile, `[el-init] antwort call=${CALL_ID} status=200 sprache=${agent.language} erste_rede=${JSON.stringify(agent.first_message.replaceAll(INHABER, "***").slice(0, FIRST_MESSAGE_ZEICHEN))}`);
+  } finally {
+    await srv.stop();
   }
 });
