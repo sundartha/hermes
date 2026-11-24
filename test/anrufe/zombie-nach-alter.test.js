@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { isoVor } from "../_iel-inbound-harness.js";
 import { startServer, seedState, seedCall, waitForStoreState } from "../helpers.js";
 
 const DOMESTIC_TO = "+4915112345678";
 const MAX_S = 60;
-const MS_PER_MINUTE = 60_000;
+const SEKUNDEN_JE_MINUTE = 60;
 const FRISTEN_TAKT_MS = "40";
 
 function abgelaufenVorMinuten(id, minuten) {
-  const answeredAt = new Date(Date.now() - MAX_S * 1000 - minuten * MS_PER_MINUTE).toISOString();
+  const answeredAt = isoVor(MAX_S + minuten * SEKUNDEN_JE_MINUTE);
   return seedCall({
     id, direction: "outbound", to: DOMESTIC_TO, status: "active",
     answeredAt, startedAt: answeredAt, endedAt: null, maxDurationS: MAX_S,

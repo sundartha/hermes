@@ -4,10 +4,13 @@ import type { AnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { inDatenbankBeendet } from "./reattach.ts";
+import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
-export const ZOMBIE_ALTER_MS = 10 * 60 * 1000;
+const ZOMBIE_ALTER_MINUTEN = 10;
+
+export const ZOMBIE_ALTER_MS = ZOMBIE_ALTER_MINUTEN * MS_PER_MINUTE;
 
 export const BUDGET_FAILURE_REASON = "budget-exhausted";
 
