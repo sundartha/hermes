@@ -22,6 +22,7 @@ import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
+import { permanentErrorStreakExceeded } from "./fehlerserie.js";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
 import { meldeAgentErsteRede } from "./anrufstart-messung.ts";
@@ -50,7 +51,7 @@ const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
 const PERMANENT_FETCH_STATUS = Object.freeze([HTTP_UNAUTHORIZED, HTTP_NOT_FOUND]);
 
-export const PERMANENT_ERROR_STREAK_LIMIT = 3;
+export { PERMANENT_ERROR_STREAK_LIMIT } from "./fehlerserie.js";
 
 const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 
@@ -707,20 +708,6 @@ async function fetchConversationOutcome({ account, conversationId, callId, timeo
   }
 }
 
-function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) {
-  if (!permanent) {
-    permanentErrorStreaks.delete(callId);
-    return false;
-  }
-  const streak = (permanentErrorStreaks.get(callId) || 0) + 1;
-  if (streak < PERMANENT_ERROR_STREAK_LIMIT) {
-    permanentErrorStreaks.set(callId, streak);
-    return false;
-  }
-  permanentErrorStreaks.delete(callId);
-  return true;
-}
-
 async function saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId }) {
   const call = await store.leseCall(callId);
   const conversationId = call?.elevenlabsConversationId;
@@ -854,7 +841,6 @@ export function makeElevenLabsOutbound({
     return ausgang;
   }
 
-  const permanentErrorStreaks = new Map();
   const laufendeInboundPolls = new Set();
   const laufendeKetten = new Set();
 
@@ -895,7 +881,7 @@ export function makeElevenLabsOutbound({
     await schreibeAbfrageFrist(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
-    if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
+    if (await permanentErrorStreakExceeded({ store, call, permanent }))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {
       if (conversation && nichtErreichtNachFrist({ call, conversation, nowMs })) return finishNichtErreicht(finishDeps);
