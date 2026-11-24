@@ -5,8 +5,9 @@ import { zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 import { laufendeAusgaben } from "../gemeinsam/instanz-ausgabe.js";
 import { startServer } from "../helpers.js";
 
-const NIE_ERREICHT = [async () => ({ nummern: 0, auftraege: 0 }), () => false];
-const ZUSTAND = 'Zustand per SQL nicht erreicht: {"nummern":0,"auftraege":0}';
+const KURZE_FRIST_MS = 50;
+const NIE_ERREICHT = [async () => ({ nummern: 0, auftraege: 0 }), () => false, KURZE_FRIST_MS];
+const ZUSTAND = /^Zustand per SQL nach \d+ ms nicht erreicht: \{"nummern":0,"auftraege":0\}\n/;
 const SPUR_A = "stripe_webhook_activate tenant=t_spur_a profile=skip:no_plan provision=none";
 const SPUR_B = "stripe_webhook_ignored action=activate tenant=t_spur_b unknown_plan";
 
@@ -29,7 +30,7 @@ test("Frist von zeilenBis abgelaufen: Meldung nennt die Webhook-Spuren der laufe
     laufendeAusgaben.delete(b);
   });
   const beide = await fehlermeldung();
-  assert.ok(beide.startsWith(`${ZUSTAND}\n`), beide);
+  assert.match(beide, ZUSTAND);
   assert.ok(beide.endsWith(`\n${SPUR_A}\n${SPUR_B}`), beide);
   assert.doesNotMatch(beide, /anderes/);
   laufendeAusgaben.delete(a);

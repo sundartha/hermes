@@ -17,8 +17,8 @@ import {
 
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
-const ENDE_FRIST_MS = 6_000;
-const NEUSTART_ENDE_FRIST_MS = 15_000;
+const ENDE_FRIST_MS = 30_000;
+const NEUSTART_ENDE_FRIST_MS = 30_000;
 const AUFLEGEN_FRIST_MS = 3_000;
 const KURZ_S = 2;
 const LANG_S = 30;
