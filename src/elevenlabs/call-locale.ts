@@ -13,6 +13,7 @@ interface Sprachwahl {
 
 interface AnrufSprache {
   language: string;
+  providerLanguage: string;
   disclosureLanguage: string;
   voiceId: string;
   firstMessage: string;
@@ -29,6 +30,18 @@ const aufgeloesteSprache: (state: MandantZustand, zugriff: Zugriff) => string = 
 const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
+
+const AN_ANBIETER_DURCHGEREICHTE_SPRACHEN = Object.freeze(["pt", "es", "fr", "de", "en", "it", "nl"]);
+
+function primaererSprachcode(code: string): string {
+  return code.split("-")[0] ?? code;
+}
+
+function providerSpracheVon(textSprache: string, callLanguage: string | undefined): string {
+  if (callLanguage === undefined) return textSprache;
+  const basis = primaererSprachcode(callLanguage);
+  return AN_ANBIETER_DURCHGEREICHTE_SPRACHEN.includes(basis) ? basis : textSprache;
+}
 
 function calleeLanguage(to: string | null): string | null {
   const land = countryForE164(to);
@@ -68,12 +81,14 @@ export function callLocaleFor(
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
   const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage }));
+  const providerLanguage = providerSpracheVon(gespraech.language, callLanguage);
   return {
     language: gespraech.language,
+    providerLanguage,
     disclosureLanguage: offenlegung.language,
     voiceId: EINE_STIMME_ID,
     firstMessage:
-      gespraech.language === offenlegung.language
+      providerLanguage === offenlegung.language
         ? EROEFFNUNG_PLATZHALTER
         : providerDisclosureFirst(offenlegung, ownerName),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
