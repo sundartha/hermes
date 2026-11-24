@@ -56,7 +56,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
 
   async function synthToServeUrl(text, cfg, ablage) {
     const nowIso = new Date().toISOString();
-    const usage = await store.platformTtsUsageView?.(nowIso);
+    const usage = store.platformTtsUsageView?.(nowIso);
     if (usage && ttsQuotaExhausted(usage)) {
       warnQuotaDegradation(usage);
       return null;
@@ -68,7 +68,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}${detail}) -> Azure-Fallback`);
       return null;
     }
-    const warning = await store.recordTtsCharacters(chars, nowIso);
+    const warning = store.recordTtsCharacters(chars, nowIso);
     if (warning?.exhausted) {
       warnQuotaDegradation(warning);
       return null;
@@ -79,7 +79,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
 
   async function synthesizeVorspann(text, voiceId) {
     const nowIso = new Date().toISOString();
-    if (ttsQuotaExhausted(await store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
+    if (ttsQuotaExhausted(store.platformTtsUsageView(nowIso))) return { quotaErschoepft: true };
     const stimme = {
       ...config.voice.elevenLabsPlayTts,
       voiceId,
@@ -88,7 +88,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     };
     const result = await synthesizeSpeechStream(text, synthOptionen(stimme));
     if (!result.ok) return result;
-    const warning = await store.recordTtsCharacters(text.length, nowIso);
+    const warning = store.recordTtsCharacters(text.length, nowIso);
     if (warning?.exhausted) return { quotaErschoepft: true };
     if (warning) onQuotaWarning(warning);
     return result;

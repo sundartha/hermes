@@ -16,7 +16,6 @@ import {
   setzeGeldImSpiegel,
   setzeHoechstdauerImSpiegel,
   setzeAbfrageImSpiegel,
-  fortschreibeFehlerserieImSpiegel,
   setzeUebergabeImSpiegel,
   setzeReserveImSpiegel,
 } from "./store/fristen-sql.js";
@@ -37,7 +36,9 @@ async function createPgBackend() {
     mandantSperreGelesenVon,
     macheRueckfrageSql,
   } = await import("./store/pg.js");
-  const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import("./store/webhook-zustellung.js");
+  const { leiteSchluesselAb, makeWebhookZustellung, planeLoeschtakt } = await import(
+    "./store/webhook-zustellung.js"
+  );
   const startSperre = await import("./store/start-sperre.js");
   const anrufSperre = await import("./store/anruf-sperre-pg.js");
   const { rolleVorhanden: rolleImKatalog } = await import("./db/migrate.js");
@@ -102,7 +103,6 @@ async function createPgBackend() {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeAbfrage(anfrage);
     },
-    fortschreibeFehlerserie: (anfrage) => makePostgresFristen(runner).fortschreibeFehlerserie(anfrage),
     setzeUebergabeFrist: async (anfrage) => {
       await store.drainFlushes();
       return makePostgresFristen(runner).setzeUebergabe(anfrage);
@@ -241,13 +241,6 @@ function jsonBackendAufbauen() {
       setzeAbfrageImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
     },
-    fortschreibeFehlerserie: async (anfrage) => {
-      const spiegel = jsonBackend.load();
-      const vorher = spiegel.calls.find((eintrag) => eintrag.id === anfrage.callId)?.permanentFehlerSerie;
-      const serie = fortschreibeFehlerserieImSpiegel(spiegel, anfrage);
-      if (serie !== vorher) jsonBackend.save();
-      return serie;
-    },
     setzeUebergabeFrist: async (anfrage) => {
       setzeUebergabeImSpiegel(jsonBackend.load(), anfrage);
       jsonBackend.save();
@@ -333,7 +326,6 @@ export const {
   setzeGeldFrist,
   setzeReserveFrist,
   setzeAbfrageFrist,
-  fortschreibeFehlerserie,
   setzeUebergabeFrist,
   setzeVorspannFrist,
   leereVorspannFrist,

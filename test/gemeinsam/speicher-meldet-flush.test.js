@@ -5,8 +5,8 @@ import { starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js
 const laufendesHermes = await starteHermesMitPglite({ alarmPostfach: "postfach@flush.invalid" });
 const speicher = await import("../../src/store.js");
 const MELDUNG = "Speicher bietet letzterFlushGelungen nicht an";
-const TABELLE_DES_FLUSHS = "usage_event";
-const TABELLE_VERSTECKT = "usage_event_versteckt";
+const TABELLE_DES_FLUSHS = "platform_tts_usage";
+const TABELLE_VERSTECKT = "platform_tts_usage_versteckt";
 
 async function flushMoeglichMachen(db) {
   await db.exec(`RESET ROLE; ALTER TABLE ${TABELLE_VERSTECKT} RENAME TO ${TABELLE_DES_FLUSHS}; SET ROLE kv2_app;`);

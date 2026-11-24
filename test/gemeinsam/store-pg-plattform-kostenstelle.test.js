@@ -21,13 +21,6 @@ async function mitGeflushtenZeichen() {
   return { store, db, runner };
 }
 
-async function kostenstelleZeichen(db) {
-  const ergebnis = await db.query(`SELECT kostenstelle_zeichen FROM platform_tts_usage WHERE id = $1`, [
-    SINGLETON_ID,
-  ]);
-  return Number(ergebnis.rows[0].kostenstelle_zeichen);
-}
-
 async function zaehlen(db, tabelle, spalte) {
   const ergebnis = await db.query(`SELECT count(*)::int AS n FROM ${tabelle} WHERE ${spalte} = $1`, [
     PLATFORM_TTS_TENANT,
@@ -36,22 +29,22 @@ async function zaehlen(db, tabelle, spalte) {
 }
 
 test("Kostenstelle platform:play-tts behaelt ihre Zeichen ueber einen Neustart", async () => {
-  const { runner, db } = await mitGeflushtenZeichen();
+  const { runner } = await mitGeflushtenZeichen();
 
-  await neuGeoeffnet(runner);
+  const geoeffnet = await neuGeoeffnet(runner);
 
-  assert.equal(await kostenstelleZeichen(db), ERSTE_ZEICHEN);
+  assert.equal(geoeffnet.usageOf(PLATFORM_TTS_TENANT).ttsCharacters, ERSTE_ZEICHEN);
 });
 
 test("Kostenstelle platform:play-tts wird nach dem Neustart fortgeschrieben, nicht ueberschrieben", async () => {
-  const { runner, db } = await mitGeflushtenZeichen();
+  const { runner } = await mitGeflushtenZeichen();
   const geoeffnet = await neuGeoeffnet(runner);
 
   geoeffnet.recordTtsCharacters(WEITERE_ZEICHEN, NOW_ISO);
   await geoeffnet.drainFlushes();
-  await neuGeoeffnet(runner);
+  const nochmalGeoeffnet = await neuGeoeffnet(runner);
 
-  assert.equal(await kostenstelleZeichen(db), ERSTE_ZEICHEN + WEITERE_ZEICHEN);
+  assert.equal(nochmalGeoeffnet.usageOf(PLATFORM_TTS_TENANT).ttsCharacters, ERSTE_ZEICHEN + WEITERE_ZEICHEN);
 });
 
 test("Kostenstelle platform:play-tts legt keinen Schein-Mandanten in tenant oder usage an", async () => {

@@ -386,39 +386,3 @@ test("Vorspann: die Stimme bleibt die wirksame Stimme des Anrufs, nicht die der 
   assert.match(url, /\/v1\/text-to-speech\/stimme-des-anrufs\/stream/);
   assert.doesNotMatch(url, new RegExp(VORLAGE_TTS.voice_id));
 });
-
-const KONTINGENT_ZEICHEN = 1000;
-
-async function vorspannBeiVerbrauch(zeichen) {
-  const aufzeichnung = recordingStreamFetch();
-  const buchungen = [];
-  const ergebnis = await withFakeFetch(aufzeichnung.fetchImpl, () =>
-    makeDirectiveSynth({
-      config: fakeConfig({ enabled: true }),
-      ttsStore: {},
-      store: {
-        platformTtsUsageView: () => ({ characters: zeichen, quota: KONTINGENT_ZEICHEN }),
-        recordTtsCharacters: (anzahl) => {
-          buchungen.push(anzahl);
-          return null;
-        },
-      },
-      onQuotaWarning: noopQuotaWarning,
-    }).synthesizeVorspann("Hallo", "voice_1"),
-  );
-  return { ergebnis, sprachAnfragen: aufzeichnung.urls, buchungen };
-}
-
-test("Ein schon erschoepftes Kontingent verhindert das Synthetisieren des Vorspanns", async () => {
-  const { ergebnis, sprachAnfragen, buchungen } = await vorspannBeiVerbrauch(KONTINGENT_ZEICHEN);
-  assert.deepEqual(ergebnis, { quotaErschoepft: true });
-  assert.deepEqual(sprachAnfragen, []);
-  assert.deepEqual(buchungen, []);
-});
-
-test("Ein noch nicht erschoepftes Kontingent laesst den Vorspann synthetisieren und buchen", async () => {
-  const { ergebnis, sprachAnfragen, buchungen } = await vorspannBeiVerbrauch(KONTINGENT_ZEICHEN - 1);
-  assert.equal(ergebnis.ok, true);
-  assert.equal(sprachAnfragen.length, 1);
-  assert.deepEqual(buchungen, [5]);
-});

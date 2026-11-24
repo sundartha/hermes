@@ -6,7 +6,6 @@ import {
   istBeweisendeHerkunft,
 } from "../begriffe/abrechnung.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
-import { fehlerText } from "../utils/fehler-text.ts";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { speicherBereiche } from "../store.js";
@@ -106,7 +105,7 @@ interface Speicher {
     dataComplete: boolean;
     chargeAnchors: unknown;
   }): { booked: boolean; deltaCents: number };
-  recordRelayTtsCharacters(tenantId: string, zeichen: number, zeitIso: string): Promise<TtsWarnung | null | undefined> | TtsWarnung | null | undefined;
+  recordRelayTtsCharacters(tenantId: string, zeichen: number, zeitIso: string): TtsWarnung | null | undefined;
   recordCallCostTruingResult(callId: string, ergebnis: { source: string | null; actualCostMicroCents: number | null; closedAt: string | null }): unknown;
 }
 
@@ -572,15 +571,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return settlementProjektion({ call, belege: store.callCostEvidence(call.id) });
   }
 
-  async function bookTtsCharactersFor(call: KostenAnruf, measured: Messung, sammler: Sammler): Promise<void> {
+  function bookTtsCharactersFor(call: KostenAnruf, measured: Messung, sammler: Sammler): void {
     if (measured.ttsCharacters <= 0) return;
     const nowMs = now();
-    try {
-      const warnung = await store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
-      if (warnung) sammler.ttsWarnungen.push(warnung);
-    } catch (err) {
-      console.warn(`[cost-truing] TTS-Zeichen nicht gebucht call=${call.id}: ${fehlerText(err)}`);
-    }
+    const warnung = store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
+    if (warnung) sammler.ttsWarnungen.push(warnung);
   }
 
   async function reportTtsQuotaFinding(warning: TtsWarnung, nowMs: number): Promise<void> {
@@ -701,7 +696,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
     if (measured && closed) {
       warnOnCostDrift(call, measured.actualCostMicroCents);
-      await bookTtsCharactersFor(call, measured, sammler);
+      bookTtsCharactersFor(call, measured, sammler);
     }
     if (closed) setteleAnruf({ call, projektion, store, config });
     if (closed) meldeAbschluss(call, abschluss, sammler);
