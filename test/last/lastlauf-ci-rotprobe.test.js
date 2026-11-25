@@ -15,7 +15,7 @@ const K6_ACTION = "grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cd
 const LAUF = fileURLToPath(new URL("../../scripts/last/lauf.mjs", import.meta.url));
 
 function jobText(name) {
-  const treffer = CI.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [a-z]+:\\n|(?![\\s\\S]))`, "m"));
+  const treffer = CI.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [a-z0-9-]+:\\n|(?![\\s\\S]))`, "m"));
   assert.ok(treffer, `Job ${name} fehlt in ci.yml`);
   return treffer[1];
 }
@@ -120,10 +120,11 @@ const JOB_ZEITGRENZEN = {
   webtests: 10,
   rotprobe: 10,
   ci: 5,
+  "vorprobe-node26": 20,
 };
 
 test("CI: jeder Job hat auf Job-Ebene genau seine Zeitgrenze, kein Job liegt ausserhalb der Tabelle", () => {
-  const jobs = [...CI.slice(CI.indexOf("\njobs:")).matchAll(/^ {2}([a-z]+):$/gm)].map((t) => t[1]);
+  const jobs = [...CI.slice(CI.indexOf("\njobs:")).matchAll(/^ {2}([a-z0-9-]+):$/gm)].map((t) => t[1]);
   assert.deepEqual([...jobs].sort(), Object.keys(JOB_ZEITGRENZEN).sort());
   for (const [name, minuten] of Object.entries(JOB_ZEITGRENZEN)) {
     const grenzen = [...jobText(name).matchAll(/^ {4}timeout-minutes: (\d+)$/gm)].map((t) => Number(t[1]));
