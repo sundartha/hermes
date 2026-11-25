@@ -5,7 +5,7 @@ import express from "express";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { resolveOnboardCountry, timezoneForCountry } from "../../src/geo/resolve.js";
+import { resolveOnboardCountry, timezoneForCountry } from "../../src/geo/resolve.ts";
 import { makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
