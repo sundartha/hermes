@@ -8,7 +8,7 @@ export function normalisiert(nummer) {
   return String(nummer).replace(SCHREIBWEISE, "");
 }
 
-const GRUND_MAX = 60;
+const GRUND_MAX = 100;
 const GRUNDCODE = /^[A-Za-z_]+$/;
 const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
 
@@ -17,7 +17,8 @@ function bereinigt(fehler) {
   const meldung = typeof fehler.message === "string" && MELDUNGSCODE.test(fehler.message) ? fehler.message : null;
   const kandidaten = [fehler.code, fehler.cause?.code, fehler.name];
   const code = kandidaten.find((wert) => typeof wert === "string" && GRUNDCODE.test(wert));
-  return (meldung ?? code ?? "unbekannt").slice(0, GRUND_MAX);
+  const detail = meldung !== null && typeof fehler.detail === "string" && GRUNDCODE.test(fehler.detail) ? `:${fehler.detail}` : "";
+  return `${meldung ?? code ?? "unbekannt"}${detail}`.slice(0, GRUND_MAX);
 }
 
 async function messenOderNichts(messen) {
