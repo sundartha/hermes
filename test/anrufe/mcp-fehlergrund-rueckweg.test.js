@@ -142,6 +142,8 @@ test("6: Rueckwaertskompatibilitaet - pickTranscript ohne dritten Parameter blei
     "objective_achieved",
     "open_points",
     "outcome",
+    "result_reason",
+    "result_state",
     "result_summary",
   ]);
 });

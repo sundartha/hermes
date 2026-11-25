@@ -67,6 +67,7 @@ const GEGENSEITE = { role: "user", text: "Praxis Dr. Beispiel, guten Tag." };
 const TABELLE = [
   ["nur Menue erreicht: Agent spricht, Gegenseite nie", { transcript: [AGENT, MENUE] }, "not_done", "menu-only"],
   ["Gegenseite mit leerem Text zaehlt nicht als Gegenseite", { transcript: [AGENT, { role: "user", text: "  " }] }, "not_done", "menu-only"],
+  ["Gegenseite ohne text-Feld zaehlt nicht als Gegenseite", { transcript: [AGENT, { role: "user" }] }, "not_done", "menu-only"],
   ["niemand abgenommen: kein answeredAt", { answeredAt: null, status: "failed", failureReason: "busy" }, "not_done", "no-answer"],
   ["Fehlergrund no-answer trotz answeredAt", { failureReason: "no-answer", transcript: [AGENT, GEGENSEITE] }, "not_done", "no-answer"],
   ["Fehlergrund no-answer mit Detail", { failureReason: "no-answer: 480", transcript: [AGENT, GEGENSEITE] }, "not_done", "no-answer"],

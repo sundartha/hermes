@@ -37,7 +37,8 @@ export const AWAIT_CALL_EVENT_DESCRIPTION =
 
 export const CALL_RESULT_DESCRIPTION =
   "After the call has ended, returns call_id, result_summary, objective_achieved and the " +
-  "result card: outcome, commitments, counterparty_commitments, open_points, next_step, and next_steps (a list of {type, text, at} follow-ups agreed in the call; \"at\" is an optional date or date-time; Hermes enters nothing into any calendar). " +
+  "result card: outcome, commitments, counterparty_commitments, open_points, next_step, and next_steps (a list of {type, text, at} follow-ups agreed in the call; \"at\" is an optional date or date-time; Hermes enters nothing into any calendar), " +
+  "result_state (done_confirmed, not_done or unconfirmed) and result_reason (menu-only, no-answer or null). " +
   "This tool NEVER returns the raw transcript - the user keeps seeing the conversation " +
   "transcript in their own customer area for the retention period (30 days by default), " +
   "and place_call's diagnostic field only switches off the separate diagnostic retention, " +

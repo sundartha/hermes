@@ -1,7 +1,6 @@
 import { failureReasonBase } from "./failure-reason.ts";
 
 export const RESULT_STATE = Object.freeze({
-  DONE_CONFIRMED: "done_confirmed",
   NOT_DONE: "not_done",
   UNCONFIRMED: "unconfirmed",
 });
