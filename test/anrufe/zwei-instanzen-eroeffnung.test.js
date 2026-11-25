@@ -9,7 +9,7 @@ const ZEITGRENZE_MS = 120_000;
 const EINMAL = 1;
 const GRUSS = "Hallo,";
 const KI_HINWEIS = "ich bin Hermes, der KI-Assistent von Jonas Beispiel";
-const ANSCHLUSS = "Es geht um Folgendes: Termin vereinbaren. Bitte sprechen Sie.";
+const ANSCHLUSS = "Es geht um Folgendes: Termin am Donnerstag vereinbaren. Bitte sprechen Sie.";
 const TEXT_SQL = "SELECT text FROM vorspann_zustand WHERE call_id = $1";
 
 const vorkommen = (text, teil) => text.split(teil).length - EINMAL;
