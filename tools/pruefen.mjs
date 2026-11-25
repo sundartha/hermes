@@ -607,13 +607,13 @@ const dauerLaden = () => Object.assign({}, ...abdeckungDateien(DAUER_TEIL));
 
 function mutantenZeile({ datei, offset }) {
   const text = `${readFileSync(datei, "utf8")}\n`;
-  return text.slice(text.lastIndexOf("\n", offset) + 1, text.indexOf("\n", offset));
+  const rumpf = /^stryMutAct_\w+\("[^"]*"\)\)\s*\{\s*\}\s*else\s*(?=\{)/.exec(text.slice(offset));
+  let tiefe = 0;
+  const schluss = rumpf && [...text.matchAll(/[{}]/g)].find(({ 0: klammer, index }) => index >= offset + rumpf[0].length && (tiefe += klammer === "{" ? 1 : -1) === 0);
+  return text.slice(text.lastIndexOf("\n", offset) + 1, schluss ? schluss.index + 1 : text.indexOf("\n", offset));
 }
 
-function ausgabeKurz(ausgabe) {
-  const zeilen = ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN);
-  return zeilen.map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
-}
+const ausgabeKurz = (ausgabe) => ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN).map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
 
 export function basisRotZeilen({ schluessel, ausgeschlossen = [], basisRotAusgabe = {} }) {
   return ausgeschlossen.flatMap((datei) => [`Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`, ...(basisRotAusgabe[datei] ? [basisRotAusgabe[datei]] : [])]);
