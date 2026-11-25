@@ -204,6 +204,50 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  vorprobe-node26:
+    name: Vorprobe Node 26 ${{ matrix.teil }}/6
+    if: github.event_name != 'push'
+      && github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Postgres starten
+        uses: ./.github/actions/postgres
+
+      - name: Node 26 und npm ci
+        uses: ./.github/actions/node-npm-ci
+        with:
+          node-version: "26"
+          web: "false"
+
+      - name: Tests
+        env:
+          TEIL: ${{ matrix.teil }}
+        run: |
+          set -euo pipefail
+          mapfile -t dateien < <(git ls-files test | grep -E '\.test\.[cm]?[jt]s$' | sort | awk -v teil="$TEIL" 'NR % 6 == teil % 6')
+          npm test -- "${dateien[@]}" -- --test-concurrency=4
+
+      - name: Protokoll bei Rot hochladen
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: protokoll-vorprobe-node26-${{ matrix.teil }}
+          path: .pruefung/regression.log
+          if-no-files-found: ignore
+          retention-days: 14
+
   webtests:
     name: Web-Tests
     if: github.event_name != 'push'
