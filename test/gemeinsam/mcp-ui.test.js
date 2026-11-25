@@ -388,6 +388,8 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
         "objective_achieved",
         "open_points",
         "outcome",
+        "result_reason",
+        "result_state",
         "result_summary",
       ],
       "Textblock: Summary/Ziel/Ergebnis-Karte ohne call_id (kein Roh-Transkript)",
@@ -404,6 +406,8 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
       "objective_achieved",
       "open_points",
       "outcome",
+      "result_reason",
+      "result_state",
       "result_summary",
       "to",
     ]);
@@ -471,6 +475,8 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
       "objective_achieved",
       "open_points",
       "outcome",
+      "result_reason",
+      "result_state",
       "result_summary",
       "to",
     ]);
