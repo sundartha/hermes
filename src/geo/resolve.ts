@@ -28,8 +28,10 @@ export function resolveOnboardCountry({
 }
 
 export function timezoneForCountry(country: unknown): string {
-  const zeitzonen: Readonly<Record<string, string>> = TIMEZONE_FOR_COUNTRY;
-  return zeitzonen[String(country).toUpperCase()] ?? DEFAULT_TIMEZONE;
+  return (
+    (TIMEZONE_FOR_COUNTRY as Readonly<Record<string, string>>)[String(country).toUpperCase()] ??
+    DEFAULT_TIMEZONE
+  );
 }
 
 export function tenantGeoForCountry(country: string): {
