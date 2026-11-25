@@ -809,6 +809,16 @@ function prTextLesen(argv) {
   }
 }
 
+function protokollLesen(arbeitsbaum) {
+  const pfad = join(arbeitsbaum, ".pruefung", "regression.log");
+  return existsSync(pfad) ? readFileSync(pfad, "utf8") : "";
+}
+
+function nurUebersprungen(ausgabe) {
+  const zahl = (name) => Number(new RegExp(`^(?:#|ℹ) ${name} (\\d+)$`, "m").exec(ausgabe)?.[1] ?? 0);
+  return zahl("skipped") > 0 && zahl("pass") === 0;
+}
+
 function gruenAufBasis(basis, hinzugekommen) {
   const ordner = mkdtempSync(join(tmpdir(), "rotprobe-vorab-"));
   const arbeitsbaum = join(ordner, "basis");
@@ -819,7 +829,14 @@ function gruenAufBasis(basis, hinzugekommen) {
       writeFileSync(join(arbeitsbaum, datei), readFileSync(datei));
     }
     if (existsSync("node_modules") && !existsSync(join(arbeitsbaum, "node_modules"))) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
-    return hinzugekommen.filter((datei) => TESTDATEI.test(datei)).filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
+    const gruen = [];
+    const nichtPruefbar = [];
+    for (const datei of hinzugekommen.filter((name) => TESTDATEI.test(name))) {
+      const lauf = spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, encoding: "utf8", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" });
+      if (lauf.status !== 0) continue;
+      (nurUebersprungen(lauf.stdout + protokollLesen(arbeitsbaum)) ? nichtPruefbar : gruen).push(datei);
+    }
+    return { gruen, nichtPruefbar };
   } finally {
     git(["worktree", "remove", "--force", arbeitsbaum]);
     rmSync(ordner, { recursive: true, force: true });
@@ -837,7 +854,9 @@ function prTextVorab(argv) {
     return 0;
   }
   const genannt = gruenAufMaster(prText).map(({ datei }) => datei);
-  const fehlend = gruenAufBasis(basis, hinzugekommen).filter((datei) => !genannt.includes(datei));
+  const { gruen, nichtPruefbar } = gruenAufBasis(basis, hinzugekommen);
+  for (const datei of nichtPruefbar) console.log(`${datei}: nicht prüfbar ohne Datenbank, die CI-Rotprobe entscheidet`);
+  const fehlend = gruen.filter((datei) => !genannt.includes(datei));
   for (const datei of fehlend) console.log(`${datei} ist auf master grün; der PR-Text nennt sie nicht unter „## Überlebende Mutanten“. Eintrag: \`src/datei.js:zeile/id\` wird getötet von \`${datei}\``);
   return fehlend.length === 0 ? 0 : EXIT_ROT;
 }
