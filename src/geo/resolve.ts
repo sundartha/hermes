@@ -11,11 +11,11 @@ export function normCountry(raw: unknown): string | null {
   return /^[A-Z]{2}$/.test(cc) ? cc : null;
 }
 
-type OnboardCountryEingabe = {
+interface OnboardCountryEingabe {
   userCountry?: unknown;
   proposedCountry?: unknown;
   fallbackCountry?: string;
-};
+}
 
 export function resolveOnboardCountry({
   userCountry,
