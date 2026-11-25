@@ -44,11 +44,11 @@ function baueMerge() {
 }
 
 function fuehreAus(schritt, verz, umgebung) {
-  const datei = join(verz, "..", `env-${Date.now()}-${Math.random()}`);
+  const datei = join(mkdtempSync(join(tmpdir(), "env-")), "env");
   writeFileSync(datei, "");
   spawnSync("bash", ["-c", schritt.run], { cwd: verz, env: { ...process.env, ...umgebung, GITHUB_ENV: datei }, encoding: "utf8" });
   const text = readFileSync(datei, "utf8");
-  rmSync(datei);
+  rmSync(join(datei, ".."), { recursive: true, force: true });
   return text.trim();
 }
 
