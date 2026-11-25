@@ -12,8 +12,10 @@ const GRUND_MAX = 60;
 const GRUNDCODE = /^[A-Za-z_]+$/;
 const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
 
+const kleinbuchstabeOderStrich = (zeichen) => zeichen === "_" || (zeichen >= "a" && zeichen <= "z");
+
 function detailSuffix(fehler, meldung) {
-  const gueltig = meldung !== null && typeof fehler.detail === "string" && GRUNDCODE.test(fehler.detail);
+  const gueltig = meldung !== null && typeof fehler.detail === "string" && [...fehler.detail].every(kleinbuchstabeOderStrich);
   return gueltig ? `:${fehler.detail}` : "";
 }
 
