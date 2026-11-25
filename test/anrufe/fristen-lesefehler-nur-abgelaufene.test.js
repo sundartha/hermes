@@ -73,7 +73,7 @@ test("Kriterium 7: bei nicht lesbarer Frist endet nur der abgelaufene Anruf, ein
   const abgelaufen = neu(CARRIER_ID, 2 * MINUTE_MS);
   const laeuft = neu("CA_laeuft_noch", 1000);
   store.save();
-  await waitUntil(() => store.getCall(abgelaufen.id)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(abgelaufen.id)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   assert.equal(store.getCall(laeuft.id).status, "active");
   assert.deepEqual(auflegen, [CARRIER_ID]);
 });

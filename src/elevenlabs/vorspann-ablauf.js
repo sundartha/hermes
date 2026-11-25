@@ -37,6 +37,7 @@ function meldeWiedergabeStartFehler(callId, fehler) {
   meldeVorspannRueckfall({ callId, grund: VORSPANN_WAHL_GRUND.NICHT_ABGESPIELT, ursache: NICHT_ABGESPIELT_URSACHE.START_ABGELEHNT });
 }
 
+
 function behandleWiedergabeStartFehler({ call, store, wiedergabe, elWahl }) {
   if (wiedergabe.status !== "rejected") return;
   meldeWiedergabeStartFehler(call.id, wiedergabe.reason);
@@ -308,14 +309,10 @@ export function makeVorspannAblauf({
   }
 
   const { beiElAngenommen, beiWiedergabeEnde } = makeVorspannBruecke({
-    voiceControl,
-    store,
-    ttsStore,
-    vorspannZustand,
+    voiceControl, store, ttsStore, vorspannZustand,
     legeBeideBeineAuf: legeBeideBeineAufMitUhr,
     vermerkeElFehler: vermerkeElFehlerFuer, vermerkeNichtAbgespielt: (call) => vermerkeNichtAbgespielt({ call, store }),
-    logFehler,
-    now,
+    logFehler, now,
   });
 
   async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben, aufgelegt = zustand.aufgelegt }) {
@@ -342,9 +339,13 @@ export function makeVorspannAblauf({
     [CALL_CONTROL_EREIGNIS.WIEDERGABE_ENDE]: (args) => (args.vomElBein ? undefined : beiWiedergabeEnde(args)),
   });
 
-  async function behandle({ call, ereignis, zugang }) {
+  async function behandle({ call, ereignis, zugang, nachLesen }) {
+    const zustand = await ladeZustand(call).catch((fehler) => {
+      logFehler("ereignis", call.id, fehler);
+      throw fehler;
+    });
+    nachLesen?.();
     try {
-      const zustand = await ladeZustand(call);
       const vomElBein = ereignis.callControlId === (zustand ? elBeinVon(call, zustand) : call.elCallControlId);
       if (!zustand) return await behandleOhneZustand({ voiceControl, store, terminateAndBillCall, billThunk, finishCall, beiAufgelegt, logFehler, call, ereignis, vomElBein, now });
       zustand.calleeId ??= await vorspannZustand.setzeCallee({ ...zustandsRef(call), calleeId: ereignis.callControlId });

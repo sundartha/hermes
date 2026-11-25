@@ -15,7 +15,7 @@ const abfrage = async () => {
 
 export const anrufer = anruferBauen({
   basis: env.STAGING_URL,
-  token: env.STAGING_TEST_TOKEN,
+  token: env.STAGING_PROBE_TOKEN,
   ziel: env.STAGING_PROBE_ZIEL,
   sprache: "de",
   auftraggeber: "Probe GmbH",

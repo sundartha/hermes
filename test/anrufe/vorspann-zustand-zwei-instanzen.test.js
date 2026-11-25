@@ -11,6 +11,7 @@ import { mitZweiHermesAufPostgres, postgresVorhanden, zeilenBis } from "./hermes
 
 const ZEITGRENZE_MS = 120_000;
 const HTTP_OK = 200;
+const HTTP_NICHT_ERREICHBAR = 503;
 const TTL_S = 165;
 const TTL_UNTERGRENZE_S = 135;
 const AUDIO = Buffer.alloc(200_000, 0xab);
@@ -179,13 +180,13 @@ test("Wird der Anruf waehrend der Wahl abgebrochen, bleibt keine Zeile zurueck",
   });
 });
 
-test("Scheitert das Loeschen der Zeile beim Auflegen, wird der Anruf trotzdem beendet", { timeout: ZEITGRENZE_MS }, async (t) => {
+test("Ist die Zeile beim Auflegen nicht lesbar, bleibt der Anruf aktiv und der Anbieter stellt neu zu", { timeout: ZEITGRENZE_MS }, async (t) => {
   if (!postgresVorhanden()) return;
   await mitAnbieter(t, {}, async ({ a, sql, signer }) => {
     assert.equal((await platziere(a)).status, HTTP_OK);
     const callId = await callIdVon(sql);
     await sql("ALTER TABLE vorspann_zustand RENAME TO vorspann_zustand_weg");
-    assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_OK);
+    assert.equal((await ereignis(signer, a, { callId, art: "call.hangup" })).status, HTTP_NICHT_ERREICHBAR);
     await zeilenBis(async () => a.stdout, (text) => text.includes(`[el-vorspann] ereignis fehlgeschlagen call=${callId}`));
     assert.equal((await sql("SELECT status FROM call WHERE id = $1", [callId])).rows[0].status, "active");
   });

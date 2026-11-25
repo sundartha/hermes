@@ -11,6 +11,10 @@ import { ABSTAND_MS, normalisiert } from "./wiederholung.mjs";
 const ABFRAGE_FRIST_MS = 10_000;
 const TAKT_MS = 2000;
 const MS_JE_SEKUNDE = 1000;
+const SEKUNDEN_JE_MINUTE = 60;
+const ROUTE_AUFRUFE_JE_MINUTE = 30;
+const ROUTE_PUFFER_MS = 100;
+export const ROUTEN_ABSTAND_MS = (SEKUNDEN_JE_MINUTE * MS_JE_SEKUNDE) / ROUTE_AUFRUFE_JE_MINUTE + ROUTE_PUFFER_MS;
 const ENDSTATUS = Object.freeze(["completed", "failed", "cancelled", "no_answer", "busy"]);
 const GEGENSEITE = Object.freeze(["Gegenseite: ", "Other party: ", "Interlocuteur: "]);
 const PROBEN_LAENGEN_IM_PUFFER = 2;
@@ -50,7 +54,7 @@ function leseRpc(text) {
 }
 
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
-  const antwort = await abfrage(`${basis}/mcp`, {
+  const antwort = await abfrage(`${basis}/intern/probe/mcp`, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(ABFRAGE_FRIST_MS),
@@ -141,11 +145,34 @@ async function gegenLesen({ ruf, uhr, probeStartMs, lesen, nachlaufMs }) {
   }
 }
 
-export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR }) {
-  const ruf = (name, argumente) => werkzeug({ abfrage, basis, token, name, argumente });
+function startLeser(ruf) {
+  const bekannt = new Map();
+  return async (anruf) => {
+    if (!bekannt.has(anruf.id)) bekannt.set(anruf.id, startMs(await ruf("get_call_status", { call_id: anruf.id })));
+    return bekannt.get(anruf.id);
+  };
+}
+
+function drossel(uhr, abstandMs) {
+  let letzter;
+  return async () => {
+    if (abstandMs > 0 && letzter !== undefined) {
+      const rest = letzter + abstandMs - uhr.jetzt();
+      if (rest > 0) await uhr.warte(rest);
+    }
+    letzter = uhr.jetzt();
+  };
+}
+
+export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vorname, abfrage, uhr = ECHTE_UHR, abstandMs = 0 }) {
+  const platz = drossel(uhr, abstandMs);
+  const aufruf = async (angaben) => {
+    await platz();
+    return werkzeug({ abfrage, basis, token, ...angaben });
+  };
+  const ruf = (name, argumente) => aufruf({ name, argumente });
   const zielNorm = normalisiert(ziel);
-  const abbrechen = (callId) =>
-    werkzeug({ abfrage, basis, token, name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
+  const abbrechen = (callId) => aufruf({ name: "cancel_call", argumente: { call_id: callId }, ohneStruktur: true });
 
   let probeStartMs = Number.NaN;
   let probeCallId;
@@ -182,7 +209,7 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
     tagesstand: async () => {
       const { calls } = await ruf("list_calls", {});
       const heute = new Date(uhr.jetzt()).toISOString().slice(0, TAG_LAENGE);
-      const startVon = async (anruf) => startMs(await ruf("get_call_status", { call_id: anruf.id }));
+      const startVon = startLeser(ruf);
       const tag = (ms) => new Date(ms).toISOString().slice(0, TAG_LAENGE);
       if (calls.length >= LISTE_OBERGRENZE) {
         const tage = [];
@@ -242,10 +269,11 @@ export function anruferBauen({ basis, token, ziel, sprache, auftraggeber, vornam
 
 export const anrufer = anruferBauen({
   basis: env.STAGING_URL,
-  token: env.STAGING_TEST_TOKEN,
+  token: env.STAGING_PROBE_TOKEN,
   ziel: env.STAGING_PROBE_ZIEL,
   sprache: SPRACHE,
   auftraggeber: env.STAGING_PROBE_AUFTRAGGEBER,
   vorname: env.STAGING_PROBE_VORNAME,
   abfrage: (...argumente) => fetch(...argumente),
+  abstandMs: ROUTEN_ABSTAND_MS,
 });

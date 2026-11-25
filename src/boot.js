@@ -31,6 +31,7 @@ import {
   llmFallbackFindings,
   elInboundAccessFindings,
   angekuendigterOriginFindings,
+  instanzZahlFindings,
 } from "./boot-guard.ts";
 import { sleep } from "./utils/uhr-warten.ts";
 import { hasActiveNumber } from "./store/views.ts";
@@ -180,6 +181,14 @@ function warnAlertChannelUnset(config) {
   });
   for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+async function starteInstanzTaktMitWarnung(config, store, nachMeldung) {
+  const takt = await store.starteInstanzTakt({ nachMeldung });
+  const lage = await store.besitzLage();
+  for (const finding of instanzZahlFindings({ serverInstanzen: config.safety.serverInstanzen, ...lage }))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+  return takt;
 }
 
 function warnAlarmEingangUnset(config) {
@@ -790,7 +799,7 @@ export async function bootServer({
     await provisioning.reconcileOrphanedProvisioning();
     await expireOrphanedConsults(store);
   };
-  const instanzTakt = await store.starteInstanzTakt({ nachMeldung: uebernimmVerwaisteArbeit });
+  const instanzTakt = await starteInstanzTaktMitWarnung(config, store, uebernimmVerwaisteArbeit);
 
   if (config.store.kennzahlenDatabaseUrl) await store.starteKennzahlenLauf();
 

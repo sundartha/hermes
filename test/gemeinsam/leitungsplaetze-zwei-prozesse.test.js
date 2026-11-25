@@ -33,9 +33,15 @@ const MANDANTEN = [0, 1, 2].map((index) => ({
 const ALT_EINTRAG_SQL = `INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um)
   VALUES ($1, 'elevenlabs', $2, now() + $3::interval)`;
 const ALT_ZEILEN_SQL = "SELECT count(*)::int AS anzahl FROM leitungsplatz WHERE call_id LIKE 'alt_%'";
-const KONVERSATION_SQL = "SELECT elevenlabs_conversation_id AS id FROM call WHERE elevenlabs_conversation_id IS NOT NULL ORDER BY seq LIMIT 1";
-const konversationBis = async (sql) =>
-  (await zeilenBis(async () => (await sql(KONVERSATION_SQL)).rows, (zeilen) => zeilen.length === 1))[0].id;
+const KONVERSATION_SQL = "SELECT elevenlabs_conversation_id AS id FROM call ORDER BY seq";
+const konversationBis = async (sql, fristMs) =>
+  (
+    await zeilenBis(
+      async () => (await sql(KONVERSATION_SQL)).rows,
+      (zeilen) => zeilen.some((zeile) => zeile.id !== null),
+      fristMs,
+    )
+  ).find((zeile) => zeile.id !== null).id;
 const PLATZ_ZEILEN_SQL = "SELECT count(*)::int AS anzahl FROM leitungsplatz WHERE anbieter = 'elevenlabs'";
 const GESPRAECH_ENDE = [{ role: "agent", message: "Auf Wiederhoeren." }];
 const SPERRE_NEHMEN_SQL = "SELECT pg_advisory_lock(2665, 1)";
@@ -126,7 +132,7 @@ test(
       ]);
       const anrufe = await zeilenBis(
         async () => (await sql(ANRUFE_GEWAEHLT_SQL)).rows[0],
-        (zeile) => zeile.gesamt === 6,
+        (zeile) => zeile.gesamt === 6 && zeile.gewaehlt === ELEVENLABS_PLAETZE,
       );
       assert.deepEqual(anrufe, { gesamt: 6, gewaehlt: ELEVENLABS_PLAETZE }, "die zwei Wartenden sind angelegt und nie gewaehlt");
     });
@@ -226,7 +232,8 @@ test("S5: scheitert das Freigeben in der Datenbank, bleibt der Platz bis zum Abl
     t,
     async ({ a, anbieter, sql }) => {
       assert.equal((await rufeAn(a, MANDANTEN[0])).status, HTTP_OK);
-      const id = await konversationBis(sql);
+      await startsBis(anbieter, 1);
+      const id = await konversationBis(sql, FREIGABE_FRIST_MS);
       await sql("BEGIN");
       await sql("LOCK TABLE leitungsplatz IN ACCESS EXCLUSIVE MODE");
       try {

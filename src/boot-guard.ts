@@ -670,3 +670,23 @@ export function angekuendigterOriginFindings({
     ...allowlistFindings(allowedOrigins),
   ];
 }
+
+interface InstanzZahlEingabe {
+  serverInstanzen: number;
+  eigene: string;
+  lebende: string[] | null;
+}
+
+export function instanzZahlFindings({ serverInstanzen, eigene, lebende }: InstanzZahlEingabe): Befund[] {
+  if (lebende === null) return [];
+  const zahl = new Set([...lebende, eigene]).size;
+  if (zahl <= serverInstanzen) return [];
+  return [
+    {
+      fatal: false,
+      message:
+        `SERVER_INSTANCES=${String(serverInstanzen)}, aber ${String(zahl)} Instanzen leben - das Rate-Limit je Instanz ist ` +
+        "dann in Summe zu gross. SERVER_INSTANCES auf die tatsaechliche Instanzzahl setzen.",
+    },
+  ];
+}

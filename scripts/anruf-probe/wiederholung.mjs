@@ -8,11 +8,24 @@ export function normalisiert(nummer) {
   return String(nummer).replace(SCHREIBWEISE, "");
 }
 
+const GRUND_MAX = 60;
+const GRUNDCODE = /^[A-Za-z_]+$/;
+const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
+
+function bereinigt(fehler) {
+  if (fehler === null || fehler === undefined) return "";
+  const meldung = typeof fehler.message === "string" && MELDUNGSCODE.test(fehler.message) ? fehler.message : null;
+  const kandidaten = [fehler.code, fehler.cause?.code, fehler.name];
+  const code = kandidaten.find((wert) => typeof wert === "string" && GRUNDCODE.test(wert));
+  return (meldung ?? code ?? "unbekannt").slice(0, GRUND_MAX);
+}
+
 async function messenOderNichts(messen) {
   try {
     return urteilen(await messen());
-  } catch {
-    return urteilen(null);
+  } catch (fehler) {
+    const grund = bereinigt(fehler);
+    return grund === "" ? urteilen(null) : { ...urteilen(null), grund };
   }
 }
 

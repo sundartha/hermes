@@ -1,4 +1,4 @@
-import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.ts";
+import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
@@ -13,6 +13,7 @@ interface Sprachwahl {
 
 interface AnrufSprache {
   language: string;
+  providerLanguage: string;
   disclosureLanguage: string;
   voiceId: string;
   firstMessage: string;
@@ -30,6 +31,18 @@ const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
 
+const AN_ANBIETER_DURCHGEREICHTE_SPRACHEN = Object.freeze(["pt", "es", "fr", "de", "en", "it", "nl"]);
+
+function primaererSprachcode(code: string): string {
+  return code.split("-")[0] ?? code;
+}
+
+function providerSpracheVon(textSprache: string, callLanguage: string | null | undefined): string {
+  if (!callLanguage) return textSprache;
+  const basis = primaererSprachcode(callLanguage);
+  return AN_ANBIETER_DURCHGEREICHTE_SPRACHEN.includes(basis) ? basis : textSprache;
+}
+
 function calleeLanguage(to: string | null): string | null {
   const land = countryForE164(to);
   return (land && SPRACHE_JE_LAND[land]) ?? null;
@@ -40,7 +53,14 @@ function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord,
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-function disclosureLanguageOf(state: MandantZustand, { tenantId, numberRecord, to }: Zugriff & { to: string | null }): string {
+const OHNE_EIGENE_TEXTE_OFFENLEGUNG = "en";
+
+function disclosureLanguageOf(
+  state: MandantZustand,
+  { tenantId, numberRecord, to, callLanguage }: Zugriff & { to: string | null; callLanguage?: string | undefined },
+): string {
+  const fremdeStartsprache = callLanguage !== undefined && !SUPPORTED_LANGUAGES.includes(callLanguage);
+  if (fremdeStartsprache) return calleeLanguage(to) ?? OHNE_EIGENE_TEXTE_OFFENLEGUNG;
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -60,13 +80,15 @@ export function callLocaleFor(
   { tenantId, numberRecord, ownerName, to, callLanguage }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
-  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to }));
+  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage }));
+  const providerLanguage = providerSpracheVon(gespraech.language, callLanguage);
   return {
     language: gespraech.language,
+    providerLanguage,
     disclosureLanguage: offenlegung.language,
     voiceId: EINE_STIMME_ID,
     firstMessage:
-      gespraech.language === offenlegung.language
+      providerLanguage === offenlegung.language
         ? EROEFFNUNG_PLATZHALTER
         : providerDisclosureFirst(offenlegung, ownerName),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,

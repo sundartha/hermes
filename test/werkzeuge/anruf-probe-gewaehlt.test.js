@@ -36,7 +36,7 @@ async function laufen({ fall = {}, umgebung = {}, mitOutput = true } = {}) {
     GITHUB_RUN_ID: "88",
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     STAGING_PROBE_AUFTRAGGEBER: "Probe GmbH",
     STAGING_PROBE_VORNAME: "Anna",
     STAGING_PROBE_TELNYX_KEY: PROBE_TELNYX_SCHLUESSEL,

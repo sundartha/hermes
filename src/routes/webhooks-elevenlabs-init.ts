@@ -10,12 +10,13 @@ import {
   inboundEroeffnungsDefekteFuer,
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
+import { eroeffnungsFelder, meldeFirstMessageErgebnis } from "../elevenlabs/anrufstart-messung.ts";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.ts";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.ts";
 import { normNum } from "../begriffe/rufnummern.js";
 import { safeEqual } from "../util.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_SERVER_ERROR } from "../utils/http.ts";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
 
 interface Anruf {
   id: string;
@@ -56,6 +57,7 @@ interface Speicher {
   getCall(callId: string): Anruf | null | undefined;
   attachActiveCall(callId: string): Promise<Anruf | null | undefined>;
   numberRecordByE164(e164: string): NummernSatz;
+  tenantContext(tenantId: string): { ownerName: unknown; firstName: unknown };
   bindInboundElConversation(callId: string, bindung: { conversationId: unknown; nowIso: string; stand?: Anruf }): Bindung;
 }
 
@@ -113,6 +115,7 @@ const INIT_LOG_TAG = "el-init";
 const LOG_SCHLUESSEL_MAX = 20;
 const LOG_ZEICHEN_UNERLAUBT = /[^A-Za-z0-9_]/g;
 const LOG_ERSATZZEICHEN = "_";
+const ANRUF_JE_ANTWORT = new WeakMap<Response, { id: string; namen: unknown[] }>();
 const INIT_KOERPER = z.object({}).passthrough().catch({});
 const KEINE_NUMMER: readonly unknown[] = Object.freeze([undefined, null, ""]);
 export const INIT_FEHLVERSUCHE_PRO_MIN = 30;
@@ -123,6 +126,20 @@ function initTokenGueltig(config: Konfiguration, req: Request): boolean {
   const erwartet = config.voice.elevenLabsInbound.initWebhookToken;
   if (typeof erwartet !== "string" || erwartet.length < INIT_WEBHOOK_TOKEN_MIN_LENGTH) return false;
   return safeEqual(req.get(INIT_TOKEN_HEADER) ?? "", erwartet);
+}
+
+function meldeEingang({ res, call, store }: { res: Response; call: Anruf | null; store: Speicher }): void {
+  if (!call) return;
+  const { ownerName, firstName } = store.tenantContext(call.tenantId);
+  ANRUF_JE_ANTWORT.set(res, { id: call.id, namen: [ownerName, firstName] });
+  console.log(`[${INIT_LOG_TAG}] eingang call=${call.id}`);
+}
+
+function sendeAntwort({ res, status, antwort }: { res: Response; status: number; antwort: unknown }): Response {
+  const eintrag = ANRUF_JE_ANTWORT.get(res);
+  const anruf = eintrag ? ` call=${eintrag.id}` : "";
+  console.log(`[${INIT_LOG_TAG}] antwort${anruf} status=${String(status)}${eroeffnungsFelder(antwort, eintrag?.namen ?? [])}`);
+  return res.status(status).json(antwort);
 }
 
 function verweigern(res: Response): Response {
@@ -184,7 +201,7 @@ function keinAnruf({
   console.log(
     `[${INIT_LOG_TAG}] abgelehnt grund=${grund} schluessel=${schluesselFuerLog(body)} sip_headers=${sipHeadersFormOf(body)}${anruf}`,
   );
-  return res.status(HTTP_NOT_FOUND).json(INIT_ANTWORT.KEIN_ANRUF);
+  return sendeAntwort({ res, status: HTTP_NOT_FOUND, antwort: INIT_ANTWORT.KEIN_ANRUF });
 }
 
 async function aktiverElInboundCallMitToken(store: Speicher, token: unknown): Promise<Anruf | null> {
@@ -265,6 +282,20 @@ function bindungsLogZeile({
   return `${zeile} ms_bearbeitung=${String(Math.round(performance.now() - eingangMs))}`;
 }
 
+function meldeBindung({
+  outboundAntwort,
+  ...zeile
+}: {
+  bindung: Bindung;
+  call: Anruf;
+  nowMs: number;
+  eingangMs: number;
+  outboundAntwort: Record<string, unknown> | null;
+}): void {
+  console.log(bindungsLogZeile(zeile));
+  if (outboundAntwort && zeile.bindung.changed) meldeFirstMessageErgebnis({ callId: zeile.call.id, antwort: outboundAntwort });
+}
+
 function inboundSperrgrundFuer({ store, config, call }: Dienste): InitGrund | null {
   if (istOutboundElProfil(call)) return null;
   if (!elWegFuer({ store, config, call })) return INIT_GRUND.KEIN_EL_WEG;
@@ -321,6 +352,7 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
   const body: InitKoerper = INIT_KOERPER.parse(pruefeKoerper(res, { schema: INIT_KOERPER }, req.body));
   const nowMs = now();
   const zuordnung = await zuordnungFuer({ store, config, body, nowMs });
+  meldeEingang({ res, call: zuordnung.call, store });
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 
@@ -341,9 +373,10 @@ async function handleInit({ req, res, deps }: { req: Request; res: Response; dep
 
   if (!(await bindungUebernommen({ bindung, bridges, callId: call.id, fristMs: speicherFristMs })))
     return keinAnruf({ res, body, grund: INIT_GRUND.KEIN_WARTENDER_ANRUF, callId: call.id });
-  console.log(bindungsLogZeile({ bindung, call, nowMs, eingangMs }));
+  meldeBindung({ bindung, call, nowMs, eingangMs, outboundAntwort });
 
-  return res.json(outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() }));
+  const antwort = outboundAntwort ?? buildInitiationResponse({ store, config, call: bindung.call, jetzt: () => new Date() });
+  return sendeAntwort({ res, status: HTTP_OK, antwort });
 }
 
 function fehlerNachricht(err: unknown): string {
@@ -357,7 +390,7 @@ async function antworteInitSicher({ req, res, deps }: { req: Request; res: Respo
   } catch (err) {
     console.error(`[${INIT_LOG_TAG}] fehler: ${fehlerNachricht(err) || "unbekannt"}`);
     if (res.headersSent) return res.end();
-    return res.status(HTTP_SERVER_ERROR).json(INIT_ANTWORT.INTERN);
+    return sendeAntwort({ res, status: HTTP_SERVER_ERROR, antwort: INIT_ANTWORT.INTERN });
   }
 }
 

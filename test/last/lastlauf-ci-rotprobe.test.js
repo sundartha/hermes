@@ -108,3 +108,25 @@ for (const [name, rotprobe, grund] of ROTPROBEN) {
     assert.ok(lauf.urteil.gruende.includes(grund));
   });
 }
+
+const JOB_ZEITGRENZEN = {
+  tests: 20,
+  abdeckung: 20,
+  mutation: 60,
+  lastlauf: 30,
+  codeql: 20,
+  pruefungen: 15,
+  semgrep: 10,
+  webtests: 10,
+  rotprobe: 10,
+  ci: 5,
+};
+
+test("CI: jeder Job hat auf Job-Ebene genau seine Zeitgrenze, kein Job liegt ausserhalb der Tabelle", () => {
+  const jobs = [...CI.slice(CI.indexOf("\njobs:")).matchAll(/^ {2}([a-z]+):$/gm)].map((t) => t[1]);
+  assert.deepEqual([...jobs].sort(), Object.keys(JOB_ZEITGRENZEN).sort());
+  for (const [name, minuten] of Object.entries(JOB_ZEITGRENZEN)) {
+    const grenzen = [...jobText(name).matchAll(/^ {4}timeout-minutes: (\d+)$/gm)].map((t) => Number(t[1]));
+    assert.deepEqual(grenzen, [minuten], `Job ${name}`);
+  }
+});

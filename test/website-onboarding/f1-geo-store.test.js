@@ -156,7 +156,7 @@ test("LANG-19 (SOLL, rot) - updateSettings normalisiert language='EN' zu 'en' st
   assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "en");
 });
 
-test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext/unbekannt ignoriert", () => {
+test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext ignoriert, formgueltiger Code ohne eigene Texte uebernommen", () => {
   const s = makeDefaultState();
   s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
   assert.ok(updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "fr" }).changed.includes("language"));
@@ -164,9 +164,11 @@ test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; F
   updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "" });
   assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, null);
   s.settings[BOOTSTRAP_TENANT_ID].language = "fr";
-  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "xx" });
-  assert.ok(!res.changed.includes("language"), "unbekannter Sprachcode wird nicht uebernommen");
+  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "Deutsch bitte" });
+  assert.ok(!res.changed.includes("language"), "Freitext wird nicht uebernommen");
   assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "fr", "alter Wert bleibt");
+  assert.ok(updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "xx" }).changed.includes("language"));
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "xx");
 });
 
 test("seedBootstrapNumber: Default-Geo = DE/de (bestehende Aufrufe verhaltens-erhaltend)", () => {

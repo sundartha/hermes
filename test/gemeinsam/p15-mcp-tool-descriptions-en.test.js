@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { GERMAN_STOPWORDS } from "../gemeinsam/deutsch-erkennung.mjs";
 import { captureToolDescriptions } from "../gemeinsam/werkzeug-registrierung.js";
 
@@ -80,10 +79,10 @@ test("O14: die Negativ-Beispiele der Qualitaets-Kette stehen woertlich in der EN
   assert.match(decideFreely, /Hard prohibitions do NOT belong here/);
 });
 
-test("LANG-15 (SOLL, gruen nach F-2) - place_call.language nennt den Katalog, lehnt unbekannte Codes ab und bleibt von der Offenlegung getrennt", () => {
+test("LANG-15 - place_call.language nennt keine Sprachliste, lehnt formfalsche Codes ab und bleibt von der Offenlegung getrennt", () => {
   const text = captureToolDescriptions().get("place_call.language");
   assert.ok(text, "der Pfad existiert");
-  for (const code of SUPPORTED_LANGUAGES) assert.ok(text.includes(code), `Katalog nennt ${code}`);
+  assert.doesNotMatch(text, /one of:/);
   assert.match(text, /REJECTED/);
   assert.match(text, /disclosure/i);
 });

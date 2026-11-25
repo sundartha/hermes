@@ -718,7 +718,7 @@ test("IEL-B5-19: Verdrahtung Cap (server.js) - Zombie beim Boot holt das Ergebni
     const call = spawnCall(await waitForStoreState(srv, (state) => Boolean(spawnCall(state).billedAt), SPAWN_FRIST_MS));
     assert.ok(attrappe.gets().length >= EINMAL);
     assert.equal(attrappe.deletes().length, 0);
-    assert.equal(call.status, "failed");
+    assert.equal(call.status, "completed");
     assert.deepEqual(call.elDetectorCounts, { elTags: 0, elB1: 0 }, "persistProviderResult lief im Beende-Pfad");
     assert.equal(call.sipCallId, null, "IEX-A1: telnyx_inbound_el_convai fuehrt keinen telnyx_sip-Join-Schluessel");
   });

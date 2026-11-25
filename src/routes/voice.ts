@@ -35,11 +35,14 @@ import {
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.ts";
+import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
 import { VORSPANN_PFAD } from "../elevenlabs/vorspann-ablauf.js";
 import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.ts";
 import { callerIsOwnerGranted } from "../callee-is-owner.ts";
-import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK } from "../utils/http.ts";
+import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } from "../utils/http.ts";
 import { sleep } from "../utils/uhr-warten.ts";
+import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
 import { fehlerText } from "../utils/fehler-text.ts";
@@ -138,7 +141,7 @@ interface Synthese {
 }
 
 interface VorspannAblauf {
-  behandle: (anfrage: { call: Anruf; ereignis: object; zugang: Zugang }) => Promise<unknown>;
+  behandle: (anfrage: { call: Anruf; ereignis: object; zugang: Zugang; nachLesen: () => void }) => Promise<unknown>;
 }
 
 interface Zugang {
@@ -554,18 +557,47 @@ async function vermerkeElBein(req: Aufruf, res: Antwort, { store, inboundBridges
   if (angenommen) inboundBridges.armBindingDeadline(call.id);
 }
 
+function bestaetigeFallsOffen(res: Antwort): void {
+  if (!res.headersSent) res.sendStatus(HTTP_OK);
+}
+
+async function leseCallVorAntwort(store: Speicher, callId: string, res: Antwort): Promise<AnrufOderLeer> {
+  const lesen = leseCallBestEffort(store, callId, VORSPANN_LOG_PREFIX);
+  const rechtzeitig = await ergebnisOderNull(lesen.then((call) => ({ call })), NUTZUNG_AUFFRISCHEN_FRIST_MS);
+  if (rechtzeitig) return rechtzeitig.call;
+  res.sendStatus(HTTP_OK);
+  return lesen;
+}
+
 async function antworteAufVorspannEreignis(
   req: Aufruf,
   res: Antwort,
   { store, config, webhookEvents, vorspannAblauf }: VoiceDeps,
 ): Promise<void> {
   if (!anfrageGeprueft(req, res, VORSPANN_KOERPER)) return;
-  res.sendStatus(HTTP_OK);
-  const call = await leseCallBestEffort(store, queryText(req.query.callId), VORSPANN_LOG_PREFIX);
-  if (!call) return;
+  const call = await leseCallVorAntwort(store, queryText(req.query.callId), res);
+  if (!call) {
+    bestaetigeFallsOffen(res);
+    return;
+  }
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
-  await vorspannAblauf.behandle({ call, ereignis, zugang: elZugangVon(config) });
+  const verarbeitung = vorspannAblauf.behandle({
+    call,
+    ereignis,
+    zugang: elZugangVon(config),
+    nachLesen: () => {
+      bestaetigeFallsOffen(res);
+    },
+  });
+  if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT) bestaetigeFallsOffen(res);
+  try {
+    await verarbeitung;
+  } catch (fehler) {
+    if (!res.headersSent) res.status(HTTP_SERVICE_UNAVAILABLE).end();
+    console.error(VORSPANN_LOG_PREFIX, fehlerText(fehler));
+    return;
+  }
   console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
 }
 

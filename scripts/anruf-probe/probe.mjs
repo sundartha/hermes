@@ -10,7 +10,7 @@ const MAX_ERSTVERSUCHE = 5;
 const MAX_ANRUFE = 10;
 const ANRUFE_JE_PROBE = 2;
 const ALARMWEGE = ["SLACK_ALERT_URL", "BETTER_STACK_ALERT_URL"];
-const PFLICHT_AUFLEGEN = ["STAGING_PROBE_ZIEL", "STAGING_TEST_TOKEN"];
+const PFLICHT_AUFLEGEN = ["STAGING_PROBE_ZIEL", "STAGING_PROBE_TOKEN"];
 const PFLICHT = [...PFLICHT_AUFLEGEN, "STAGING_PROBE_AUFTRAGGEBER", "STAGING_PROBE_VORNAME"];
 const COMMIT = /^[0-9a-f]{40}$/;
 const EXIT_ROT = 1;
@@ -161,7 +161,8 @@ async function ausgangMelden(ergebnis) {
     gewaehltMerken();
     return zeile("Erstversuch rot, Wiederholung grün");
   }
-  zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}`);
+  const grund = ergebnis.zweit.grund === undefined ? "" : ` grund=${ergebnis.zweit.grund}`;
+  zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}${grund}`);
   await alarmSenden(ergebnis.seit);
   throw new Ende("probe_rot");
 }

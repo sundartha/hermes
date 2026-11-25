@@ -13,7 +13,7 @@ function auflegen(ereignis) {
     PATH: process.env.PATH,
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify({ eigeneNummer: ZIEL, offene: 2 }),
     GITHUB_EVENT_NAME: ereignis,

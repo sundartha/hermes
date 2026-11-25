@@ -23,8 +23,10 @@ import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
 import { entferneKlammern } from "../i18n/audio-tags.js";
+import { permanentErrorStreakExceeded } from "./fehlerserie.ts";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";
+import { meldeAgentErsteRede } from "./anrufstart-messung.ts";
 import { meldeVorspannEroeffnung } from "./vorspann-erzeugen.js";
 import { ermittleStimmenAnzahl } from "./wirksame-stimme.ts";
 
@@ -50,7 +52,7 @@ const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
 const PERMANENT_FETCH_STATUS = Object.freeze([HTTP_UNAUTHORIZED, HTTP_NOT_FOUND]);
 
-export const PERMANENT_ERROR_STREAK_LIMIT = 3;
+export { PERMANENT_ERROR_STREAK_LIMIT } from "./fehlerserie.ts";
 
 const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 
@@ -407,7 +409,9 @@ async function persistProviderResult({ store, callId, conversation, belegNachrei
   });
   await schreibeNeueAnbieterZeilen(store, callId, zeilen);
   const speicherFehler = await sichereErgebnisUndFelder({ store, callId, conversation, politik });
-  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(await store.leseCall(callId));
+  const call = await store.leseCall(callId);
+  if (call) meldeAgentErsteRede({ call, conversation });
+  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(call);
   if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   recordAbsenderMessung(store, callId, conversation);
   recordElevenLabsKostenBelege({
@@ -433,7 +437,7 @@ function sichereEroeffnung(teile) {
 }
 
 function drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }) {
-  if (locale.language === locale.disclosureLanguage) {
+  if (locale.providerLanguage === locale.disclosureLanguage) {
     const { text, pflichtsatz } = drittEroeffnungText({
       language: locale.language,
       ownerName: owner,
@@ -468,7 +472,7 @@ function openingLinesOf({ call, locale }) {
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
-  if (locale.language === locale.disclosureLanguage) return "";
+  if (locale.providerLanguage === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
@@ -492,7 +496,7 @@ function conversationConfigOverride({ call, locale, offenlegung, firstName, owne
   const ersteNachricht = eroeffnungGesagt ? anschlussSatz({ language: locale.language, anlass: openingLine }) : uebergabe;
   return {
     agent: {
-      language: locale.language,
+      language: locale.providerLanguage,
       ...(ersteNachricht === null ? {} : { first_message: ersteNachricht }),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
@@ -706,20 +710,6 @@ async function fetchConversationOutcome({ account, conversationId, callId, timeo
   }
 }
 
-function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) {
-  if (!permanent) {
-    permanentErrorStreaks.delete(callId);
-    return false;
-  }
-  const streak = (permanentErrorStreaks.get(callId) || 0) + 1;
-  if (streak < PERMANENT_ERROR_STREAK_LIMIT) {
-    permanentErrorStreaks.set(callId, streak);
-    return false;
-  }
-  permanentErrorStreaks.delete(callId);
-  return true;
-}
-
 async function saveProviderResultIfFetched({ store, fetchConversationSoft, stimmenAnzahlFuer, callId }) {
   const call = await store.leseCall(callId);
   const conversationId = call?.elevenlabsConversationId;
@@ -853,7 +843,6 @@ export function makeElevenLabsOutbound({
     return ausgang;
   }
 
-  const permanentErrorStreaks = new Map();
   const laufendeInboundPolls = new Set();
   const laufendeKetten = new Set();
 
@@ -894,7 +883,7 @@ export function makeElevenLabsOutbound({
     await schreibeAbfrageFrist(call, REQUEST_TIMEOUT_MS + ABFRAGE_UEBERNAHME_MS);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(await store.leseCall(callId))) return;
-    if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
+    if (await permanentErrorStreakExceeded({ store, call, permanent }))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!anbieterErgebnisFertig(conversation)) {
       if (conversation && nichtErreichtNachFrist({ call, conversation, nowMs })) return finishNichtErreicht(finishDeps);

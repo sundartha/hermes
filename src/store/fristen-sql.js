@@ -74,6 +74,8 @@ const SETZEN_RESERVE_SQL =
   "UPDATE call SET frist_reserve_at = $3, frist_reserve_versuche = 0 WHERE tenant_id = $1 AND id = $2";
 const SETZEN_ABFRAGE_SQL =
   "UPDATE call SET frist_abfrage_at = $3, frist_abfrage_versuche = 0 WHERE tenant_id = $1 AND id = $2 AND status = 'active'";
+const FEHLERSERIE_SQL =
+  "UPDATE call SET permanent_fehler_serie = CASE WHEN $3::boolean THEN permanent_fehler_serie + 1 ELSE 0 END WHERE tenant_id = $1 AND id = $2 AND status = 'active' AND ($3::boolean OR permanent_fehler_serie <> 0) RETURNING permanent_fehler_serie";
 const SETZEN_UEBERGABE_SQL = `UPDATE call SET frist_uebergabe_versuche = 0,
   frist_uebergabe_at = CASE WHEN $3::timestamptz IS NULL THEN NULL ELSE LEAST(COALESCE(frist_uebergabe_at, $3::timestamptz), $3::timestamptz) END
   WHERE tenant_id = $1 AND id = $2 AND status = 'active'`;
@@ -146,6 +148,10 @@ export function macheFristenSql({ runner, einreihen, besitzLage }) {
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_RESERVE_SQL, [tenantId, callId, faelligAt]])),
     setzeAbfrage: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_ABFRAGE_SQL, [tenantId, callId, faelligAt]])),
+    fortschreibeFehlerserie: async ({ callId, tenantId, permanent }) => {
+      const zeilen = await einreihen((client) => imMandanten(client, tenantId, [FEHLERSERIE_SQL, [tenantId, callId, permanent]]));
+      return zeilen[0]?.permanent_fehler_serie;
+    },
     setzeUebergabe: ({ callId, tenantId, faelligAt }) =>
       einreihen((client) => imMandanten(client, tenantId, [SETZEN_UEBERGABE_SQL, [tenantId, callId, faelligAt]])),
     faellige: async ({ art, limitJeMandant, leaseMs }) => {
@@ -216,6 +222,13 @@ export function setzeAbfrageImSpiegel(state, { callId, faelligAt }) {
   if (call?.status !== "active") return;
   call.fristAbfrageAt = faelligAt;
   call.fristAbfrageVersuche = 0;
+}
+
+export function fortschreibeFehlerserieImSpiegel(state, { callId, permanent }) {
+  const call = state.calls.find((eintrag) => eintrag.id === callId);
+  if (call?.status !== "active") return undefined;
+  call.permanentFehlerSerie = permanent ? (call.permanentFehlerSerie ?? 0) + 1 : 0;
+  return call.permanentFehlerSerie;
 }
 
 export function setzeUebergabeImSpiegel(state, { callId, faelligAt }) {
