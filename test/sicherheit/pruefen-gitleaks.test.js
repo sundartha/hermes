@@ -49,6 +49,7 @@ function inProbe({ fassung = ERWARTETE_FASSUNG, exitCode = 0, vorhanden = true, 
     const basis = git(ordner, "rev-parse", "HEAD");
     const umgebung = { ...gitUmgebung(), PATH: `${attrappen}:${kern}` };
     if (ci) umgebung.GITHUB_ACTIONS = "true";
+    else delete umgebung.GITHUB_ACTIONS;
     const ergebnis = spawnSync("node", [PRUEFEN, "gitleaks", "--basis", basis], { cwd: ordner, env: umgebung, encoding: "utf8" });
     pruefung({ status: ergebnis.status, text: ergebnis.stdout + ergebnis.stderr, aufrufe: aufrufe(protokoll), basis });
   } finally {
