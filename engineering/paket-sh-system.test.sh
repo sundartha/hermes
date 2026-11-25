@@ -76,4 +76,8 @@ pruefe "Linux-Teile (Scope, Konto-Schluessel, Lastampel) laufen nur unter Linux"
 pruefe "paket.sh kennt keine feste homebrew-Datei ausserhalb der Weiche" "$(grep -v '^  *Darwin)' $S | grep -c '/opt/homebrew/bin/\(gh\|python3\)')" "0"
 GL=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
 pruefe "gitr nimmt unter Linux flock und unter Darwin lockf" "$(print -r -- "$GL" | grep -c 'flock -w 120.*lockf -k -t 120\|lockf -k -t 120.*flock -w 120')" "1"
+# Anspruch (#4438): die Kette erkennt offene PRs des Issues an Kopf und Text und gibt WARTET=<PR> aus, wenn bau "ist in Arbeit" meldet.
+pruefe "Bau-Prompt erkennt offene PRs an Kopf paket/ISSUE-* und system/ISSUE-*" "$(grep -c 'offenen PR zum Issue (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*, oder im Text .Refs #\$ISSUE., .Closes #\$ISSUE. oder .Teil von #\$ISSUE.): übernimm ihn' $S)" "1"
+pruefe "Kette wartet auf die PR-Nummer aus ist in Arbeit" "$(grep -c "Antwortet bau mit 'ist in Arbeit' und nennt eine PR-Nummer, schreib davor eine eigene Zeile WARTET=<diese Nummer> und als letzte Zeile PR=keiner" $S)" "1"
+pruefe "Entscheidungs-Sitzung sucht offene PRs des Issues an Kopf und Text" "$(grep -c "falls es einen offenen PR zum Issue gibt (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*" $S)" "1"
 exit $fehler
