@@ -3,7 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { tenantIdForSubject, TENANT_STATUS } from "./begriffe/mandant.js";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.ts";
-import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
+import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.ts";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";
 import { anfrage } from "./utils/anfrage.js";
 import { config } from "./config.ts";

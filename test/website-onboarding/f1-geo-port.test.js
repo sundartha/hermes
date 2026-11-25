@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeStubGeoLookup, nullGeoLookup } from "../../src/geo/stub.js";
-import { makeMaxmindGeoLookup } from "../../src/geo/maxmind.js";
-import { normCountry, resolveOnboardCountry } from "../../src/geo/resolve.js";
+import { makeStubGeoLookup, nullGeoLookup } from "../../src/geo/stub.ts";
+import { makeMaxmindGeoLookup } from "../../src/geo/maxmind.ts";
+import { normCountry, resolveOnboardCountry } from "../../src/geo/resolve.ts";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../../src/i18n/locales.ts";
-import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.js";
+import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.ts";
 import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 
 test("makeStubGeoLookup: bekannte IP -> {country}; unbekannte -> null", () => {

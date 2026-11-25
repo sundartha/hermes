@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../../src/config.ts";
-import { geoLookupAdapter } from "../../src/geo/registry.js";
-import { nullGeoLookup } from "../../src/geo/stub.js";
+import { geoLookupAdapter } from "../../src/geo/registry.ts";
+import { nullGeoLookup } from "../../src/geo/stub.ts";
 
 function withGeoEnabled(value, fn) {
   const original = config.provisioning.geoEnabled;

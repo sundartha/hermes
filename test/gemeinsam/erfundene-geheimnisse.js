@@ -122,3 +122,7 @@ export const VORSPANN_RUECKFALL_TELNYX_SCHLUESSEL = "KEYtest-vorspann-rueckfall-
 export const PROBE_ZUGANG_SCHLUESSEL = "probe-zugang-erfunden-".padEnd(48, "p");
 export const PROBE_ZUGANG_SCHLUESSEL_ABWEICHEND = "probe-zugang-erfunden-".padEnd(47, "p") + "q";
 export const PROBE_ZUGANG_SCHLUESSEL_ZU_KURZ = "probe-zugang-kurz".padEnd(31, "k");
+
+export const PROBE_WERKZEUGFEHLER_SCHLUESSEL = "sk_AbCdEf12GhIjKl34MnOp";
+export const PROBE_WERKZEUGFEHLER_TELEFON = "+4917312345678";
+export const PROBE_WERKZEUGFEHLER_EMAIL = "max.mustermann@firma.de";

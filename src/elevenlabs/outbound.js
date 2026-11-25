@@ -9,6 +9,7 @@ import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfW
 import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, START_UNKLAR_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";
 import { composedOpeningLine, ownerOpeningLine, verifiedOpeningLine } from "./opening-line.ts";
 import { besitzerAnlassEroeffnung } from "./besitzer-anlass.ts";
+import { anschlussSatz } from "./vorspann-anschluss.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
@@ -436,7 +437,7 @@ function sichereEroeffnung(teile) {
 }
 
 function drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }) {
-  if (locale.language === locale.disclosureLanguage) {
+  if (locale.providerLanguage === locale.disclosureLanguage) {
     const { text, pflichtsatz } = drittEroeffnungText({
       language: locale.language,
       ownerName: owner,
@@ -471,7 +472,7 @@ function openingLinesOf({ call, locale }) {
 function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
   if (ownerEroeffnung) return ownerEroeffnung;
-  if (locale.language === locale.disclosureLanguage) return "";
+  if (locale.providerLanguage === locale.disclosureLanguage) return "";
   return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
@@ -491,10 +492,11 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
 
 function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
   const perCallEroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
-  const { ersteNachricht } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
+  const { ersteNachricht: uebergabe } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
+  const ersteNachricht = eroeffnungGesagt ? anschlussSatz({ language: locale.language, anlass: openingLine }) : uebergabe;
   return {
     agent: {
-      language: locale.language,
+      language: locale.providerLanguage,
       ...(ersteNachricht === null ? {} : { first_message: ersteNachricht }),
     },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),

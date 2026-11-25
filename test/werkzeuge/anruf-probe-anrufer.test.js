@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
+import {
+  PROBE_WERKZEUGFEHLER_SCHLUESSEL,
+  PROBE_WERKZEUGFEHLER_TELEFON,
+  PROBE_WERKZEUGFEHLER_EMAIL,
+} from "../gemeinsam/erfundene-geheimnisse.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
@@ -319,3 +324,50 @@ test("Tagesstand: 29 Einträge, alle von heute, sind vollständig und zählen", 
   const { anrufer } = attrappe(vollListe(29, () => "2026-11-17T01:00:00.000Z"));
   assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
 });
+
+const werkzeugFehler = (text) => {
+  const roh = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text }] } };
+  return attrappe({ place_call: () => ({ ok: true, status: 200, text: async () => JSON.stringify(roh) }) }).anrufer;
+};
+
+test("Anruf: Werkzeugfehler nennt nur eine feste Fehlerklasse, nie Freitext aus dem Werkzeug", async () => {
+  const geheimnisse = [PROBE_WERKZEUGFEHLER_SCHLUESSEL, PROBE_WERKZEUGFEHLER_TELEFON, PROBE_WERKZEUGFEHLER_EMAIL];
+  const freitexte = [`Ziel nicht erlaubt: ${geheimnisse.join(" ")}`, `Etwas ganz anderes: ${geheimnisse.join(" ")}`];
+  const erwartet = ["ziel_nicht_erlaubt", "unklar"];
+  for (const [index, text] of freitexte.entries()) {
+    await assert.rejects(werkzeugFehler(text).anrufen({ ziel: ZIEL }), (fehler) => {
+      assert.equal(fehler.message, "mcp_place_call_fehlgeschlagen");
+      assert.equal(fehler.detail, erwartet[index]);
+      for (const geheimnis of geheimnisse) assert.equal(fehler.detail.includes(geheimnis), false);
+      return true;
+    });
+  }
+});
+
+const FEHLERKLASSEN_FAELLE = [
+  ["Nicht erlaubt", "ziel_nicht_erlaubt"],
+  ["Call not allowed", "ziel_nicht_erlaubt"],
+  ["403 Forbidden", "ziel_nicht_erlaubt"],
+  ["Mandant unbekannt", "mandant_fehlt"],
+  ["unknown tenant", "mandant_fehlt"],
+  ["Tageslimit erreicht", "limit_erreicht"],
+  ["budget used up", "limit_erreicht"],
+  ["Leitung besetzt", "leitung_belegt"],
+  ["line busy", "leitung_belegt"],
+  ["Timeout beim Waehlen", "zeitueberschreitung"],
+  ["Nummer ungueltig", "nummer_ungueltig"],
+  ["invalid number", "nummer_ungueltig"],
+  ["Unauthorized", "nicht_angemeldet"],
+  ["Anmeldung fehlt", "nicht_angemeldet"],
+  ["bad token", "nicht_angemeldet"],
+  ["Limit erreicht, Token ungueltig", "limit_erreicht"],
+];
+
+for (const [text, klasse] of FEHLERKLASSEN_FAELLE) {
+  test(`Anruf: Werkzeugfehler "${text}" ergibt die Klasse ${klasse}`, async () => {
+    await assert.rejects(werkzeugFehler(text).anrufen({ ziel: ZIEL }), (fehler) => {
+      assert.equal(fehler.detail, klasse);
+      return true;
+    });
+  });
+}

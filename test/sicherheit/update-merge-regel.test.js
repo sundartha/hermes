@@ -282,8 +282,8 @@ const NIE_FRAGEN = {
   notAus: wirftWennGefragt,
 };
 
-test("am PR außerhalb der Queue greift die Regel nicht", async () => {
-  assert.deepEqual(await lauf(MAJOR, [], { imQueue: false, quellen: NIE_FRAGEN }), []);
+test("am PR außerhalb der Queue greift die Update-Regel nicht, nur das Urteil wird verlangt", async () => {
+  assert.deepEqual(await lauf(MAJOR, MIT_PASS, { imQueue: false, quellen: NIE_FRAGEN }), []);
 });
 
 test("ein PR ohne Versionsänderung wird nicht als Update behandelt", async () => {

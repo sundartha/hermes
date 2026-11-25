@@ -248,8 +248,8 @@ test("verschachtelte Stände desselben Pakets werden einmal genannt", () => {
   assert.equal(befunde[0].match(/typescript/g).length, 1);
 });
 
-test("am offenen PR verlangt die Freigabe die Migrationsprüfung noch nicht", () => {
-  assert.deepEqual(lauf(MAJOR, [], { imQueue: false }), []);
+test("am offenen PR verlangt die Freigabe die Migrationsprüfung noch nicht, nur das Urteil", () => {
+  assert.deepEqual(lauf(MAJOR, [approve("PASS")], { imQueue: false }), []);
 });
 
 function probeRepo(ordner, stand) {

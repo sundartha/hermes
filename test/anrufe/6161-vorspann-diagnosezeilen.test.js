@@ -159,8 +159,9 @@ test("6161-K1: Init nach dem Vorspann meldet first_message_ergebnis einmal mit O
   await waitUntil(() => umgebung.attrappe.anfragen.some((anfrage) => anfrage.path === "/v2/calls" && istEl(anfrage) && anfrage.roh.includes(callId)), WARTE);
   const antwort = await init(anrufIn(callId), KONVERSATION);
   assert.equal(antwort.status, HTTP_OK);
-  assert.equal(eroeffnungLaenge(await antwort.json()), 0);
-  assert.deepEqual(zeilenMit(umgebung.srv, ZEILEN[1]), [`[el-vorspann] first_message_ergebnis geliefert=ja laenge=0 call=${callId}`]);
+  const laenge = eroeffnungLaenge(await antwort.json());
+  assert.ok(laenge > 0, "Init nach dem Vorspann traegt den Anschluss-Satz");
+  assert.deepEqual(zeilenMit(umgebung.srv, ZEILEN[1]), [`[el-vorspann] first_message_ergebnis geliefert=ja laenge=${laenge} call=${callId}`]);
   const wiederholung = await init(anrufIn(callId), KONVERSATION);
   assert.equal(wiederholung.status, HTTP_OK);
   assert.equal(zeilenMit(umgebung.srv, ZEILEN[1]).length, EINMAL);

@@ -53,6 +53,36 @@ function leseRpc(text) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
+const FEHLERKLASSEN = Object.freeze([
+  ["nicht erlaubt", "ziel_nicht_erlaubt"],
+  ["not allowed", "ziel_nicht_erlaubt"],
+  ["forbidden", "ziel_nicht_erlaubt"],
+  ["mandant", "mandant_fehlt"],
+  ["tenant", "mandant_fehlt"],
+  ["limit", "limit_erreicht"],
+  ["budget", "limit_erreicht"],
+  ["leitung", "leitung_belegt"],
+  ["busy", "leitung_belegt"],
+  ["timeout", "zeitueberschreitung"],
+  ["nummer", "nummer_ungueltig"],
+  ["number", "nummer_ungueltig"],
+  ["unauthorized", "nicht_angemeldet"],
+  ["anmeld", "nicht_angemeldet"],
+  ["token", "nicht_angemeldet"],
+]);
+const UNKLARE_KLASSE = "unklar";
+
+function textTeil(ergebnis) {
+  const teile = Array.isArray(ergebnis?.content) ? ergebnis.content : [];
+  return teile.find((teil) => typeof teil?.text === "string");
+}
+
+function detailVon(ergebnis) {
+  const klein = (textTeil(ergebnis)?.text ?? "").toLowerCase();
+  const treffer = FEHLERKLASSEN.find(([stichwort]) => klein.includes(stichwort));
+  return treffer === undefined ? UNKLARE_KLASSE : treffer[1];
+}
+
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
   const antwort = await abfrage(`${basis}/intern/probe/mcp`, {
     method: "POST",
@@ -68,7 +98,9 @@ async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur =
   if (!antwort.ok) throw new Error(`mcp_http_${antwort.status}`);
   const ergebnis = leseRpc(await antwort.text())?.result;
   if (!ergebnis || ergebnis.isError || (!ohneStruktur && !ergebnis.structuredContent)) {
-    throw new Error(`mcp_${name}_fehlgeschlagen`);
+    const fehler = new Error(`mcp_${name}_fehlgeschlagen`);
+    fehler.detail = detailVon(ergebnis);
+    throw fehler;
   }
   return { ...ergebnis.structuredContent, _meta: ergebnis._meta };
 }

@@ -66,7 +66,10 @@ function pruefeEinmal({ gesprochen, init }) {
   assert.equal(treffer(gesprochen, GRUESSE).length, EINMAL, gesprochen);
   assert.equal(treffer(gesprochen, VORSTELLUNGEN).length, EINMAL, gesprochen);
   assert.equal(treffer(gesprochen, /Hermes/g).length, EINMAL, gesprochen);
-  assert.equal(init.conversation_config_override.agent.first_message, "");
+  const anschluss = init.conversation_config_override.agent.first_message;
+  assert.ok(anschluss.endsWith(" Bitte sprechen Sie."), anschluss);
+  assert.equal(treffer(anschluss, GRUESSE).length, 0, anschluss);
+  assert.equal(treffer(anschluss, VORSTELLUNGEN).length, 0, anschluss);
   assert.equal(init.dynamic_variables.eroeffnung_gesagt, gesprochen);
 }
 

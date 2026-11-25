@@ -68,10 +68,10 @@ test("Kriterium 9: im JSON-Speicher beendet der Boot-Takt einen aktiven Anruf oh
   call.answeredAt = new Date(jetzt - 2 * MINUTE_MS).toISOString();
   call.fristHoechstdauerAt = new Date(jetzt - MINUTE_MS).toISOString();
   store.save();
-  await waitUntil(() => store.getCall(call.id)?.status === "failed", { timeoutMs: FRIST_BIS_BEENDET_MS });
+  await waitUntil(() => store.getCall(call.id)?.status === "completed", { timeoutMs: FRIST_BIS_BEENDET_MS });
   await store.drainFlushes();
   const ende = store.getCall(call.id);
-  assert.equal(ende.status, "failed");
+  assert.equal(ende.status, "completed");
   assert.equal(ende.failureReason, CAP_FAILURE_REASON);
   assert.notEqual(ende.billedAt, null);
   assert.deepEqual(auflegen, [CARRIER_ID]);

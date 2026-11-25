@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { stripTypeScriptTypes } from "node:module";
-import { basename, dirname, extname, join, posix, relative, resolve } from "node:path";
+import { dirname, extname, join, posix, relative, resolve } from "node:path";
 import process, { env } from "node:process";
 import { setTimeout as warte } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -125,10 +125,7 @@ const KEIN_FEHLERFALL_MINDESTENS = 40;
 const FEHLERFALL_PFADE = ["src/elevenlabs/", "src/telephony/", "src/conversation/", "src/routes/voice.ts", "src/store/instanz-besitz.js", "src/store/zustand/"];
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
-const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
-const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
-const WORT = /[\w$]+/g;
 const STRYKER_AUFRUF = /\bstry\w+(?:\([^()]*\))?|(["'`])\1/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
@@ -140,13 +137,9 @@ const GETOETET_VON = /`([^`\s]+:\d+\/(\d+))`[^\S\n]+wird getötet von[^\S\n]+`([
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8", maxBuffer: GROSSE_AUSGABE }).trim();
-}
+const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: GROSSE_AUSGABE }).trim();
 
-function lauf(befehl, args, optionen = {}) {
-  return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
-}
+const lauf = (befehl, args, optionen = {}) => spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
 
 function zeileDesBefunds(befund, lies) {
   try {
@@ -469,42 +462,9 @@ export function geaenderteBereiche(basis) {
   return bereiche;
 }
 
-function mitStartkanten(nutzer) {
-  for (const pfad of git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei))) {
-    for (const [, name, voll] of readFileSync(pfad, "utf8").matchAll(STARTPFAD)) {
-      const ziel = voll ?? `src/${name}`;
-      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-    }
-  }
-  return nutzer;
-}
-
 function einbettungen() {
   return git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei)).flatMap((pfad) =>
     [...readFileSync(pfad, "utf8").matchAll(EINBETTUNG)].map(([, verweis]) => ({ pfad, ziel: join(dirname(pfad), verweis) })));
-}
-
-function mitEinbettungen(nutzer, kanten) {
-  for (const { pfad, ziel } of kanten) nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-  return nutzer;
-}
-
-function nennendeTests(ziel, nutzer) {
-  const stamm = basename(ziel, extname(ziel));
-  const globale = new Set([...readFileSync(ziel, "utf8").matchAll(GLOBAL_GESETZT)].map(([, global]) => global));
-  const nennt = (pfad) => {
-    const text = readFileSync(pfad, "utf8");
-    return pfad.includes(stamm) || text.includes(stamm) || (text.match(WORT) ?? []).some((wort) => globale.has(wort));
-  };
-  const testcode = git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei));
-  return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());
-}
-
-function eingebetteteTests(dateien) {
-  const kanten = einbettungen();
-  const ziele = dateien.filter((datei) => kanten.some(({ ziel }) => ziel === datei));
-  const nutzer = ziele.length > 0 ? mitEinbettungen(mitStartkanten(graph()), kanten) : null;
-  return Object.fromEntries(ziele.map((ziel) => [ziel, nennendeTests(ziel, nutzer)]).map(([ziel, nennende]) => [ziel, [...testTiefen([ziel], nutzer).keys()].filter((pfad) => nennende.has(pfad))]));
 }
 
 function mutationTests(basis) {
@@ -567,8 +527,7 @@ export function ausgefuehrteMutanten(prozesse, orte) {
 
 async function abdeckungMessen(plan) {
   const orte = schutzOrte(plan.dateien);
-  const { eingebettete } = plan;
-  const eingebettet = (datei) => Object.entries(eingebettete).filter(([, tests]) => tests.includes(datei)).flatMap(([ziel]) => Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) === ziel));
+  const eingebettet = Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) in plan.eingebettete);
   const offen = plan.tests.filter((datei, index) => index % teilAnzahl() === teilNummer());
   const abdeckung = {};
   const dauer = {};
@@ -587,7 +546,7 @@ async function abdeckungMessen(plan) {
       dauer[datei] = Date.now() - start;
       if (zeitueberschritten) console.error(`${datei} ${Math.round((Date.now() - start) / SEKUNDE_MS)} s`);
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
-      abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
+      abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet])];
       rmSync(dirname(ordner), { recursive: true, force: true });
     }
   };
@@ -607,7 +566,10 @@ const dauerLaden = () => Object.assign({}, ...abdeckungDateien(DAUER_TEIL));
 
 function mutantenZeile({ datei, offset }) {
   const text = `${readFileSync(datei, "utf8")}\n`;
-  return text.slice(text.lastIndexOf("\n", offset) + 1, text.indexOf("\n", offset));
+  const rumpf = /^stryMutAct_\w+\("[^"]*"\)\)\s*\{\s*\}\s*else\s*(?=\{)/.exec(text.slice(offset));
+  let tiefe = 0;
+  const schluss = rumpf && [...text.matchAll(/[{}]/g)].find(({ 0: klammer, index }) => index >= offset + rumpf[0].length && (tiefe += klammer === "{" ? 1 : -1) === 0);
+  return text.slice(text.lastIndexOf("\n", offset) + 1, schluss ? schluss.index + 1 : text.indexOf("\n", offset));
 }
 
 function ausgabeKurz(ausgabe) {
@@ -722,10 +684,6 @@ function teileSchreiben(bericht) {
   return true;
 }
 
-function einbettungenAufUnveraendertenQuellen(zaehlen, dateien) {
-  return zaehlen && env[ABDECKUNG] !== undefined ? { eingebettete: eingebetteteTests(dateien) } : {};
-}
-
 export function strykerKonfiguration(mutate, bericht) {
   return { testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, disableTypeChecks: false, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" };
 }
@@ -738,7 +696,7 @@ function mutationTeil(argv) {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), dauer: dauerLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), dauer: dauerLaden(), eingebettete: Object.fromEntries(einbettungen().map(({ ziel }) => [ziel, true])) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify(strykerKonfiguration(mutate, bericht)));
@@ -809,6 +767,20 @@ function prTextLesen(argv) {
   }
 }
 
+function protokollLesen(arbeitsbaum) {
+  const pfad = join(arbeitsbaum, ".pruefung", "regression.log");
+  return existsSync(pfad) ? readFileSync(pfad, "utf8") : "";
+}
+
+function nurUebersprungen(ausgabe) {
+  const zahl = (name) => Number(new RegExp(`^(?:#|ℹ) ${name} (\\d+)$`, "m").exec(ausgabe)?.[1] ?? 0);
+  return zahl("skipped") > 0 && zahl("pass") === 0;
+}
+
+function brauchtDatenbank(datei) {
+  return /\bpostgresVorhanden\b/.test(readFileSync(datei, "utf8"));
+}
+
 function gruenAufBasis(basis, hinzugekommen) {
   const ordner = mkdtempSync(join(tmpdir(), "rotprobe-vorab-"));
   const arbeitsbaum = join(ordner, "basis");
@@ -819,7 +791,14 @@ function gruenAufBasis(basis, hinzugekommen) {
       writeFileSync(join(arbeitsbaum, datei), readFileSync(datei));
     }
     if (existsSync("node_modules") && !existsSync(join(arbeitsbaum, "node_modules"))) symlinkSync(resolve("node_modules"), join(arbeitsbaum, "node_modules"));
-    return hinzugekommen.filter((datei) => TESTDATEI.test(datei)).filter((datei) => spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, stdio: "ignore", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" }).status === 0);
+    const gruen = [];
+    const nichtPruefbar = [];
+    for (const datei of hinzugekommen.filter((name) => TESTDATEI.test(name))) {
+      const lauf = spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, encoding: "utf8", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" });
+      if (lauf.status !== 0) continue;
+      (brauchtDatenbank(datei) || nurUebersprungen(lauf.stdout + protokollLesen(arbeitsbaum)) ? nichtPruefbar : gruen).push(datei);
+    }
+    return { gruen, nichtPruefbar };
   } finally {
     git(["worktree", "remove", "--force", arbeitsbaum]);
     rmSync(ordner, { recursive: true, force: true });
@@ -837,7 +816,9 @@ function prTextVorab(argv) {
     return 0;
   }
   const genannt = gruenAufMaster(prText).map(({ datei }) => datei);
-  const fehlend = gruenAufBasis(basis, hinzugekommen).filter((datei) => !genannt.includes(datei));
+  const { gruen, nichtPruefbar } = gruenAufBasis(basis, hinzugekommen);
+  for (const datei of nichtPruefbar) console.log(`${datei}: nicht prüfbar ohne Datenbank, die CI-Rotprobe entscheidet`);
+  const fehlend = gruen.filter((datei) => !genannt.includes(datei));
   for (const datei of fehlend) console.log(`${datei} ist auf master grün; der PR-Text nennt sie nicht unter „## Überlebende Mutanten“. Eintrag: \`src/datei.js:zeile/id\` wird getötet von \`${datei}\``);
   return fehlend.length === 0 ? 0 : EXIT_ROT;
 }
@@ -998,6 +979,38 @@ async function umbenennungPruefen(basis) {
   return gruen;
 }
 
+const CI_DATEI = join(dirname(fileURLToPath(import.meta.url)), "../.github/workflows/ci.yml");
+const GITLEAKS_FASSUNG = /^\s*GITLEAKS_VERSION:\s*(\S+)\s*$/m;
+
+function gitleaksFassungErwartet() {
+  try {
+    return readFileSync(CI_DATEI, "utf8").match(GITLEAKS_FASSUNG)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function gitleaksScan(basis) {
+  const args = ["git", "--config", "gitleaks.toml", "--redact", "--no-banner", "--exit-code", "1", `--log-opts=${basis}..HEAD`, "."];
+  return lauf("gitleaks", args);
+}
+
+function gitleaksPruefen(basis) {
+  const fassung = spawnSync("gitleaks", ["version"], { encoding: "utf8" });
+  if (fassung.error !== undefined || fassung.status !== 0) {
+    if (env.GITHUB_ACTIONS === "true") console.log("Gitleaks rot: gitleaks nicht installiert.");
+    else console.log("Gitleaks übersprungen: gitleaks nicht installiert; die CI prüft es.");
+    return env.GITHUB_ACTIONS !== "true";
+  }
+  const erwartet = gitleaksFassungErwartet();
+  const gefunden = fassung.stdout.trim().replace(/^v/, "");
+  if (erwartet === undefined || gefunden !== erwartet) {
+    console.log(`Gitleaks rot: Fassung erwartet ${erwartet ?? "(GITLEAKS_VERSION in ci.yml fehlt)"}, gefunden ${gefunden}.`);
+    return false;
+  }
+  return gitleaksScan(basis);
+}
+
 const SCHRITTE = {
   lint(basis) {
     const dateien = geaendert(basis).filter((pfad) => CODE.test(pfad));
@@ -1039,6 +1052,7 @@ const SCHRITTE = {
     for (const befund of befunde) console.log(`${befund.path}:${befund.start.line}: ${befund.check_id}: ${befund.extra.message}`);
     return befunde.length === 0;
   },
+  gitleaks: gitleaksPruefen,
   tests(basis) {
     const { direkt, alle } = betroffeneTests(geaendert(basis));
     const auswahl = direkt.slice(0, OHNE_LOKALE_SPERRE);

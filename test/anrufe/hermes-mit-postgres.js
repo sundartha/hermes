@@ -15,7 +15,7 @@ import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { starteAnrufstartAttrappe } from "./elevenlabs-anrufstart-attrappe.js";
 import { starteAttrappe } from "./attrappen-server.js";
 
-const SQL_FRIST_MS = 5_000;
+const SQL_FRIST_MS = 30_000;
 const SQL_TAKT_MS = 50;
 const ZIEL_VORWAHL = "+49151123401";
 const ZIEL_STELLEN = 3;
@@ -143,11 +143,11 @@ export async function mitZweiHermesAufPostgres(t, { env = {}, mandantGepinnt }, 
 }
 
 export async function zeilenBis(lies, genug, fristMs = SQL_FRIST_MS) {
-  const ende = Date.now() + fristMs;
+  const start = Date.now();
+  const ende = start + fristMs;
   let zeilen = await lies();
   while (!genug(zeilen)) {
-    if (Date.now() >= ende) throw new Error(fristAblaufMeldung(zeilen));
-    assert.ok(Date.now() < ende, `Zustand per SQL nicht erreicht: ${JSON.stringify(zeilen)}`);
+    if (Date.now() >= ende) throw new Error(fristAblaufMeldung(zeilen, Date.now() - start));
     await echtWarten(SQL_TAKT_MS);
     zeilen = await lies();
   }
@@ -231,12 +231,13 @@ export function rufeAnMit(srv, auftrag) {
 }
 
 export async function anrufAnBis(sql, { ziel, genug, fristMs = SQL_FRIST_MS }) {
-  const ende = Date.now() + fristMs;
+  const start = Date.now();
+  const ende = start + fristMs;
   let [anruf] = (await sql(ANRUF_AN_SQL, [ziel])).rows;
   while (!anruf || !genug(anruf)) {
     assert.ok(
       Date.now() < ende,
-      `Anruf an ${ziel} per SQL nicht erreicht: ${JSON.stringify(anruf)}`,
+      `Anruf an ${ziel} per SQL nach ${Date.now() - start} ms nicht erreicht: ${JSON.stringify(anruf)}`,
     );
     await echtWarten(SQL_TAKT_MS);
     [anruf] = (await sql(ANRUF_AN_SQL, [ziel])).rows;

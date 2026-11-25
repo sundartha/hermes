@@ -9,6 +9,7 @@ const ZEITGRENZE_MS = 120_000;
 const EINMAL = 1;
 const GRUSS = "Hallo,";
 const KI_HINWEIS = "ich bin Hermes, der KI-Assistent von Jonas Beispiel";
+const ANSCHLUSS = "Es geht um Folgendes: Termin am Donnerstag vereinbaren. Bitte sprechen Sie.";
 const TEXT_SQL = "SELECT text FROM vorspann_zustand WHERE call_id = $1";
 
 const vorkommen = (text, teil) => text.split(teil).length - EINMAL;
@@ -26,10 +27,10 @@ async function eroeffnungEinmal(t, { vorspannAuf, initAuf: initInstanz }) {
     assert.ok(gesprochen.startsWith(GRUSS), gesprochen);
     assert.equal(vorkommen(gesprochen, KI_HINWEIS), EINMAL);
     const anderer = await initAuf(srv[initInstanz], sql, callId);
-    assert.equal(anderer.conversation_config_override.agent.first_message, "");
+    assert.equal(anderer.conversation_config_override.agent.first_message, ANSCHLUSS);
     assert.equal(anderer.dynamic_variables.eroeffnung_gesagt, gesprochen);
     const wieder = await initAuf(vorspann, sql, callId);
-    assert.equal(wieder.conversation_config_override.agent.first_message, "");
+    assert.equal(wieder.conversation_config_override.agent.first_message, ANSCHLUSS);
     assert.equal(aufrufe.wiedergaben.length, EINMAL);
   });
 }

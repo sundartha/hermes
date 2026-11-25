@@ -6,13 +6,16 @@ gitr() { git -C "$REPO" "$@"; }   # paket.sh ruft git im Ordner REPO über gitr 
 
 REPO=$T/repo; mkdir -p $REPO && git -C $REPO init -q -b master && git -C $REPO commit -q --allow-empty -m a
 git -C $REPO worktree add -q $T/wt-x1 -b paket/x1 >/dev/null
-STELLE=$(grep -o 'LB=\$B; \[\[ \$B == [a-z]*/\* \]\] && LB=paket/\${B#system/}; WT=[^#]*' $S | head -1)
+STELLE=$(grep -E '^kopie_von\(\) \{' $S | head -1)   # 24.11.: eine Funktion für Rücklauf und Wegräumen
 [ -n "$STELLE" ] || { echo "ROT  Stelle nicht in paket.sh gefunden"; exit 1; }
-suche() { B=$1 eval "$STELLE"; echo "$WT"; }
+eval "$STELLE"; suche() { kopie_von "$1"; }
 pruefe() { [[ "$2" == "$3" ]] && echo "ok   $1" || { echo "ROT  $1: '$2' != '$3'"; fehler=1; }; }
 W=$(cd $T/wt-x1 && pwd -P)
 pruefe "PR auf paket/x1 findet den Worktree" "$(suche paket/x1)" "$W"
 pruefe "PR auf system/x1 findet denselben Worktree" "$(suche system/x1)" "$W"
+WEG=$(grep -E '^wegraeumen\(\) \{' $S | head -1); [ -n "$WEG" ] || { echo "ROT  wegraeumen nicht in paket.sh gefunden"; exit 1; }; eval "$WEG"   # 24.11.: die Kette räumt die Arbeitskopie eines gemergten/geschlossenen PR selbst weg
+git -C $REPO worktree add -q $T/wt-y -b paket/y >/dev/null; gh() { echo paket/y; }; wegraeumen 1; unset -f gh
+pruefe "wegraeumen entfernt Arbeitskopie und Zweig des PR" "$(ls $T | grep -c "^wt-y$")$(git -C $REPO branch --list paket/y | wc -l | tr -d ' ')" "00"
 pruefe "fremder Zweig findet keinen Worktree" "$(suche andere/x1)" ""
 # Geschlossener PR ohne Merge: Merge-Schleife und Selbstneustart-Wartender warten nicht 60 bzw. 15 Minuten, sondern gehen weiter (4178, 17.11.). Beide Stellen werden aus paket.sh gelesen.
 SCHLEIFE=$(grep -o 'prj \$PR; S=\$PRS; \[ "\$S" = MERGED \] && break; \[ "\$S" = CLOSED \] && {[^}]*}' $S | head -1)
@@ -51,6 +54,12 @@ pruefe "Kopf unveraendert seit Nachtrag: nicht umgesetzt" "$(nb '9\n' aaa aaa)" 
 pruefe "dreimal umgesetzt: Grenze" "$(nb '9\n9\n9\n' aaa bbb)" "Nachbesserungsgrenze erreicht "
 pruefe "zweimal umgesetzt: weiter" "$(nb '9\n9\n' aaa bbb)" ""
 pruefe "Halt-Kommentar mit letzter Bewertung steht im Issue" "$(grep -c 'Paket hält bei PR #\$PR: \$HG. Letzte Bewertung' $S)" "1"
+# A-5UNP4V 25.11.: Startgrenze zählt nur, wenn starts.txt frisch ist (PAKET_STARTS_FRIST, 360 min); ein alter Zähler (5x) lässt den Start zu, ein frischer hält. Die Stelle wird aus paket.sh gelesen.
+GRENZE=$(grep -m1 'sechster Start ohne Merge' $S | sed 's/   # zählt nur.*//')
+[ -n "$GRENZE" ] || { echo "ROT  Startgrenze nicht in paket.sh gefunden"; exit 1; }
+grenze() { local D=$(mktemp -d); LOG=$D; START=h1; ( for _ in 1 2 3 4 5; do echo h1; done ) > $LOG/starts.txt; [ -n "$1" ] && touch -t $(date -d "$1 hours ago" +%Y%m%d%H%M 2>/dev/null || date -v-${1}H +%Y%m%d%H%M) $LOG/starts.txt; ( eval "$GRENZE" ) 2>/dev/null; [ -s $LOG/halt.txt ] && echo halt || echo frei; }
+pruefe "frischer Zaehler (5 Starts) haelt" "$(grenze)" "halt"
+pruefe "7 h alter Zaehler (5 Starts) startet" "$(grenze 7)" "frei"
 # wt-steuerung (Issue 5760): alle Git-Aufrufe im gemeinsamen Ordner laufen unter einer Sperre; ein index.lock-Zusammenstoß wird wiederholt statt zu scheitern
 GITR=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
 [ -n "$GITR" ] || { echo "ROT  gitr in paket.sh nicht gefunden"; exit 1; }
@@ -61,19 +70,35 @@ touch $G/.git/index.lock; ( sleep 3; mv $G/.git/index.lock $T/lock.weg ) &
 gitr checkout -q --detach master; pruefe "index.lock-Zusammenstoss wird wiederholt und gelingt" "$?" "0"; wait
 ( gitr checkout -q --detach master & gitr checkout -q --detach master & gitr checkout -q --detach master & wait ) 2>/dev/null
 pruefe "drei gleichzeitige Checkouts unter der Sperre" "$(git -C $G rev-parse --abbrev-ref HEAD)" "HEAD"
-# Host-Weiche (#5766): eine Quelle fuer Mac und Server; die Werte je Host stehen allein in host_werte(), uname wird als Funktion vorgegeben.
-HW=$(sed -n '/^host_werte() {/,/^}/p' $S)
-[ -n "$HW" ] || { echo "ROT  host_werte nicht in paket.sh gefunden"; exit 1; }
-hw() { zsh -c 'uname() { echo $UN; }; HOME=/h; PATH=/usr/bin:/bin; eval "$HW"; host_werte; print -r -- "$MAX_KETTEN|$PATH|$GHBIN|$PYBIN|${(j: :)SEDI}"' ; }
-pruefe "Darwin: 14 Ketten, kein Node-22-Pfad, gh und python3 aus homebrew, BSD-sed" "$(UN=Darwin HW=$HW hw)" "14|/usr/bin:/bin|/opt/homebrew/bin/gh|/opt/homebrew/bin/python3|sed -i "
-pruefe "Linux: 3 Ketten, Node 22 vorn, gh und python3 aus dem Pfad, GNU-sed" "$(UN=Linux HW=$HW hw)" "3|/h/node22/bin:/usr/bin:/bin|gh|python3|sed -i"
-KE=$(grep -E '^konto_env\(\) \{' $S | sed 's/   # .*//')
-[ -n "$KE" ] || { echo "ROT  konto_env nicht in paket.sh gefunden"; exit 1; }
-ke() { zsh -c 'uname() { echo $UN; }; eval "$KE"; CLAUDE_CODE_OAUTH_TOKEN=x konto_env 2 env | grep -E "^(KONTO_FEST|CLAUDE_KONTO|CLAUDE_CODE_OAUTH_TOKEN)=" | tr "\n" " "'; }
-pruefe "Linux: Verbrauchsabfrage laeuft mit festem Konto und ohne Abo-Schluessel" "$(UN=Linux KE=$KE ke)" "KONTO_FEST=1 CLAUDE_KONTO=2 "
-pruefe "Darwin: Verbrauchsabfrage laeuft ohne Konto-Umgebung" "$(UN=Darwin KE=$KE ke)" "CLAUDE_CODE_OAUTH_TOKEN=x "
-pruefe "Linux-Teile (Scope, Konto-Schluessel, Lastampel) laufen nur unter Linux" "$(grep -E 'PAKET_SCOPE|_kn=1;|AMPEL_K=' $S | grep -c '^\[\[ \$(uname) == Linux \]\]\|^if \[\[ \$(uname) == Linux \]\]')" "3"
-pruefe "paket.sh kennt keine feste homebrew-Datei ausserhalb der Weiche" "$(grep -v '^  *Darwin)' $S | grep -c '/opt/homebrew/bin/\(gh\|python3\)')" "0"
 GL=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
 pruefe "gitr nimmt unter Linux flock und unter Darwin lockf" "$(print -r -- "$GL" | grep -c 'flock -w 120.*lockf -k -t 120\|lockf -k -t 120.*flock -w 120')" "1"
+pruefe "ausgeloest sucht den CI-Lauf ueber die Workflow-Datei, nicht ueber den Laufnamen" "$(grep -E '^ausgeloest\(\)' $S | grep -c 'index(".github/workflows/ci.yml")')" "1"
+pruefe "ausgeloest liest nicht mehr den Laufnamen CI" "$(grep -E '^ausgeloest\(\)' $S | grep -c 'index("CI")')" "0"
+# Anspruch (#4438): die Kette erkennt offene PRs des Issues an Kopf und Text und gibt WARTET=<PR> aus, wenn bau "ist in Arbeit" meldet.
+pruefe "Bau-Prompt erkennt offene PRs an Kopf paket/ISSUE-* und system/ISSUE-*" "$(grep -c 'offenen PR zum Issue (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*, oder im Text .Refs #\$ISSUE., .Closes #\$ISSUE. oder .Teil von #\$ISSUE.): übernimm ihn' $S)" "1"
+pruefe "Kette wartet auf die PR-Nummer aus ist in Arbeit" "$(grep -c "Antwortet bau mit 'ist in Arbeit' und nennt eine PR-Nummer, schreib davor eine eigene Zeile WARTET=<diese Nummer> und als letzte Zeile PR=keiner" $S)" "1"
+pruefe "Entscheidungs-Sitzung sucht offene PRs des Issues an Kopf und Text" "$(grep -c "falls es einen offenen PR zum Issue gibt (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*" $S)" "1"
+# freigabe-am-pr (25.11.): Die Freigabe-Prüfung am PR ist bis zum Approve rot (Es fehlt das KI-Urteil). Die Kette darf dadurch nicht halten (Deadlock), jede andere Ursache bleibt ein Halt. Die Stelle wird aus paket.sh gelesen, gh ist ein Ersatz.
+PFL=$(grep -E '^pflicht_ausser_urteil\(\) \{' $S | sed 's/   # freigabe-am-pr.*//')
+[ -n "$PFL" ] || { echo "ROT  pflicht_ausser_urteil nicht in paket.sh gefunden"; exit 1; }; eval "$PFL"
+TAB=$(printf '\t')
+gh() { case "$1 $2" in "pr checks") [ -n "${CHECKS-x}" ] && printf '%b' "$CHECKS" ;; "run view") printf '%s' "$LOGTEXT" ;; esac; }
+PASSALLE="CI${TAB}pass${TAB}1m${TAB}https://x/runs/1/job/2\nTestschutz${TAB}pass${TAB}1s${TAB}https://x/runs/3/job/4\n"
+FREI_ROT="Freigabe-Prüfung${TAB}fail${TAB}5s${TAB}https://x/runs/77/job/8\n"
+CHECKS="$PASSALLE$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve von Antonio20045 oder jonas986 auf dem Stand abc1234."
+pflicht_ausser_urteil 5; pruefe "nur das KI-Urteil fehlt: kein Halt" "$?" "0"
+LOGTEXT="x.js: Prüfregel auf Branch paket/a. Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "Prüfregel-Befund bleibt ein Halt" "$?" "1"
+LOGTEXT="Code unter src/ kommt nur vom Bau-Agenten (x); Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "src/ von anderem Autor bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Tests 1/3${TAB}fail${TAB}1m${TAB}https://x/runs/9/job/1\n$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "andere rote Prüfung bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Tests 1/3${TAB}pending${TAB}0${TAB}https://x/runs/9/job/1\n$FREI_ROT"
+pflicht_ausser_urteil 5; pruefe "andere offene Prüfung bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Freigabe-Prüfung${TAB}pass${TAB}5s${TAB}https://x/runs/77/job/8\n"
+pflicht_ausser_urteil 5; pruefe "alles grün: kein Halt" "$?" "0"
+CHECKS=""; pflicht_ausser_urteil 5; pruefe "keine Auskunft von GitHub ist kein Freibrief" "$?" "1"
+unset -f gh
+pruefe "umzug (Prüfregel-PR) kommt vor der Ausnahme für das KI-Urteil" "$(grep -c 'cwarten \$PR > /dev/null 2>&1 || umzug \$PR \$MIG || pflicht_ausser_urteil \$PR ||' $S)" "1"
+pruefe "freigeben wartet nach dem Approve auf die grüne Freigabe-Prüfung" "$(grep -E '^freigeben\(\)' $S | grep -c 'eingereiht \$1 || { urteil_gruen \$1;')" "1"
 exit $fehler

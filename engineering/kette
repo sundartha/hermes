@@ -1,0 +1,58 @@
+#!/bin/bash
+# kette – der eine Weg zu einer Bau-Kette, egal ob sie auf dem Server oder auf Antonios Mac läuft (24.11.2026).
+# Die Agenten laufen auf dem Server; ein Teil der Ketten läuft auf dem Mac (der Server ist dafür zu klein, Antonio 24.11.).
+# Dieser Befehl findet die Kette und führt die Aktion dort aus, wo sie liegt. Für Mac-Ketten legt er einen Auftrag ab,
+# den der Mac binnen zwei Minuten abholt (cloud/mac-auftraege-holen.sh auf dem Mac), und wartet auf das Ergebnis.
+#
+#   kette <nr>                         wo die Kette liegt und ihr Stand (lage paket)
+#   kette <nr> ls                      Dateien im Ketten-Ordner
+#   kette <nr> lies <datei>            eine Datei lesen (Mac: Spiegel, höchstens wenige Minuten alt)
+#   kette <nr> schreibe <datei> <text> Datei mit Text ersetzen   (wartet-auf.txt, halt-bis.txt)
+#   kette <nr> anhaengen <datei> <text> Zeile anhängen           (halt.txt)
+#   kette <nr> entferne <datei>        Datei entfernen           (halt-bis.txt, starts.txt, wartet-auf.txt)
+#   kette <nr> start [konto]           Kette starten oder neu starten (paket.sh); Konto 1, 2 oder 3, sonst wählt paket.sh
+set -u
+K=/home/ubuntu/Bereiche/sundartha/engineering/ketten
+SPIEGEL=/home/ubuntu/Bereiche/openclaw/cloud/mac-ketten
+AUFTRAEGE=/home/ubuntu/Bereiche/openclaw/cloud/mac-auftraege
+LAGE=/home/ubuntu/Bereiche/openclaw/lage/lage
+SCHREIBBAR="wartet-auf.txt halt-bis.txt halt.txt starts.txt"
+
+NR=${1:-}; AKTION=${2:-stand}
+[[ $NR =~ ^[0-9]+$ ]] || { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+ort() {   # mac, wenn der Mac die Kette führt (sein Spiegel existiert); server, wenn nur hier ein Ordner liegt; sonst neu
+  if [ -d "$SPIEGEL/paket-$NR" ]; then echo mac
+  elif [ -d "$K/paket-$NR" ]; then echo server
+  else echo neu; fi; }
+ORT=$(ort)
+
+datei_ok() { [[ " $SCHREIBBAR " == *" $1 "* ]] || { echo "Datei $1 ist hier nicht vorgesehen. Erlaubt: $SCHREIBBAR" >&2; exit 2; }; }
+
+auf_mac() {   # Auftrag ablegen und auf das Ergebnis warten (höchstens 5 Minuten)
+  mkdir -p "$AUFTRAEGE"; local ID; ID=$(date +%s)-$NR-$$
+  printf '%s\n%s\n%s\n%s\n' "$NR" "$1" "${2:-}" "$(printf '%s' "${3:-}" | base64 -w0)" > "$AUFTRAEGE/$ID.neu" && mv "$AUFTRAEGE/$ID.neu" "$AUFTRAEGE/$ID.auftrag"
+  echo "Kette #$NR läuft auf dem Mac. Auftrag abgelegt, der Mac holt ihn binnen zwei Minuten ab …" >&2
+  for _ in $(seq 1 60); do
+    if [ -f "$AUFTRAEGE/$ID.ergebnis" ]; then cat "$AUFTRAEGE/$ID.ergebnis"; mkdir -p "$AUFTRAEGE/erledigt"; mv "$AUFTRAEGE/$ID.ergebnis" "$AUFTRAEGE/erledigt/" 2>/dev/null; return 0; fi
+    sleep 5
+  done
+  echo "Der Mac hat den Auftrag in 5 Minuten nicht abgeholt (schläft er, ist er offline?). Der Auftrag bleibt liegen und wird ausgeführt, sobald der Mac wieder da ist: $AUFTRAEGE/$ID.auftrag" >&2; return 1; }
+
+case $AKTION in
+  stand) echo "Kette #$NR liegt: $ORT"; "$LAGE" paket "$NR" ;;
+  ls) case $ORT in mac) echo "(Spiegel vom Mac, Stand $(date -r "$SPIEGEL/paket-$NR" '+%H:%M'))"; ls -la "$SPIEGEL/paket-$NR" ;; server) ls -la "$K/paket-$NR" ;; *) echo "Kette #$NR gibt es noch nicht" ;; esac ;;
+  lies) F=${3:?Datei fehlt}; case $ORT in mac) cat "$SPIEGEL/paket-$NR/$F" ;; server) cat "$K/paket-$NR/$F" ;; *) echo "Kette #$NR gibt es noch nicht" >&2; exit 1 ;; esac ;;
+  schreibe|anhaengen|entferne) F=${3:?Datei fehlt}; datei_ok "$F"; T=${4:-}
+    case $ORT in
+      mac) auf_mac "$AKTION" "$F" "$T" ;;
+      server|neu) mkdir -p "$K/paket-$NR"; case $AKTION in schreibe) printf '%s\n' "$T" > "$K/paket-$NR/$F" ;; anhaengen) printf '%s\n' "$T" >> "$K/paket-$NR/$F" ;; entferne) rm -f "$K/paket-$NR/$F" ;; esac; echo "erledigt auf dem Server: $AKTION $F" ;;
+    esac ;;
+  start) KONTO=${3:-}; [[ -z $KONTO || $KONTO =~ ^[123]$ ]] || { echo "Konto muss 1, 2 oder 3 sein" >&2; exit 2; }
+    case $ORT in
+      mac) auf_mac start "$KONTO" "" ;;
+      *) cd /home/ubuntu/Bereiche/sundartha/engineering && mkdir -p "$K/paket-$NR" && nohup ./paket.sh "$NR" $KONTO >> "$K/paket-$NR/kette.out" 2>&1 < /dev/null &
+         sleep 3; echo "gestartet auf dem Server (ist er voll, reiht paket.sh die Kette ein und der Mac übernimmt sie)"; tail -2 "$K/paket-$NR/kette.out" 2>/dev/null ;;
+    esac ;;
+  *) echo "Unbekannte Aktion $AKTION" >&2; sed -n '7,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

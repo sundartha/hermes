@@ -10,7 +10,7 @@ import {
   REQUEST_NUMBER_REASON,
   NUMBER_HOLD_REASON,
 } from "../../begriffe/nummern-vergabe.js";
-import { DEFAULT_COUNTRY } from "../../begriffe/sprache-zeit.js";
+import { DEFAULT_COUNTRY } from "../../begriffe/sprache-zeit.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.js";
 import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.js";

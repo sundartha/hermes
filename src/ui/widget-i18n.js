@@ -82,6 +82,7 @@ export const WIDGET_DICT = {
     "Duration limit": "Dauerlimit",
     "Budget used up": "Budget aufgebraucht",
     "Result being evaluated": "Wird ausgewertet",
+    "No longer updating": "Nicht mehr aktualisiert",
   },
   fr: {
     "Hermes · Call": "Hermes · Appel",
@@ -162,6 +163,7 @@ export const WIDGET_DICT = {
     "Duration limit": "Limite de durée",
     "Budget used up": "Budget épuisé",
     "Result being evaluated": "Évaluation en cours",
+    "No longer updating": "Plus de mise à jour",
   },
 };
 

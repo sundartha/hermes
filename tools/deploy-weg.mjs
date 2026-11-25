@@ -67,6 +67,12 @@ function grundLesen(wert) {
   return GRUND_MUSTER.test(wert) ? wert : null;
 }
 
+const MESSUNG_GRUND_MUSTER = /^(?=.{1,60}$)[A-Za-z_]+(?:_\d{3})?$/;
+
+function messungGrundLesen(wert) {
+  return MESSUNG_GRUND_MUSTER.test(wert) ? wert : null;
+}
+
 const ARGUMENTE = new Map([
   ["--name", anlassLesen],
   ["--commit", commitLesen],
@@ -77,6 +83,7 @@ const ARGUMENTE = new Map([
   ["--anlass", anlassLesen],
   ["--seit", zeitpunktLesen],
   ["--grund", grundLesen],
+  ["--messung-grund", messungGrundLesen],
 ]);
 
 function ereignisLesen(einstellungen) {
@@ -108,7 +115,7 @@ const BEFEHLE = new Map([
     "hoertest",
     {
       argumente: ["--commit", "--teile"],
-      freiwillig: ["--anlass", "--seit", "--grund"],
+      freiwillig: ["--anlass", "--seit", "--grund", "--messung-grund"],
       ausfuehren: async ({ einstellungen, werte, ausgabe }) => {
         await hoertestIssueAnlegenOderErsetzen({
           einstellungen,
@@ -117,6 +124,7 @@ const BEFEHLE = new Map([
           teile: werte.get("--teile"),
           seit: werte.get("--seit"),
           grund: werte.get("--grund"),
+          messungGrund: werte.get("--messung-grund"),
           ausgabe,
         });
         return true;

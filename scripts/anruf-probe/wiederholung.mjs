@@ -8,11 +8,31 @@ export function normalisiert(nummer) {
   return String(nummer).replace(SCHREIBWEISE, "");
 }
 
+const GRUND_MAX = 60;
+const GRUNDCODE = /^[A-Za-z_]+$/;
+const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
+
+const kleinbuchstabeOderStrich = (zeichen) => zeichen === "_" || (zeichen >= "a" && zeichen <= "z");
+
+function detailSuffix(fehler, meldung) {
+  const gueltig = meldung !== null && typeof fehler.detail === "string" && [...fehler.detail].every(kleinbuchstabeOderStrich);
+  return gueltig ? `:${fehler.detail}` : "";
+}
+
+function bereinigt(fehler) {
+  if (fehler === null || fehler === undefined) return "";
+  const meldung = typeof fehler.message === "string" && MELDUNGSCODE.test(fehler.message) ? fehler.message : null;
+  const kandidaten = [fehler.code, fehler.cause?.code, fehler.name];
+  const code = kandidaten.find((wert) => typeof wert === "string" && GRUNDCODE.test(wert));
+  return `${meldung ?? code ?? "unbekannt"}${detailSuffix(fehler, meldung)}`.slice(0, GRUND_MAX);
+}
+
 async function messenOderNichts(messen) {
   try {
     return urteilen(await messen());
-  } catch {
-    return urteilen(null);
+  } catch (fehler) {
+    const grund = bereinigt(fehler);
+    return grund === "" ? urteilen(null) : { ...urteilen(null), grund };
   }
 }
 
