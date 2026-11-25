@@ -23,13 +23,17 @@ Workflows, nicht als GitHub-Variablen: `STAGING_URL` =
 die Aenderung als Pull Request in die Workflow-Datei. Beide Dienste melden
 unter `/healthz` den Commit, der gerade laeuft.
 
-`HERMES_DEPLOY_TOKEN` ist das Token, mit dem der Workflow `live` die
-Produktion unter `/intern/anrufe-laufend` fragt, ob gerade ein Anruf laeuft.
-Es hat mindestens 32 Zeichen, ohne Leerzeichen und ohne Zeilenumbruch, und
-steht mit demselben Wert an zwei Stellen: als Secret im GitHub-Environment
-`produktion` und als Umgebungsvariable beim Render-Dienst `vodafone-agent`.
-Fehlt es auf dem Server oder hat es dort weniger als 32 Zeichen, lehnt die
-Produktion jede Anfrage ab, und `live` deployt nicht.
+`HERMES_DEPLOY_TOKEN` ist das Token, mit dem der Workflow `notfall` die
+Anrufpause setzt und liest und laufende Anrufe meldet (`anrufpause` in
+`tools/deploy-weg/deploy.mjs`; die Produktion prueft es in
+`deployTokenAbgewiesen`, `src/routes/intern-anrufe-laufend.js`). `live` fragt
+damit keine laufenden Anrufe mehr ab, fuehrt es aber weiter als Pflichtwert
+(`tools/deploy-weg/einstellungen.mjs`, Schritt `deploy`). Das Format steht
+dort als Muster fuer `HERMES_DEPLOY_TOKEN`; es steht mit demselben Wert an
+zwei Stellen: als Secret im GitHub-Environment `produktion` und als
+Umgebungsvariable beim Render-Dienst `vodafone-agent`. Fehlt es auf dem
+Server oder passt es nicht zum Muster, lehnt die Produktion die Anfragen von
+`notfall` ab.
 
 Der Gateway baut und serviert das Website-Build mit (`app.sundartha.com`).
 Eine Aenderung unter `apps/web/` geht deshalb auch mit dem naechsten
@@ -124,11 +128,10 @@ ohne die Var bricht der Build ab).
      Lauf von `live` startet niemand neu.
 7. **Token wechseln** (`HERMES_DEPLOY_TOKEN`): neuen Wert an beiden Stellen
    eintragen (GitHub-Environment `produktion` und Render `vodafone-agent`).
-   Render uebernimmt den neuen Wert erst mit einem Deploy, und `live` kann
-   diesen Deploy nicht selbst machen. Danach deployt Antonio den Commit, den
+   Render uebernimmt den neuen Wert erst mit einem Deploy. Danach deployt Antonio den Commit, den
    `/healthz` der Produktion gerade meldet, einmal von Hand im
-   Render-Dashboard; so kommt kein neuer Code live. Bis dahin endet jeder
-   Lauf von `live` rot mit HTTP 401.
+   Render-Dashboard; so kommt kein neuer Code live. Bis dahin lehnt die
+   Produktion die Anrufpause von `notfall` mit HTTP 401 ab.
 
 ## Abhaengigkeits-Updates (automatisch, Issue #3458)
 
@@ -219,12 +222,11 @@ nennt je Zeile oben die Tests, die sie belegen.
   von dort. Loeschen darf ihn nur Antonio, erst nachdem dieses Runbook auf
   `master` ist und das Website-Labor nachweislich aus `master` baut.
 - Die Produktion wird nur ueber den Workflow `live` deployt. Ein
-  "Manual Deploy" im Render-Dashboard oder per API umgeht die Anruf-Pruefung
-  und den Gespraechsabdruck; erlaubt ist im Dashboard nur der Rollback.
-  Ausnahmen sind genau zwei Deploys von Hand: der einmalige erste Deploy
-  eines Commits mit diesem Weg (vorher kennt die Produktion
-  `/intern/anrufe-laufend` nicht, und `live` endet vor dem Ausloesen rot)
-  und der Deploy desselben Commits nach einem Token-Wechsel (Schritt 7).
+  "Manual Deploy" im Render-Dashboard oder per API umgeht den
+  Gespraechsabdruck; erlaubt ist im Dashboard nur der Rollback.
+  Einzige Ausnahme ist der Deploy desselben Commits von Hand nach einem
+  Token-Wechsel (Schritt 7): Render uebernimmt den neuen Wert erst mit einem
+  Deploy, bis dahin lehnt die Produktion die Anrufpause von `notfall` ab.
 - Der Gespraechsabdruck sieht nicht: was das Sprachmodell im Gespraech
   tatsaechlich formuliert, den Live-Agenten im ElevenLabs-Konto (dafuer
   `npm run elevenlabs:drift`) und Render-Umgebungsvariablen. Ein Push des
