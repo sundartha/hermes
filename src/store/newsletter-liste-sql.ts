@@ -4,7 +4,7 @@ const LISTE_ZURUECK = "newsletter_recipients, newsletter_confirm_mail_log";
 const LEERE_LISTE = "'[]'::jsonb";
 
 const ELEMENTE = "jsonb_array_elements(COALESCE(newsletter_recipients, '[]'::jsonb)) WITH ORDINALITY AS t(e, ord)";
-const neueListe = (bedingung, element = "e") =>
+const neueListe = (bedingung: string, element = "e"): string =>
   `(SELECT COALESCE(jsonb_agg(${element} ORDER BY ord), ${LEERE_LISTE}) FROM ${ELEMENTE} ${bedingung})`;
 
 const ANHAENGEN_SQL = `UPDATE tenant SET newsletter_recipients = COALESCE(newsletter_recipients, ${LEERE_LISTE}) || $2::jsonb,
@@ -22,11 +22,13 @@ const BESTAETIGEN_SQL = `UPDATE tenant SET newsletter_recipients = ${neueListe(
 
 export const NEWSLETTER_LISTEN_LESEN_SQL = `SELECT id, ${LISTE_ZURUECK} FROM tenant WHERE newsletter_recipients IS NOT NULL`;
 
-export function empfaengerAnhaengen(empfaenger, nowIso) {
+type Anweisung = { sql: string; werte: string[] };
+
+export function empfaengerAnhaengen(empfaenger: unknown, nowIso: string): Anweisung {
   const grenze = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
   return { sql: ANHAENGEN_SQL, werte: [JSON.stringify([empfaenger]), grenze, nowIso] };
 }
 
-export const empfaengerEntfernen = (email) => ({ sql: ENTFERNEN_SQL, werte: [email] });
-export const empfaengerAbmelden = (token) => ({ sql: ABMELDEN_SQL, werte: [token] });
-export const empfaengerBestaetigen = (tokenHash, nowIso) => ({ sql: BESTAETIGEN_SQL, werte: [tokenHash, nowIso] });
+export const empfaengerEntfernen = (email: string): Anweisung => ({ sql: ENTFERNEN_SQL, werte: [email] });
+export const empfaengerAbmelden = (token: string): Anweisung => ({ sql: ABMELDEN_SQL, werte: [token] });
+export const empfaengerBestaetigen = (tokenHash: string, nowIso: string): Anweisung => ({ sql: BESTAETIGEN_SQL, werte: [tokenHash, nowIso] });

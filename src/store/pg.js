@@ -38,7 +38,7 @@ import { macheMandantSql, sperreSchreiben } from "./mandant-sql.js";
 import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheTtsZaehlerSql } from "./tts-zaehler-sql.js";
-import { empfaengerAbmelden, empfaengerAnhaengen, empfaengerBestaetigen, empfaengerEntfernen } from "./newsletter-liste-sql.js";
+import { empfaengerAbmelden, empfaengerAnhaengen, empfaengerBestaetigen, empfaengerEntfernen } from "./newsletter-liste-sql.ts";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
