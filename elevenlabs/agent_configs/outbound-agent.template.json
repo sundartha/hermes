@@ -568,7 +568,7 @@
         "live": [
           "conversation_config.turn.initial_wait_time"
         ],
-        "_hinweis": "Besessen seit 2026-11-20 (Issue 5543): die Karenz, bevor der Agent nach dem Anrufstart von sich aus spricht. Der Vorspann laeuft ueber Telnyx bis VORSPANN_TTS_FRIST_MS (src/elevenlabs/vorspann-*.js); eine Rausch-Zeile oder die Anrufannahme in dieser Zeit fuehrte zur zweiten Begruessung. SOLL: Vorspann-Frist plus 5 s Karenz. LIVE GEMESSEN 2026-11-20: None - bis zum Push durch den Eigentuemer meldet npm run elevenlabs:drift dieses Feld erwartungsgemaess als ABWEICHUNG (Push-Absicht, keine Ausnahme). Kein Anrufstart-Override."
+        "_hinweis": "Besessen seit 2026-11-20 (Issue 5543): die Karenz, bevor der Agent nach dem Anrufstart von sich aus spricht. Der Vorspann laeuft ueber Telnyx bis VORSPANN_TTS_FRIST_MS (src/elevenlabs/vorspann-*.js); eine Rausch-Zeile oder die Anrufannahme in dieser Zeit fuehrte zur zweiten Begruessung. SOLL: Brueckendauer einer Eroeffnung plus Karenz, gerechnet in test/anrufe/6161-wartezeit-nach-bruecke.test.js (Issue 6161; Wert in der Vorlage unter turn.initial_wait_time). LIVE GEMESSEN 2026-11-20: None - bis zum Push durch den Eigentuemer meldet npm run elevenlabs:drift dieses Feld erwartungsgemaess als ABWEICHUNG (Push-Absicht, keine Ausnahme). Kein Anrufstart-Override."
       },
       {
         "feld": "disable_first_message_interruptions",
@@ -1008,7 +1008,7 @@
         "turn_timeout": 5,
         "silence_end_call_timeout": 30,
         "turn_eagerness": "patient",
-        "initial_wait_time": 10,
+        "initial_wait_time": 16,
         "transcribe_on_disabled_interruptions": false,
         "soft_timeout_config": {
           "message": "Hmm...",

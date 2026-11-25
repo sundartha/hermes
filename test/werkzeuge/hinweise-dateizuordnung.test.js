@@ -55,6 +55,8 @@ const KARTE_PROBE = {
     { baustein: "start", zweck: "Start.", quellen: ["src/start.js", "src/i18n/z.js"], eingaenge: ["src/start.js"], nutzt: [] },
   ],
   altlast: [],
+
+  javascriptBestand: ["src/api/x.js", "src/i18n/index.js", "src/i18n/z.js", "src/routes/a.js", "src/routes/c.js", "src/start.js", "src/util.js"],
 };
 const KARTE_UMGEZOGEN = {
   ...KARTE_PROBE,

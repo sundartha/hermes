@@ -55,6 +55,26 @@ export function meldeFirstMessageErgebnis({ callId, antwort }: { callId: string;
   console.log(`${LOG_TAG} first_message_ergebnis geliefert=${geliefert ? "ja" : "nein"} laenge=${String(laenge)} call=${callId}`);
 }
 
+const ERSTE_REDE_ZEICHEN = 40;
+
+const VERBORGEN = "***";
+const WORT_TRENNER = /\s+/;
+
+const namensTeile = (namen: readonly unknown[]): string[] =>
+  namen
+    .flatMap((name) => (typeof name === "string" ? [name.trim(), ...name.split(WORT_TRENNER)] : []))
+    .filter(Boolean)
+    .sort((links, rechts) => rechts.length - links.length);
+
+export function eroeffnungsFelder(antwort: unknown, namen: readonly unknown[]): string {
+  const agent = lies(lies(antwort, "conversation_config_override"), "agent");
+  const sprache = lies(agent, "language");
+  const text = lies(agent, "first_message");
+  if (typeof sprache !== "string" || typeof text !== "string") return "";
+  const ohneNamen = namensTeile(namen).reduce((rest, name) => rest.replaceAll(name, VERBORGEN), text);
+  return ` sprache=${sprache} erste_rede=${JSON.stringify(ohneNamen.slice(0, ERSTE_REDE_ZEICHEN))}`;
+}
+
 interface Gespraech {
   transcript?: ({ role?: unknown; message?: unknown; time_in_call_secs?: unknown } | null)[] | null;
   metadata?: { start_time_unix_secs?: unknown } | null;

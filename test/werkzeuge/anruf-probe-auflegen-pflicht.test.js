@@ -13,7 +13,7 @@ function auflegen(umgebung) {
     PATH: process.env.PATH,
     STAGING_URL: "https://hermes-staging-erpv.onrender.com",
     STAGING_PROBE_ZIEL: ZIEL,
-    STAGING_TEST_TOKEN: PROBE_STAGING_TEST_TOKEN,
+    STAGING_PROBE_TOKEN: PROBE_STAGING_TEST_TOKEN,
     PROBE_ANRUFER_MODUL: MODUL,
     PROBE_FALL: JSON.stringify({ eigeneNummer: ZIEL, offene: 3 }),
     ...umgebung,
@@ -25,18 +25,18 @@ function auflegen(umgebung) {
   return new Promise((fertig) => kind.on("close", (code) => fertig({ code, ausgabe })));
 }
 
-test("auflegen ohne STAGING_TEST_TOKEN im Push-Lauf: übersprungen, grün, nichts beendet", async () => {
-  const ergebnis = await auflegen({ GITHUB_EVENT_NAME: "push", STAGING_TEST_TOKEN: "" });
+test("auflegen ohne STAGING_PROBE_TOKEN im Push-Lauf: übersprungen, grün, nichts beendet", async () => {
+  const ergebnis = await auflegen({ GITHUB_EVENT_NAME: "push", STAGING_PROBE_TOKEN: "" });
   assert.equal(ergebnis.code, 0);
-  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_test_token_fehlt/);
+  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_probe_token_fehlt/);
   assert.ok(!ergebnis.ausgabe.includes("probe_ziel_unerlaubt"));
   assert.ok(!ergebnis.ausgabe.includes("AUFGELEGT"));
 });
 
-test("auflegen ohne STAGING_TEST_TOKEN im Zeitplan-Lauf: rot mit gleicher Meldung", async () => {
-  const ergebnis = await auflegen({ GITHUB_EVENT_NAME: "schedule", STAGING_TEST_TOKEN: "" });
+test("auflegen ohne STAGING_PROBE_TOKEN im Zeitplan-Lauf: rot mit gleicher Meldung", async () => {
+  const ergebnis = await auflegen({ GITHUB_EVENT_NAME: "schedule", STAGING_PROBE_TOKEN: "" });
   assert.equal(ergebnis.code, 1);
-  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_test_token_fehlt/);
+  assert.match(ergebnis.ausgabe, /probe_uebersprungen_staging_probe_token_fehlt/);
   assert.ok(!ergebnis.ausgabe.includes("AUFGELEGT"));
 });
 

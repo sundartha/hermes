@@ -5,15 +5,18 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+    types: [opened, synchronize, reopened, edited]
   merge_group:
     types: [checks_requested]
 
 permissions:
   contents: read
 
+run-name: ${{ github.event.action == 'edited' && 'CI-Text-Lauf' || github.event.pull_request.title || github.event.merge_group.head_commit.message || github.event.head_commit.message }}
+
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'edited' }}
 
 env:
   BASIS: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
@@ -24,7 +27,9 @@ jobs:
   pruefungen:
     name: Prüfungen
     if: github.event_name != 'push'
+      && github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -80,6 +85,19 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run typecheck
 
+      - name: Typabdeckung (Untergrenze, Ratsche)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          vorher=$(git show "$BASIS:package.json" | node -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); process.stdout.write(String(p.typeCoverage?.atLeast ?? ""))')
+          jetzt=$(node -e 'process.stdout.write(String(require("./package.json").typeCoverage.atLeast))')
+          echo "Untergrenze der Typabdeckung: $jetzt, auf der Basis ${vorher:-keine}"
+          if [ -n "$vorher" ] && node -e 'process.exit(Number(process.argv[1]) < Number(process.argv[2]) ? 0 : 1)' "$jetzt" "$vorher"; then
+            echo "Die Untergrenze der Typabdeckung darf nur steigen."
+            exit 1
+          fi
+          npm run typecheck:abdeckung
+
       - name: Syntax
         if: ${{ !cancelled() }}
         run: find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
@@ -115,7 +133,9 @@ jobs:
   semgrep:
     name: Semgrep
     if: github.event_name != 'push'
+      && github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -137,7 +157,9 @@ jobs:
   tests:
     name: Tests ${{ matrix.teil }}/12
     if: github.event_name != 'push'
+      && github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -177,7 +199,9 @@ jobs:
   webtests:
     name: Web-Tests
     if: github.event_name != 'push'
+      && github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -195,8 +219,9 @@ jobs:
 
   rotprobe:
     name: Rotprobe
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.body != null)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -268,8 +293,9 @@ jobs:
 
   abdeckung:
     name: Abdeckung ${{ matrix.teil }}/${{ strategy.job-total }}
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.body != null)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -309,8 +335,9 @@ jobs:
   mutation:
     name: Mutation ${{ matrix.teil }}/${{ strategy.job-total }}
     needs: [abdeckung, rotprobe]
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.body != null)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read
@@ -366,6 +393,7 @@ jobs:
     name: Lastlauf
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -426,8 +454,9 @@ jobs:
 
   codeql:
     name: CodeQL (${{ matrix.language }})
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && github.event.action != 'edited'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read
@@ -458,6 +487,7 @@ jobs:
     if: always() && github.event_name != 'push'
     needs: [pruefungen, semgrep, tests, webtests, rotprobe, abdeckung, mutation, lastlauf]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       actions: read
@@ -466,11 +496,25 @@ jobs:
       - name: Alle Pflicht-Jobs erfolgreich
         env:
           NEEDS: ${{ toJSON(needs) }}
+          TEXT_LAUF: ${{ github.event.action == 'edited' }}
         run: |
           set -euo pipefail
-          rot=$(jq -r 'to_entries[] | select(.value.result != "success" and ((.key != "rotprobe" and .key != "mutation" and .key != "abdeckung" and .key != "lastlauf") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          rot=$(jq -r --arg text "$TEXT_LAUF" 'to_entries[] | select(.value.result != "success" and ($text != "true" or .value.result != "skipped") and ((.key != "rotprobe" and .key != "mutation" and .key != "abdeckung" and .key != "lastlauf") or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
           if [ -n "$rot" ]; then
             echo "Nicht erfolgreich: $rot"
+            exit 1
+          fi
+
+      - name: Hauptlauf des Kopf-Commits ist grün
+        if: ${{ github.event.action == 'edited' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KOPF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          stand=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$KOPF&event=pull_request&per_page=100" --jq '[.workflow_runs[] | select(.display_title != "CI-Text-Lauf")] | sort_by(.created_at) | last | "\(.status) \(.conclusion)"')
+          if [ "$stand" != "completed success" ]; then
+            echo "Hauptlauf fehlt oder ist nicht grün (${stand:-kein Lauf}): zuerst einen Push oder Neustart des Hauptlaufs abwarten"
             exit 1
           fi
 

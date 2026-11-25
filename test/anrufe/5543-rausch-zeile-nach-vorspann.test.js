@@ -12,10 +12,10 @@ const FESTE_FRAGE =
 const REGEL =
   /A user line without any words, only dots or punctuation marks, before the first real utterance is noise: stay silent, no greeting and no question\./;
 
-test("5543-K1 Vorlage: turn.initial_wait_time ist 10 Sekunden (Vorspann 5 s plus 5 s Karenz)", () => {
+test("5543-K1 Vorlage: turn.initial_wait_time ist 16 Sekunden (Brücke einer 183-Zeichen-Eröffnung plus Karenz, Issue 6161)", () => {
   const treffer = wertAnPfad(vorlage, "agent.conversation_config.turn.initial_wait_time");
   assert.equal(treffer.gefunden, true);
-  assert.equal(treffer.wert, 10);
+  assert.equal(treffer.wert, 16);
 });
 
 test("5543-K2 Besitz: initial_wait_time ist ein Wert-Eintrag mit Vorlagen- und Live-Pfad", () => {

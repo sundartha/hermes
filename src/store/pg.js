@@ -26,7 +26,7 @@ import { mitZeitgrenze } from "./webhook-zustellung.js";
 import { macheAnrufpauseSql } from "./anrufpause-sql.js";
 import { macheAusfallSql } from "./ausfall-sql.js";
 import { macheProfilSql } from "./profil-sql.js";
-import { endeAusstehend, macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
+import { macheAnrufeSql, unbestaetigteZeilen } from "./anrufe.js";
 import { macheAnrufExport } from "./anruf-export-sql.js";
 import { macheAktiveAnrufeSql } from "./aktive-anrufe-sql.js";
 import { macheAnrufNummernSql } from "./anruf-nummern-sql.js";
@@ -1884,8 +1884,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          ended_at=CASE WHEN call.status = 'active' THEN EXCLUDED.ended_at ELSE call.ended_at END,
          summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
-         summary_sms_sent_at=COALESCE(call.summary_sms_sent_at, EXCLUDED.summary_sms_sent_at),
-         failure_reason=CASE WHEN $74::boolean THEN call.failure_reason ELSE EXCLUDED.failure_reason END,
+         summary_sms_sent_at=COALESCE(call.summary_sms_sent_at, EXCLUDED.summary_sms_sent_at), failure_reason=EXCLUDED.failure_reason,
          billed_at=COALESCE(call.billed_at, EXCLUDED.billed_at),
          call_control_id=EXCLUDED.call_control_id, assistant_id=EXCLUDED.assistant_id,
          estimated_cost_cents=COALESCE(EXCLUDED.estimated_cost_cents, call.estimated_cost_cents),
@@ -1916,7 +1915,7 @@ async function schreibeAnrufZeile(client, tenantId, call) {
          el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
          el_nachlauf_started_at=COALESCE(call.el_nachlauf_started_at, EXCLUDED.el_nachlauf_started_at),
          bridged_at=EXCLUDED.bridged_at, el_call_control_id=COALESCE(EXCLUDED.el_call_control_id, call.el_call_control_id)`,
-      [...callRowValues(endeAusstehend.has(call) ? { ...call, status: "active", endedAt: null } : call, tenantId), endeAusstehend.has(call)],
+      callRowValues(call, tenantId),
     );
 }
 
