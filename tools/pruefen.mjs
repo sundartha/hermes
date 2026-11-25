@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { stripTypeScriptTypes } from "node:module";
-import { basename, dirname, extname, join, posix, relative, resolve } from "node:path";
+import { dirname, extname, join, posix, relative, resolve } from "node:path";
 import process, { env } from "node:process";
 import { setTimeout as warte } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -125,10 +125,7 @@ const KEIN_FEHLERFALL_MINDESTENS = 40;
 const FEHLERFALL_PFADE = ["src/elevenlabs/", "src/telephony/", "src/conversation/", "src/routes/voice.ts", "src/store/instanz-besitz.js", "src/store/zustand/"];
 const MUTATION_ANZEIGE = 80;
 const GETOETET = "getötet";
-const STARTPFAD = /["'`]src["'`]\s*,\s*["'`]([\w.-]+\.m?js)["'`]|["'`](src\/[\w./-]+\.m?js)["'`]/g;
 const EINBETTUNG = /new URL\(\s*["'`](\.{1,2}\/[\w./-]+\.m?js)["'`]\s*,\s*import\.meta\.url\s*\)/g;
-const GLOBAL_GESETZT = /\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
-const WORT = /[\w$]+/g;
 const STRYKER_AUFRUF = /\bstry\w+(?:\([^()]*\))?|(["'`])\1/g;
 const MERKMAL = /["'`]([^"'`\n]{4,})["'`]|\b([A-Za-z_$][\w$]{5,})\b/g;
 const TS_ENDUNG = /(?<=\w)\.ts(?!\w)/g;
@@ -469,42 +466,9 @@ export function geaenderteBereiche(basis) {
   return bereiche;
 }
 
-function mitStartkanten(nutzer) {
-  for (const pfad of git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei))) {
-    for (const [, name, voll] of readFileSync(pfad, "utf8").matchAll(STARTPFAD)) {
-      const ziel = voll ?? `src/${name}`;
-      nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-    }
-  }
-  return nutzer;
-}
-
 function einbettungen() {
   return git(["ls-files", "src"]).split("\n").filter((datei) => CODE.test(datei)).flatMap((pfad) =>
     [...readFileSync(pfad, "utf8").matchAll(EINBETTUNG)].map(([, verweis]) => ({ pfad, ziel: join(dirname(pfad), verweis) })));
-}
-
-function mitEinbettungen(nutzer, kanten) {
-  for (const { pfad, ziel } of kanten) nutzer.set(ziel, [...(nutzer.get(ziel) ?? []), pfad]);
-  return nutzer;
-}
-
-function nennendeTests(ziel, nutzer) {
-  const stamm = basename(ziel, extname(ziel));
-  const globale = new Set([...readFileSync(ziel, "utf8").matchAll(GLOBAL_GESETZT)].map(([, global]) => global));
-  const nennt = (pfad) => {
-    const text = readFileSync(pfad, "utf8");
-    return pfad.includes(stamm) || text.includes(stamm) || (text.match(WORT) ?? []).some((wort) => globale.has(wort));
-  };
-  const testcode = git(["ls-files", "test"]).split("\n").filter((datei) => CODE.test(datei));
-  return new Set(testTiefen(testcode.filter(nennt), nutzer).keys());
-}
-
-function eingebetteteTests(dateien) {
-  const kanten = einbettungen();
-  const ziele = dateien.filter((datei) => kanten.some(({ ziel }) => ziel === datei));
-  const nutzer = ziele.length > 0 ? mitEinbettungen(mitStartkanten(graph()), kanten) : null;
-  return Object.fromEntries(ziele.map((ziel) => [ziel, nennendeTests(ziel, nutzer)]).map(([ziel, nennende]) => [ziel, [...testTiefen([ziel], nutzer).keys()].filter((pfad) => nennende.has(pfad))]));
 }
 
 function mutationTests(basis) {
@@ -567,8 +531,7 @@ export function ausgefuehrteMutanten(prozesse, orte) {
 
 async function abdeckungMessen(plan) {
   const orte = schutzOrte(plan.dateien);
-  const { eingebettete } = plan;
-  const eingebettet = (datei) => Object.entries(eingebettete).filter(([, tests]) => tests.includes(datei)).flatMap(([ziel]) => Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) === ziel));
+  const eingebettet = Object.keys(orte).filter((id) => relative(process.cwd(), orte[id].datei) in plan.eingebettete);
   const offen = plan.tests.filter((datei, index) => index % teilAnzahl() === teilNummer());
   const abdeckung = {};
   const dauer = {};
@@ -587,7 +550,7 @@ async function abdeckungMessen(plan) {
       dauer[datei] = Date.now() - start;
       if (zeitueberschritten) console.error(`${datei} ${Math.round((Date.now() - start) / SEKUNDE_MS)} s`);
       const prozesse = gruen && existsSync(ordner) ? readdirSync(ordner).map((name) => JSON.parse(readFileSync(join(ordner, name), "utf8")).result) : null;
-      abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet(datei)])];
+      abdeckung[datei] = prozesse && [...new Set([...ausgefuehrteMutanten(prozesse, orte), ...eingebettet])];
       rmSync(dirname(ordner), { recursive: true, force: true });
     }
   };
@@ -722,10 +685,6 @@ function teileSchreiben(bericht) {
   return true;
 }
 
-function einbettungenAufUnveraendertenQuellen(zaehlen, dateien) {
-  return zaehlen && env[ABDECKUNG] !== undefined ? { eingebettete: eingebetteteTests(dateien) } : {};
-}
-
 export function strykerKonfiguration(mutate, bericht) {
   return { testRunner: "command", commandRunner: { command: "node tools/pruefen.mjs mutant" }, inPlace: true, disableTypeChecks: false, concurrency: 1, coverageAnalysis: "off", timeoutMS: MUTATION_FRIST_MS, dryRunTimeoutMinutes: FRIST_MINUTEN, mutate, reporters: ["json"], jsonReporter: { fileName: bericht }, logLevel: "warn" };
 }
@@ -738,7 +697,7 @@ function mutationTeil(argv) {
   const ordner = mkdtempSync(join(tmpdir(), "mutation-"));
   const [planDatei, bericht, konfiguration, protokoll] = ["plan.json", "bericht.json", "stryker.json", "protokoll.jsonl"].map((name) => join(ordner, name));
   const dateien = [...new Set(bereiche.map(({ datei }) => datei))];
-  const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), dauer: dauerLaden(), ...einbettungenAufUnveraendertenQuellen(zaehlen, dateien) };
+  const plan = { frist: Date.now() + MUTATION_FRIST_MS, testdateiFrist: MUTANT_TESTDATEI_FRIST_MS, ...mutationTests(basis), protokoll, basisRot: join(ordner, "basis-rot.json"), dateien, abdeckung: abdeckungLaden(), dauer: dauerLaden(), eingebettete: Object.fromEntries(einbettungen().map(({ ziel }) => [ziel, true])) };
   writeFileSync(planDatei, JSON.stringify(plan));
   const mutate = bereiche.map(({ datei, von, bis }) => `${datei}:${von}-${bis}`);
   writeFileSync(konfiguration, JSON.stringify(strykerKonfiguration(mutate, bericht)));

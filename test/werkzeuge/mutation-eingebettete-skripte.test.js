@@ -227,11 +227,8 @@ const STRYKER_ATTRAPPE = [
   "",
 ].join("\n");
 
-function messeAbdeckung({ ordner, basis, attrappen }, skript, eigenerGraph) {
+function messeAbdeckung({ ordner, basis, attrappen }, skript) {
   const arbeit = dirname(ordner);
-  const tests = imRepo(ordner, "ls-files", "test").split("\n").filter((pfad) => /\.test\.m?js$/.test(pfad));
-  const graph = eigenerGraph ?? { modules: tests.map((source) => ({ source, dependencies: [{ resolved: "src/ui/katalog.js" }] })), summary: { violations: [] } };
-  programm(join(ordner, "node_modules/.bin/depcruise"), [`printf '%s' '${JSON.stringify(graph)}'`]);
   const text = readFileSync(join(ordner, `src/ui/${skript}.js`), "utf8");
   if (!text.includes("stryMutAct_9fa48")) legeAn(ordner, `src/ui/${skript}.js`, `${text}void stryMutAct_9fa48("${MUTANT_IM_SKRIPT}");\n`);
   legeAn(ordner, "test/testbaenke-run.mjs", "");
@@ -243,70 +240,6 @@ function messeAbdeckung({ ordner, basis, attrappen }, skript, eigenerGraph) {
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
   return JSON.parse(readFileSync(join(arbeit, "abdeckung/0.json"), "utf8"));
 }
-
-function erreichteTests(probe, graph) {
-  return Object.values(messeAbdeckung(probe, "eingebettet", graph)).filter((ids) => ids.includes(MUTANT_IM_SKRIPT)).length;
-}
-
-const NENNT_NICHT = 'export default "src/ui/katalog.js";\n';
-
-test("Ein Test, der den Katalog erreicht und das Skript nicht nennt, zählt nicht", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/nennt-nicht.test.js", NENNT_NICHT);
-    assert.equal(erreichteTests(probe), 0);
-  });
-});
-
-test("Ein Test, der den Katalog erreicht und den Dateinamen des Skripts nennt, zählt", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/nennt-datei.test.js", `${NENNT_NICHT}// eingebettet.js\n`);
-    assert.equal(erreichteTests(probe), 1);
-  });
-});
-
-test("Ein Test, der ein vom Skript gesetztes Global nennt, zählt", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/nennt-global.test.js", `${NENNT_NICHT}const name = "HermesProbe";\n`);
-    assert.equal(erreichteTests(probe), 1);
-  });
-});
-
-test("Ein kurzer Globalname zählt nicht als Treffer mitten in einem anderen Wort", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "globalThis.k = 2;\n");
-    legeTestAn(probe, "test/nennt-nicht.test.js", NENNT_NICHT);
-    assert.equal(erreichteTests(probe), 0);
-  });
-});
-
-test("Ein Test, der den Katalog nur über eine Startkante erreicht und das Skript nennt, zählt", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/startkante.test.js", `${NENNT_NICHT}// eingebettet.js\n`);
-    assert.equal(erreichteTests(probe, { modules: [], summary: { violations: [] } }), 1);
-  });
-});
-
-test("Ein Test zählt, wenn sein Helfer unter test/ das Skript nennt", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/skript-helfer.js", "export const name = 'HermesProbe';\n");
-    legeTestAn(probe, "test/ueber-helfer.test.js", NENNT_NICHT);
-    const graph = { modules: [{ source: "test/ueber-helfer.test.js", dependencies: [{ resolved: "test/skript-helfer.js" }, { resolved: "src/ui/katalog.js" }] }], summary: { violations: [] } };
-    assert.equal(erreichteTests(probe, graph), 1);
-  });
-});
-
-test("Ein Test, dessen Dateiname den Namen des Skripts ohne Endung trägt, zählt", () => {
-  mitProbe((probe) => {
-    setzeSkript(probe, "window.HermesProbe = {};\n");
-    legeTestAn(probe, "test/mein-eingebettet.test.js", NENNT_NICHT);
-    assert.equal(erreichteTests(probe), 1);
-  });
-});
 
 function mutantLauf(probe, testInhalt, abdeckung = {}) {
   const skript = `${STRYKER_KOPF}\nglobalThis.ergebnis = stryMutAct_9fa48("${AKTIVER_MUTANT}") ? "an" : "aus";\n`;
