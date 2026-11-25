@@ -15,7 +15,7 @@ const STRYKER_ATTRAPPE = [
   "const konfiguration = JSON.parse(readFileSync(process.argv[4], 'utf8'));",
   "const dateien = [...new Set(konfiguration.mutate.map((eintrag) => eintrag.replace(/:\\d+-\\d+$/, '')))];",
   "const [befehl, ...argumente] = konfiguration.commandRunner.command.split(' ');",
-  `const lauf = spawnSync(befehl, argumente.map((teil) => (teil === "tools/pruefen.mjs" ? ${JSON.stringify(PRUEFEN)} : teil)), { stdio: "inherit" });`,
+  'const lauf = spawnSync(befehl, argumente.map((teil) => (teil === "tools/pruefen.mjs" ? process.env.PRUEFEN_PFAD : teil)), { stdio: "inherit" });',
   "writeFileSync(konfiguration.jsonReporter.fileName, JSON.stringify({ files: Object.fromEntries(dateien.map((datei) => [datei, { mutants: [] }])) }));",
   "process.exitCode = lauf.status;",
   "",
@@ -59,7 +59,13 @@ function messe(arbeit) {
   programm(join(ordner, "node_modules/.bin/depcruise"), ["echo depcruise darf nicht laufen >&2", "exit 1"]);
   writeFileSync(join(arbeit, "stryker.mjs"), STRYKER_ATTRAPPE);
   programm(join(attrappen, "npx"), [`node "${join(arbeit, "stryker.mjs")}" "$@"`]);
-  const umgebung = umgebungOhneGit({ PATH: `${attrappen}:${process.env.PATH}`, TEIL: "0", TEILE: "1", MUTATION_ABDECKUNG: join(arbeit, "abdeckung") });
+  const umgebung = umgebungOhneGit({
+    PATH: `${attrappen}:${process.env.PATH}`,
+    TEIL: "0",
+    TEILE: "1",
+    MUTATION_ABDECKUNG: join(arbeit, "abdeckung"),
+    PRUEFEN_PFAD: PRUEFEN,
+  });
   delete umgebung.__STRYKER_ACTIVE_MUTANT__;
   const lauf = spawnSync("node", [PRUEFEN, "mutation", "--zaehlen", "--basis", basis], { cwd: ordner, env: umgebung, encoding: "utf8" });
   assert.equal(lauf.status, 0, lauf.stdout + lauf.stderr);
