@@ -311,6 +311,8 @@ test("AL-P11-12: get_call_result structuredContent traegt die fuenf Karten-Felde
       "objective_achieved",
       "open_points",
       "outcome",
+      "result_reason",
+      "result_state",
       "result_summary",
       "to",
     ]);
