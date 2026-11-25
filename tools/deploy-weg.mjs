@@ -67,10 +67,10 @@ function grundLesen(wert) {
   return GRUND_MUSTER.test(wert) ? wert : null;
 }
 
-const MESSUNG_GRUND_MUSTER = /^[A-Za-z_]{1,60}(?:_\d{3})?$/;
+const MESSUNG_GRUND_MUSTER = /^(?=.{1,60}$)[A-Za-z_]+(?:_\d{3})?$/;
 
 function messungGrundLesen(wert) {
-  return wert.length <= 60 && MESSUNG_GRUND_MUSTER.test(wert) ? wert : null;
+  return MESSUNG_GRUND_MUSTER.test(wert) ? wert : null;
 }
 
 const ARGUMENTE = new Map([
