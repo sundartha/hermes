@@ -137,3 +137,23 @@ test("Probe: wirft der Anrufer einen Kurzcode, lautet die Ausgabe Probe rot: mes
   assert.equal(code, 1);
   assert.match(ausgabe, /^Probe rot: messung grund=mcp_http_401$/m);
 });
+
+const DETAIL_SUFFIX = [
+  ["gültiges Detail hängt :klasse an", { detail: "ziel_nicht_erlaubt" }, "mcp_place_call_fehlgeschlagen:ziel_nicht_erlaubt"],
+  ["Ziffern im Detail hängen nichts an", { detail: "ziel1" }, "mcp_place_call_fehlgeschlagen"],
+  ["Großbuchstaben im Detail hängen nichts an", { detail: "ZielNichtErlaubt" }, "mcp_place_call_fehlgeschlagen"],
+  ["Nicht-String-Detail hängt nichts an", { detail: 123 }, "mcp_place_call_fehlgeschlagen"],
+  ["fehlendes Detail hängt nichts an", {}, "mcp_place_call_fehlgeschlagen"],
+];
+
+for (const [name, felder, erwartet] of DETAIL_SUFFIX) {
+  test(`Messung-Grund: ${name}`, async () => {
+    assert.equal(await zweitGrund("mcp_place_call_fehlgeschlagen", felder), erwartet);
+  });
+}
+
+test("Probe: gültiges Detail des Anrufers erscheint im Protokoll als :klasse am Grund", async () => {
+  const { code, ausgabe } = await probeStarten({ fehler: "mcp_place_call_fehlgeschlagen", felder: { detail: "ziel_nicht_erlaubt" } });
+  assert.equal(code, 1);
+  assert.match(ausgabe, /^Probe rot: messung grund=mcp_place_call_fehlgeschlagen:ziel_nicht_erlaubt$/m);
+});
