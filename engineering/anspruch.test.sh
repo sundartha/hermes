@@ -4,13 +4,13 @@ S=${1:-$(cd "$(dirname "$0")" && pwd)/anspruch.sh}
 T=$(mktemp -d); fehler=0; N=4438
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 mkdir -p $T/bin
-printf '%s\n' '#!/bin/bash' '[ "$1 $2" = "pr list" ] && [[ "$*" == *"-R sundartha/hermes"* && "$*" == *"--state open"* ]] && cat "$PRS" || exit 1' > $T/bin/gh
-chmod +x $T/bin/gh; export PATH=$T/bin:$PATH PRS=$T/prs.json
+printf '%s\n' '#!/bin/bash' '[ -z "$GH_KAPUTT" ] || exit 1' '[ "$1 $2" = "pr list" ] && [[ "$*" == *"-R sundartha/hermes"* ]] || exit 1' '[[ "$*" == *"--state open"* ]] && exec cat "$PRS"' '[[ "$*" == *"--state all --head "* ]] || exit 1' 'while [ "$1" != "--head" ]; do shift; done; grep -c -x -- "$2" "$ERLEDIGT"; true' > $T/bin/gh
+chmod +x $T/bin/gh; export PATH=$T/bin:$PATH PRS=$T/prs.json ERLEDIGT=$T/erledigt.txt
 pruefe() { [[ "$2" == "$3" ]] && echo "ok   $1" || { echo "ROT  $1: '$2' != '$3'"; fehler=1; }; }
 neu() {
   rm -rf $T/remote.git $T/w; git init -q --bare -b master $T/remote.git
   git clone -q $T/remote.git $T/w 2>/dev/null; git -C $T/w commit -q --allow-empty -m a; git -C $T/w push -q origin HEAD:master
-  echo '[]' > $PRS
+  echo '[]' > $PRS; : > $ERLEDIGT
 }
 alt() { local d; d=$(date -u -d "$1 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ); echo $d; }
 zweig() { GIT_AUTHOR_DATE=$(alt $2) GIT_COMMITTER_DATE=$(alt $2) git -C $T/w commit -q --allow-empty -m "${3:-$1}"; git -C $T/w push -q origin HEAD:refs/heads/$1 --force; git -C $T/w reset -q --hard HEAD~1; }
@@ -54,5 +54,10 @@ neu; zweig paket/$N-alt 241; fall "K6 alter fremder Zweig" 0
 neu; zweig $EIGEN 10; fall "K6 eigener Zweig" 0
 neu; zweig system/$N-eigen 10; fall "K6 eigener Zweig unter system" 0
 neu; zweig paket/${N}0-alt 10; fall "K6 Zweig zu Issue ${N}0" 0
+neu; anspruch $N paket/$N-erstes 10; echo paket/$N-erstes > $ERLEDIGT; fall "K7 Folgehäppchen nach Merge des Vorgängers baut" 0
+pruefe "K7 Anspruch nennt danach den eigenen Zweig" "$(git -C $T/remote.git log -1 --format=%s refs/heads/paket/$N-anspruch | cut -d" " -f4)" "$EIGEN"
+neu; anspruch $N paket/$N-erstes 10; zweig paket/$N-erstes 10; echo paket/$N-erstes > $ERLEDIGT; fall "K7 Zweig des gemergten Vorgängers bleibt stehen" 0
+neu; anspruch $N paket/$N-andere 10; echo paket/$N-erstes > $ERLEDIGT; fall "K7 Halter ohne PR bleibt besetzt" 1 "paket/$N-andere"
+neu; anspruch $N paket/$N-andere 10; GH_KAPUTT=1 fall "K8 scheiterndes gh" 2
 echo "fehler=$fehler"
 exit $fehler
