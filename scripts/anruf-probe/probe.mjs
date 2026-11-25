@@ -52,7 +52,7 @@ function kindUmgebung() {
   return Object.fromEntries(eigene);
 }
 
-function alarmSenden(seit, grund) {
+function alarmSenden(seit, grund, messungGrund) {
   const argumente = [
     "tools/deploy-weg.mjs",
     "hoertest",
@@ -65,6 +65,7 @@ function alarmSenden(seit, grund) {
     "--seit",
     seit,
     ...(grund === undefined ? [] : ["--grund", grund]),
+    ...(messungGrund === undefined ? [] : ["--messung-grund", messungGrund]),
   ];
   const kind = spawn("node", argumente, { env: kindUmgebung(), stdio: "inherit" });
   return new Promise((fertig) => kind.on("close", fertig));
@@ -163,7 +164,7 @@ async function ausgangMelden(ergebnis) {
   }
   const grund = ergebnis.zweit.grund === undefined ? "" : ` grund=${ergebnis.zweit.grund}`;
   zeile(`Probe rot: ${ergebnis.zweit.gerissen.join(",")}${grund}`);
-  await alarmSenden(ergebnis.seit);
+  await alarmSenden(ergebnis.seit, undefined, ergebnis.zweit.grund);
   throw new Ende("probe_rot");
 }
 
