@@ -1,4 +1,4 @@
-import { NEWSLETTER_LISTEN_LESEN_SQL } from "./newsletter-liste-sql.js";
+import { NEWSLETTER_LISTEN_LESEN_SQL } from "./newsletter-liste-sql.ts";
 import {
   billingHoldActive,
   findTenant,
