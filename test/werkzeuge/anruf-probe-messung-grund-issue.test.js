@@ -81,7 +81,8 @@ test("Probe rot ohne Ausnahme: das Probe-Issue hat keine Zeile Messung warf", as
     ausfuehren([...HOERTEST, "--seit", "2026-01-01T00:00:00Z"], umgebung),
   );
   assert.equal(ergebnis.code, 0);
-  assert.ok(!ergebnis.github[0].body.includes("Messung warf"));
+  const text = ergebnis.github[0].body;
+  assert.ok(!text.includes("Messung warf"));
 });
 
 test("--messung-grund mit Kurzcode steht im Issue", async () => {
@@ -89,7 +90,8 @@ test("--messung-grund mit Kurzcode steht im Issue", async () => {
     ausfuehren([...HOERTEST, "--seit", "2026-01-01T00:00:00Z", "--messung-grund", "mcp_http_401"], umgebung),
   );
   assert.equal(ergebnis.code, 0);
-  assert.ok(ergebnis.github[0].body.includes("\nMessung warf: mcp_http_401\n"));
+  const text = ergebnis.github[0].body;
+  assert.ok(text.includes("\nMessung warf: mcp_http_401\n"));
 });
 
 const ABGEWIESEN = ["freitext mit leer", "mcp_http_4012", "a".repeat(61), "", "x\nMessung", "https://x", "Fehler42"];
@@ -111,5 +113,6 @@ test("--messung-grund mit genau 60 Zeichen wird angenommen", async () => {
     ausfuehren([...HOERTEST, "--seit", "2026-01-01T00:00:00Z", "--messung-grund", grund], umgebung),
   );
   assert.equal(ergebnis.code, 0);
-  assert.ok(ergebnis.github[0].body.includes(`Messung warf: ${grund}\n`));
+  const text = ergebnis.github[0].body;
+  assert.ok(text.includes(`Messung warf: ${grund}\n`));
 });
