@@ -343,3 +343,31 @@ test("Anruf: Werkzeugfehler nennt nur eine feste Fehlerklasse, nie Freitext aus 
     });
   }
 });
+
+const FEHLERKLASSEN_FAELLE = [
+  ["Nicht erlaubt", "ziel_nicht_erlaubt"],
+  ["Call not allowed", "ziel_nicht_erlaubt"],
+  ["403 Forbidden", "ziel_nicht_erlaubt"],
+  ["Mandant unbekannt", "mandant_fehlt"],
+  ["unknown tenant", "mandant_fehlt"],
+  ["Tageslimit erreicht", "limit_erreicht"],
+  ["budget used up", "limit_erreicht"],
+  ["Leitung besetzt", "leitung_belegt"],
+  ["line busy", "leitung_belegt"],
+  ["Timeout beim Waehlen", "zeitueberschreitung"],
+  ["Nummer ungueltig", "nummer_ungueltig"],
+  ["invalid number", "nummer_ungueltig"],
+  ["Unauthorized", "nicht_angemeldet"],
+  ["Anmeldung fehlt", "nicht_angemeldet"],
+  ["bad token", "nicht_angemeldet"],
+  ["Limit erreicht, Token ungueltig", "limit_erreicht"],
+];
+
+for (const [text, klasse] of FEHLERKLASSEN_FAELLE) {
+  test(`Anruf: Werkzeugfehler "${text}" ergibt die Klasse ${klasse}`, async () => {
+    await assert.rejects(werkzeugFehler(text).anrufen({ ziel: ZIEL }), (fehler) => {
+      assert.equal(fehler.detail, klasse);
+      return true;
+    });
+  });
+}

@@ -157,3 +157,7 @@ test("Probe: gültiges Detail des Anrufers erscheint im Protokoll als :klasse am
   assert.equal(code, 1);
   assert.match(ausgabe, /^Probe rot: messung grund=mcp_place_call_fehlgeschlagen:ziel_nicht_erlaubt$/m);
 });
+
+test("Messung-Grund: gültiges Detail ohne Kurzcode in der Meldung hängt nichts an", async () => {
+  assert.equal(await zweitGrund("Verbindung abgelehnt", { detail: "ziel_nicht_erlaubt" }), "Error");
+});
