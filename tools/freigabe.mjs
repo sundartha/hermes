@@ -272,8 +272,9 @@ export function updateBefunde({ pull, reviews, dateien, basis, kopf, lesen = inh
 
 export function befundeFuerLauf({ pull, reviews, dateien, imQueue, basis, kopf, lesen }) {
   const schranke = schrankeBefunde({ branch: pull.head.ref, dateien, basis, kopf });
-  if (!imQueue) return [...schranke, ...herkunftBefunde(pull, dateien)];
-  return [...schranke, ...freigabeBefunde(pull, reviews, dateien), ...updateBefunde({ pull, reviews, dateien, basis, kopf, lesen })];
+  const urteil = freigabeBefunde(pull, reviews, dateien);
+  if (!imQueue) return [...schranke, ...urteil];
+  return [...schranke, ...urteil, ...updateBefunde({ pull, reviews, dateien, basis, kopf, lesen })];
 }
 
 function hatLabel(pull, name) {
@@ -533,7 +534,6 @@ async function main() {
   const reviews = await alleSeiten(`/pulls/${pr}/reviews`);
   const dateien = geaenderteDateien(basis, kopf);
   const imQueue = gruppenKopf !== undefined;
-  if (!imQueue) console.log("Das KI-Urteil wird erst in der Merge-Queue verlangt.");
   const gefunden = await laufBefunde({ pull, reviews, dateien, imQueue, basis, kopf, quellen: echteQuellen(pull, gruppenKopf) });
   for (const zeile of gefunden) console.log(zeile);
   if (gefunden.length > 0) process.exitCode = EXIT_ROT;
