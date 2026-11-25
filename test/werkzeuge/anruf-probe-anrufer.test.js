@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 import {
-  PROBE_STAGING_TEST_TOKEN,
   PROBE_WERKZEUGFEHLER_SCHLUESSEL,
   PROBE_WERKZEUGFEHLER_TELEFON,
   PROBE_WERKZEUGFEHLER_EMAIL,
