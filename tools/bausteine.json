@@ -390,7 +390,6 @@
     "src/begriffe/rueckfrage.js",
     "src/begriffe/rufnummern.js",
     "src/begriffe/speicher.js",
-    "src/begriffe/sprache-zeit.js",
     "src/billing/meter.js",
     "src/billing/metering.js",
     "src/boot.js",
