@@ -101,3 +101,39 @@ test("Probe: Meldung mit Token erscheint nie in der Ausgabe", async () => {
   const ohneMaske = ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::"));
   assert.equal(ohneMaske.join("\n").includes(PROBE_STAGING_TEST_TOKEN), false);
 });
+
+const KURZCODES = [
+  ["mcp_http_401", "mcp_http_401"],
+  ["mcp_place_call_fehlgeschlagen", "mcp_place_call_fehlgeschlagen"],
+  ["probe_startzeit_unlesbar", "probe_startzeit_unlesbar"],
+];
+
+for (const [meldung, erwartet] of KURZCODES) {
+  test(`Messung-Grund: Kurzcode ${meldung} wird übernommen`, async () => {
+    assert.equal(await zweitGrund(meldung, {}), erwartet);
+  });
+}
+
+const KEIN_KURZCODE = [
+  ["Meldung mit Leerzeichen bleibt beim Namen", "Verbindung abgelehnt", "Error"],
+  ["Meldung mit mehr als 3 Ziffern bleibt beim Namen", "mcp_http_4012", "Error"],
+  ["Header-Meldung mit Token bleibt beim Namen", `Bearer ${PROBE_STAGING_TEST_TOKEN}`, "Error"],
+  ["getrennte Nummer als Meldung bleibt beim Namen", "+1 272 220 5602", "Error"],
+  ["Adresse als Meldung bleibt beim Namen", "https://geheim.example/pfad", "Error"],
+];
+
+for (const [name, meldung, erwartet] of KEIN_KURZCODE) {
+  test(`Messung-Grund: ${name}`, async () => {
+    assert.equal(await zweitGrund(meldung, {}), erwartet);
+  });
+}
+
+test("Messung-Grund: Meldung ohne Namen und ohne Kurzcode ergibt unbekannt", async () => {
+  assert.equal(await zweitGrund("Verbindung abgelehnt", { name: "Fehler42" }), "unbekannt");
+});
+
+test("Probe: wirft der Anrufer einen Kurzcode, lautet die Ausgabe Probe rot: messung grund=mcp_http_401", async () => {
+  const { code, ausgabe } = await probeStarten({ fehler: "mcp_http_401" });
+  assert.equal(code, 1);
+  assert.match(ausgabe, /^Probe rot: messung grund=mcp_http_401$/m);
+});
