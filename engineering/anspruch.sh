@@ -8,6 +8,11 @@ FRIST=$((HOECHSTDAUER_MIN * 60))
 jetzt() { date +%s; }
 zeit() { TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd "$1"; }
 besetzt() { echo "Paket #$ISSUE ist in Arbeit: $1" >&2; exit 1; }
+erledigt() {
+  local N
+  N=$(gh pr list -R $REPO_GH --state all --head "$1" --json number --jq length) || { echo "gh pr list gescheitert" >&2; exit 2; }
+  [ "$N" -gt 0 ]
+}
 
 PRS=$(gh pr list -R $REPO_GH --state open --limit 200 --json number,headRefName,body) || { echo "gh pr list gescheitert" >&2; exit 2; }
 FREMDE=$(printf '%s' "$PRS" | jq -r --arg i "$ISSUE" --arg e "$EIGEN" '.[] | select(.headRefName != $e) | select((.headRefName | startswith("paket/" + $i + "-") or startswith("system/" + $i + "-")) or ((.body // "") | test("(Refs|Closes|Teil von) #" + $i + "([^0-9A-Za-z_]|$)"))) | "PR #\(.number) (\(.headRefName))"' | head -1)
@@ -18,6 +23,7 @@ while read -r SHA REF; do
   [ -n "${REF:-}" ] || continue
   ZWEIG=${REF#refs/heads/}
   [ "$ZWEIG" != "$ANSPRUCH" ] && [ "${ZWEIG/#system\//paket/}" != "$GLEICH" ] || continue
+  erledigt "$ZWEIG" && continue
   git fetch -q hermes "$REF"
   ALTER=$(( $(jetzt) - $(git log -1 --format=%ct FETCH_HEAD) ))
   [ "$ALTER" -ge "$FRIST" ] || besetzt "Zweig $ZWEIG, letzter Commit $(zeit FETCH_HEAD)"
@@ -40,7 +46,7 @@ auswerten() {
   local S=$(git log -1 --format=%s FETCH_HEAD) A=$(( $(jetzt) - $(git log -1 --format=%ct FETCH_HEAD) ))
   S=${S#Anspruch \#$ISSUE von }; S=${S% *}
   [ "$S" != "$EIGEN" ] || return 0
-  [ "$A" -ge "$FRIST" ] || besetzt "$S seit $(zeit FETCH_HEAD)"
+  [ "$A" -ge "$FRIST" ] || erledigt "$S" || besetzt "$S seit $(zeit FETCH_HEAD)"
   git fetch -q hermes master
   anlegen "$SHA" && return 0
   return 3
