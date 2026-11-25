@@ -33,13 +33,14 @@ master_sha() {
   local M
   M=$(git ls-remote hermes refs/heads/master | cut -f1)
   [ -n "$M" ] || return 1
-  git fetch -q hermes master
+  git fetch -q hermes master || return 1
   echo "$M"
 }
 anlegen() {
   local ALT=$1 NEU M
   M=$(master_sha) || return 3
   NEU=$(git commit-tree "$M^{tree}" -p "$M" -m "Anspruch #$ISSUE von $EIGEN $(date -u +%Y-%m-%dT%H:%M:%SZ)")
+  [ -n "$NEU" ] || return 3
   git push -q --force-with-lease=$AB:$ALT hermes $NEU:$AB 2>/dev/null
 }
 auswerten() {

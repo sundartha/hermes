@@ -60,10 +60,12 @@ neu; anspruch $N paket/$N-erstes 10; zweig paket/$N-erstes 10; echo paket/$N-ers
 neu; anspruch $N paket/$N-andere 10; echo paket/$N-erstes > $ERLEDIGT; fall "K7 Halter ohne PR bleibt besetzt" 1 "paket/$N-andere"
 neu; anspruch $N paket/$N-andere 10; GH_KAPUTT=1 fall "K8 scheiterndes gh" 2
 ECHT_GIT=$(command -v git)
-printf '%s\n' '#!/bin/bash' "\"$ECHT_GIT\" \"\$@\"; rc=\$?" '[ "$1" = fetch ] && [ -n "${FREMD_FETCH:-}" ] || exit $rc' "S2=\$(\"$ECHT_GIT\" ls-remote hermes refs/heads/\$FREMD_FETCH | cut -f1)" "\"$ECHT_GIT\" fetch -q hermes refs/heads/\$FREMD_FETCH" "printf '%s\\t\\t%s\\n' \"\$S2\" \"'branch' of fremd\" > \"\$(\"$ECHT_GIT\" rev-parse --git-dir)/FETCH_HEAD\"" 'exit $rc' > $T/bin/git
+printf '%s\n' '#!/bin/bash' '[ "$*" = "fetch -q hermes master" ] && [ -n "${MASTER_KAPUTT:-}" ] && { [ -e "$MASTER_KAPUTT" ] && exit 1; : > "$MASTER_KAPUTT"; }' "\"$ECHT_GIT\" \"\$@\"; rc=\$?" '[ "$1" = fetch ] && [ -n "${FREMD_FETCH:-}" ] || exit $rc' "S2=\$(\"$ECHT_GIT\" ls-remote hermes refs/heads/\$FREMD_FETCH | cut -f1)" "\"$ECHT_GIT\" fetch -q hermes refs/heads/\$FREMD_FETCH" "printf '%s\\t\\t%s\\n' \"\$S2\" \"'branch' of fremd\" > \"\$(\"$ECHT_GIT\" rev-parse --git-dir)/FETCH_HEAD\"" 'exit $rc' > $T/bin/git
 chmod +x $T/bin/git
 neu; zweig paket/99-fremd 500; anspruch $N paket/$N-andere 10; FREMD_FETCH=paket/99-fremd fall "K9 FETCH_HEAD von außen alt: junger fremder Anspruch bleibt besetzt" 1 "paket/$N-andere"
 neu; zweig paket/99-fremd 5 "Anspruch #$N von paket/$N-andere $(alt 5)"; anspruch $N $EIGEN 10; FREMD_FETCH=paket/99-fremd fall "K9 FETCH_HEAD von außen fremd: eigener Anspruch baut" 0
 neu; zweig paket/99-fremd 500; zweig paket/$N-alt 10; FREMD_FETCH=paket/99-fremd fall "K9 FETCH_HEAD von außen alt: junger fremder Zweig bleibt besetzt" 1 "paket/$N-alt"
+neu; anspruch $N paket/$N-andere 241; ALT_SHA=$(git -C $T/remote.git rev-parse refs/heads/paket/$N-anspruch); rm -f $T/zaehler; MASTER_KAPUTT=$T/zaehler fall "K10 scheiternder Master-Fetch beim Anlegen bricht ab" 2
+pruefe "K10 verfallener Anspruch bleibt stehen" "$(git -C $T/remote.git rev-parse refs/heads/paket/$N-anspruch)" "$ALT_SHA"
 echo "fehler=$fehler"
 exit $fehler
