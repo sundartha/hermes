@@ -25,29 +25,35 @@ while read -r SHA REF; do
   [ "$ZWEIG" != "$ANSPRUCH" ] && [ "${ZWEIG/#system\//paket/}" != "$GLEICH" ] || continue
   erledigt "$ZWEIG" && continue
   git fetch -q hermes "$REF"
-  ALTER=$(( $(jetzt) - $(git log -1 --format=%ct FETCH_HEAD) ))
-  [ "$ALTER" -ge "$FRIST" ] || besetzt "Zweig $ZWEIG, letzter Commit $(zeit FETCH_HEAD)"
+  ALTER=$(( $(jetzt) - $(git log -1 --format=%ct "$SHA") ))
+  [ "$ALTER" -ge "$FRIST" ] || besetzt "Zweig $ZWEIG, letzter Commit $(zeit "$SHA")"
 done < <(git ls-remote hermes "refs/heads/paket/$ISSUE-*" "refs/heads/system/$ISSUE-*")
 
+master_sha() {
+  local M
+  M=$(git ls-remote hermes refs/heads/master | cut -f1)
+  [ -n "$M" ] || return 1
+  git fetch -q hermes master
+  echo "$M"
+}
 anlegen() {
-  local ALT=$1 NEU
-  NEU=$(git commit-tree 'FETCH_HEAD^{tree}' -p FETCH_HEAD -m "Anspruch #$ISSUE von $EIGEN $(date -u +%Y-%m-%dT%H:%M:%SZ)")
+  local ALT=$1 NEU M
+  M=$(master_sha) || return 3
+  NEU=$(git commit-tree "$M^{tree}" -p "$M" -m "Anspruch #$ISSUE von $EIGEN $(date -u +%Y-%m-%dT%H:%M:%SZ)")
   git push -q --force-with-lease=$AB:$ALT hermes $NEU:$AB 2>/dev/null
 }
 auswerten() {
   local SHA
   SHA=$(git ls-remote hermes $AB | cut -f1)
   if [ -z "$SHA" ]; then
-    git fetch -q hermes master
     anlegen "" && return 0
     return 3
   fi
   git fetch -q hermes $AB
-  local S=$(git log -1 --format=%s FETCH_HEAD) A=$(( $(jetzt) - $(git log -1 --format=%ct FETCH_HEAD) ))
+  local S=$(git log -1 --format=%s "$SHA") A=$(( $(jetzt) - $(git log -1 --format=%ct "$SHA") ))
   S=${S#Anspruch \#$ISSUE von }; S=${S% *}
   [ "$S" != "$EIGEN" ] || return 0
-  [ "$A" -ge "$FRIST" ] || erledigt "$S" || besetzt "$S seit $(zeit FETCH_HEAD)"
-  git fetch -q hermes master
+  [ "$A" -ge "$FRIST" ] || erledigt "$S" || besetzt "$S seit $(zeit "$SHA")"
   anlegen "$SHA" && return 0
   return 3
 }
