@@ -85,7 +85,7 @@ function staginglaufText({ commit, laufUrl }) {
   ].join("\n");
 }
 
-function probeText({ commit, laufUrl, seit, grund }) {
+function probeText({ commit, laufUrl, seit, grund, messungGrund }) {
   if (grund !== undefined) {
     return [
       "Die Anrufprobe gegen Staging ist nicht gelaufen: " + grund + " (Commit " + commit + ").",
@@ -99,6 +99,7 @@ function probeText({ commit, laufUrl, seit, grund }) {
   return [
     "Die Anrufprobe gegen Staging ist rot, auch die Wiederholung (Commit " + commit + ").",
     "Seit: " + seit,
+    ...(messungGrund === undefined ? [] : ["Messung warf: " + messungGrund]),
     "Lauf: " + laufUrl,
     "",
     "Das ist kein Hörtest und keine Freigabe für Live. Der gerissene Wert steht im Lauf.",
@@ -303,10 +304,11 @@ export async function hoertestIssueAnlegenOderErsetzen({
   teile,
   seit,
   grund,
+  messungGrund,
   ausgabe,
 }) {
   const { titel, meldungen, text, vorfallId } = ANLAESSE[anlass];
-  const body = text({ commit, teile, seit, grund, laufUrl: laufAdresse(einstellungen) });
+  const body = text({ commit, teile, seit, grund, messungGrund, laufUrl: laufAdresse(einstellungen) });
   const vorher = await issueSchreiben({ einstellungen, titel, body, meldungen, ausgabe });
   if (vorfallId === undefined) return;
   const vorfall = { id: vorfallId, titel, commit, seit, grund };
