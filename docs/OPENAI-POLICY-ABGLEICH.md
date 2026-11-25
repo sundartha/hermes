@@ -651,7 +651,7 @@ im Abschnitt "Minimale Antworten" behandelt.
 | `get_call_status` | `call_id`, `status`, `failure_reason`, `duration_s`, `server_time`, `started_at`, `answered_at`, `last_transcript_lines` (`src/mcp-tools.js#pickCallStatus`) | Anruf-Datensatz, Roh-Transkript |
 | `await_call_event` (nur bei freigegebenem Rueckfrage-Kanal) | `event`, `event_id`, `questions`, `status`, `failure_reason`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js#awaitEventView`) | Rueckfragen, Anruf-Datensatz, Zusammenfassung und Ergebnis |
 | `answer_consult` (nur bei freigegebenem Rueckfrage-Kanal) | `accepted`, `merged_facts` (`src/mcp-tools.js#uiTool("answer_consult")`) | keine personenbezogenen Daten in der Antwort; die Eingabe ist unter Rueckfragen erfasst |
-| `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js#pickTranscript`) | Zusammenfassung und Ergebnis |
+| `get_call_result` | `call_id`, `result_summary`, `objective_achieved`, `result_state`, `result_reason`, fuenf Felder der Ergebnis-Karte (`src/mcp-tools.js#pickTranscript`; Form in `docs/mcp-vertrag.json`) | Zusammenfassung und Ergebnis |
 | `cancel_call` | `status`, bei einem Anruf ueber den Sprach-Agenten zusaetzlich technische Angaben zum Auflegen (`src/routes/api-calls.ts#router.post("/api/calls/:id/cancel")`) | Anruf-Datensatz (nur Status) |
 | `get_agent_number` | `number` (`src/mcp-tools.js#pickMyNumber`) | Rufnummer des Assistenten |
 | `list_calls` | je Anruf `id`, `direction`, `counterparty`, `status`, `startedAt`, `summary` (`src/mcp-tools.js#pickCall`) | Anruf-Datensatz (Nummer der Gegenseite; bei einem Anruf an die eigene hinterlegte Nummer ist es diese), Zusammenfassung |

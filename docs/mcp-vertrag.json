@@ -1379,6 +1379,8 @@
           "objective_achieved",
           "open_points",
           "outcome",
+          "result_reason",
+          "result_state",
           "result_summary"
         ],
         "properties": {
@@ -1403,6 +1405,15 @@
           "objective_achieved": {
             "type": [
               "boolean",
+              "string"
+            ]
+          },
+          "result_state": {
+            "type": "string"
+          },
+          "result_reason": {
+            "type": [
+              "null",
               "string"
             ]
           },
@@ -2142,6 +2153,12 @@
       "art": "bruch",
       "begruendung": "await_call_event liefert in der done-Antwort next_steps (Art, Text, Zeitpunkt) wie get_call_result, damit ein im Gespraech genannter Rueckruf den Assistenten erreicht (#5995). Noch nichts veroeffentlicht.",
       "stand_sha256": "02494ad7414385bafecad4904e9bdf897e36b72d639a860acf7a009d6ca953ea"
+    },
+    {
+      "datum": "2026-11-25",
+      "art": "bruch",
+      "begruendung": "get_call_result liefert result_state (done_confirmed, not_done, unconfirmed) und result_reason, damit ein Anruf ohne Gegenseite nie als erledigt gilt (#4059, Haeppchen 1). Noch nichts veroeffentlicht.",
+      "stand_sha256": "5e8594cdfbec3f4e68c0266ca2e886abd87e813917ba912ada2398df2a4b2b48"
     }
   ]
 }
