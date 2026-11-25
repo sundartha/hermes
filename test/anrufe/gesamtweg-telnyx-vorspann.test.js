@@ -107,7 +107,7 @@ async function mitGesamtweg(lauf) {
 }
 
 let ereignisZaehler = 0;
-function telnyxEreignis({ srv, signer }, callId, typ, { bein = calleeVon(callId), status } = {}) {
+function telnyxEreignis({ srv, signer, callId }, typ, { bein = calleeVon(callId), status } = {}) {
   const payload = { call_control_id: bein, ...(status ? { status } : {}) };
   const roh = JSON.stringify({ data: { id: `evt-6182-${(ereignisZaehler += 1)}`, event_type: typ, payload } });
   const zeit = String(nowSeconds());
@@ -152,7 +152,7 @@ test("Gesamtweg Telnyx-Vorspann: place_call, Annahme, Init-Bindung, Gespraech un
     assert.equal(anruf().costProfile, KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI);
     assert.equal(anruf().from, ABSENDER);
 
-    assert.equal((await telnyxEreignis({ srv, signer }, callId, "call.answered")).status, HTTP_OK);
+    assert.equal((await telnyxEreignis({ srv, signer, callId }, "call.answered")).status, HTTP_OK);
     await warteAuf(() => aktionen(telnyx, calleeVon(callId), "playback_start").length === 1);
     await warteAuf(() => gewaehlt(telnyx, "-el").length === 1);
 
@@ -165,12 +165,12 @@ test("Gesamtweg Telnyx-Vorspann: place_call, Annahme, Init-Bindung, Gespraech un
     assert.ok(variablen.eroeffnung_gesagt.includes("KI"), variablen.eroeffnung_gesagt);
     await waitForStoreState(srv, () => anruf().elevenlabsConversationId === CONV_ID, WARTE_FRIST_MS);
 
-    await telnyxEreignis({ srv, signer }, callId, "call.playback.ended", { status: "completed" });
-    await telnyxEreignis({ srv, signer }, callId, "call.answered", { bein: elVon(callId) });
+    await telnyxEreignis({ srv, signer, callId }, "call.playback.ended", { status: "completed" });
+    await telnyxEreignis({ srv, signer, callId }, "call.answered", { bein: elVon(callId) });
     await warteAuf(() => aktionen(telnyx, calleeVon(callId), "bridge").length === 1);
 
     el.setzeAntwort(GESPRAECH_FERTIG);
-    await telnyxEreignis({ srv, signer }, callId, "call.hangup");
+    await telnyxEreignis({ srv, signer, callId }, "call.hangup");
     await waitForStoreState(srv, () => anruf().status === "completed" && anruf().billedAt, WARTE_FRIST_MS);
     assert.equal(anruf().summary, ZUSAMMENFASSUNG);
     assert.deepEqual(anruf().transcript.map((zeile) => zeile.text).slice(-ZEILEN.length), ZEILEN);
