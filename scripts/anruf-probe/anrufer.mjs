@@ -53,23 +53,34 @@ function leseRpc(text) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
-const DETAIL_MAX = 30;
-const DETAIL_WORT_MAX = 24;
-const NUR_BUCHSTABEN = /[^A-Za-z_ ]/g;
+const FEHLERKLASSEN = Object.freeze([
+  ["nicht erlaubt", "ziel_nicht_erlaubt"],
+  ["not allowed", "ziel_nicht_erlaubt"],
+  ["forbidden", "ziel_nicht_erlaubt"],
+  ["unauthorized", "nicht_angemeldet"],
+  ["anmeld", "nicht_angemeldet"],
+  ["token", "nicht_angemeldet"],
+  ["mandant", "mandant_fehlt"],
+  ["tenant", "mandant_fehlt"],
+  ["limit", "limit_erreicht"],
+  ["budget", "limit_erreicht"],
+  ["leitung", "leitung_belegt"],
+  ["busy", "leitung_belegt"],
+  ["timeout", "zeitueberschreitung"],
+  ["nummer", "nummer_ungueltig"],
+  ["number", "nummer_ungueltig"],
+]);
+const UNKLARE_KLASSE = "unklar";
 
 function textTeil(ergebnis) {
   const teile = Array.isArray(ergebnis?.content) ? ergebnis.content : [];
   return teile.find((teil) => typeof teil?.text === "string");
 }
 
-function kurzesWort(wort) {
-  return wort !== "" && wort.length <= DETAIL_WORT_MAX;
-}
-
 function detailVon(ergebnis) {
-  const roh = textTeil(ergebnis)?.text ?? "";
-  const woerter = roh.replace(NUR_BUCHSTABEN, " ").split(/\s+/).filter(kurzesWort);
-  return woerter.join("_").toLowerCase().slice(0, DETAIL_MAX);
+  const klein = (textTeil(ergebnis)?.text ?? "").toLowerCase();
+  const treffer = FEHLERKLASSEN.find(([stichwort]) => klein.includes(stichwort));
+  return treffer === undefined ? UNKLARE_KLASSE : treffer[1];
 }
 
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {

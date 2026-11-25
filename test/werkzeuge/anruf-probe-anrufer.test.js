@@ -320,13 +320,23 @@ test("Tagesstand: 29 Einträge, alle von heute, sind vollständig und zählen", 
   assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
 });
 
-test("Anruf: Werkzeugfehler traegt bereinigten Fehlertext ohne Ziffern, Tokens und Sonderzeichen", async () => {
-  const roh = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: "Ziel nicht erlaubt: +4917312345678 token=sk_abcdefghijklmnopqrstuvwxyz0123456789" }] } };
-  const { anrufer } = attrappe({ place_call: () => ({ ok: true, status: 200, text: async () => JSON.stringify(roh) }) });
-  await assert.rejects(anrufer.anrufen({ ziel: ZIEL }), (fehler) => {
-    assert.equal(fehler.message, "mcp_place_call_fehlgeschlagen");
-    assert.match(fehler.detail, /^ziel_nicht_erlaubt/);
-    assert.doesNotMatch(fehler.detail, /\d|sk_|abcdef/);
-    return true;
-  });
+const werkzeugFehler = (text) => {
+  const roh = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text }] } };
+  return attrappe({ place_call: () => ({ ok: true, status: 200, text: async () => JSON.stringify(roh) }) }).anrufer;
+};
+
+test("Anruf: Werkzeugfehler nennt nur eine feste Fehlerklasse, nie Freitext aus dem Werkzeug", async () => {
+  const freitexte = [
+    "Ziel nicht erlaubt: +4917312345678 sk_AbCdEf12GhIjKl34MnOp max.mustermann@firma.de",
+    "Etwas ganz anderes: sk_AbCdEf12GhIjKl34MnOp max.mustermann@firma.de",
+  ];
+  const erwartet = ["ziel_nicht_erlaubt", "unklar"];
+  for (const [index, text] of freitexte.entries()) {
+    await assert.rejects(werkzeugFehler(text).anrufen({ ziel: ZIEL }), (fehler) => {
+      assert.equal(fehler.message, "mcp_place_call_fehlgeschlagen");
+      assert.equal(fehler.detail, erwartet[index]);
+      assert.doesNotMatch(fehler.detail, /abcdef|ghijkl|mustermann|firma/);
+      return true;
+    });
+  }
 });
