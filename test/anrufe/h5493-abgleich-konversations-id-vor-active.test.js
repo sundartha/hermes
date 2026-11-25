@@ -21,7 +21,7 @@ const VERSUCHT_MS = Date.parse("2026-11-17T10:00:00.000Z");
 const BREMS_SCHRITTE = 200;
 const SPEICHERN_FEHLER = "Speichern der Konversations-ID abgelehnt";
 const FLUSH_MELDUNG = "[pg] Flush fehlgeschlagen:";
-const ID_SCHREIBEN = /elevenlabs_conversation_id\s*=\s*(\$3|EXCLUDED)/;
+const ID_SCHREIBEN = /elevenlabs_conversation_id\s*=\s*(\$3|EXCLUDED|COALESCE\(call\.elevenlabs_conversation_id,\s*EXCLUDED)/;
 const ANTWORT_SQL = "UPDATE call SET answered_at";
 const ZEILE_SQL = "SELECT status, answered_at, elevenlabs_conversation_id AS id, frist_abfrage_at FROM call WHERE id = $1";
 
