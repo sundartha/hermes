@@ -8,7 +8,7 @@ export function normalisiert(nummer) {
   return String(nummer).replace(SCHREIBWEISE, "");
 }
 
-const GRUND_MAX = 100;
+const GRUND_MAX = 60;
 const GRUNDCODE = /^[A-Za-z_]+$/;
 const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
 

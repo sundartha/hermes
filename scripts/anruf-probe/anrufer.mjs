@@ -53,7 +53,7 @@ function leseRpc(text) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
-const DETAIL_MAX = 40;
+const DETAIL_MAX = 30;
 const DETAIL_WORT_MAX = 24;
 const NUR_BUCHSTABEN = /[^A-Za-z_ ]/g;
 
