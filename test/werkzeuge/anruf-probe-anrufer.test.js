@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { PROBE_STAGING_TEST_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
+import {
+  PROBE_STAGING_TEST_TOKEN,
+  PROBE_WERKZEUGFEHLER_SCHLUESSEL,
+  PROBE_WERKZEUGFEHLER_TELEFON,
+  PROBE_WERKZEUGFEHLER_EMAIL,
+} from "../gemeinsam/erfundene-geheimnisse.js";
 import { anruferBauen } from "../../scripts/anruf-probe/anrufer.mjs";
 import { urteilen } from "../../scripts/anruf-probe/urteil.mjs";
 
@@ -326,16 +331,14 @@ const werkzeugFehler = (text) => {
 };
 
 test("Anruf: Werkzeugfehler nennt nur eine feste Fehlerklasse, nie Freitext aus dem Werkzeug", async () => {
-  const freitexte = [
-    "Ziel nicht erlaubt: +4917312345678 sk_AbCdEf12GhIjKl34MnOp max.mustermann@firma.de",
-    "Etwas ganz anderes: sk_AbCdEf12GhIjKl34MnOp max.mustermann@firma.de",
-  ];
+  const geheimnisse = [PROBE_WERKZEUGFEHLER_SCHLUESSEL, PROBE_WERKZEUGFEHLER_TELEFON, PROBE_WERKZEUGFEHLER_EMAIL];
+  const freitexte = [`Ziel nicht erlaubt: ${geheimnisse.join(" ")}`, `Etwas ganz anderes: ${geheimnisse.join(" ")}`];
   const erwartet = ["ziel_nicht_erlaubt", "unklar"];
   for (const [index, text] of freitexte.entries()) {
     await assert.rejects(werkzeugFehler(text).anrufen({ ziel: ZIEL }), (fehler) => {
       assert.equal(fehler.message, "mcp_place_call_fehlgeschlagen");
       assert.equal(fehler.detail, erwartet[index]);
-      assert.doesNotMatch(fehler.detail, /abcdef|ghijkl|mustermann|firma/);
+      for (const geheimnis of geheimnisse) assert.equal(fehler.detail.includes(geheimnis), false);
       return true;
     });
   }

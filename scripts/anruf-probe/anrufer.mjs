@@ -57,9 +57,6 @@ const FEHLERKLASSEN = Object.freeze([
   ["nicht erlaubt", "ziel_nicht_erlaubt"],
   ["not allowed", "ziel_nicht_erlaubt"],
   ["forbidden", "ziel_nicht_erlaubt"],
-  ["unauthorized", "nicht_angemeldet"],
-  ["anmeld", "nicht_angemeldet"],
-  ["token", "nicht_angemeldet"],
   ["mandant", "mandant_fehlt"],
   ["tenant", "mandant_fehlt"],
   ["limit", "limit_erreicht"],
@@ -69,6 +66,9 @@ const FEHLERKLASSEN = Object.freeze([
   ["timeout", "zeitueberschreitung"],
   ["nummer", "nummer_ungueltig"],
   ["number", "nummer_ungueltig"],
+  ["unauthorized", "nicht_angemeldet"],
+  ["anmeld", "nicht_angemeldet"],
+  ["token", "nicht_angemeldet"],
 ]);
 const UNKLARE_KLASSE = "unklar";
 
