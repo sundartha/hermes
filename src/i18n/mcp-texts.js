@@ -8,7 +8,7 @@ function countedText(lang, singular, plural) {
 
 function joinWithAnd(items, and) {
   const front = items.slice(0, -1);
-  return front.length === 0 ? items.join("") : `${front.join(", ")} ${and} ${items.at(-1)}`;
+  return front.length === 0 ? items.join("") : `${front.join(", ")} ${and} ${items.slice(-1).join()}`;
 }
 
 export const MCP_ERROR_CODE = Object.freeze({
@@ -97,8 +97,8 @@ export const MCP_TEXTS = Object.freeze({
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
     consultAnswerAccepted: countedText(
       "de",
-      (count) => `${count} Angabe an den Anruf uebergeben.`,
-      (count) => `${count} Angaben an den Anruf uebergeben.`,
+      (count) => `${String(count)} Angabe an den Anruf uebergeben.`,
+      (count) => `${String(count)} Angaben an den Anruf uebergeben.`,
     ),
     consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
@@ -118,7 +118,7 @@ export const MCP_TEXTS = Object.freeze({
       }),
       permissionsAllowed: (items) => `Darf ${joinWithAnd(items, "und")} weitergeben`,
       permissionsNone: "Gibt keine Daten weiter",
-      planUsage: (percent) => `Monatsnutzung: ${percent} % des Minuten-Kontingents`,
+      planUsage: (percent) => `Monatsnutzung: ${String(percent)} % des Minuten-Kontingents`,
       planUsageUnknown: "Monatsnutzung: kein Kontingent hinterlegt",
     }),
     callFailedSummary: makeCallFailedSummary(
@@ -191,8 +191,8 @@ export const MCP_TEXTS = Object.freeze({
       "This call was already running - the running call is returned, no second call was started.",
     consultAnswerAccepted: countedText(
       "en",
-      (count) => `${count} detail passed on to the call.`,
-      (count) => `${count} details passed on to the call.`,
+      (count) => `${String(count)} detail passed on to the call.`,
+      (count) => `${String(count)} details passed on to the call.`,
     ),
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
@@ -212,7 +212,7 @@ export const MCP_TEXTS = Object.freeze({
       }),
       permissionsAllowed: (items) => `May share ${joinWithAnd(items, "and")}`,
       permissionsNone: "Shares no data",
-      planUsage: (percent) => `Monthly usage: ${percent}% of your included minutes`,
+      planUsage: (percent) => `Monthly usage: ${String(percent)}% of your included minutes`,
       planUsageUnknown: "Monthly usage: no plan quota on file",
     }),
     callFailedSummary: makeCallFailedSummary("The call did not go through.", FAILURE_REASON_TEXTS.en),
@@ -284,8 +284,8 @@ export const MCP_TEXTS = Object.freeze({
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
     consultAnswerAccepted: countedText(
       "fr",
-      (count) => `${count} information transmise à l'appel.`,
-      (count) => `${count} informations transmises à l'appel.`,
+      (count) => `${String(count)} information transmise à l'appel.`,
+      (count) => `${String(count)} informations transmises à l'appel.`,
     ),
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
@@ -306,7 +306,7 @@ export const MCP_TEXTS = Object.freeze({
       }),
       permissionsAllowed: (items) => `Peut partager ${joinWithAnd(items, "et")}`,
       permissionsNone: "Ne partage aucune donnée",
-      planUsage: (percent) => `Utilisation mensuelle : ${percent} % des minutes incluses`,
+      planUsage: (percent) => `Utilisation mensuelle : ${String(percent)} % des minutes incluses`,
       planUsageUnknown: "Utilisation mensuelle : aucun forfait enregistré",
     }),
     callFailedSummary: makeCallFailedSummary("L'appel n'a pas abouti.", FAILURE_REASON_TEXTS.fr),

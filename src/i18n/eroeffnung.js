@@ -38,18 +38,25 @@ const TEXTE_NACH_SPRACHE = new Map(Object.entries(TEXTE));
 const GEDANKENSTRICH = "–";
 const NAME_PLATZHALTER = "\u0000";
 
+function texteFor(language) {
+  const texte = TEXTE_NACH_SPRACHE.get(language);
+  if (texte === undefined) throw new TypeError(`Unbekannte Sprache: ${language}`);
+  return texte;
+}
+
 function kiHinweisFor(language, ownerName) {
-  const texte = TEXTE[language];
+  const texte = texteFor(language);
   return texte.kiHinweis(texte.kiKern, ownerName);
 }
 
 export function kiHinweisKernFor(language) {
-  return TEXTE[language].kiKern;
+  return texteFor(language).kiKern;
 }
 
 export function kiHinweisRahmenFor(language) {
-  const [pre, post] = kiHinweisFor(language, NAME_PLATZHALTER).split(NAME_PLATZHALTER);
-  return { pre, post };
+  const text = kiHinweisFor(language, NAME_PLATZHALTER);
+  const stelle = text.indexOf(NAME_PLATZHALTER);
+  return { pre: text.slice(0, stelle), post: text.slice(stelle + NAME_PLATZHALTER.length) };
 }
 
 export function afterGreeting(reason) {
@@ -62,15 +69,15 @@ export const PLACEHOLDER_OPENER = "{{";
 export function besitzerEroeffnung({ language, firstName }) {
   const vorname = typeof firstName === "string" ? firstName.trim() : "";
   if (!vorname || vorname.includes(PLACEHOLDER_OPENER)) return "";
-  return TEXTE_NACH_SPRACHE.get(language).besitzer;
+  return texteFor(language).besitzer;
 }
 
 export function besitzerFrage(language) {
-  return TEXTE_NACH_SPRACHE.get(language).besitzerFrage;
+  return texteFor(language).besitzerFrage;
 }
 
 export function drittEroeffnung({ language, ownerName, firstName, reason }) {
-  const texte = TEXTE[language];
+  const texte = texteFor(language);
   const anlass = afterGreeting(reason).replace(/[.!]+$/, "");
   const kopf = `${texte.gruss} ${anlass} ${GEDANKENSTRICH} `;
   const pflichtsatz = `${kopf}${kiHinweisFor(language, ownerName)}`;
