@@ -53,6 +53,21 @@ function leseRpc(text) {
   return roh === "" ? null : JSON.parse(roh);
 }
 
+const DETAIL_MAX = 40;
+const DETAIL_WORT_MAX = 24;
+
+// Nur Buchstaben und Unterstriche, kurze Woerter: so kann kein Schluessel oder Token ins Log gelangen.
+function detailVon(ergebnis) {
+  const text = ergebnis?.content?.find((teil) => typeof teil?.text === "string")?.text ?? "";
+  return text
+    .replace(/[^A-Za-z_ ]/g, " ")
+    .split(/\s+/)
+    .filter((wort) => wort !== "" && wort.length <= DETAIL_WORT_MAX)
+    .join("_")
+    .toLowerCase()
+    .slice(0, DETAIL_MAX);
+}
+
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
   const antwort = await abfrage(`${basis}/intern/probe/mcp`, {
     method: "POST",
@@ -68,7 +83,9 @@ async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur =
   if (!antwort.ok) throw new Error(`mcp_http_${antwort.status}`);
   const ergebnis = leseRpc(await antwort.text())?.result;
   if (!ergebnis || ergebnis.isError || (!ohneStruktur && !ergebnis.structuredContent)) {
-    throw new Error(`mcp_${name}_fehlgeschlagen`);
+    const fehler = new Error(`mcp_${name}_fehlgeschlagen`);
+    fehler.detail = detailVon(ergebnis);
+    throw fehler;
   }
   return { ...ergebnis.structuredContent, _meta: ergebnis._meta };
 }

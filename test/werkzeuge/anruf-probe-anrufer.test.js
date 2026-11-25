@@ -319,3 +319,14 @@ test("Tagesstand: 29 Einträge, alle von heute, sind vollständig und zählen", 
   const { anrufer } = attrappe(vollListe(29, () => "2026-11-17T01:00:00.000Z"));
   assert.deepEqual(await anrufer.tagesstand(), { erstversuche: 0, anrufe: 0 });
 });
+
+test("Anruf: Werkzeugfehler traegt bereinigten Fehlertext ohne Ziffern, Tokens und Sonderzeichen", async () => {
+  const roh = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: "Ziel nicht erlaubt: +4917312345678 token=sk_abcdefghijklmnopqrstuvwxyz0123456789" }] } };
+  const { anrufer } = attrappe({ place_call: () => ({ ok: true, status: 200, text: async () => JSON.stringify(roh) }) });
+  await assert.rejects(anrufer.anrufen({ ziel: ZIEL }), (fehler) => {
+    assert.equal(fehler.message, "mcp_place_call_fehlgeschlagen");
+    assert.match(fehler.detail, /^ziel_nicht_erlaubt/);
+    assert.doesNotMatch(fehler.detail, /\d|sk_|abcdef/);
+    return true;
+  });
+});
