@@ -3,6 +3,7 @@ import { mapStatus, resultCardView } from "../call-result.ts";
 import { localeFor } from "../i18n/locales.ts";
 import { maskRestrictedText } from "../restricted-data.ts";
 import { failureReasonBase } from "../telephony/failure-reason.ts";
+import { ergebnisZustand } from "../telephony/ergebnis-zustand.ts";
 
 export { mapStatus };
 
@@ -23,6 +24,7 @@ export function pickTranscript(callId, call, texts = null) {
     call_id: callId,
     result_summary: maskRestrictedText(call.summary || failureSummary || texts?.awaitSummary || AWAIT_SUMMARY_PLACEHOLDER),
     objective_achieved: call.objectiveAchieved ?? "unclear",
+    ...ergebnisZustand(call),
     ...maskedResultCard(call.result),
   };
 }

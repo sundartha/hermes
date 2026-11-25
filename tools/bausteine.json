@@ -338,6 +338,7 @@
         "src/telephony/adapters/telnyx/http.ts",
         "src/telephony/anruf-fristen.ts",
         "src/telephony/alert-sms.ts",
+        "src/telephony/ergebnis-zustand.ts",
         "src/telephony/failure-reason.ts",
         "src/telephony/fristen-lauf.ts",
         "src/telephony/number-denylist.ts",
