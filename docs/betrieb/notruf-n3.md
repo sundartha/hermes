@@ -1,6 +1,6 @@
 # Notruf N3: Kostendecke eines Mandanten oder Kostenalarm
 
-Prüfliste: Kennung N3 in `docs/betrieb/launch-pruefliste.md`. Die pro-Tenant-Kostendecke sperrt beide Richtungen, auch Inbound (Quelle: `src/config.ts`, Schlüssel `MAX_BUDGET_EUR` und `DEFAULT_TENANT_BUDGET_CENTS`, Beschreibung in `.env.example`). Sie wird in diesem Notfall nie gelockert, umgangen oder per Datenbankeingriff ausgehebelt.
+Prüfliste: Kennung N3 in `docs/betrieb/launch-pruefliste.md`. Die pro-Tenant-Kostendecke sperrt beide Richtungen, auch Inbound (Quelle: `src/konfiguration/rohwerte-billing.ts`, Schlüssel `MAX_BUDGET_EUR` und `DEFAULT_TENANT_BUDGET_CENTS`, Beschreibung in `.env.example`). Sie wird in diesem Notfall nie gelockert, umgangen oder per Datenbankeingriff ausgehebelt.
 
 ## Symptom
 
