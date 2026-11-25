@@ -22,7 +22,10 @@ const BESTAETIGEN_SQL = `UPDATE tenant SET newsletter_recipients = ${neueListe(
 
 export const NEWSLETTER_LISTEN_LESEN_SQL = `SELECT id, ${LISTE_ZURUECK} FROM tenant WHERE newsletter_recipients IS NOT NULL`;
 
-type Anweisung = { sql: string; werte: string[] };
+interface Anweisung {
+  sql: string;
+  werte: string[];
+}
 
 export function empfaengerAnhaengen(empfaenger: unknown, nowIso: string): Anweisung {
   const grenze = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
