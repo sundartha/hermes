@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { timezoneForCountry } from "../../src/geo/resolve.js";
+import { timezoneForCountry } from "../../src/geo/resolve.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";

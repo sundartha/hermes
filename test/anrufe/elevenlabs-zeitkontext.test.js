@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { timezoneForCountry } from "../../src/geo/resolve.js";
+import { timezoneForCountry } from "../../src/geo/resolve.ts";
 import { calleeTimezone, callTimeContext, todayIn } from "../../src/elevenlabs/time-context.ts";
 import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";
 

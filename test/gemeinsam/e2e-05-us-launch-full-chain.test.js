@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { prodEnv } from "../prod-env.js";
 import { normalizePrivateNumber } from "../../src/store/state-ops.js";
-import { resolveOnboardCountry, tenantGeoForCountry } from "../../src/geo/resolve.js";
+import { resolveOnboardCountry, tenantGeoForCountry } from "../../src/geo/resolve.ts";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
