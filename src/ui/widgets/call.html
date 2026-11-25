@@ -651,13 +651,20 @@
     }
 
     function isAwaitPlaceholder(data) {
-      return data.objective_achieved === "unclear" && AWAIT_SUMMARIES.indexOf(data.result_summary) !== -1;
+      if (data.objective_achieved !== "unclear") return false;
+      return currentStatus !== "completed" || AWAIT_SUMMARIES.indexOf(data.result_summary) !== -1;
     }
 
     function applySummaryRow(data, awaiting) {
       if (awaiting) setKeyedText(slot("result_summary"), "Result being evaluated");
       else if ("result_summary" in data) setKeyedText(slot("result_summary"), null, data.result_summary);
       setRowVisible("summary", currentStatus === "completed");
+    }
+
+    function showUpdatesStopped() {
+      if (isTerminalStatus(currentStatus)) return;
+      setKeyedText(slot("result_summary"), "No longer updating");
+      setRowVisible("summary", true);
     }
 
     function applyCallResult(data) {
@@ -785,7 +792,10 @@
       if (isRecord(m.result)) observeLocale(m.result._meta);
       if (m.error) {
         consecutiveRpcErrors += 1;
-        if (consecutiveRpcErrors >= MAX_CONSECUTIVE_RPC_ERRORS) stopPolling();
+        if (consecutiveRpcErrors >= MAX_CONSECUTIVE_RPC_ERRORS) {
+          stopPolling();
+          showUpdatesStopped();
+        }
         return;
       }
       consecutiveRpcErrors = 0;
