@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const STATUS = WIDGETS["agent-status"];
-const NEUE_VERSION = 34;
+const NEUE_VERSION = 35;
 
 function stil(html) {
   return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
