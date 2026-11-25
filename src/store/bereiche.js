@@ -217,6 +217,9 @@ function nummernkaufBereich(speicher) {
   return {
     ensureTenant: async (tenantId) => speicher.ensureTenant(tenantId),
     alleMandantenIds: async () => allTenantIds(speicher.load()),
+    schreibenAbwarten: async () => {
+      if (speicher.nummernSql?.()) await speicher.drainFlushes();
+    },
     legeNummerAn: async (eingabe) => speicher.nummernSql?.()?.nummerAnlegen(eingabe) ?? null,
     entferneNummer: async (eingabe) => speicher.nummernSql?.()?.nummerEntfernen(eingabe) ?? null,
     legeAuftragAn: async (eingabe) => {

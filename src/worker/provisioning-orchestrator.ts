@@ -110,6 +110,7 @@ interface Triggerergebnis {
 }
 
 interface NummernkaufBereich {
+  schreibenAbwarten: () => Promise<void>;
   ensureTenant: (tenantId: string) => Promise<unknown>;
   legeNummerAn: (eingabe: { tenantId: string; number: Nummer; hoechstens: number; plattformHoechstens: number }) => Promise<{ ok: boolean } | null>;
   entferneNummer: (eingabe: { tenantId: string; numberId: string }) => Promise<unknown>;
@@ -300,6 +301,7 @@ export function makeProvisioningOrchestrator({
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
       .withStoreLock(async () => {
+        await bereiche.nummernkauf.schreibenAbwarten();
         const zustand = store.load();
         const retry = resolveProvisionRetry(zustand, {
           tenantId,
