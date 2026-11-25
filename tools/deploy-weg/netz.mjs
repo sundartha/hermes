@@ -147,11 +147,6 @@ function fruehwarnungsZaehler(daten) {
   };
 }
 
-function anzahlLaufend(daten) {
-  const wert = daten?.laufend;
-  return Number.isInteger(wert) && wert >= 0 ? wert : null;
-}
-
 export function hermesZugang(basisUrl, deployToken = null) {
   const internKopf = { authorization: "Bearer " + deployToken, "cache-control": "no-store" };
   return Object.freeze({
@@ -169,12 +164,6 @@ export function hermesZugang(basisUrl, deployToken = null) {
     aufwecken: (optionen) => aufwecken(basisUrl, optionen),
     async wachhalten() {
       await anfrage(basisUrl + HEALTHZ_PFAD);
-    },
-    async anrufe() {
-      const { status, daten } = await anfrage(basisUrl + "/intern/anrufe-laufend", {
-        kopf: internKopf,
-      });
-      return { status, laufend: status === HTTP_OK ? anzahlLaufend(daten) : null };
     },
     anrufpauseLesen: () => anfrage(basisUrl + ANRUFPAUSE_PFAD, { kopf: internKopf }),
     anrufpauseSetzen: (an) =>

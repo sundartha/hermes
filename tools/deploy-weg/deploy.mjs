@@ -202,12 +202,6 @@ async function pauseLesen(kontext) {
   return true;
 }
 
-async function anrufeMelden({ hermes, ausgabe }) {
-  const { status, laufend } = await hermes.anrufe();
-  if (laufend === null) ausgabe.melde("anrufe_nicht_lesbar", { http: status });
-  else ausgabe.melde("anrufe_weiter", { anzahl: laufend });
-}
-
 export async function anrufpause({
   einstellungen,
   an,
@@ -220,7 +214,6 @@ export async function anrufpause({
   const kontext = { hermes, ausgabe, an };
   if (!(await aufwachen(kontext, { uhr, takte }))) return false;
   if (!(await pauseSetzen(kontext)) || !(await pauseLesen(kontext))) return false;
-  await anrufeMelden(kontext);
   if (an) ausgabe.melde("anrufpause_probe");
   return true;
 }
