@@ -71,7 +71,7 @@ jobs:
           curl -sSfL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/$archiv" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archiv"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archiv" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$archiv" -C "$RUNNER_TEMP" gitleaks
-          "$RUNNER_TEMP/gitleaks" git --config gitleaks.toml --redact --no-banner --exit-code 1 --log-opts="$BASIS..HEAD" .
+          PATH="$RUNNER_TEMP:$PATH" node tools/pruefen.mjs gitleaks --basis "$BASIS"
 
       - name: Lint (ESLint mit den Hermes-Regeln)
         if: ${{ !cancelled() }}
