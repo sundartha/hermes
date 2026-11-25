@@ -11,43 +11,47 @@ const ZIEL = "+12722205602";
 
 const uhr = { jetzt: () => Date.parse("2026-11-17T10:00:00.000Z"), warte: async () => {} };
 
-function werfer(meldung) {
+function werfer(meldung, felder = {}) {
   return async () => {
-    throw new Error(meldung);
+    throw Object.assign(new Error(meldung), felder);
   };
 }
 
-async function zweitGrund(meldung) {
-  const ergebnis = await probeLaufen({ messen: werfer(meldung), uhr });
+async function zweitGrund(meldung, felder) {
+  const ergebnis = await probeLaufen({ messen: werfer(meldung, felder), uhr });
   assert.equal(ergebnis.ausgang, "rot");
   assert.deepEqual(ergebnis.zweit.gerissen, ["messung"]);
   return ergebnis.zweit.grund;
 }
 
 test("Messung wirft in beiden Versuchen: rot mit Grund im Ergebnis", async () => {
-  const ergebnis = await probeLaufen({ messen: werfer("Verbindung abgelehnt"), uhr });
+  const ergebnis = await probeLaufen({ messen: werfer("x", { code: "ECONNREFUSED" }), uhr });
   assert.equal(ergebnis.ausgang, "rot");
   assert.deepEqual(ergebnis.zweit.gerissen, ["messung"]);
-  assert.equal(ergebnis.zweit.grund, "Verbindung abgelehnt");
-  assert.equal(ergebnis.erst.grund, "Verbindung abgelehnt");
+  assert.equal(ergebnis.zweit.grund, "ECONNREFUSED");
+  assert.equal(ergebnis.erst.grund, "ECONNREFUSED");
 });
 
-const BEREINIGT = [
-  ["Nummer und Ziffern ab 4 werden ersetzt", "Token abc123 an +491701234567 abgelehnt", "Token abc123 an +*** abgelehnt"],
-  ["genau 3 Ziffern bleiben", "Code 123 falsch", "Code 123 falsch"],
-  ["genau 4 Ziffern werden ersetzt", "Code 1234 falsch", "Code *** falsch"],
-  ["Adresse mit :// entfällt", "Fehler bei https://geheim.example/pfad?x=1 aufgetreten", "Fehler bei *** aufgetreten"],
-  ["120 Zeichen bleiben", "a".repeat(120), "a".repeat(120)],
-  ["121 Zeichen werden auf 120 gekürzt", "a".repeat(121), "a".repeat(120)],
+const GRUENDE = [
+  ["Fehlercode geht durch", "egal", { code: "ECONNREFUSED" }, "ECONNREFUSED"],
+  ["Code der Ursache geht durch", "egal", { cause: { code: "ENOTFOUND" } }, "ENOTFOUND"],
+  ["Code mit Ziffern fällt auf den Namen zurück", "egal", { code: "E1234" }, "Error"],
+  ["Code ohne Text fällt auf den Namen zurück", "egal", { code: 500 }, "Error"],
+  ["Name mit Ziffern ergibt unbekannt", "egal", { name: "Fehler42" }, "unbekannt"],
+  ["Freitext der Meldung wird nie übernommen", `Bearer ${PROBE_STAGING_TEST_TOKEN} ungültig`, {}, "Error"],
+  ["getrennte Nummer in der Meldung wird nie übernommen", "an +1 272 220 5602 abgelehnt", {}, "Error"],
+  ["Adresse in der Meldung wird nie übernommen", "bei https://geheim.example/pfad?x=1", {}, "Error"],
+  ["60 Zeichen bleiben", "egal", { code: "A".repeat(60) }, "A".repeat(60)],
+  ["61 Zeichen werden auf 60 gekürzt", "egal", { code: "A".repeat(61) }, "A".repeat(60)],
 ];
 
-for (const [name, meldung, erwartet] of BEREINIGT) {
+for (const [name, meldung, felder, erwartet] of GRUENDE) {
   test(`Messung-Grund: ${name}`, async () => {
-    assert.equal(await zweitGrund(meldung), erwartet);
+    assert.equal(await zweitGrund(meldung, felder), erwartet);
   });
 }
 
-test("Messung-Grund: Ausnahme ohne Text gibt keinen Grund", async () => {
+test("Messung-Grund: Ausnahme null gibt keinen Grund", async () => {
   const ergebnis = await probeLaufen({
     messen: async () => {
       throw null;
@@ -84,14 +88,16 @@ function probeStarten(fall) {
   return new Promise((fertig) => kind.on("close", (code) => fertig({ code, ausgabe })));
 }
 
-test("Probe: wirft der Anrufer, lautet die Ausgabe Probe rot: messung grund=...", async () => {
-  const { code, ausgabe } = await probeStarten({ fehler: "Verbindung abgelehnt" });
+test("Probe: wirft der Anrufer, lautet die Ausgabe Probe rot: messung grund=<Code>", async () => {
+  const { code, ausgabe } = await probeStarten({ fehler: "Verbindung abgelehnt", felder: { code: "ECONNREFUSED" } });
   assert.equal(code, 1);
-  assert.match(ausgabe, /^Probe rot: messung grund=Verbindung abgelehnt$/m);
+  assert.match(ausgabe, /^Probe rot: messung grund=ECONNREFUSED$/m);
+  assert.doesNotMatch(ausgabe, /Verbindung abgelehnt/);
 });
 
-test("Probe: wirft der Anrufer ohne Text, steht kein grund in der Ausgabe", async () => {
-  const { code, ausgabe } = await probeStarten({ fehler: "" });
-  assert.equal(code, 1);
-  assert.match(ausgabe, /^Probe rot: messung$/m);
+test("Probe: Meldung mit Token erscheint nie in der Ausgabe", async () => {
+  const { ausgabe } = await probeStarten({ fehler: `Bearer ${PROBE_STAGING_TEST_TOKEN}` });
+  assert.match(ausgabe, /^Probe rot: messung grund=Error$/m);
+  const ohneMaske = ausgabe.split("\n").filter((zeile) => !zeile.startsWith("::add-mask::"));
+  assert.equal(ohneMaske.join("\n").includes(PROBE_STAGING_TEST_TOKEN), false);
 });

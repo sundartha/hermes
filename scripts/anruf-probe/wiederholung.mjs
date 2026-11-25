@@ -8,22 +8,21 @@ export function normalisiert(nummer) {
   return String(nummer).replace(SCHREIBWEISE, "");
 }
 
-const GRUND_MAX = 120;
-const ADRESSE = /\S*:\/\/\S*/g;
-const ZIFFERN = /\d{4,}/g;
+const GRUND_MAX = 60;
+const GRUNDCODE = /^[A-Za-z_]+$/;
 
-function bereinigt(meldung) {
-  return String(meldung ?? "")
-    .replace(ADRESSE, "***")
-    .replace(ZIFFERN, "***")
-    .slice(0, GRUND_MAX);
+function bereinigt(fehler) {
+  if (fehler === null || fehler === undefined) return "";
+  const kandidaten = [fehler.code, fehler.cause?.code, fehler.name];
+  const code = kandidaten.find((wert) => typeof wert === "string" && GRUNDCODE.test(wert));
+  return (code ?? "unbekannt").slice(0, GRUND_MAX);
 }
 
 async function messenOderNichts(messen) {
   try {
     return urteilen(await messen());
   } catch (fehler) {
-    const grund = bereinigt(fehler?.message);
+    const grund = bereinigt(fehler);
     return grund === "" ? urteilen(null) : { ...urteilen(null), grund };
   }
 }
