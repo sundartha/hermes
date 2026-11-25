@@ -234,8 +234,8 @@ nennt je Zeile oben die Tests, die sie belegen.
   Weg.
 - Render Free: 750 Free-Stunden je Workspace und Monat; danach setzt Render
   alle Free-Dienste bis Monatsende aus, und `staging` und `live` enden rot.
-- Bekannte Luecke: zwischen der letzten Anruf-Abfrage und dem Umschalten
-  kann ein Anruf beginnen. Der alte Prozess wartet beim Beenden hoechstens
+- Bekannte Luecke: der Deploy fragt nicht nach laufenden Anrufen; ein Anruf
+  kann also jederzeit beim Umschalten laufen. Der alte Prozess wartet beim Beenden hoechstens
   die Gesamtfrist `SHUTDOWN_DRAIN_TIMEOUT_MS` (Wert in `render.yaml`) und
   fuehrt Anrufe nicht zu Ende. Er wartet zuerst auf offene Anfragen, danach
   laeuft der letzte Flush des Speichers; laeuft die Gesamtfrist ab, endet der
