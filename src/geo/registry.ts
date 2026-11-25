@@ -1,6 +1,6 @@
 import { config } from "../config.ts";
-import { nullGeoLookup } from "./stub.js";
-import { makeMaxmindGeoLookup } from "./maxmind.js";
+import { nullGeoLookup } from "./stub.ts";
+import { makeMaxmindGeoLookup } from "./maxmind.ts";
 
 export function geoLookupAdapter() {
   if (!config.provisioning.geoEnabled) return nullGeoLookup;

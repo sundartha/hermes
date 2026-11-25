@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
-import { tenantGeoForCountry } from "../../src/geo/resolve.js";
+import { tenantGeoForCountry } from "../../src/geo/resolve.ts";
 import { LOCALES, localeFor } from "../../src/i18n/locales.ts";
 import { resolveCallLanguage } from "../../src/store/state-ops.js";
 
