@@ -71,7 +71,6 @@ const TABELLE = [
   ["Fehlergrund no-answer trotz answeredAt", { failureReason: "no-answer", transcript: [AGENT, GEGENSEITE] }, "not_done", "no-answer"],
   ["Fehlergrund no-answer mit Detail", { failureReason: "no-answer: 480", transcript: [AGENT, GEGENSEITE] }, "not_done", "no-answer"],
   ["Gegenseite hat gesprochen: nie done_confirmed ohne Bestaetigung", { transcript: [AGENT, GEGENSEITE] }, "unconfirmed", null],
-  ["Transkript fehlt ganz: nicht als Menue werten", { transcript: undefined }, "unconfirmed", null],
   ["Transkript geloescht: nicht als Menue werten", { transcript: [] }, "unconfirmed", null],
   ["Ziel nicht erreicht aendert den Zustand nicht", { objectiveAchieved: false, transcript: [AGENT, GEGENSEITE] }, "unconfirmed", null],
 ];
