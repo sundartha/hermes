@@ -5,7 +5,7 @@ import test from "node:test";
 import { timezoneForCountry } from "../../src/geo/resolve.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.js";
+import { DEFAULT_TIMEZONE } from "../../src/begriffe/sprache-zeit.ts";
 import { countryForE164 } from "../../src/begriffe/rufnummern.js";
 import {
   OWNER_TEST_FIRST_NAME,

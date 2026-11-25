@@ -2,7 +2,7 @@ import {
   DEFAULT_COUNTRY,
   DEFAULT_TIMEZONE,
   TIMEZONE_FOR_COUNTRY,
-} from "../begriffe/sprache-zeit.js";
+} from "../begriffe/sprache-zeit.ts";
 import { languageForCountry } from "../i18n/locales.ts";
 
 export function normCountry(raw: unknown): string | null {

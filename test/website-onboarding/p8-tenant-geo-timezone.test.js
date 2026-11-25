@@ -11,7 +11,7 @@ import {
   tenantTimezone,
   findTenant,
 } from "../../src/store/state-ops.js";
-import { DEFAULT_TIMEZONE, resolveTimezone } from "../../src/begriffe/sprache-zeit.js";
+import { DEFAULT_TIMEZONE, resolveTimezone } from "../../src/begriffe/sprache-zeit.ts";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { timezoneForCountry, tenantGeoForCountry } from "../../src/geo/resolve.ts";
 

@@ -10,7 +10,7 @@ test("selbstbedienung-importrichtung: anrufe importiert nichts mehr aus selbstbe
 });
 
 test("selbstbedienung-importrichtung: die Zeitzone je Land liegt in begriffe und gilt unverändert", async () => {
-  const { TIMEZONE_FOR_COUNTRY } = await import("../../src/begriffe/sprache-zeit.js");
+  const { TIMEZONE_FOR_COUNTRY } = await import("../../src/begriffe/sprache-zeit.ts");
   assert.deepEqual(
     { ...TIMEZONE_FOR_COUNTRY },
     {
@@ -23,7 +23,7 @@ test("selbstbedienung-importrichtung: die Zeitzone je Land liegt in begriffe und
 });
 
 test("selbstbedienung-importrichtung: geo/resolve nutzt dieselbe Tabelle", async () => {
-  const { TIMEZONE_FOR_COUNTRY } = await import("../../src/begriffe/sprache-zeit.js");
+  const { TIMEZONE_FOR_COUNTRY } = await import("../../src/begriffe/sprache-zeit.ts");
   const { timezoneForCountry } = await import("../../src/geo/resolve.ts");
   for (const [land, zone] of Object.entries(TIMEZONE_FOR_COUNTRY)) assert.equal(timezoneForCountry(land), zone);
   assert.equal(timezoneForCountry("JP"), "Europe/Berlin");
