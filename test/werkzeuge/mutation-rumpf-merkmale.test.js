@@ -39,7 +39,7 @@ function mitAufbau(kill, ablauf) {
     writeFileSync(join(ordner, "src/quelle.mjs"), QUELLE);
     writeFileSync(join(ordner, "test/testbaenke-run.mjs"), TESTLAUF(kill));
     for (const datei of TESTS) writeFileSync(join(ordner, datei), datei.includes("treffer") ? '// prüft "rumpf-merkmal"\n' : "");
-    const plan = { frist: Date.now() + 600_000, tests: TESTS, dateien: ["src/quelle.mjs"], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
+    const plan = { frist: 4_102_444_800_000, tests: TESTS, dateien: ["src/quelle.mjs"], eingebettete: {}, abdeckung: {}, protokoll: join(ordner, "protokoll.jsonl"), basisRot: join(ordner, "basis-rot.json") };
     writeFileSync(join(ordner, "plan.json"), JSON.stringify(plan));
     spawnSync(process.execPath, [PRUEFEN, "mutant"], { cwd: ordner, env: { ...process.env, TEIL: "0", TEILE: "1", __STRYKER_ACTIVE_MUTANT__: "3", MUTATION_PLAN: join(ordner, "plan.json") } });
     const { dauer, ...urteil } = JSON.parse(readFileSync(join(ordner, "protokoll.jsonl"), "utf8").trim().split("\n").at(-1));

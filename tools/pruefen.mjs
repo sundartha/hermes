@@ -140,13 +140,9 @@ const GETOETET_VON = /`([^`\s]+:\d+\/(\d+))`[^\S\n]+wird getötet von[^\S\n]+`([
 const LEERER_LAUF = "Leerer Lauf: keine Mutanten auf geänderten Zeilen unter src/, nichts geprüft.";
 const MUTATION_AUSWEG = "Rot: Jeder nicht getötete Mutant braucht einen Test, der ihn tötet; nur ein überlebender kann stattdessen unter „## Überlebende Mutanten“ im PR-Text eine Zeile mit seinem Schlüssel in Backticks und dem Grund, warum er äquivalent ist, bekommen. Danach diesen Job neu starten.";
 
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8", maxBuffer: GROSSE_AUSGABE }).trim();
-}
+const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: GROSSE_AUSGABE }).trim();
 
-function lauf(befehl, args, optionen = {}) {
-  return spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
-}
+const lauf = (befehl, args, optionen = {}) => spawnSync(befehl, args, { stdio: "inherit", ...optionen }).status === 0;
 
 function zeileDesBefunds(befund, lies) {
   try {
@@ -613,7 +609,10 @@ function mutantenZeile({ datei, offset }) {
   return text.slice(text.lastIndexOf("\n", offset) + 1, schluss ? schluss.index + 1 : text.indexOf("\n", offset));
 }
 
-const ausgabeKurz = (ausgabe) => ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN).map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
+function ausgabeKurz(ausgabe) {
+  const zeilen = ausgabe.split("\n").filter((zeile) => zeile.trim() !== "").slice(-BASIS_ROT_ZEILEN);
+  return zeilen.map((zeile) => `  ${zeile}`).join("\n").slice(-BASIS_ROT_ZEICHEN);
+}
 
 export function basisRotZeilen({ schluessel, ausgeschlossen = [], basisRotAusgabe = {} }) {
   return ausgeschlossen.flatMap((datei) => [`Basis rot: ${datei} war bei ${schluessel} zweimal ohne Mutant rot und ist für den Rest des Jobs ausgeschlossen`, ...(basisRotAusgabe[datei] ? [basisRotAusgabe[datei]] : [])]);
