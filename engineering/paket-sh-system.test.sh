@@ -54,6 +54,12 @@ pruefe "Kopf unveraendert seit Nachtrag: nicht umgesetzt" "$(nb '9\n' aaa aaa)" 
 pruefe "dreimal umgesetzt: Grenze" "$(nb '9\n9\n9\n' aaa bbb)" "Nachbesserungsgrenze erreicht "
 pruefe "zweimal umgesetzt: weiter" "$(nb '9\n9\n' aaa bbb)" ""
 pruefe "Halt-Kommentar mit letzter Bewertung steht im Issue" "$(grep -c 'Paket hält bei PR #\$PR: \$HG. Letzte Bewertung' $S)" "1"
+# A-5UNP4V 25.11.: Startgrenze zählt nur, wenn starts.txt frisch ist (PAKET_STARTS_FRIST, 360 min); ein alter Zähler (5x) lässt den Start zu, ein frischer hält. Die Stelle wird aus paket.sh gelesen.
+GRENZE=$(grep -m1 'sechster Start ohne Merge' $S | sed 's/   # zählt nur.*//')
+[ -n "$GRENZE" ] || { echo "ROT  Startgrenze nicht in paket.sh gefunden"; exit 1; }
+grenze() { local D=$(mktemp -d); LOG=$D; START=h1; ( for _ in 1 2 3 4 5; do echo h1; done ) > $LOG/starts.txt; [ -n "$1" ] && touch -t $(date -d "$1 hours ago" +%Y%m%d%H%M 2>/dev/null || date -v-${1}H +%Y%m%d%H%M) $LOG/starts.txt; ( eval "$GRENZE" ) 2>/dev/null; [ -s $LOG/halt.txt ] && echo halt || echo frei; }
+pruefe "frischer Zaehler (5 Starts) haelt" "$(grenze)" "halt"
+pruefe "7 h alter Zaehler (5 Starts) startet" "$(grenze 7)" "frei"
 # wt-steuerung (Issue 5760): alle Git-Aufrufe im gemeinsamen Ordner laufen unter einer Sperre; ein index.lock-Zusammenstoß wird wiederholt statt zu scheitern
 GITR=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
 [ -n "$GITR" ] || { echo "ROT  gitr in paket.sh nicht gefunden"; exit 1; }
