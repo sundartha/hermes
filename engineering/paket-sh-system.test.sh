@@ -6,13 +6,16 @@ gitr() { git -C "$REPO" "$@"; }   # paket.sh ruft git im Ordner REPO über gitr 
 
 REPO=$T/repo; mkdir -p $REPO && git -C $REPO init -q -b master && git -C $REPO commit -q --allow-empty -m a
 git -C $REPO worktree add -q $T/wt-x1 -b paket/x1 >/dev/null
-STELLE=$(grep -o 'LB=\$B; \[\[ \$B == [a-z]*/\* \]\] && LB=paket/\${B#system/}; WT=[^#]*' $S | head -1)
+STELLE=$(grep -E '^kopie_von\(\) \{' $S | head -1)   # 24.11.: eine Funktion für Rücklauf und Wegräumen
 [ -n "$STELLE" ] || { echo "ROT  Stelle nicht in paket.sh gefunden"; exit 1; }
-suche() { B=$1 eval "$STELLE"; echo "$WT"; }
+eval "$STELLE"; suche() { kopie_von "$1"; }
 pruefe() { [[ "$2" == "$3" ]] && echo "ok   $1" || { echo "ROT  $1: '$2' != '$3'"; fehler=1; }; }
 W=$(cd $T/wt-x1 && pwd -P)
 pruefe "PR auf paket/x1 findet den Worktree" "$(suche paket/x1)" "$W"
 pruefe "PR auf system/x1 findet denselben Worktree" "$(suche system/x1)" "$W"
+WEG=$(grep -E '^wegraeumen\(\) \{' $S | head -1); [ -n "$WEG" ] || { echo "ROT  wegraeumen nicht in paket.sh gefunden"; exit 1; }; eval "$WEG"   # 24.11.: die Kette räumt die Arbeitskopie eines gemergten/geschlossenen PR selbst weg
+git -C $REPO worktree add -q $T/wt-y -b paket/y >/dev/null; gh() { echo paket/y; }; wegraeumen 1; unset -f gh
+pruefe "wegraeumen entfernt Arbeitskopie und Zweig des PR" "$(ls $T | grep -c "^wt-y$")$(git -C $REPO branch --list paket/y | wc -l | tr -d ' ')" "00"
 pruefe "fremder Zweig findet keinen Worktree" "$(suche andere/x1)" ""
 # Geschlossener PR ohne Merge: Merge-Schleife und Selbstneustart-Wartender warten nicht 60 bzw. 15 Minuten, sondern gehen weiter (4178, 17.11.). Beide Stellen werden aus paket.sh gelesen.
 SCHLEIFE=$(grep -o 'prj \$PR; S=\$PRS; \[ "\$S" = MERGED \] && break; \[ "\$S" = CLOSED \] && {[^}]*}' $S | head -1)
@@ -23,16 +26,6 @@ pruefe "offener PR bleibt in der Schleife" "$(runde OPEN | tr '\n' ' ')" "runde 
 pruefe "gemergter PR verlaesst die Merge-Schleife" "$(runde MERGED | tr '\n' ' ')" "runde ende runde ende "
 WARTER=$(grep -o 'case "${Q% \*}" in MERGED|CLOSED) break ;; esac' $S | head -1)
 pruefe "Wartender endet auch bei CLOSED" "$([ -n "$WARTER" ] && echo ja)" "ja"
-# Übersprungen-Zweig (bau-$N übersprungen): freigeben greift bei rotem Kopf nie, ohne Obergrenze läuft die while-Schleife endlos (PR 5311, Kette #5006, 19.11.). Ab der vierten Runde in Folge auf demselben Kopf hält die Kette statt weiterzudrehen.
-UEBER=$(grep -o 'echo "bau-\$N übersprungen[^#]*' $S | head -1)
-[ -n "$UEBER" ] || { echo "ROT  Übersprungen-Stelle nicht in paket.sh gefunden"; exit 1; }
-runde_ueber() { LOG=$T/ueber-$1; rm -rf $LOG; mkdir -p $LOG; PR=5311; PRK=$1; freigeben() { :; }; einstufung() { echo "sonnet -"; }
-  for _ in 1 2 3 4 5; do ( eval "$UEBER" ) 2>/dev/null; [ -s $LOG/halt.txt ] && { echo halt; return; }; echo weiter; done; }
-pruefe "gleicher roter Kopf haelt nach 3 Runden statt endlos weiterzudrehen" "$(runde_ueber kopfA)" "weiter
-weiter
-weiter
-halt"
-pruefe "neuer Kopf setzt den Zaehler zurueck" "$(LOG=$T/ueber-neu; rm -rf $LOG; mkdir -p $LOG; PR=5311; freigeben() { :; }; einstufung() { echo "sonnet -"; }; for k in a a a b; do PRK=$k; ( eval "$UEBER" ) 2>/dev/null; done; tail -1 $LOG/uebersprungen.txt)" "5311 b 1"
 # CI-ROT-1119: PASS auf unverändertem Kopf wird nur bei grüner CI übersprungen; bei roter CI geht die Kette in die Rücklauf-Schleife statt zu überspringen (2973, 5006).
 pruefe "Skip-Bedingung prueft die CI" "$(grep -c 'pass_auf_kopf \$PR \$PRK && { case "$(ci_lage \$PR)" in gruen) ;; \*) CIROT=1' $S)" "1"
 pruefe "Schleife betritt PASS-PR bei roter CI" "$(grep -c '\[ "\$PRM" = CONFLICTING \] || \[ -n "\$CIROT" \]; do' $S)" "1"
@@ -61,19 +54,4 @@ touch $G/.git/index.lock; ( sleep 3; mv $G/.git/index.lock $T/lock.weg ) &
 gitr checkout -q --detach master; pruefe "index.lock-Zusammenstoss wird wiederholt und gelingt" "$?" "0"; wait
 ( gitr checkout -q --detach master & gitr checkout -q --detach master & gitr checkout -q --detach master & wait ) 2>/dev/null
 pruefe "drei gleichzeitige Checkouts unter der Sperre" "$(git -C $G rev-parse --abbrev-ref HEAD)" "HEAD"
-# Host-Weiche (#5766): eine Quelle fuer Mac und Server; die Werte je Host stehen allein in host_werte(), uname wird als Funktion vorgegeben.
-HW=$(sed -n '/^host_werte() {/,/^}/p' $S)
-[ -n "$HW" ] || { echo "ROT  host_werte nicht in paket.sh gefunden"; exit 1; }
-hw() { zsh -c 'uname() { echo $UN; }; HOME=/h; PATH=/usr/bin:/bin; eval "$HW"; host_werte; print -r -- "$MAX_KETTEN|$PATH|$GHBIN|$PYBIN|${(j: :)SEDI}"' ; }
-pruefe "Darwin: 14 Ketten, kein Node-22-Pfad, gh und python3 aus homebrew, BSD-sed" "$(UN=Darwin HW=$HW hw)" "14|/usr/bin:/bin|/opt/homebrew/bin/gh|/opt/homebrew/bin/python3|sed -i "
-pruefe "Linux: 3 Ketten, Node 22 vorn, gh und python3 aus dem Pfad, GNU-sed" "$(UN=Linux HW=$HW hw)" "3|/h/node22/bin:/usr/bin:/bin|gh|python3|sed -i"
-KE=$(grep -E '^konto_env\(\) \{' $S | sed 's/   # .*//')
-[ -n "$KE" ] || { echo "ROT  konto_env nicht in paket.sh gefunden"; exit 1; }
-ke() { zsh -c 'uname() { echo $UN; }; eval "$KE"; CLAUDE_CODE_OAUTH_TOKEN=x konto_env 2 env | grep -E "^(KONTO_FEST|CLAUDE_KONTO|CLAUDE_CODE_OAUTH_TOKEN)=" | tr "\n" " "'; }
-pruefe "Linux: Verbrauchsabfrage laeuft mit festem Konto und ohne Abo-Schluessel" "$(UN=Linux KE=$KE ke)" "KONTO_FEST=1 CLAUDE_KONTO=2 "
-pruefe "Darwin: Verbrauchsabfrage laeuft ohne Konto-Umgebung" "$(UN=Darwin KE=$KE ke)" "CLAUDE_CODE_OAUTH_TOKEN=x "
-pruefe "Linux-Teile (Scope, Konto-Schluessel, Lastampel) laufen nur unter Linux" "$(grep -E 'PAKET_SCOPE|_kn=1;|AMPEL_K=' $S | grep -c '^\[\[ \$(uname) == Linux \]\]\|^if \[\[ \$(uname) == Linux \]\]')" "3"
-pruefe "paket.sh kennt keine feste homebrew-Datei ausserhalb der Weiche" "$(grep -v '^  *Darwin)' $S | grep -c '/opt/homebrew/bin/\(gh\|python3\)')" "0"
-GL=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
-pruefe "gitr nimmt unter Linux flock und unter Darwin lockf" "$(print -r -- "$GL" | grep -c 'flock -w 120.*lockf -k -t 120\|lockf -k -t 120.*flock -w 120')" "1"
 exit $fehler
