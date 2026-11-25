@@ -10,6 +10,7 @@ const PRUEFEN = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tools
 const KOPF = 'import { test } from "node:test";\n';
 const UEBERSPRUNGEN = `${KOPF}test("db", (t) => { t.skip("ohne Datenbank"); });\n`;
 const TEIL = `${KOPF}test("db", (t) => { t.skip("ohne Datenbank"); });\ntest("echt", () => {});\n`;
+const RETURN = 'import { test } from "node:test";\nimport { postgresVorhanden } from "../anrufe/hermes-mit-postgres.js";\ntest("db", () => { if (!postgresVorhanden()) return; throw new Error("braucht Datenbank"); });\ntest("echt", () => {});\n';
 const GRUEN = `${KOPF}test("echt", () => {});\n`;
 const ROT = `${KOPF}test("rot", () => { throw new Error("rot"); });\n`;
 const DATEI = "test/bereich/neu.test.js";
@@ -29,6 +30,7 @@ function vorab(inhalt) {
     git(ordner, "init", "-q", "-b", "master");
     schreibe(ordner, "package.json", JSON.stringify({ scripts: { test: "node --test" } }));
     schreibe(ordner, "src/a.js", "export const a = 1;\n");
+    schreibe(ordner, "test/anrufe/hermes-mit-postgres.js", "export const postgresVorhanden = () => false;\n");
     git(ordner, "add", "-A");
     git(ordner, "commit", "-q", "-m", "basis");
     const basis = git(ordner, "rev-parse", "HEAD");
@@ -70,4 +72,11 @@ test("Eine Testdatei mit teils übersprungenen, teils echt grünen Tests zählt 
   assert.equal(status, 1);
   assert.match(ausgabe, /ist auf master grün/);
   assert.doesNotMatch(ausgabe, /nicht prüfbar/);
+});
+
+test("Eine Testdatei, die bei fehlender Datenbank mit return aussteigt, ist nicht prüfbar ohne Datenbank", () => {
+  const { status, ausgabe } = vorab(RETURN);
+  assert.equal(status, 0);
+  assert.match(ausgabe, /test\/bereich\/neu\.test\.js.*nicht prüfbar ohne Datenbank, die CI-Rotprobe entscheidet/);
+  assert.doesNotMatch(ausgabe, /ist auf master grün/);
 });
