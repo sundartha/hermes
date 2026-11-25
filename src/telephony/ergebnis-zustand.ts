@@ -19,7 +19,7 @@ export interface ErgebnisZustand {
 interface AnrufSicht {
   answeredAt?: string | null;
   failureReason?: string | null;
-  transcript?: ReadonlyArray<{ role?: string; text?: string }> | null;
+  transcript: ReadonlyArray<{ role?: string; text?: string }>;
 }
 
 const AGENT_ROLE = "agent";
@@ -29,14 +29,13 @@ function nichtErledigt(grund: string): ErgebnisZustand {
 }
 
 function gegenseitenZeilen(call: AnrufSicht): number {
-  return (call.transcript ?? []).filter((zeile) => zeile.role !== AGENT_ROLE && (zeile.text ?? "").trim() !== "").length;
+  return call.transcript.filter((zeile) => zeile.role !== AGENT_ROLE && (zeile.text ?? "").trim() !== "").length;
 }
 
 export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
   if (failureReasonBase(call.failureReason) === RESULT_REASON.NO_ANSWER || call.answeredAt == null) {
     return nichtErledigt(RESULT_REASON.NO_ANSWER);
   }
-  const zeilen = call.transcript ?? [];
-  if (zeilen.length > 0 && gegenseitenZeilen(call) === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
+  if (call.transcript.length > 0 && gegenseitenZeilen(call) === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
   return { result_state: RESULT_STATE.UNCONFIRMED, result_reason: null };
 }
