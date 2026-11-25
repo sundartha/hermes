@@ -165,3 +165,10 @@ test("ist die Hinweis-Erzeugung nicht startbar, bricht neu mit Exit 1 ab", () =>
   assert.match(ergebnis.stderr, /Hinweise konnten nicht erzeugt werden/);
   assert.doesNotMatch(ergebnis.stdout + ergebnis.stderr, /angelegt/);
 });
+
+test("die Art fachdatei gibt ein Ergebnis zurück und nennt ok() aus ergebnis.ts", () => {
+  const text = inhalt(wurzel, FACHDATEI);
+  assert.match(text, /^import \{ ok, type Ergebnis \} from "\.\.\/utils\/ergebnis\.ts";$/m);
+  assert.match(text, /Promise<Ergebnis<unknown>>/);
+  assert.match(text, /return ok\(await antwort\.json\(\)\);/);
+});

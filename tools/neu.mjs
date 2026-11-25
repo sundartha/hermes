@@ -45,15 +45,16 @@ export function make%PASCAL%Routes({ webAuthMw }: { webAuthMw: RequestHandler })
 const FACHDATEI = `import { %BEGRIFF% } from "%ZU_BEGRIFFEN%";
 import { anfrage } from "%ZU_ANFRAGE%";
 import { MS_PER_SECOND } from "%ZU_TIMER%";
+import { ok, type Ergebnis } from "%ZU_ERGEBNIS%";
 
 const FRIST_SEKUNDEN = 10;
 const FRIST_MS = FRIST_SEKUNDEN * MS_PER_SECOND;
 
 export const %KONSTANTE%_BEGRIFF = %BEGRIFF%;
 
-export async function hole%PASCAL%(url: string, { signal }: { signal?: AbortSignal } = {}): Promise<unknown> {
+export async function hole%PASCAL%(url: string, { signal }: { signal?: AbortSignal } = {}): Promise<Ergebnis<unknown>> {
   const antwort = await anfrage(url, { fristMs: FRIST_MS, signal });
-  return antwort.json();
+  return ok(await antwort.json());
 }
 `;
 
@@ -128,6 +129,7 @@ function planeFachdatei(wurzel, baustein, name) {
     ZU_BEGRIFFEN: relativ(datei, quelle),
     ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.js"),
     ZU_TIMER: relativ(datei, "src/utils/timer.ts"),
+    ZU_ERGEBNIS: relativ(datei, "src/utils/ergebnis.ts"),
   };
   return { datei, inhalt: ausfuellen(FACHDATEI, werte), karte: { baustein, eingang: false } };
 }
