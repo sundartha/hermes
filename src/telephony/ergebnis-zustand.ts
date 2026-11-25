@@ -19,7 +19,7 @@ export interface ErgebnisZustand {
 interface AnrufSicht {
   answeredAt?: string | null;
   failureReason?: string | null;
-  transcript: ReadonlyArray<{ role?: string; text?: string }>;
+  transcript: readonly { role?: string; text?: string }[];
 }
 
 const AGENT_ROLE = "agent";
