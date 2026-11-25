@@ -55,17 +55,21 @@ function leseRpc(text) {
 
 const DETAIL_MAX = 40;
 const DETAIL_WORT_MAX = 24;
+const NUR_BUCHSTABEN = /[^A-Za-z_ ]/g;
 
-// Nur Buchstaben und Unterstriche, kurze Woerter: so kann kein Schluessel oder Token ins Log gelangen.
+function textTeil(ergebnis) {
+  const teile = Array.isArray(ergebnis?.content) ? ergebnis.content : [];
+  return teile.find((teil) => typeof teil?.text === "string");
+}
+
+function kurzesWort(wort) {
+  return wort !== "" && wort.length <= DETAIL_WORT_MAX;
+}
+
 function detailVon(ergebnis) {
-  const text = ergebnis?.content?.find((teil) => typeof teil?.text === "string")?.text ?? "";
-  return text
-    .replace(/[^A-Za-z_ ]/g, " ")
-    .split(/\s+/)
-    .filter((wort) => wort !== "" && wort.length <= DETAIL_WORT_MAX)
-    .join("_")
-    .toLowerCase()
-    .slice(0, DETAIL_MAX);
+  const roh = textTeil(ergebnis)?.text ?? "";
+  const woerter = roh.replace(NUR_BUCHSTABEN, " ").split(/\s+/).filter(kurzesWort);
+  return woerter.join("_").toLowerCase().slice(0, DETAIL_MAX);
 }
 
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
