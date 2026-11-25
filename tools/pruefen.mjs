@@ -998,6 +998,38 @@ async function umbenennungPruefen(basis) {
   return gruen;
 }
 
+const CI_DATEI = join(dirname(fileURLToPath(import.meta.url)), "../.github/workflows/ci.yml");
+const GITLEAKS_FASSUNG = /^\s*GITLEAKS_VERSION:\s*(\S+)\s*$/m;
+
+function gitleaksFassungErwartet() {
+  try {
+    return readFileSync(CI_DATEI, "utf8").match(GITLEAKS_FASSUNG)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function gitleaksScan(basis) {
+  const args = ["git", "--config", "gitleaks.toml", "--redact", "--no-banner", "--exit-code", "1", `--log-opts=${basis}..HEAD`, "."];
+  return lauf("gitleaks", args);
+}
+
+function gitleaksPruefen(basis) {
+  const fassung = spawnSync("gitleaks", ["version"], { encoding: "utf8" });
+  if (fassung.error !== undefined || fassung.status !== 0) {
+    if (env.GITHUB_ACTIONS === "true") console.log("Gitleaks rot: gitleaks nicht installiert.");
+    else console.log("Gitleaks übersprungen: gitleaks nicht installiert; die CI prüft es.");
+    return env.GITHUB_ACTIONS !== "true";
+  }
+  const erwartet = gitleaksFassungErwartet();
+  const gefunden = fassung.stdout.trim().replace(/^v/, "");
+  if (erwartet === undefined || gefunden !== erwartet) {
+    console.log(`Gitleaks rot: Fassung erwartet ${erwartet ?? "(GITLEAKS_VERSION in ci.yml fehlt)"}, gefunden ${gefunden}.`);
+    return false;
+  }
+  return gitleaksScan(basis);
+}
+
 const SCHRITTE = {
   lint(basis) {
     const dateien = geaendert(basis).filter((pfad) => CODE.test(pfad));
@@ -1039,6 +1071,7 @@ const SCHRITTE = {
     for (const befund of befunde) console.log(`${befund.path}:${befund.start.line}: ${befund.check_id}: ${befund.extra.message}`);
     return befunde.length === 0;
   },
+  gitleaks: gitleaksPruefen,
   tests(basis) {
     const { direkt, alle } = betroffeneTests(geaendert(basis));
     const auswahl = direkt.slice(0, OHNE_LOKALE_SPERRE);
