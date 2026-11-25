@@ -224,6 +224,12 @@ services:
         value: "80"
       - key: PLATFORM_ALERT_SMS_TO
         sync: false
+      - key: METRIKEN_OTLP_URL
+        sync: false
+      - key: METRIKEN_OTLP_BENUTZER
+        sync: false
+      - key: METRIKEN_OTLP_TOKEN
+        sync: false
       - key: OUTAGE_ALERT_WINDOW_MS
         value: "3600000"
       - key: OUTAGE_ALERT_MIN_FAILURES
