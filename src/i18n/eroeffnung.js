@@ -54,9 +54,8 @@ export function kiHinweisKernFor(language) {
 }
 
 export function kiHinweisRahmenFor(language) {
-  const text = kiHinweisFor(language, NAME_PLATZHALTER);
-  const stelle = text.indexOf(NAME_PLATZHALTER);
-  return { pre: text.slice(0, stelle), post: text.slice(stelle + NAME_PLATZHALTER.length) };
+  const [pre = "", post = ""] = kiHinweisFor(language, NAME_PLATZHALTER).split(NAME_PLATZHALTER);
+  return { pre, post };
 }
 
 export function afterGreeting(reason) {
