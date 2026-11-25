@@ -12,7 +12,6 @@ import {
 } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { EL_OUTBOUND_CONFIG } from "../helpers.js";
-import { macheSpeicherSperre } from "../../src/store/pg.js";
 import { BOOTSTRAP_TENANT_ID, makePgStore, makePgTestStore } from "../pg-helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannDiAttrappe, vorspannKonfig, vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
@@ -30,10 +29,8 @@ globaleKonfig.voice.elevenLabsInbound.initWebhookToken = INIT_TOKEN;
 globaleKonfig.voice.elevenLabsOutbound.agentId = AGENT_ID;
 
 let makeCallRoutes;
-let zustandsFunktionen;
 
 before(async () => {
-  ({ zustandsFunktionen } = await import("../../src/store.js"));
   ({ makeCallRoutes } = await import("../../src/routes/api-calls.ts"));
 });
 
@@ -75,7 +72,7 @@ const freieGates = [
   },
 ];
 
-function runnerMitGehaltenemFlush(runner) {
+function haltbarMachen(t, runner) {
   const zustand = { halten: false };
   const tor = new Promise((fertig) => {
     zustand.freigeben = fertig;
@@ -83,16 +80,15 @@ function runnerMitGehaltenemFlush(runner) {
   const begonnen = new Promise((fertig) => {
     zustand.melde = fertig;
   });
+  const durchgereicht = runner.withClient;
+  t.mock.method(runner, "withClient", async (arbeit) => {
+    if (!zustand.halten) return durchgereicht(arbeit);
+    zustand.halten = false;
+    zustand.melde();
+    await tor;
+    return durchgereicht(arbeit);
+  });
   return {
-    runner: {
-      withClient: async (arbeit) => {
-        if (!zustand.halten) return runner.withClient(arbeit);
-        zustand.halten = false;
-        zustand.melde();
-        await tor;
-        return runner.withClient(arbeit);
-      },
-    },
     haltenAb: () => {
       zustand.halten = true;
     },
@@ -174,13 +170,9 @@ async function zeileLesen(runner, callId) {
   });
 }
 
-test("POST /api/calls: Ein Flush nach dem Start loescht die vom Init gebundene Konversation in der Zeile call nicht", async () => {
-  const { runner } = await makePgTestStore();
-  const gehalten = runnerMitGehaltenemFlush(runner);
-  const instanzA = makePgStore(gehalten.runner);
-  instanzA.withStoreLock = macheSpeicherSperre();
-  Object.assign(instanzA, zustandsFunktionen(instanzA));
-  await instanzA.init();
+test("POST /api/calls: Ein Flush nach dem Start loescht die vom Init gebundene Konversation in der Zeile call nicht", async (t) => {
+  const { store: instanzA, runner } = await makePgTestStore();
+  const gehalten = haltbarMachen(t, runner);
   const instanzB = makePgStore(runner);
   await instanzB.init();
   const anruf = await lauschen(anrufApp({ store: instanzA, gehalten }));
