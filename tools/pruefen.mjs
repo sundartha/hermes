@@ -819,6 +819,10 @@ function nurUebersprungen(ausgabe) {
   return zahl("skipped") > 0 && zahl("pass") === 0;
 }
 
+function brauchtDatenbank(datei) {
+  return /\bpostgresVorhanden\b/.test(readFileSync(datei, "utf8"));
+}
+
 function gruenAufBasis(basis, hinzugekommen) {
   const ordner = mkdtempSync(join(tmpdir(), "rotprobe-vorab-"));
   const arbeitsbaum = join(ordner, "basis");
@@ -834,7 +838,7 @@ function gruenAufBasis(basis, hinzugekommen) {
     for (const datei of hinzugekommen.filter((name) => TESTDATEI.test(name))) {
       const lauf = spawnSync("npm", ["test", "--", datei], { cwd: arbeitsbaum, encoding: "utf8", timeout: ROTPROBE_FRIST_MS, killSignal: "SIGKILL" });
       if (lauf.status !== 0) continue;
-      (nurUebersprungen(lauf.stdout + protokollLesen(arbeitsbaum)) ? nichtPruefbar : gruen).push(datei);
+      (brauchtDatenbank(datei) || nurUebersprungen(lauf.stdout + protokollLesen(arbeitsbaum)) ? nichtPruefbar : gruen).push(datei);
     }
     return { gruen, nichtPruefbar };
   } finally {
