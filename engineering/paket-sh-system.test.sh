@@ -26,6 +26,16 @@ pruefe "offener PR bleibt in der Schleife" "$(runde OPEN | tr '\n' ' ')" "runde 
 pruefe "gemergter PR verlaesst die Merge-Schleife" "$(runde MERGED | tr '\n' ' ')" "runde ende runde ende "
 WARTER=$(grep -o 'case "${Q% \*}" in MERGED|CLOSED) break ;; esac' $S | head -1)
 pruefe "Wartender endet auch bei CLOSED" "$([ -n "$WARTER" ] && echo ja)" "ja"
+# Übersprungen-Zweig (bau-$N übersprungen): freigeben greift bei rotem Kopf nie, ohne Obergrenze läuft die while-Schleife endlos (PR 5311, Kette #5006, 19.11.). Ab der vierten Runde in Folge auf demselben Kopf hält die Kette statt weiterzudrehen.
+UEBER=$(grep -o 'echo "bau-\$N übersprungen[^#]*' $S | head -1)
+[ -n "$UEBER" ] || { echo "ROT  Übersprungen-Stelle nicht in paket.sh gefunden"; exit 1; }
+runde_ueber() { LOG=$T/ueber-$1; rm -rf $LOG; mkdir -p $LOG; PR=5311; PRK=$1; freigeben() { :; }; einstufung() { echo "sonnet -"; }
+  for _ in 1 2 3 4 5; do ( eval "$UEBER" ) 2>/dev/null; [ -s $LOG/halt.txt ] && { echo halt; return; }; echo weiter; done; }
+pruefe "gleicher roter Kopf haelt nach 3 Runden statt endlos weiterzudrehen" "$(runde_ueber kopfA)" "weiter
+weiter
+weiter
+halt"
+pruefe "neuer Kopf setzt den Zaehler zurueck" "$(LOG=$T/ueber-neu; rm -rf $LOG; mkdir -p $LOG; PR=5311; freigeben() { :; }; einstufung() { echo "sonnet -"; }; for k in a a a b; do PRK=$k; ( eval "$UEBER" ) 2>/dev/null; done; tail -1 $LOG/uebersprungen.txt)" "5311 b 1"
 # CI-ROT-1119: PASS auf unverändertem Kopf wird nur bei grüner CI übersprungen; bei roter CI geht die Kette in die Rücklauf-Schleife statt zu überspringen (2973, 5006).
 pruefe "Skip-Bedingung prueft die CI" "$(grep -c 'pass_auf_kopf \$PR \$PRK && { case "$(ci_lage \$PR)" in gruen) ;; \*) CIROT=1' $S)" "1"
 pruefe "Schleife betritt PASS-PR bei roter CI" "$(grep -c '\[ "\$PRM" = CONFLICTING \] || \[ -n "\$CIROT" \]; do' $S)" "1"
@@ -54,4 +64,8 @@ touch $G/.git/index.lock; ( sleep 3; mv $G/.git/index.lock $T/lock.weg ) &
 gitr checkout -q --detach master; pruefe "index.lock-Zusammenstoss wird wiederholt und gelingt" "$?" "0"; wait
 ( gitr checkout -q --detach master & gitr checkout -q --detach master & gitr checkout -q --detach master & wait ) 2>/dev/null
 pruefe "drei gleichzeitige Checkouts unter der Sperre" "$(git -C $G rev-parse --abbrev-ref HEAD)" "HEAD"
+GL=$(grep -E '^gitr\(\) \{' $S | sed 's/   # 21\.11\..*//')
+pruefe "gitr nimmt unter Linux flock und unter Darwin lockf" "$(print -r -- "$GL" | grep -c 'flock -w 120.*lockf -k -t 120\|lockf -k -t 120.*flock -w 120')" "1"
+pruefe "ausgeloest sucht den CI-Lauf ueber die Workflow-Datei, nicht ueber den Laufnamen" "$(grep -E '^ausgeloest\(\)' $S | grep -c 'index(".github/workflows/ci.yml")')" "1"
+pruefe "ausgeloest liest nicht mehr den Laufnamen CI" "$(grep -E '^ausgeloest\(\)' $S | grep -c 'index("CI")')" "0"
 exit $fehler
