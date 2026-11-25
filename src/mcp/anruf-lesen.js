@@ -99,6 +99,8 @@ function callResultReply(callId, callRecord, loc) {
   const text = jsonText({
     result_summary: data.result_summary,
     objective_achieved: data.objective_achieved,
+    result_state: data.result_state,
+    result_reason: data.result_reason,
     outcome: data.outcome,
     commitments: data.commitments,
     counterparty_commitments: data.counterparty_commitments,

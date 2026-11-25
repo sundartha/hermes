@@ -1379,6 +1379,8 @@
           "objective_achieved",
           "open_points",
           "outcome",
+          "result_reason",
+          "result_state",
           "result_summary"
         ],
         "properties": {
@@ -1403,6 +1405,15 @@
           "objective_achieved": {
             "type": [
               "boolean",
+              "string"
+            ]
+          },
+          "result_state": {
+            "type": "string"
+          },
+          "result_reason": {
+            "type": [
+              "null",
               "string"
             ]
           },
@@ -2148,6 +2159,12 @@
       "art": "bruch",
       "begruendung": "Widget-URIs agent-status v35, my-number v36, calls v36, call v52: Anrufkarte zeigt nach wiederholten Fehlerantworten Nicht mehr aktualisiert und laedt ein unklares Ergebnis weiter nach (#3669)",
       "stand_sha256": "430aa791115248e98a1b7bb0941490f9226e05036fdb627ec357e9e3429f1c53"
+    },
+    {
+      "datum": "2026-11-25",
+      "art": "bruch",
+      "begruendung": "get_call_result liefert result_state (done_confirmed, not_done, unconfirmed) und result_reason, damit ein Anruf ohne Gegenseite nie als erledigt gilt (#4059, Haeppchen 1). Noch nichts veroeffentlicht.",
+      "stand_sha256": "32f773ca71a63d42e5694dc3727dd9aaad838eba891629da86f932f7686764bb"
     }
   ]
 }

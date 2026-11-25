@@ -37,6 +37,8 @@ export const CALL_RESULT_OUTPUT = {
   ...CALL_SUBJECT_OUTPUT,
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
+  result_state: z.string(),
+  result_reason: z.string().nullable(),
   ...RESULT_CARD_OUTPUT,
   next_steps: z.array(NEXT_STEP_OUTPUT),
 };
