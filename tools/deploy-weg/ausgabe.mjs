@@ -255,8 +255,6 @@ const KATALOG = new Map([
   ["anrufpause_angefordert", "Anrufpause angefordert: HTTP {http}"],
   ["anrufpause_stand", "Anrufpause in Produktion: {an}"],
   ["rot_anrufpause_abweichend", "Rot: Produktion meldet die Anrufpause nicht wie verlangt"],
-  ["anrufe_weiter", "Laufende Anrufe: {anzahl}, sie laufen weiter"],
-  ["anrufe_nicht_lesbar", "Warnung: laufende Anrufe nicht lesbar (HTTP {http})"],
   ["nachkontrolle_kein_update", "Kein Update-Deploy: keine Nachkontrolle nötig"],
   ["nachkontrolle_gut", "Nachkontrolle: Produktion fährt {commit} und meldet ok"],
   [
