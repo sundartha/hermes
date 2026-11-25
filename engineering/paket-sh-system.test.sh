@@ -72,4 +72,27 @@ pruefe "ausgeloest liest nicht mehr den Laufnamen CI" "$(grep -E '^ausgeloest\(\
 pruefe "Bau-Prompt erkennt offene PRs an Kopf paket/ISSUE-* und system/ISSUE-*" "$(grep -c 'offenen PR zum Issue (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*, oder im Text .Refs #\$ISSUE., .Closes #\$ISSUE. oder .Teil von #\$ISSUE.): übernimm ihn' $S)" "1"
 pruefe "Kette wartet auf die PR-Nummer aus ist in Arbeit" "$(grep -c "Antwortet bau mit 'ist in Arbeit' und nennt eine PR-Nummer, schreib davor eine eigene Zeile WARTET=<diese Nummer> und als letzte Zeile PR=keiner" $S)" "1"
 pruefe "Entscheidungs-Sitzung sucht offene PRs des Issues an Kopf und Text" "$(grep -c "falls es einen offenen PR zum Issue gibt (Kopf paket/\$ISSUE-\* oder system/\$ISSUE-\*" $S)" "1"
+# freigabe-am-pr (25.11.): Die Freigabe-Prüfung am PR ist bis zum Approve rot (Es fehlt das KI-Urteil). Die Kette darf dadurch nicht halten (Deadlock), jede andere Ursache bleibt ein Halt. Die Stelle wird aus paket.sh gelesen, gh ist ein Ersatz.
+PFL=$(grep -E '^pflicht_ausser_urteil\(\) \{' $S | sed 's/   # freigabe-am-pr.*//')
+[ -n "$PFL" ] || { echo "ROT  pflicht_ausser_urteil nicht in paket.sh gefunden"; exit 1; }; eval "$PFL"
+TAB=$(printf '\t')
+gh() { case "$1 $2" in "pr checks") [ -n "${CHECKS-x}" ] && printf '%b' "$CHECKS" ;; "run view") printf '%s' "$LOGTEXT" ;; esac; }
+PASSALLE="CI${TAB}pass${TAB}1m${TAB}https://x/runs/1/job/2\nTestschutz${TAB}pass${TAB}1s${TAB}https://x/runs/3/job/4\n"
+FREI_ROT="Freigabe-Prüfung${TAB}fail${TAB}5s${TAB}https://x/runs/77/job/8\n"
+CHECKS="$PASSALLE$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve von Antonio20045 oder jonas986 auf dem Stand abc1234."
+pflicht_ausser_urteil 5; pruefe "nur das KI-Urteil fehlt: kein Halt" "$?" "0"
+LOGTEXT="x.js: Prüfregel auf Branch paket/a. Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "Prüfregel-Befund bleibt ein Halt" "$?" "1"
+LOGTEXT="Code unter src/ kommt nur vom Bau-Agenten (x); Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "src/ von anderem Autor bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Tests 1/3${TAB}fail${TAB}1m${TAB}https://x/runs/9/job/1\n$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "andere rote Prüfung bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Tests 1/3${TAB}pending${TAB}0${TAB}https://x/runs/9/job/1\n$FREI_ROT"
+pflicht_ausser_urteil 5; pruefe "andere offene Prüfung bleibt ein Halt" "$?" "1"
+CHECKS="${PASSALLE}Freigabe-Prüfung${TAB}pass${TAB}5s${TAB}https://x/runs/77/job/8\n"
+pflicht_ausser_urteil 5; pruefe "alles grün: kein Halt" "$?" "0"
+CHECKS=""; pflicht_ausser_urteil 5; pruefe "keine Auskunft von GitHub ist kein Freibrief" "$?" "1"
+unset -f gh
+pruefe "umzug (Prüfregel-PR) kommt vor der Ausnahme für das KI-Urteil" "$(grep -c 'cwarten \$PR > /dev/null 2>&1 || umzug \$PR \$MIG || pflicht_ausser_urteil \$PR ||' $S)" "1"
+pruefe "freigeben wartet nach dem Approve auf die grüne Freigabe-Prüfung" "$(grep -E '^freigeben\(\)' $S | grep -c 'eingereiht \$1 || { urteil_gruen \$1;')" "1"
 exit $fehler
