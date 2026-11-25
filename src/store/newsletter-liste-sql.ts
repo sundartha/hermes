@@ -7,8 +7,10 @@ const ELEMENTE = "jsonb_array_elements(COALESCE(newsletter_recipients, '[]'::jso
 const neueListe = (bedingung: string, element = "e"): string =>
   `(SELECT COALESCE(jsonb_agg(${element} ORDER BY ord), ${LEERE_LISTE}) FROM ${ELEMENTE} ${bedingung})`;
 
-const ANHAENGEN_SQL = `UPDATE tenant SET newsletter_recipients = COALESCE(newsletter_recipients, ${LEERE_LISTE}) || $2::jsonb,
-  newsletter_confirm_mail_log = (SELECT COALESCE(jsonb_agg(s ORDER BY ord), ${LEERE_LISTE}) FROM jsonb_array_elements(COALESCE(newsletter_confirm_mail_log, ${LEERE_LISTE})) WITH ORDINALITY AS l(s, ord) WHERE (s #>> '{}') >= $3::text) || to_jsonb($4::text)
+const SCHON_DA = `EXISTS (SELECT 1 FROM ${ELEMENTE} WHERE e->>'unsubToken' = ($2::jsonb)->0->>'unsubToken')`;
+
+const ANHAENGEN_SQL = `UPDATE tenant SET newsletter_recipients = CASE WHEN ${SCHON_DA} THEN COALESCE(newsletter_recipients, ${LEERE_LISTE}) ELSE COALESCE(newsletter_recipients, ${LEERE_LISTE}) || $2::jsonb END,
+  newsletter_confirm_mail_log = (SELECT COALESCE(jsonb_agg(s ORDER BY ord), ${LEERE_LISTE}) FROM jsonb_array_elements(COALESCE(newsletter_confirm_mail_log, ${LEERE_LISTE})) WITH ORDINALITY AS l(s, ord) WHERE (s #>> '{}') >= $3::text) || CASE WHEN ${SCHON_DA} THEN ${LEERE_LISTE} ELSE to_jsonb(ARRAY[$4::text]) END
   WHERE id = $1 RETURNING ${LISTE_ZURUECK}`;
 
 const ENTFERNEN_SQL = `UPDATE tenant SET newsletter_recipients = ${neueListe("WHERE e->>'email' <> $2::text")} WHERE id = $1 RETURNING ${LISTE_ZURUECK}`;
