@@ -7,7 +7,7 @@ export const anrufer = {
   eigeneNummer: async () => FALL.eigeneNummer,
   tagesstand: async () => FALL.stand,
   anrufen: async () => {
-    throw new Error(FALL.fehler);
+    throw Object.assign(new Error(FALL.fehler), FALL.felder);
   },
   offeneBeenden: async () => 0,
 };
