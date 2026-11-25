@@ -2,20 +2,18 @@ import { DEFAULT_COUNTRY, DEFAULT_TIMEZONE, TIMEZONE_FOR_COUNTRY } from "../begr
 import { languageForCountry } from "../i18n/locales.ts";
 
 export function normCountry(raw) {
-  const cc = String(raw || "")
-    .trim()
-    .toUpperCase();
+  const cc = (typeof raw === "string" ? raw : "").trim().toUpperCase();
   return /^[A-Z]{2}$/.test(cc) ? cc : null;
 }
 
-export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCountry } = {}) {
+export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCountry = "" } = {}) {
   return (
-    normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY
+    normCountry(userCountry) ?? normCountry(proposedCountry) ?? (fallbackCountry || DEFAULT_COUNTRY)
   );
 }
 
 export function timezoneForCountry(country) {
-  return TIMEZONE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_TIMEZONE;
+  return TIMEZONE_FOR_COUNTRY[String(country ?? "").toUpperCase()] ?? DEFAULT_TIMEZONE;
 }
 
 export function tenantGeoForCountry(country) {

@@ -1,4 +1,3 @@
-export function makeMaxmindGeoLookup(dbPath = "") {
-  void dbPath;
+export function makeMaxmindGeoLookup() {
   return () => null;
 }
