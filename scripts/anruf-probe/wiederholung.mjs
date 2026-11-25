@@ -12,13 +12,17 @@ const GRUND_MAX = 100;
 const GRUNDCODE = /^[A-Za-z_]+$/;
 const MELDUNGSCODE = /^[a-z]+(_[a-z]+)+(_\d{3})?$/;
 
+function detailSuffix(fehler, meldung) {
+  const gueltig = meldung !== null && typeof fehler.detail === "string" && GRUNDCODE.test(fehler.detail);
+  return gueltig ? `:${fehler.detail}` : "";
+}
+
 function bereinigt(fehler) {
   if (fehler === null || fehler === undefined) return "";
   const meldung = typeof fehler.message === "string" && MELDUNGSCODE.test(fehler.message) ? fehler.message : null;
   const kandidaten = [fehler.code, fehler.cause?.code, fehler.name];
   const code = kandidaten.find((wert) => typeof wert === "string" && GRUNDCODE.test(wert));
-  const detail = meldung !== null && typeof fehler.detail === "string" && GRUNDCODE.test(fehler.detail) ? `:${fehler.detail}` : "";
-  return `${meldung ?? code ?? "unbekannt"}${detail}`.slice(0, GRUND_MAX);
+  return `${meldung ?? code ?? "unbekannt"}${detailSuffix(fehler, meldung)}`.slice(0, GRUND_MAX);
 }
 
 async function messenOderNichts(messen) {
