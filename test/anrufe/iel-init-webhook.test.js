@@ -13,7 +13,7 @@ import {
   callBindingTokenOf,
   sipHeadersFormOf,
 } from "../../src/elevenlabs/inbound-initiation.js";
-import { inboundElLocaleOf } from "../../src/elevenlabs/call-locale.ts";
+import { elevenlabsOutbound } from "../../src/elevenlabs/registry.ts";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, zugangsFingerabdruck } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { hasInboundNotice } from "../../src/i18n/inbound-notice.ts";
 import { LOCALES, localeFor } from "../../src/i18n/locales.ts";
@@ -67,6 +67,7 @@ const ERWARTETE_VARIABLEN = 17;
 const GATE_UNAVAILABLE = "unavailable";
 const VORLAGE_DE = LOCALES.de;
 const VORLAGE_EN = LOCALES.en;
+const { inboundElLocaleOf } = elevenlabsOutbound();
 
 function baueConfig({
   enabled = true,

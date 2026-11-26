@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { quelltexteUnter } from "../helpers.js";
+
 const DE = { language: "de", providerLanguage: "de", disclosureLanguage: "de", voiceId: "voice-1" };
 const FREMD = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel.";
 const BESITZER = "Hallo Jonas, womit kann ich helfen?";
@@ -30,10 +32,10 @@ describe("anrufStart fuer eingehende Anrufe", () => {
 });
 
 describe("Huellen entfernt", () => {
-  it("outbound.js und inbound-initiation.js fuehren keine eigene Sprachwahl mehr", async () => {
-    const aus = await import("../../src/elevenlabs/outbound.js");
-    const ein = await import("../../src/elevenlabs/inbound-initiation.js");
-    assert.equal("callLocaleOf" in aus, false);
-    assert.equal("inboundElLocaleOf" in ein, false);
+  it("kein Treffer fuer die Huellen callLocaleOf und inboundElLocaleOf in outbound.js und inbound-initiation.js", () => {
+    const huellen = quelltexteUnter("src/elevenlabs")
+      .filter(([datei]) => datei.endsWith("/outbound.js") || datei.endsWith("/inbound-initiation.js"))
+      .filter(([, inhalt]) => /export function (callLocaleOf|inboundElLocaleOf)\b/.test(inhalt));
+    assert.deepEqual(huellen, []);
   });
 });

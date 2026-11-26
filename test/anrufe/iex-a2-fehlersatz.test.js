@@ -5,7 +5,7 @@ import express from "express";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../../src/elevenlabs/inbound-bridge-state.ts";
 import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "../../src/elevenlabs/inbound-bridges.ts";
-import { inboundElLocaleOf } from "../../src/elevenlabs/call-locale.ts";
+import { elevenlabsOutbound } from "../../src/elevenlabs/registry.ts";
 import {
   EL_MIN_CONVERSATION_MS,
   RUECKFALL_ENTSCHEIDUNG,
@@ -31,6 +31,7 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const OWNER_NAME = "Jonas";
 const PUBLIC_URL = "https://agent.test";
+const { inboundElLocaleOf } = elevenlabsOutbound();
 const AGENT_STIMME = "v_agent";
 const FAKE_NOW_MS = Date.parse("2026-09-15T10:00:00.000Z");
 const SPAETER_MS = FAKE_NOW_MS + EL_MIN_CONVERSATION_MS;
