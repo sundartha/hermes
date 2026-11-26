@@ -150,3 +150,9 @@ test("Auswertung 4059: Leerraum im Zitat wird zu einem Leerzeichen, nicht entfer
   assert.equal(urteil("japasst").confirmed, false);
   assert.equal(urteil("ja   \n passt").confirmed, true);
 });
+
+test("Auswertung 4059: Strasse und Straße sind nicht dasselbe Zitat", () => {
+  const transcript = [AGENT_ZEILE, { role: "user", text: "Ja, die Strasse passt" }];
+  const modell = { ...BESTAETIGT_MODELL, confirmation_quote: "Straße passt" };
+  assert.equal(gegenseitenUrteil(modell, transcript).confirmed, false);
+});
