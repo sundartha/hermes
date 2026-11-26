@@ -42,7 +42,7 @@ test("canTransitionNumber: legale Kette erlaubt, Spruenge verboten", () => {
 test("beginCapturing: provisioning -> capturing legal, aus requested illegal (fail-closed)", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   assert.throws(() => beginCapturing(s, number.id), /illegaler Uebergang/);
   beginProvisioning(s, number.id);
   beginCapturing(s, number.id);
@@ -52,7 +52,7 @@ test("beginCapturing: provisioning -> capturing legal, aus requested illegal (fa
 test("transitionNumber: illegaler Uebergang wirft (kein active per Shortcut)", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   assert.throws(() => transitionNumber(s, number.id, NUMBER_STATUS.ACTIVE), /illegaler Uebergang/);
   assert.equal(
     findNumber(s, number.id).status,
@@ -86,8 +86,8 @@ test("requestNumber: happy path -> status requested, KEINE e164/Kauf", () => {
   seedTenant(s);
   const res = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   assert.equal(res.ok, true);
-  assert.equal(res.number.status, NUMBER_STATUS.REQUESTED);
-  assert.equal(res.number.e164, null, "requested Nummer hat noch keine e164");
+  assert.equal(res.wert.number.status, NUMBER_STATUS.REQUESTED);
+  assert.equal(res.wert.number.e164, null, "requested Nummer hat noch keine e164");
 });
 
 test("requestNumber: globaler Cap blockt (Kosten-Notbremse)", () => {
@@ -100,7 +100,7 @@ test("requestNumber: globaler Cap blockt (Kosten-Notbremse)", () => {
   assert.equal(requestNumber(s, { tenantId: "b", ...caps }).ok, true);
   const blocked = requestNumber(s, { tenantId: "c", ...caps });
   assert.equal(blocked.ok, false);
-  assert.equal(blocked.reason, "global_cap");
+  assert.equal(blocked.fehler, "global_cap");
 });
 
 test("requestNumber: per-Tenant-Cap blockt", () => {
@@ -109,15 +109,15 @@ test("requestNumber: per-Tenant-Cap blockt", () => {
   assert.equal(requestNumber(s, { tenantId: "t_user1", ...CAPS }).ok, true);
   const second = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   assert.equal(second.ok, false);
-  assert.equal(second.reason, "tenant_cap");
+  assert.equal(second.fehler, "tenant_cap");
 });
 
 test("requestNumber: unbekannter/inaktiver Tenant blockt (fail-closed)", () => {
   const s = makeDefaultState();
-  assert.equal(requestNumber(s, { tenantId: "nope", ...CAPS }).reason, "tenant_inactive");
+  assert.equal(requestNumber(s, { tenantId: "nope", ...CAPS }).fehler, "tenant_inactive");
   const t = registerTenant(s, "susp");
   t.status = TENANT_STATUS.SUSPENDED;
-  assert.equal(requestNumber(s, { tenantId: "susp", ...CAPS }).reason, "tenant_inactive");
+  assert.equal(requestNumber(s, { tenantId: "susp", ...CAPS }).fehler, "tenant_inactive");
 });
 
 test("liveNumbers/requestNumber: RELEASED/FAILED belegen keine Kapazitaet - Cap greift erst bei echter Auslastung", () => {
@@ -126,9 +126,9 @@ test("liveNumbers/requestNumber: RELEASED/FAILED belegen keine Kapazitaet - Cap 
   registerTenant(s, "dead2");
   registerTenant(s, "live1");
   const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
-  const dead1 = requestNumber(s, { tenantId: "dead1", ...caps }).number;
+  const dead1 = requestNumber(s, { tenantId: "dead1", ...caps }).wert.number;
   failNumber(s, dead1.id);
-  const dead2 = requestNumber(s, { tenantId: "dead2", ...caps }).number;
+  const dead2 = requestNumber(s, { tenantId: "dead2", ...caps }).wert.number;
   beginProvisioning(s, dead2.id);
   activateNumber(s, dead2.id, { e164: "+4915799990002", providerNumberId: "num_dead2" });
   releaseNumber(s, dead2.id);
@@ -143,7 +143,7 @@ test("requestNumber: global_cap hinterlaesst Skip-Marker am Tenant (reine Observ
   const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
   requestNumber(s, { tenantId: "a", ...caps });
   const blocked = requestNumber(s, { tenantId: "b", ...caps });
-  assert.equal(blocked.reason, GLOBAL_CAP_REASON);
+  assert.equal(blocked.fehler, GLOBAL_CAP_REASON);
   const tenantB = findTenant(s, "b");
   assert.equal(tenantB.numberProvisionSkipReason, GLOBAL_CAP_REASON);
   assert.ok(tenantB.numberProvisionSkipAt, "Zeitstempel gesetzt");
@@ -156,7 +156,7 @@ test("requestNumber: Skip-Marker verschwindet bei erfolgreichem Folge-Request (I
   const tight = { maxNumbers: 1, maxNumbersPerTenant: 1 };
   requestNumber(s, { tenantId: "a", ...tight });
   const blocked = requestNumber(s, { tenantId: "b", ...tight });
-  assert.equal(blocked.reason, GLOBAL_CAP_REASON);
+  assert.equal(blocked.fehler, GLOBAL_CAP_REASON);
   assert.equal(findTenant(s, "b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
   const loose = { maxNumbers: 5, maxNumbersPerTenant: 1 };
   const retry = requestNumber(s, { tenantId: "b", ...loose });
@@ -176,7 +176,7 @@ test("shouldPersistProvisionResult: Erfolg UND global_cap persistieren, jeder an
 test("happy path: request -> provisioning -> active setzt e164 + legt assignment an", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   beginProvisioning(s, number.id);
   assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.PROVISIONING);
   activateNumber(s, number.id, { e164: "+4915799999999", providerNumberId: "tnx_123" });
@@ -191,7 +191,7 @@ test("happy path: request -> provisioning -> active setzt e164 + legt assignment
 test("Fehlerpfad: provisioning -> failed (kein active, keine assignment)", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   beginProvisioning(s, number.id);
   failNumber(s, number.id);
   assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.FAILED);
@@ -201,7 +201,7 @@ test("Fehlerpfad: provisioning -> failed (kein active, keine assignment)", () =>
 test("findTenantByNumber: nur active routet; requested/suspended/released -> null", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   beginProvisioning(s, number.id);
   activateNumber(s, number.id, { e164: "+4915700000009", providerNumberId: "x" });
   assert.equal(findTenantByNumber(s, "+4915700000009"), "t_user1", "active -> routet");
@@ -214,7 +214,7 @@ test("findTenantByNumber: nur active routet; requested/suspended/released -> nul
 test("release schliesst die assignment (released_at) und gibt den Platz frei", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   beginProvisioning(s, number.id);
   activateNumber(s, number.id, { e164: "+4915788888888", providerNumberId: "tnx_9" });
   releaseNumber(s, number.id);
@@ -239,7 +239,7 @@ const ALLE_STATUS = Object.keys(ERLAUBTE_UEBERGAENGE);
 
 const nummerAufWeg = (s, weg) => {
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   for (const status of weg) {
     if (status === "active" && findNumber(s, number.id).status === "provisioning") {
       activateNumber(s, number.id, { e164: "+4915755500001", providerNumberId: "tnx_nie" });
@@ -270,7 +270,7 @@ test("[NIE1] Uebergangstabelle erlaubt genau die vorgesehenen Zielstatus, aus re
 test("[NIE2] Nummernstatus traegt beim Anfordern bis Freigeben die vorgesehenen Werte", () => {
   const s = makeDefaultState();
   seedTenant(s);
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   assert.equal(findNumber(s, number.id).status, "requested");
   beginProvisioning(s, number.id);
   assert.equal(findNumber(s, number.id).status, "provisioning");
@@ -357,7 +357,7 @@ const BEZUGSZEIT_MS = Date.parse(BEZUGSZEIT_ISO);
 
 const aktiveNummer = (zustand, tenantId, e164) => {
   registerTenant(zustand, tenantId);
-  const { number } = requestNumber(zustand, { tenantId, ...CAPS });
+  const { number } = requestNumber(zustand, { tenantId, ...CAPS }).wert;
   beginProvisioning(zustand, number.id);
   activateNumber(zustand, number.id, { e164, providerNumberId: `tnx_${tenantId}` });
   return findNumber(zustand, number.id);
@@ -401,7 +401,7 @@ test("attachNumberPaymentIntent und attachNumberRegistration: unbekannte Nummer 
   assert.throws(() => attachNumberPaymentIntent(zustand, "num_x", "pi_1"), /nicht gefunden/);
   assert.throws(() => attachNumberRegistration(zustand, "num_x", "reg_1"), /nicht gefunden/);
   seedTenant(zustand);
-  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS }).wert;
   assert.equal(attachNumberPaymentIntent(zustand, number.id, "pi_1").paymentIntentId, "pi_1");
   attachNumberRegistration(zustand, number.id, "reg_1");
   attachNumberRegistration(zustand, number.id, "reg_2");
@@ -411,7 +411,7 @@ test("attachNumberPaymentIntent und attachNumberRegistration: unbekannte Nummer 
 test("attachNumberRegistration: gibt den Nummernsatz mit der gesetzten Registrierung zurueck", () => {
   const zustand = makeDefaultState();
   seedTenant(zustand);
-  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(zustand, { tenantId: "t_user1", ...CAPS }).wert;
   const zurueck = attachNumberRegistration(zustand, number.id, "reg_rueckgabe");
   assert.equal(zurueck, findNumber(zustand, number.id), "Rueckgabe ist der Nummernsatz");
   assert.equal(zurueck.providerAgentPhoneNumberId, "reg_rueckgabe");
@@ -585,7 +585,8 @@ test("requestNumber vergibt eine Kennung mit Praefix num_", () => {
   seedTenant(state);
   const result = requestNumber(state, { tenantId: "t_user1", ...CAPS });
   assert.equal(result.ok, true);
-  assert.ok(result.number.id.startsWith("num_"));
+  const { number } = result.wert;
+  assert.ok(number.id.startsWith("num_"));
 });
 
 test("markTenantNeedsManualReconcile gibt den Mandanten zurueck und aendert ihn nur beim ersten Aufruf", () => {

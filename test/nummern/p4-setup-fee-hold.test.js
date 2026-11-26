@@ -25,7 +25,7 @@ function tenantWithCard(s, id, patch = {}) {
     paymentMethodType: "card",
   });
   if (Object.keys(patch).length) setTenantSubscription(s, id, patch);
-  return requestNumber(s, { tenantId: id, ...CAPS }).number;
+  return requestNumber(s, { tenantId: id, ...CAPS }).wert.number;
 }
 
 test("exempt + Karte: placeHold UND cancelHold, KEIN captureHold, Nummer ACTIVE, paymentIntentId gesetzt", async () => {
