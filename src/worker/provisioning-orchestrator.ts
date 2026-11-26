@@ -14,6 +14,7 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { auftragHaltGrund, speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
+import { fehler as ablehnung, type Ergebnis } from "../utils/ergebnis.ts";
 
 const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
@@ -91,16 +92,12 @@ interface FremderAuftrag {
   instanz: string | null;
 }
 
-type Wiederaufnahme =
-  | Ablehnung
-  | { ok: true; reason: "redrive"; numberId: string; jobId: string; job: Bereitstellung }
-  | { ok: true; reason?: undefined; number: Nummer };
+type Wiederaufnahme = Ergebnis<
+  | { reason: "redrive"; numberId: string; jobId: string; job: Bereitstellung }
+  | { reason?: undefined; number: Nummer }
+>;
 
 type JobSpur = { ok: true; jobId: string } | { ok: false };
-interface Ablehnung {
-  ok: false;
-  reason: string;
-}
 
 interface Triggerergebnis {
   ok: boolean;
@@ -253,16 +250,17 @@ export function makeProvisioningOrchestrator({
     return inDatenbank;
   }
 
-  async function nummerUnterSperre(zustand: Zustand, ergebnis: Wiederaufnahme, tenantId: string): Promise<Ablehnung | null> {
-    if (!ergebnis.ok || ergebnis.reason === PROVISION_REASON.REDRIVE) return null;
-    const stelle = zustand.numbers.indexOf(ergebnis.number);
+  async function nummerUnterSperre(zustand: Zustand, ergebnis: Wiederaufnahme, tenantId: string): Promise<Ergebnis<never> | null> {
+    if (!ergebnis.ok || ergebnis.wert.reason === PROVISION_REASON.REDRIVE) return null;
+    const { number } = ergebnis.wert;
+    const stelle = zustand.numbers.indexOf(number);
     zustand.numbers.splice(stelle, 1);
-    const ausDatenbank = () => bereiche.nummernkauf.entferneNummer({ tenantId, numberId: ergebnis.number.id });
+    const ausDatenbank = () => bereiche.nummernkauf.entferneNummer({ tenantId, numberId: number.id });
     let gebucht;
     try {
       gebucht = await bereiche.nummernkauf.legeNummerAn({
         tenantId,
-        number: ergebnis.number,
+        number,
         hoechstens: Math.min(1, config.provisioning.maxNumbersPerTenant),
         plattformHoechstens: config.provisioning.maxNumbers,
       });
@@ -272,9 +270,9 @@ export function makeProvisioningOrchestrator({
     }
     if (gebucht && !gebucht.ok) {
       await ausDatenbank();
-      return { ok: false, reason: PROVISION_REASON.ALREADY_PROVISIONED };
+      return ablehnung(PROVISION_REASON.ALREADY_PROVISIONED);
     }
-    zustand.numbers.splice(stelle, 0, ergebnis.number);
+    zustand.numbers.splice(stelle, 0, number);
     return null;
   }
 
@@ -312,30 +310,31 @@ export function makeProvisioningOrchestrator({
         });
         const abgelehnt = await nummerUnterSperre(zustand, retry, tenantId);
         if (abgelehnt) return abgelehnt;
-        if (shouldPersistProvisionResult(retry)) {
+        const grund = retry.ok ? undefined : retry.fehler;
+        if (shouldPersistProvisionResult({ ok: retry.ok, reason: grund })) {
           store.save();
           store.stammdatenSchreiben?.(tenantId, SKIP_VERMERK_SCHLUESSEL);
         }
         return retry;
       })
-      .catch((fehler: unknown): Ablehnung => {
+      .catch((fehler: unknown) => {
         console.error(
           "[webhook-provision] Persistenz fehlgeschlagen:",
           Reflect.get(Object(fehler), "message"),
         );
-        return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
+        return ablehnung(PROVISION_REASON.PERSIST_ERROR);
       });
     if (!numberResult.ok) {
-      if (numberResult.reason !== PROVISION_REASON.ALREADY_PROVISIONED)
-        audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${numberResult.reason}`);
-      return { ok: false, reason: numberResult.reason };
+      if (numberResult.fehler !== PROVISION_REASON.ALREADY_PROVISIONED)
+        audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${numberResult.fehler}`);
+      return { ok: false, reason: numberResult.fehler };
     }
-    const numberId =
-      numberResult.reason === PROVISION_REASON.REDRIVE ? numberResult.numberId : numberResult.number.id;
+    const vergabe = numberResult.wert;
+    const numberId = vergabe.reason === PROVISION_REASON.REDRIVE ? vergabe.numberId : vergabe.number.id;
     if (!config.provisioning.provisioningEnabled) return { ok: true, reason: PROVISION_REASON.DRY_RUN, numberId };
-    if (numberResult.reason === PROVISION_REASON.REDRIVE) {
-      redriveProvisioningJobs([numberResult.job]);
-      return { ok: true, reason: PROVISION_REASON.REDRIVE, numberId, jobId: numberResult.jobId };
+    if (vergabe.reason === PROVISION_REASON.REDRIVE) {
+      redriveProvisioningJobs([vergabe.job]);
+      return { ok: true, reason: PROVISION_REASON.REDRIVE, numberId, jobId: vergabe.jobId };
     }
     const jobRes = await queueProvisioning(numberId, tenantId);
     if (!jobRes.ok) return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };

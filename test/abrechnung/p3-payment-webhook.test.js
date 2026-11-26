@@ -301,7 +301,7 @@ test("B(h) Idempotenz: zweiter Trigger-Kern kauft nicht doppelt (genau eine Numm
   assert.equal(first.ok, true, "erster Lauf fragt eine Nummer an");
   const second = requestNumberForPaidTenant(s, opts);
   assert.equal(second.ok, false, "zweiter Lauf -> Guard greift");
-  assert.equal(second.reason, "already_provisioned");
+  assert.equal(second.fehler, "already_provisioned");
   assert.equal(
     s.numbers.filter((n) => n.tenantId === "t_one").length,
     1,

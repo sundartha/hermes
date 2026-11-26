@@ -169,7 +169,7 @@ test("Kriterium 1+2: der Ueberspringgrund aus dem Webhook-Nummernkauf von A steh
       const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenant);
       mandant.numberProvisionSkipReason = GLOBALE_DECKE;
       mandant.numberProvisionSkipAt = EINGANG;
-      return { ok: false, reason: GLOBALE_DECKE };
+      return { ok: false, fehler: GLOBALE_DECKE };
     },
     audit: () => {},
     recordProvisioningJob: () => null,
@@ -300,7 +300,7 @@ test("Kriterium 1+2: ein Webhook-Nummernkauf mit nicht zu speicherndem Ergebnis 
       const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenant);
       mandant.numberProvisionSkipReason = "tenant_cap";
       mandant.numberProvisionSkipAt = EINGANG;
-      return { ok: false, reason: "tenant_cap" };
+      return { ok: false, fehler: "tenant_cap" };
     },
     audit: () => {},
     recordProvisioningJob: () => null,

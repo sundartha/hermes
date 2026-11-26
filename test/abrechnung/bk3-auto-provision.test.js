@@ -16,7 +16,7 @@ test("BK3-T1 Aktivierung fragt genau eine Dry-Run-Nummer an", () => {
   registerTenant(s, "t1", {});
   const r = requestNumberForPaidTenant(s, { tenantId: "t1", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   assert.equal(r.ok, true);
-  assert.equal(r.number.status, NUMBER_STATUS.REQUESTED);
+  assert.equal(r.wert.number.status, NUMBER_STATUS.REQUESTED);
   assert.equal(s.numbers.filter((n) => n.tenantId === "t1").length, 1);
 });
 
@@ -25,7 +25,7 @@ test("BK3 Tenant ohne Geo -> Kaufland immer US ueber kauflandFuer", () => {
   registerTenant(s, "t_us", {});
   const r = requestNumberForPaidTenant(s, { tenantId: "t_us", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US");
+  assert.equal(r.wert.number.country, "US");
 });
 
 test("BK3 Webhook-/Aktivierungspfad liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
@@ -37,7 +37,7 @@ test("BK3 Webhook-/Aktivierungspfad liefert number.language='en' ueber den Weltd
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.language, "en");
+  assert.equal(r.wert.number.language, "en");
 });
 
 test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache bleibt am Herkunftsland (DE)", () => {
@@ -50,8 +50,8 @@ test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache ble
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.country, "US", "Kaufland ist US ueber kauflandFuer");
-  assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
+  assert.equal(r.wert.number.country, "US", "Kaufland ist US ueber kauflandFuer");
+  assert.equal(r.wert.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
 test("requestNumberForPaidTenant: Tenant MIT Geo DE -> Sprache 'de'", () => {
@@ -64,7 +64,7 @@ test("requestNumberForPaidTenant: Tenant MIT Geo DE -> Sprache 'de'", () => {
     maxNumbersPerTenant: HIGH,
   });
   assert.equal(r.ok, true);
-  assert.equal(r.number.language, "de", "Sprache folgt der Tenant-Geo");
+  assert.equal(r.wert.number.language, "de", "Sprache folgt der Tenant-Geo");
 });
 
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {
@@ -74,7 +74,7 @@ test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () 
   assert.equal(requestNumberForPaidTenant(s, opts).ok, true);
   const second = requestNumberForPaidTenant(s, opts);
   assert.equal(second.ok, false);
-  assert.equal(second.reason, "already_provisioned");
+  assert.equal(second.fehler, "already_provisioned");
   assert.equal(s.numbers.filter((n) => n.tenantId === "t2").length, 1);
 });
 
@@ -83,7 +83,7 @@ test("BK3-T3 Cap blockt: keine Nummer, Grund tenant_cap", () => {
   registerTenant(s, "t3", {});
   const r = requestNumberForPaidTenant(s, { tenantId: "t3", maxNumbers: HIGH, maxNumbersPerTenant: 0 });
   assert.equal(r.ok, false);
-  assert.equal(r.reason, "tenant_cap");
+  assert.equal(r.fehler, "tenant_cap");
   assert.equal(s.numbers.filter((n) => n.tenantId === "t3").length, 0);
 });
 
@@ -91,9 +91,17 @@ test("BK3-T3b global cap -> global_cap, keine Nummer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t3b", {});
   const r = requestNumberForPaidTenant(s, { tenantId: "t3b", maxNumbers: 0, maxNumbersPerTenant: HIGH });
-  assert.equal(r.reason, "global_cap");
+  assert.equal(r.fehler, "global_cap");
   assert.equal(s.numbers.length, 0);
   assert.equal(findTenant(s, "t3b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
+});
+
+test("BK3 Tenant ohne Abo -> fehler tenant_inactive, keine Nummer", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_ohne_abo", {}).status = "suspended";
+  const r = requestNumberForPaidTenant(s, { tenantId: "t_ohne_abo", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+  assert.deepEqual(r, { ok: false, fehler: "tenant_inactive" });
+  assert.deepEqual(s.numbers, []);
 });
 
 test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent", async () => {
@@ -106,8 +114,10 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   const mac = crypto.createHmac("sha256", SECRET).update(`${NOW}.${body}`).digest("hex");
   assert.equal(verifyStripeSignature({ rawBody: body, signatureHeader: `t=${NOW},v1=${mac}`, secret: SECRET, nowS: NOW }), true);
 
-  const provision = async (tenant) =>
-    requestNumberForPaidTenant(s, { tenantId: tenant, maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+  const provision = async (tenant) => {
+    const r = requestNumberForPaidTenant(s, { tenantId: tenant, maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+    return r.ok ? { ok: true, ...r.wert } : { ok: false, reason: r.fehler };
+  };
   const deps = {
     store: {
       findTenantBySubscription: () => null, setTenantSubscription: () => {}, setKycLevel: () => {},
