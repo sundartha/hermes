@@ -5,7 +5,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { mock } from "node:test";
 import { platformAlertSender, sendeVorfall } from "../../src/telephony/alert-sms.ts";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };

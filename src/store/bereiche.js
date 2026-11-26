@@ -1,5 +1,5 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.ts";
-import { SKIP_VERMERK_SCHLUESSEL } from "../begriffe/nummern-vergabe.js";
+import { SKIP_VERMERK_SCHLUESSEL } from "../begriffe/nummern-vergabe.ts";
 import * as ausfall from "./zustand/ausfall.js";
 import { expireOrphanedConsults } from "./state-ops.js";
 import { tenantLanguage } from "./views.ts";

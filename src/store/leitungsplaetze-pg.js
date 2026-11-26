@@ -1,4 +1,4 @@
-import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.js";
+import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.ts";
 import {
   BEDARF,
   LEITUNGSPLATZ_ENTSCHEIDUNG,

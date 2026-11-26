@@ -5,7 +5,7 @@ import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { seedDefaults } from "../../src/db/migrate.js";
 import { config } from "../../src/config.ts";
 import { defaultSettings, demoCalendar } from "../../src/store.js";
-import { PROVIDER, GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER, GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { TENANT_STATUS } from "../../src/begriffe/mandant.ts";

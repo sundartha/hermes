@@ -15,7 +15,7 @@ process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 
 const { telnyxVoice } = await import("../../src/telephony/adapters/telnyx/voice.js");
 const { voiceControl } = await import("../../src/telephony/registry.js");
-const { DEFAULT_PROVIDER, PROVIDER } = await import("../../src/begriffe/nummern-vergabe.js");
+const { DEFAULT_PROVIDER, PROVIDER } = await import("../../src/begriffe/nummern-vergabe.ts");
 const { config } = await import("../../src/config.ts");
 
 const { withBlankedConfig } = makeConfigOverrides(config);

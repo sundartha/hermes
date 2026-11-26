@@ -14,7 +14,7 @@ import {
 } from "../../src/billing/cost-calibration.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 import { EL_STICHPROBE, STICHPROBEN_ENDE_MS, eigenCentQuelleJeAnruf, elVollkostenState } from "../fixtures/kostenv2-vollkosten-stichprobe.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../../src/billing/cost-truing.ts";
 import { makeStubStore, fakeConfig, fakeSpies } from "../cost-truing-harness.js";

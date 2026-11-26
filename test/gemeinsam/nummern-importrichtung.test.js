@@ -19,7 +19,7 @@ for (const datei of ["src/telephony/adapters/telnyx/numbers.js"]) {
 }
 
 test("nummern-importrichtung: der Fehler 'Nummer gekauft, ID offen' liegt in begriffe und trägt Nummer und Ursache", async () => {
-  const { NummerGekauftIdOffen } = await import("../../src/begriffe/nummern-vergabe.js");
+  const { NummerGekauftIdOffen } = await import("../../src/begriffe/nummern-vergabe.ts");
   const ursache = new Error("keine ID");
   const fehler = new NummerGekauftIdOffen("+4930123456", ursache);
   assert.equal(fehler.name, "NummerGekauftIdOffen");

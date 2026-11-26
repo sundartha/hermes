@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { platformHoldEscalationCandidates } from "../../src/store/state-ops.js";
 import { runPlatformHoldEscalationSweep, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON } from "../../src/begriffe/nummern-vergabe.ts";
 
 const SCHWELLE_MS = 86400000;
 const ZWEI_MELDUNGEN = 2;

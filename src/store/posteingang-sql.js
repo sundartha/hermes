@@ -1,5 +1,5 @@
 import * as ops from "./state-ops.js";
-import { MAX_NOTIFICATIONS } from "../begriffe/speicher.js";
+import { MAX_NOTIFICATIONS } from "../begriffe/speicher.ts";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const SPERRE_SQL = `SELECT pg_advisory_xact_lock(hashtext($1))`;

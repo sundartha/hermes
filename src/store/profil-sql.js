@@ -1,4 +1,4 @@
-import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.ts";
 
 const SCHREIBEN_SQL = `INSERT INTO profile (tenant_id, data) VALUES ($1, $2)
   ON CONFLICT (tenant_id) DO UPDATE SET data = profile.data || EXCLUDED.data`;

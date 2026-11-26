@@ -4,7 +4,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
-import { normNum } from "../begriffe/rufnummern.js";
+import { normNum } from "../begriffe/rufnummern.ts";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.ts";
 import { CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../begriffe/rueckfrage.ts";
 import { validateAssistantContext } from "../i18n/anruf-eingabe-texte.ts";

@@ -13,7 +13,7 @@ import {
 import { eroeffnungsFelder, meldeFirstMessageErgebnis } from "../elevenlabs/anrufstart-messung.ts";
 import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.ts";
 import { RATE_WINDOW_MS, respondTooManyRequests } from "../middleware.ts";
-import { normNum } from "../begriffe/rufnummern.js";
+import { normNum } from "../begriffe/rufnummern.ts";
 import { safeEqual } from "../util.ts";
 import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
 import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";

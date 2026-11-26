@@ -1,4 +1,4 @@
-export { E164 } from "./rufnummern.js";
+export { E164 } from "./rufnummern.ts";
 
 export const TEXT_LIMITS = {
   objective: 500,

@@ -6,7 +6,7 @@ import { SESSION_COOKIE_NAME, webAuth, adminOnly, makeAccounts, makeSessions, si
 import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

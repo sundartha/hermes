@@ -2,7 +2,7 @@ import { assertTelnyxOk } from "./errors.ts";
 import { parseDecimalToMicroCents } from "./cost-parse.ts";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.ts";
 import { assertKaufbareRufnummer, assertKaufbaresLand } from "../../../store.js";
-import { NummerGekauftIdOffen } from "../../../begriffe/nummern-vergabe.js";
+import { NummerGekauftIdOffen } from "../../../begriffe/nummern-vergabe.ts";
 import { anfrage } from "../../../utils/anfrage.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";

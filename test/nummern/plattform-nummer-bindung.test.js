@@ -19,7 +19,7 @@ import {
   openPlatformBindingByPurpose,
 } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON, PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { releaseTenantNumbersOnErase } from "../../src/release-reconcile.ts";
 import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanup.ts";

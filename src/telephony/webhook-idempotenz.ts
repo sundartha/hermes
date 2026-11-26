@@ -2,7 +2,7 @@ import { HTTP_OK, HTTP_SERVER_ERROR } from "../utils/http.ts";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { PROVIDER_WEBHOOK_HARDCUT_MS } from "../turn-budget.ts";
-import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.js";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.ts";
 import { ergebnisOderNull } from "./ergebnis-oder-null.ts";
 import { escapeXml } from "./adapters/telnyx/render.ts";
 import { TS_HEADER } from "./adapters/telnyx/signature.ts";

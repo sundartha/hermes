@@ -6,7 +6,7 @@ import { makeDefaultState } from "../../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../../src/billing/payment-method-eligibility.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
 import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
-import { PROVISION_NUMBER_JOB, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVISION_NUMBER_JOB, PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 
 const NUMBER_ID = "num_x";
 const ORDER_KEY = `order_${NUMBER_ID}`;

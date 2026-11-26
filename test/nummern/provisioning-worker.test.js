@@ -13,7 +13,7 @@ import {
   setTenantStripe,
 } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.ts";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "US", connectionId: "conn_1" };

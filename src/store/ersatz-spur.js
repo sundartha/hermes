@@ -1,6 +1,6 @@
-import { NUMBER_SWAP_JOB } from "../begriffe/nummern-vergabe.js";
+import { NUMBER_SWAP_JOB } from "../begriffe/nummern-vergabe.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
-import { normNum } from "../begriffe/rufnummern.js";
+import { normNum } from "../begriffe/rufnummern.ts";
 import { newId } from "./zustand/grundlagen.js";
 import { bootstrapNummerAnlegen, swapKey } from "./zustand/nummern.ts";
 

@@ -9,10 +9,10 @@ import {
   emptyPlatformTtsUsage,
   emptyCostCrossCheck,
 } from "./leerzustaende.js";
-import { sanitizeProfile } from "../begriffe/profil.js";
+import { sanitizeProfile } from "../begriffe/profil.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.ts";
-import { normNum, E164 } from "../begriffe/rufnummern.js";
-import { resolveSeedProvider } from "../begriffe/nummern-vergabe.js";
+import { normNum, E164 } from "../begriffe/rufnummern.ts";
+import { resolveSeedProvider } from "../begriffe/nummern-vergabe.ts";
 import { CENTS_PER_EUR } from "../begriffe/abrechnung.ts";
 import { findActiveNumber, tenantLanguage as tenantLanguageOf } from "./views.ts";
 import * as ops from "./state-ops.js";

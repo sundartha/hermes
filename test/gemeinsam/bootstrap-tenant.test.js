@@ -4,7 +4,7 @@ import { bootstrapTenant, makeDefaultState, findTenant } from "../../src/store/s
 import { hasActiveNumber } from "../../src/store/views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { tenantContext } from "../../src/store/state-ops.js";

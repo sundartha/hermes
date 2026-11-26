@@ -6,7 +6,7 @@ import {
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   normalizeDialTarget,
-} from "../begriffe/rufnummern.js";
+} from "../begriffe/rufnummern.ts";
 import { eurText, spendMonthEndDate, outboundReserveCents } from "../begriffe/abrechnung.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { emergencyBrakeSeconds } from "../call-duration.ts";

@@ -16,7 +16,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { CENTS_PER_EUR, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE, USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.ts";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const TENANT_ID = "t_user1";

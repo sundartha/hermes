@@ -1,5 +1,5 @@
 import { emptyUsage } from "../leerzustaende.js";
-import { PROVIDER } from "../../begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../begriffe/nummern-vergabe.ts";
 import {
   USAGE_EVENT_KIND,
   MICRO_CENTS_PER_CENT,

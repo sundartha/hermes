@@ -1,4 +1,4 @@
-import { normNum, E164, countryAllowed, allowedPrivateNumberCodes } from "../../begriffe/rufnummern.js";
+import { normNum, E164, countryAllowed, allowedPrivateNumberCodes } from "../../begriffe/rufnummern.ts";
 import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../begriffe/nummern.ts";
 import { TENANT_STATUS, KYC_LEVEL, KYC_ORDER } from "../../begriffe/mandant.ts";
 import { DEFAULT_LANGUAGE } from "../../konfiguration/standardsprache.ts";

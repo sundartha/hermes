@@ -20,7 +20,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../src/begriffe/nummern.ts";
 import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
-import { GLOBAL_CAP_REASON, shouldPersistProvisionResult } from "../../src/begriffe/nummern-vergabe.js";
+import { GLOBAL_CAP_REASON, shouldPersistProvisionResult } from "../../src/begriffe/nummern-vergabe.ts";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const seedTenant = (s, id = "t_user1") => registerTenant(s, id);
@@ -348,7 +348,7 @@ import {
   setTenantSubscription,
 } from "../../src/store/state-ops.js";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 
 const GRACE_MS = 60_000;
 const MAX_AGE_MS = 120_000;
