@@ -9,7 +9,7 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REGEL = "hermes/monatsrechnung-aus-month";
-const MONATSMODUL = "src/utils/month.js";
+const MONATSMODUL = "src/utils/month.ts";
 
 const eslint = new ESLint({ cwd: WURZEL });
 
@@ -21,7 +21,7 @@ async function befunde(datei, quelltext) {
 async function erwarteBefund(quelltext, datei = "src/probe-monat.js") {
   const gefunden = await befunde(datei, quelltext);
   assert.equal(gefunden.length, 1, `Monatsregel: ${quelltext} wurde nicht genau einmal gemeldet`);
-  assert.match(gefunden[0].message, /src\/utils\/month\.js/);
+  assert.match(gefunden[0].message, /src\/utils\/month\.ts/);
 }
 
 async function erwarteKeinen(datei, quelltext) {
@@ -56,7 +56,7 @@ test("Monatsregel: getUTCMonth() mit Vergleich bleibt ohne Meldung", () =>
 test("Monatsregel: der Aufruf der Helfer aus month.js bleibt ohne Meldung", () =>
   erwarteKeinen(
     "src/probe-monat.js",
-    'import { yearMonthKey, previousMonthStart } from "./utils/month.js";\nexport const a = (d) => yearMonthKey(previousMonthStart(d));\n',
+    'import { yearMonthKey, previousMonthStart } from "./utils/month.ts";\nexport const a = (d) => yearMonthKey(previousMonthStart(d));\n',
   ));
 
 function gitGrep(...argumente) {
@@ -75,7 +75,7 @@ test("Monatsregel: keine Bestandsliste und keine Unterdrückung für die Regel",
 });
 
 test("Monatsregel: unter src/ steht außer month.js keine Monatsrechnung", () => {
-  const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/*.js", ":!src/utils/month.js");
+  const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/*.js", ":!src/utils/month.ts");
   assert.equal(treffer, "");
 });
 
@@ -83,7 +83,7 @@ test("Monatsregel: Date.UTC mit getUTCMonth() als Monatsargument ist ein Fehler,
   erwarteBefund("export const a = (d) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);\n"));
 
 test("Monatsregel: unter src/ in .js und .ts steht außer month.js kein Date.UTC", () => {
-  const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/**/*.js", "src/**/*.ts", ":!src/utils/month.js");
+  const treffer = gitGrep("-nE", String.raw`getUTCMonth\(\) *[-+]|setUTCMonth|Date\.UTC\(`, "--", "src/**/*.js", "src/**/*.ts", ":!src/utils/month.ts");
   assert.equal(treffer, "");
 });
 

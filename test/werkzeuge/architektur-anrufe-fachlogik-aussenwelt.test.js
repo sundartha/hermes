@@ -44,7 +44,7 @@ const VERBOTEN = [
   "src/store.ts",
   "src/store/state-ops.js",
   "src/db/pool.js",
-  "src/utils/anfrage.js",
+  "src/utils/anfrage.ts",
   "src/telephony/adapters/telnyx.js",
 ];
 

@@ -8,7 +8,7 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REGEL = "hermes-tests/anfrage-mit-frist";
-const ANFRAGE_DATEI = "src/utils/anfrage.js";
+const ANFRAGE_DATEI = "src/utils/anfrage.ts";
 const PRODUKT = "src/probe-anfrage.js";
 const MIT_FRIST = 'fetch("https://x.test", { signal: AbortSignal.timeout(5000) });\n';
 
@@ -23,7 +23,7 @@ async function erwarteBefund(quelltext) {
   const gefunden = await befunde(PRODUKT, quelltext);
   assert.equal(gefunden.length, 1, `Anfrage-Regel: ${quelltext} wurde nicht genau einmal gemeldet`);
   assert.match(gefunden[0].message, /`anfrage\(url, \{ fristMs \}\)`/);
-  assert.match(gefunden[0].message, /src\/utils\/anfrage\.js/);
+  assert.match(gefunden[0].message, /src\/utils\/anfrage\.ts/);
 }
 
 async function erwarteKeinen(datei, quelltext) {
@@ -50,7 +50,7 @@ for (const [name, quelltext] of Object.entries(FAELLE)) {
 }
 
 test("Anfrage-Regel: anfrage() selbst bleibt erlaubt", () =>
-  erwarteKeinen(PRODUKT, 'import { anfrage } from "./utils/anfrage.js";\nanfrage("https://x.test", { fristMs: 5 });\n'));
+  erwarteKeinen(PRODUKT, 'import { anfrage } from "./utils/anfrage.ts";\nanfrage("https://x.test", { fristMs: 5 });\n'));
 test("Anfrage-Regel: ein lokaler Parameter namens fetch ist kein globales fetch", () =>
   erwarteKeinen(PRODUKT, "export const a = (fetch) => fetch(1);\n"));
 test("Anfrage-Regel: eine Methode namens fetch ist kein globales fetch", () =>
