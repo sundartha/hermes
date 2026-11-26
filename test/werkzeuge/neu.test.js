@@ -72,7 +72,7 @@ test("die Art route erzeugt die Router-Form wie in der Fixture, mit webAuthMw un
 
 test("die Art fachdatei liegt im Ordner des Bausteins und nutzt anfrage() und timer", () => {
   const text = inhalt(wurzel, FACHDATEI);
-  assert.match(text, /^import \{ anfrage \} from "\.\.\/utils\/anfrage\.js";$/m);
+  assert.match(text, /^import \{ anfrage \} from "\.\.\/utils\/anfrage\.ts";$/m);
   assert.match(text, /^import \{ MS_PER_SECOND \} from "\.\.\/utils\/timer\.ts";$/m);
   assert.match(text, /^import \{ USAGE_EVENT_KIND \} from "\.\.\/begriffe\/abrechnung\.ts";$/m);
   assert.match(text, /^export const PROBE_ABRUF_BEGRIFF = USAGE_EVENT_KIND;$/m);

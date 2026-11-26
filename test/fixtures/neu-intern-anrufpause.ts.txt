@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
-import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.ts";
 
 export const INTERN_ANRUFPAUSE_PATH = "/api/intern-anrufpause";
