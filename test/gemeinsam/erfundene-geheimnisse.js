@@ -126,3 +126,5 @@ export const PROBE_ZUGANG_SCHLUESSEL_ZU_KURZ = "probe-zugang-kurz".padEnd(31, "k
 export const PROBE_WERKZEUGFEHLER_SCHLUESSEL = "sk_AbCdEf12GhIjKl34MnOp";
 export const PROBE_WERKZEUGFEHLER_TELEFON = "+4917312345678";
 export const PROBE_WERKZEUGFEHLER_EMAIL = "max.mustermann@firma.de";
+
+export const SCHLUESSELBUND_ELEVENLABS_SCHLUESSEL = "sk_schluesselbund_erfunden_0001";
