@@ -2,7 +2,6 @@ import "./process-guards.js";
 import { config } from "./config.ts";
 import * as store from "./store.js";
 import { fruehwarnung } from "./routes/intern-anrufe-laufend.js";
-import { planSummarySms } from "./sms-summary.ts";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.ts";
 import { makeAblageBisFreigabe } from "./tts/ablage-bis-freigabe.ts";
@@ -126,18 +125,14 @@ const priceDriftWatch = makePriceDriftWatch({
   lesePreis: (priceId) => stripeBilling.retrievePriceAmount(priceId),
 });
 
-const accountsRef = { current: null };
-
 const callFinishOhneUrteil = makeCallFinish({
   store,
   config,
   metering,
   messaging,
   summarizeCall,
-  planSummarySms,
   audit,
   mailer,
-  accountsRef,
   qualifiesAsInboxEntry,
   metrics,
   leitungsplaetze: store.leitungsplaetze,
@@ -308,7 +303,6 @@ const deps = {
     fruehwarnung: () => fruehwarnung(store, Date.now()),
   },
 };
-const { app, accounts, auditStore, zeitplaeneAnmelden } = await buildApp(deps);
-accountsRef.current = accounts;
+const { app, auditStore, zeitplaeneAnmelden } = await buildApp(deps);
 auditStoreRef.current = auditStore;
 await bootServer({ app, auditStore, zeitplaeneAnmelden, ...deps });

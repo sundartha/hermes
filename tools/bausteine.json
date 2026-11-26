@@ -180,7 +180,6 @@
       "zweck": "Posteingang und Zusammenfassungen nach dem Anruf.",
       "quellen": [
         "src/inbox-entry.ts",
-        "src/sms-summary.ts",
         "src/routes/api-inbox.ts"
       ],
       "eingaenge": [],
@@ -310,8 +309,6 @@
         "src/call-result.ts",
         "src/callee-is-owner.ts",
         "src/diagnostic-retention.ts",
-        "src/mail-not-placed.ts",
-        "src/mail-summary.ts",
         "src/turn-budget.ts",
         "src/routes/voice.ts",
         "src/routes/webhooks-elevenlabs-init.ts",
