@@ -374,7 +374,8 @@ export function makeSelfServiceRoutes({
         detail: `email_fp=${hashEmail(plan.wert.email)}`,
       });
     } catch (err) {
-      console.error(`self-service newsletter-recipients audit write failed: ${err.message}`);
+      const art = err instanceof Error ? err.name : typeof err;
+      console.error(`self-service newsletter-recipients audit write failed: art=${art}`);
     }
     audit("self_service_newsletter_recipient_add", req, "outcome=pending");
     res.json({ ok: true, status: "pending" });
