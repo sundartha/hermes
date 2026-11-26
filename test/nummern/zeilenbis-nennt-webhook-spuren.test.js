@@ -32,7 +32,7 @@ test("Frist von zeilenBis abgelaufen: Meldung nennt die Webhook-Spuren der laufe
   const beide = await fehlermeldung();
   assert.match(beide, ZUSTAND);
   assert.ok(beide.endsWith(`\n${SPUR_A}\n${SPUR_B}`), beide);
-  assert.doesNotMatch(beide, /anderes/);
+  assert.doesNotMatch(beide.split("Webhook-Spuren der laufenden Server:").at(-1), /anderes/);
   laufendeAusgaben.delete(a);
   assert.ok((await fehlermeldung()).endsWith(`\n${SPUR_B}`));
   laufendeAusgaben.delete(b);

@@ -17,5 +17,5 @@ export function fristAblaufMeldung(zeilen, gewartetMs) {
     console.log(text);
   });
   const spuren = ausgaben.flatMap((text) => text.match(WEBHOOK_SPUR) ?? []);
-  return `Zustand per SQL nach ${gewartetMs} ms nicht erreicht: ${JSON.stringify(zeilen)}\nWebhook-Spuren der laufenden Server:\n${spuren.join("\n") || "(keine)"}${attrappenFehlerText()}`;
+  return `Zustand per SQL nach ${gewartetMs} ms nicht erreicht: ${JSON.stringify(zeilen)}\n${instanzAusgabeText()}\nWebhook-Spuren der laufenden Server:\n${spuren.join("\n") || "(keine)"}${attrappenFehlerText()}`;
 }
