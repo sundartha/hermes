@@ -1,5 +1,5 @@
-import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
-import { E164, countryForE164 } from "../begriffe/rufnummern.js";
+import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
+import { countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
 
@@ -29,7 +29,7 @@ type MandantZustand = Parameters<typeof resolveCallLanguage>[0];
 const aufgeloesteSprache: (state: MandantZustand, zugriff: Zugriff) => string = resolveCallLanguage;
 const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
-const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
+const SPRACHE_JE_LAND: Readonly<Record<string, string>> = EIGENE_SPRACHE_JE_LAND;
 
 const OFFENLEGUNG_OHNE_LANDESTEXT = "en";
 
@@ -47,8 +47,7 @@ function providerSpracheVon(textSprache: string, callLanguage: string | null | u
 
 function calleeLanguage(to: string | null): string | null {
   const land = countryForE164(to);
-  if (land) return SPRACHE_JE_LAND[land] ?? OFFENLEGUNG_OHNE_LANDESTEXT;
-  return to !== null && E164.test(to) ? OFFENLEGUNG_OHNE_LANDESTEXT : null;
+  return (land && SPRACHE_JE_LAND[land]) ?? null;
 }
 
 function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord, callLanguage }: Zugriff & { callLanguage?: string | undefined }): string {
