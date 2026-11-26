@@ -134,3 +134,19 @@ test("Auswertung 4059: Karte behaelt das Urteil, auch wenn sonst nichts drinsteh
   assert.equal(normalizeCallResult({}, { ...opts, counterparty: { confirmed: false, declined: false } }), null);
   assert.equal(normalizeCallResult({}, opts), null);
 });
+
+const BESTAETIGT_MODELL = { confirmed_by_counterparty: true };
+
+test("Auswertung 4059: eine Zeile der Gegenseite ohne Text belegt auch kein kurzes Zitat", () => {
+  for (const zitat of ["was", "here", "Stryker was here!"]) {
+    const modell = { ...BESTAETIGT_MODELL, confirmation_quote: zitat };
+    assert.equal(gegenseitenUrteil(modell, [AGENT_ZEILE, { role: "user" }]).confirmed, false, zitat);
+  }
+});
+
+test("Auswertung 4059: Leerraum im Zitat wird zu einem Leerzeichen, nicht entfernt", () => {
+  const transcript = [AGENT_ZEILE, { role: "user", text: "ja passt" }];
+  const urteil = (zitat) => gegenseitenUrteil({ ...BESTAETIGT_MODELL, confirmation_quote: zitat }, transcript);
+  assert.equal(urteil("japasst").confirmed, false);
+  assert.equal(urteil("ja   \n passt").confirmed, true);
+});
