@@ -43,19 +43,19 @@ function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord,
 
 function disclosureLanguageOf(
   state: MandantZustand,
-  { tenantId, numberRecord, to, callLanguage }: Zugriff & { to: string | null; callLanguage?: string | undefined },
+  { tenantId, numberRecord, to, callLanguage, ausdruecklich }: Zugriff & { to: string | null; callLanguage?: string | undefined; ausdruecklich?: boolean | undefined },
 ): string {
   const startsprache = callLanguage ? primaererSprachcode(callLanguage) : STARTSPRACHE;
-  if (startsprache !== STARTSPRACHE) return SUPPORTED_LANGUAGES.includes(startsprache) ? startsprache : OFFENLEGUNG_OHNE_LANDESTEXT;
+  if (ausdruecklich ?? startsprache !== STARTSPRACHE) return SUPPORTED_LANGUAGES.includes(startsprache) ? startsprache : OFFENLEGUNG_OHNE_LANDESTEXT;
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
 export function callLocaleFor(
   state: MandantZustand,
-  { tenantId, numberRecord, ownerName, to, callLanguage }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined },
+  { tenantId, numberRecord, ownerName, to, callLanguage, ausdruecklich }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined; ausdruecklich?: boolean | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
-  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage }));
+  const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage, ausdruecklich }));
   const providerLanguage = callLanguage ? primaererSprachcode(callLanguage) : gespraech.language;
   return {
     language: gespraech.language,
@@ -76,7 +76,7 @@ export interface LocaleAnruf {
   tenantId: string;
   from?: string | undefined;
   to: string;
-  language?: string | undefined;
+  language?: string | null | undefined;
 }
 
 export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher; call: LocaleAnruf; ownerName: string | null }): AnrufSprache {
@@ -85,7 +85,8 @@ export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher
     numberRecord: store.numberRecordByE164(call.from),
     ownerName,
     to: call.to,
-    callLanguage: call.language,
+    callLanguage: call.language ?? STARTSPRACHE,
+    ausdruecklich: Boolean(call.language),
   });
 }
 
@@ -95,6 +96,6 @@ export function inboundElLocaleOf({ store, call }: { store: LocaleSpeicher; call
     numberRecord: store.numberRecordByE164(call.to),
     ownerName: null,
     to: null,
-    callLanguage: call.language,
+    callLanguage: call.language ?? undefined,
   });
 }

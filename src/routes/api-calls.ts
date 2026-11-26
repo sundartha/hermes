@@ -908,7 +908,7 @@ export function makeCallRoutes({
       const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
       const callLocale = anrufSprache({
         store,
-        call: { tenantId: String(ctx.tenantId), from: ctx.fromNumber, to: ctx.to, language },
+        call: { tenantId: String(ctx.tenantId), from: ctx.fromNumber, to: ctx.to, language: requestedLanguage },
         ownerName,
       });
       const opening = await eroeffnungHolen({
@@ -932,7 +932,7 @@ export function makeCallRoutes({
         constraints: b.constraints,
         context: ctx.context,
         mandate: ctx.mandate,
-        language,
+        language: requestedLanguage,
         maxDurationS: ctx.maxDur,
         requestedBy: ctx.requestedBy,
         tenantId: ctx.tenantId,

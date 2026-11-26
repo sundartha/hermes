@@ -301,7 +301,7 @@ export function createCall(
     context: context || null,
     mandate: mandate || null,
     callerName: null,
-    language: language || "de",
+    language: language || "",
     maxDurationS: maxDurationS || null,
     requestedBy: requestedBy || null,
     tenantId: requireTenantId(tenantId),
