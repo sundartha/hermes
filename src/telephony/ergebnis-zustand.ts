@@ -36,17 +36,21 @@ function gegenseitenZeilen(call: AnrufSicht): number {
   return call.transcript.filter((zeile) => zeile.role !== AGENT_ROLE && (zeile.text ?? "").trim() !== "").length;
 }
 
-export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
-  if (failureReasonBase(call.failureReason) === RESULT_REASON.NO_ANSWER || call.answeredAt == null) {
-    return nichtErledigt(RESULT_REASON.NO_ANSWER);
-  }
-  if (call.transcript.length > 0 && gegenseitenZeilen(call) === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
+function urteilZustand(call: AnrufSicht): ErgebnisZustand {
   const gegenseite = call.result?.counterparty;
   if (gegenseite?.declined) return nichtErledigt(RESULT_REASON.DECLINED);
   if (gegenseite?.confirmed && call.objectiveAchieved === true) {
     return { result_state: RESULT_STATE.DONE_CONFIRMED, result_reason: null };
   }
   return { result_state: RESULT_STATE.UNCONFIRMED, result_reason: null };
+}
+
+export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
+  if (failureReasonBase(call.failureReason) === RESULT_REASON.NO_ANSWER || call.answeredAt == null) {
+    return nichtErledigt(RESULT_REASON.NO_ANSWER);
+  }
+  if (call.transcript.length > 0 && gegenseitenZeilen(call) === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
+  return urteilZustand(call);
 }
 
 export const BESTAETIGUNGS_KLAUSEL =

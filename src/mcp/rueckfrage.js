@@ -12,6 +12,15 @@ import { AWAIT_CALL_EVENT_DESCRIPTION, answerConsultDescription } from "./beschr
 import { TOOL_ANNOTATIONS } from "./metadaten.js";
 import { callOutcomeView, pickTranscript, maskedResultCard, maskedNextSteps } from "./anruf-ergebnis.js";
 
+function endeFelder(done) {
+  return {
+    result_summary: done?.result_summary ?? null,
+    objective_achieved: done?.objective_achieved ?? null,
+    result_state: done?.result_state ?? null,
+    result_reason: done?.result_reason ?? null,
+  };
+}
+
 function awaitEventView({ callId, event, finished, texts }) {
   const done = finished ? pickTranscript(callId, finished, texts) : null;
   const result = finished?.result;
@@ -21,10 +30,7 @@ function awaitEventView({ callId, event, finished, texts }) {
     event_id: event.eventId ?? null,
     questions: Array.isArray(event.questions) ? event.questions.map(maskRestrictedText) : [],
     ...outcome,
-    result_summary: done?.result_summary ?? null,
-    objective_achieved: done?.objective_achieved ?? null,
-    result_state: done?.result_state ?? null,
-    result_reason: done?.result_reason ?? null,
+    ...endeFelder(done),
     ...maskedResultCard(result),
     next_steps: maskedNextSteps(result),
   };
