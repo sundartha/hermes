@@ -193,4 +193,20 @@ pruefe "Approve da, derselbe rote Check ein zweites Mal (5 Min. später): jetzt 
 D3=$(mktemp -d)
 pruefe "kein Approve, nur pending: erste Messung hält noch nicht" "$(pruefstelle 0 1 0 300 PENDING $D3)" "weiter"
 pruefe "kein Approve, pending bleibt: zweite Messung hält wegen fehlendem Approve, nicht wegen 'rot'" "$(pruefstelle 0 1 0 300 PENDING $D3)" "halt: PR 9: kein Approve auf dem aktuellen Kopf (Kopf kopfabc)"
+
+# A-FSY74P 26.11.: Einreihen über Antonios OAuth-Token (gh pr merge) scheitert ohne "workflow"-Scope, wenn der PR eine Workflow-Datei ändert (#6293, Kette 3776); bisher schluckte freigeben() den gh-Fehler stumm (> /dev/null 2>&1) und die Kette hielt erst indirekt über den "PASS übersprungen"-Zähler nach mehreren Neustarts. freigeben() erkennt den Fehlertext jetzt direkt und hält sofort mit eigenem Grund, über den vorhandenen Haltweg (kein starts.txt-Zähler betroffen).
+FRG=$(grep -E '^freigeben\(\) \{' $S | head -1); [ -n "$FRG" ] || { echo "ROT  freigeben nicht in paket.sh gefunden"; exit 1; }
+freigeben_lauf() {   # $1 PR-Nummer, $2 Fehlertext der zweiten "antonio pr merge"-Stelle (leer = die Stelle meldet Erfolg)
+  LOG=$(mktemp -d); FEHLERTEXT=$2
+  approve() { return 0; }; eingereiht() { return 1; }; urteil_gruen() { :; }; pass_am_pr() { :; }
+  antonio() { case "$*" in *--disable-auto*) return 0 ;; *) [ -n "$FEHLERTEXT" ] && echo "$FEHLERTEXT" >&2; return 1 ;; esac; }
+  ( eval "$FRG"; freigeben "$1" ) 2>/dev/null
+  [ -s $LOG/halt.txt ] && cat $LOG/halt.txt || echo "(kein Halt)"
+}
+pruefe "Fehlertext nennt die fehlende workflow-Berechtigung: Halt nennt Grund und PR-Nummer" \
+  "$(freigeben_lauf 6293 'GraphQL: refusing to allow an OAuth App to create or update workflow `.github/workflows/ci.yml` without `workflow` scope')" \
+  "Einreihen braucht workflow-Berechtigung: Antonio klickt Merge when ready (PR 6293) oder gh auth refresh -s workflow"
+pruefe "anderer gh-Fehler (keine workflow-Berechtigung betroffen): bisheriges Verhalten bleibt (Halt 'Freigabe nicht ausgeführt')" \
+  "$(freigeben_lauf 6293 'HTTP 502: Bad Gateway')" \
+  "Freigabe nicht ausgeführt (PR 6293)"
 exit $fehler
