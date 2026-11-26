@@ -140,4 +140,32 @@ pflicht_ausser_urteil 5; pruefe "derselbe Kopf wird nicht zweimal neu gestartet"
 unset -f gh
 pruefe "umzug (Prüfregel-PR) kommt vor der Ausnahme für das KI-Urteil" "$(grep -c 'cwarten \$PR > /dev/null 2>&1 || umzug \$PR \$MIG || pflicht_ausser_urteil \$PR ||' $S)" "1"
 pruefe "freigeben wartet nach dem Approve auf die grüne Freigabe-Prüfung" "$(grep -E '^freigeben\(\)' $S | grep -c 'eingereiht \$1 || { urteil_gruen \$1;')" "1"
+# A-TGA9A5 26.11.: Merge-Warten lief über 60 Runden (je Runde mehrere gh/API-Aufrufe plus sleep 60), damit länger als die zugesagten 60 Min. (6183, 6344, früher 5927 standen 1,5 h+); es gab keinen Halt dafür, dass der PR-Kopf kein Approve hat oder ein Pflicht-Check außer der Freigabe-Prüfung rot ist. Jetzt läuft die Frist per Wanduhr ($SECONDS) und etwa alle 5 Min. prüft eine reine Funktion (merge_entscheidung), ob gehalten, freigegeben, neu gestartet oder weitergewartet wird.
+pruefe "Merge-Warten zählt keine Runden mehr (seq 1 60)" "$(grep -c 'for _ in \$(seq 1 60)' $S)" "0"
+pruefe "Merge-Warten läuft per Wanduhr (SECONDS) mit der zugesagten 60-Minuten-Frist" "$(grep -c 'phase merge "PR \$PR" 3600; MWT=\$SECONDS; MWLETZT=\$SECONDS; while (( SECONDS - MWT < 3600 ))' $S)" "1"
+pruefe "etwa alle 5 Min. (300 s), nicht jede Runde, wird der Kopf geprüft" "$(grep -c 'SECONDS - MWLETZT >= 300' $S)" "1"
+MENT=$(sed -n '/^merge_entscheidung() {/,/^}$/p' $S); [ -n "$MENT" ] || { echo "ROT  merge_entscheidung nicht in paket.sh gefunden"; exit 1; }; eval "$MENT"
+pruefe "Approve da, nichts rot: weiter warten" "$(merge_entscheidung 1 0 0)" "WEITER"
+pruefe "Approve da, nichts rot, PASS da: weiter warten (schon freigegeben, nicht nochmal)" "$(merge_entscheidung 1 0 1)" "WEITER"
+pruefe "kein Approve, kein PASS: Halt mit Grund" "$(merge_entscheidung 0 0 0)" "HALT:kein Approve auf dem aktuellen Kopf"
+pruefe "kein Approve, aber gültiges PASS: freigeben statt warten" "$(merge_entscheidung 0 0 1)" "FREIGEBEN"
+pruefe "Pflicht-Check außer Freigabe-Prüfung rot, kein Approve: Halt mit eigenem Grund" "$(merge_entscheidung 0 1 0)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
+pruefe "Pflicht-Check rot, auch mit PASS aber ohne Approve: trotzdem Halt (nicht freigeben)" "$(merge_entscheidung 0 1 1)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
+pruefe "Freigabe-Prüfung rot, Approve vorhanden: rote_neu statt Halt" "$(merge_entscheidung 1 1 0)" "ROTE_NEU"
+pruefe "Freigabe-Prüfung rot, Approve und PASS vorhanden: trotzdem rote_neu statt Halt" "$(merge_entscheidung 1 1 1)" "ROTE_NEU"
+# Verhaltenstest der eingebauten 5-Minuten-Prüfung selbst (Mocks für approve, pflicht_ausser_urteil, pass_auf_kopf, rote_neu, freigeben): die Stelle wird aus paket.sh gelesen, nicht nachgebaut.
+PRUEF=$(sed -n '/^    if \[ "\$S" = OPEN \] && (( SECONDS - MWLETZT >= 300 )); then/,/^    fi$/p' $S); [ -n "$PRUEF" ] || { echo "ROT  5-Minuten-Prüfstelle nicht in paket.sh gefunden"; exit 1; }
+pruefstelle() {   # $1 Approve 1/0, $2 pflicht_ausser_urteil-Rückgabe (0 = fein, 1 = Befund), $3 PASS 1/0, $4 Sekunden seit letzter Prüfung
+  local D=$(mktemp -d) FA=$1 FR=$2 FP=$3; LOG=$D; PR=9; PRK=kopfabc; S=OPEN; MWLETZT=$(( SECONDS - $4 ))
+  approve() { return $(( FA == 1 ? 0 : 1 )); }; pflicht_ausser_urteil() { return $FR; }; pass_auf_kopf() { return $(( FP == 1 ? 0 : 1 )); }
+  rote_neu() { echo "rote_neu $1" >> $D/aufrufe.txt; }; freigeben() { echo "freigeben $1" >> $D/aufrufe.txt; }
+  ( eval "$PRUEF" ) 2>/dev/null
+  if [ -s $D/halt.txt ]; then echo "halt: $(cat $D/halt.txt)"; elif [ -s $D/aufrufe.txt ]; then cat $D/aufrufe.txt; else echo "weiter"; fi
+}
+pruefe "Frist (5 Min.) noch nicht erreicht: keine Prüfung, einfach weiter" "$(pruefstelle 0 1 0 60)" "weiter"
+pruefe "Frist erreicht, kein Approve, kein PASS: Halt mit Grund" "$(pruefstelle 0 1 0 300)" "halt: PR 9: Pflicht-Check außer Freigabe-Prüfung rot (Kopf kopfabc)"
+pruefe "Frist erreicht, kein Approve, kein Pflicht-Befund, kein PASS: Halt kein Approve" "$(pruefstelle 0 0 0 300)" "halt: PR 9: kein Approve auf dem aktuellen Kopf (Kopf kopfabc)"
+pruefe "Frist erreicht, kein Approve, aber PASS: freigeben statt warten" "$(pruefstelle 0 0 1 300)" "freigeben 9"
+pruefe "Frist erreicht, Approve da, Pflicht-Befund (Freigabe-Prüfung rot): rote_neu statt Halt" "$(pruefstelle 1 1 0 300)" "rote_neu 9"
+pruefe "Frist erreicht, Approve da, alles grün: einfach weiter" "$(pruefstelle 1 0 0 300)" "weiter"
 exit $fehler
