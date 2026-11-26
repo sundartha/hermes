@@ -7,9 +7,9 @@ import { ESLint } from "eslint";
 
 const WURZEL = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REGEL = "hermes-tests/anfrage-mit-frist";
-const ANFRAGE_DATEI = "src/utils/anfrage.js";
+const ANFRAGE_DATEI = "src/utils/anfrage.ts";
 const PRODUKT = "src/probe-anfrage.js";
-const IMPORT = 'import { anfrage } from "./utils/anfrage.js";\n';
+const IMPORT = 'import { anfrage } from "./utils/anfrage.ts";\n';
 
 const eslint = new ESLint({ cwd: WURZEL });
 
@@ -32,7 +32,7 @@ for (const [name, quelltext] of Object.entries(BEFUNDE)) {
     const gefunden = await befunde(PRODUKT, quelltext);
     assert.equal(gefunden.length, 1);
     assert.match(gefunden[0].message, /fristMs/);
-    assert.match(gefunden[0].message, /src\/utils\/anfrage\.js/);
+    assert.match(gefunden[0].message, /src\/utils\/anfrage\.ts/);
   });
 }
 
