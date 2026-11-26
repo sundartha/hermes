@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { makeAnrufstartAuftrag } from "../../src/elevenlabs/anrufstart-auftrag.ts";
-import * as ops from "../../src/store/state-ops.js";
 
 const FEST_MS = Date.parse("2026-11-26T10:00:00.000Z");
 const WARTEFRIST_MS = 120 * 1000;
@@ -85,15 +84,17 @@ test("Anrufstart-Auftrag: wird die Zeile erst nach sieben Wiederholungen sichtba
   let lesen = 0;
   const { protokoll } = aufbau({ unsichtbarFuer: 0 });
   const beendeEcht = async (callId, grund) => {
-    ops.recordFailureReason(zustand, callId, `not-placed:${grund}`);
-    ops.endCallRecord(zustand, callId, "failed");
+    const zeile = zustand.calls.find((eintrag) => eintrag.id === callId);
+    if (!zeile) return;
+    zeile.failureReason = `not-placed:${grund}`;
+    zeile.status = "failed";
   };
   const echt = makeAnrufstartAuftrag({
     store: {
       leseCall: async (id) => {
         lesen += 1;
         if (lesen === 8) zustand.calls.push({ ...CALL, status: "active", elevenlabsConversationId: null });
-        return ops.getCall(zustand, id);
+        return zustand.calls.find((eintrag) => eintrag.id === id) ?? null;
       },
       anderesAnrufMitKonversation: async () => false,
       anrufstartMarker: { setze: async () => true, lies: async () => null },
@@ -114,8 +115,8 @@ test("Anrufstart-Auftrag: wird die Zeile erst nach sieben Wiederholungen sichtba
   });
   assert.equal(await echt({ payload: { callId: CALL.id } }), "gestartet");
   assert.deepEqual(protokoll.starts, [CALL.id]);
-  assert.equal(ops.getCall(zustand, CALL.id).status, "active");
-  assert.equal(ops.getCall(zustand, CALL.id).failureReason, undefined);
+  assert.equal(zustand.calls[0].status, "active");
+  assert.equal(zustand.calls[0].failureReason, undefined);
 });
 
 test("Anrufstart-Auftrag: ein Fehler beim Beenden des unlesbaren Anrufs steht mit callId im Log", async () => {
