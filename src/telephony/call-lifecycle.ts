@@ -5,6 +5,7 @@ import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./c
 import { carrierEndMsOf } from "../store/state-ops.js";
 import { inDatenbankBeendet } from "./reattach.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
+import { VERSAEUMTE_FRIST, zaehleFristVersaeumt } from "../utils/betriebsmessung.js";
 
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
@@ -35,6 +36,7 @@ interface Call {
   id: string;
   status: AnrufZustand;
   elevenlabsConversationId?: string | null;
+  bridgedAt?: string | null;
   tenantId: string;
   twilioSid: string;
   maxDurationS?: number;
@@ -260,6 +262,7 @@ export function makeCallLifecycle({
     loescheOhneAuflegeweg(call, { store, hangUpAction, voiceControl, endActiveCall }, grund);
 
   async function terminateExpiredCall(call: Call): Promise<void> {
+    if (call.bridgedAt) zaehleFristVersaeumt(VERSAEUMTE_FRIST.abschluss);
     await ohneWeg(call, CAP_FAILURE_REASON);
     const zombie = classifyCallTime(call, Date.now() - ZOMBIE_ALTER_MS, MAX_CALL_DURATION_CAP_S).expired;
     await terminateCappedCall(call.id, call.twilioSid, zombie ? "failed" : "completed");

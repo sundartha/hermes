@@ -2,6 +2,7 @@ import { meldeAuftragBisKlingeln } from "./anrufstart-messung.ts";
 import { fristenEinstellungen } from "../config.ts";
 import { maxDurationSOf } from "../call-duration.ts";
 import { callFailureReason } from "../telephony/failure-reason.ts";
+import { VERSAEUMTE_FRIST, zaehleFristVersaeumt } from "../utils/betriebsmessung.js";
 import { CALL_CONTROL_EREIGNIS } from "../telephony/call-control-ereignis.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
 import { EL_DIAL_RING_TIMEOUT_S } from "./inbound-rueckfall.ts";
@@ -124,27 +125,29 @@ async function waehleElBein({ call, zustand, steuerung, zugang, store, config })
   if (aufzeichnung.status !== "active") await legeBeinAuf(steuerung, call.id, callControlId);
 }
 
-async function vermerkeElFehler({ call, store, inboundBridges, now, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
+async function vermerkeElFehler({ call, store, inboundBridges, now, ohneAnnahme, rueckfall = VORSPANN_WAHL_GRUND.EL_FEHLER, grund = INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT }) {
   try {
     if ((await store.leseCall(call.id)).status !== "active") return;
     meldeVorspannRueckfall({ callId: call.id, grund: rueckfall });
+    if (ohneAnnahme) zaehleFristVersaeumt(VERSAEUMTE_FRIST.annahme);
     vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: now() }, { store, inboundBridges });
   } catch (fehler) {
     logFehler("vermerk", call.id, fehler);
   }
 }
 
-async function vermerkeElNichtAngenommen({ ereignis, ...args }) {
+async function vermerkeElNichtAngenommen({ ereignis, stand, ...args }) {
   meldeElBeinAufgelegt(args.call.id, ereignis);
   await vermerkeElFehler({
     ...args,
+    ohneAnnahme: !stand.has(STAND.EL_BEIN),
     rueckfall: EL_NICHT_ANGENOMMEN,
     grund: `${INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT}:${ursacheText(ereignis)} instanz=${instanzKennung()}`,
   });
 }
 
 const vermerkeElFrist = (args) =>
-  vermerkeElFehler({ ...args, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: VORSPANN_WAHL_GRUND.EL_FRIST });
+  vermerkeElFehler({ ...args, ohneAnnahme: true, rueckfall: VORSPANN_WAHL_GRUND.EL_FRIST, grund: VORSPANN_WAHL_GRUND.EL_FRIST });
 
 const vermerkeNichtAbgespielt = ({ call, store }) => {
   try {
@@ -267,7 +270,7 @@ export function makeVorspannAblauf({
   now,
 }) {
   setzeInstanzKennung(config);
-  const vermerkeElFehlerFuer = (call) => vermerkeElFehler({ call, store, inboundBridges, now });
+  const vermerkeElFehlerFuer = (call, ohneAnnahme) => vermerkeElFehler({ call, store, inboundBridges, now, ohneAnnahme });
   const legeBeideBeineAufMitUhr = (args) => legeBeideBeineAuf({ ...args, now, vorspannZustand });
   const beineAufFuer = (call, zustand) => legeBeideBeineAufMitUhr({ call, zustand, steuerung: voiceControl(call.provider) });
   const ladeZustand = async (call) => zustandVon(await vorspannZustand.lade(zustandsRef(call)));
@@ -304,7 +307,7 @@ export function makeVorspannAblauf({
     behandleWiedergabeStartFehler({ call, store, wiedergabe, elWahl });
     if (elWahl.status === "rejected") logFehler("el-wahl", call.id, elWahl.reason);
     if (wiedergabe.status === "fulfilled" && elWahl.status === "fulfilled") return;
-    if (elWahl.status === "rejected") await vermerkeElFehlerFuer(call);
+    if (elWahl.status === "rejected") await vermerkeElFehlerFuer(call, true);
     await legeBeideBeineAufMitUhr({ call, zustand, steuerung });
   }
 
@@ -318,7 +321,7 @@ export function makeVorspannAblauf({
   async function beiAufgelegt({ call, zustand, vomElBein, ereignis, abgehoben = zustand.abgehoben, aufgelegt = zustand.aufgelegt }) {
     ttsStore.release(zustand.token);
     if (call.status !== "active") return;
-    if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis });
+    if (elVorBruecke({ vomElBein, stand: zustand.stand })) await vermerkeElNichtAngenommen({ call, store, inboundBridges, now, ereignis, stand: zustand.stand });
     const andereBeinId = vomElBein ? zustand.calleeId : elBeinVon(call, zustand);
     const nochOffen = andereBeinId && !aufgelegt.has(andereBeinId);
     const aufzeichnung = await store.leseCall(call.id);

@@ -50,5 +50,18 @@
     "labels": {"bereich":"betrieb"},
     "annotations": {"summary":"Anbieter-Fehlerquote zu hoch","runbook_url":"docs/betrieb/alarme/anbieter-fehlerquote.md"},
     "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "anruf-frist-versaeumt",
+    "title": "Anruf ohne Annahme oder Abschluss in der Frist",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"sum by (frist) (increase(hermes_call_deadline_missed_total[15m])) or vector(0)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[0]}}]}}
+    ],
+    "for": "0s",
+    "labels": {"bereich":"anrufe"},
+    "annotations": {"summary":"Anruf ohne Annahme oder Abschluss in der Frist","runbook_url":"docs/betrieb/alarme/anruf-frist-versaeumt.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
   }
 ]
