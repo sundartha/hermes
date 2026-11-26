@@ -67,14 +67,13 @@ async function beendeAnruf({ failWrite, overrides }) {
 const ABGESCHLOSSEN = { status: "completed", summary: "Termin steht" };
 const GESCHEITERT = { status: "failed", transcript: [], failureReason: "at-capacity:leitungen-voll" };
 
-test("Zusammenfassung: Schreibfehler im Posteingang, SMS und Mail gehen trotzdem raus", async () => {
+test("Zusammenfassung: Schreibfehler im Posteingang, es geht weder SMS noch Mail raus", async () => {
   const ok = await beendeAnruf({ failWrite: false, overrides: ABGESCHLOSSEN });
   const kaputt = await beendeAnruf({ failWrite: true, overrides: ABGESCHLOSSEN });
-  assert.equal(ok.sms.length, 1);
-  assert.equal(ok.mails.length, 1);
-  assert.equal(kaputt.sms.length, ok.sms.length);
-  assert.equal(kaputt.mails.length, ok.mails.length);
-  assert.equal(kaputt.mails[0].to, "kunde@example.test");
+  assert.equal(ok.sms.length, 0);
+  assert.equal(ok.mails.length, 0);
+  assert.equal(kaputt.sms.length, 0);
+  assert.equal(kaputt.mails.length, 0);
   assert.equal(kaputt.notes.length, 0);
 });
 

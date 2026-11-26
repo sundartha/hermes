@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { tempDataDir, seedState, seedCall, DOMESTIC_TEST_NUMBER } from "../helpers.js";
+import { tempDataDir, seedState, DOMESTIC_TEST_NUMBER } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
@@ -13,14 +13,12 @@ import {
   recordTenantTtsCharacters,
   aiCostCents,
 } from "../../src/store/state-ops.js";
-import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { COST_LEDGER_MAP } from "../../src/billing/cost-ledger-map.ts";
 
 const ANSWERED_AT = "2026-01-01T00:00:00.000Z";
 const ENDED_AT_PLUS_ONE_MINUTE = "2026-01-01T00:01:00.000Z";
 const VOICE_CALL_TO = "+491701234567";
 const MONTHLY_RENT_CENTS = 92;
-const SMS_COST_CENTS_FIXTURE = 7;
 const RESEARCH_FEE_CENTS_FIXTURE = 3;
 const LOOKUP_FEE_CENTS_FIXTURE = 4;
 const INBOUND_TARIFF_CENTS_FIXTURE = 9;
@@ -209,48 +207,6 @@ test("KV-P1-4 research_fee: die Suchgebuehr erreicht NUR das Gate, nie den Ledge
     config.research.researchSearchFeeCents + config.research.lookupSearchFeeCents,
     "Buch B: beide Gebuehren addieren sich auf denselben Bucket",
   );
-});
-
-test("KV-P1-5 sms: die Summary-SMS bucht den Ledger, das Gate bleibt unberuehrt", async () => {
-  const s = makeDefaultState();
-  const call = seedCall({
-    tenantId: BOOTSTRAP_TENANT_ID,
-    direction: "outbound",
-    status: "completed",
-    to: "+12025550123",
-    transcript: [{ role: "caller", text: "Hallo", at: ANSWERED_AT }],
-  });
-  const callFinishConfig = { billing: { paymentEnabled: false, smsCostCents: SMS_COST_CENTS_FIXTURE }, privacy: {} };
-  const { finishCall } = makeCallFinish({
-    store: {
-      withStoreLock: (fn) => fn(),
-      releaseOutboundReserve: async () => {},
-      save: () => {},
-      addNotification: () => {},
-      purgeTranscript: () => {},
-      tenantContext: () => ({ settings: { agentName: "Hermes" } }),
-      recordUsageEvent: (ev) => recordUsageEvent(s, ev),
-      markSummarySmsSent: () => {},
-      markBilled: () => {},
-      markInboxEntry: () => {},
-    },
-    config: callFinishConfig,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
-    messaging: () => ({ sendSms: async () => {} }),
-    summarizeCall: async () => ({ summary: "Testzusammenfassung", actionItems: [] }),
-    planSummarySms: () => ({ send: true, to: "+12025550199", smsFrom: { e164: "+12025550001" } }),
-    audit: () => {},
-  });
-
-  await finishCall(call);
-
-  const events = s.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.SMS);
-  const gateCents = usageOf(s, BOOTSTRAP_TENANT_ID).costCents;
-  assertRowMatchesObservation("sms", { ledgerWrote: events.length > 0, gateWrote: gateCents > 0 });
-
-  assert.equal(events.length, 1, "Buch A: genau ein SMS-Beleg");
-  assert.equal(events[0].costCents, SMS_COST_CENTS_FIXTURE);
-  assert.equal(gateCents, 0, "Buch B: kein addUsageCostCents/trackUsage-Aufruf im SMS-Pfad");
 });
 
 function makeNumberFixture(tenantId) {

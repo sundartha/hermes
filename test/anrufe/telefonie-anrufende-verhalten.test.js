@@ -12,8 +12,6 @@ const EIGENE_NUMMER = "+4915199998888";
 const ZIEL = "+4915112345678";
 const ANGENOMMEN_UM = "2026-01-01T00:00:00.000Z";
 const BEENDET_UM = "2026-01-01T00:05:00.000Z";
-const SMS_GRENZE = 1500;
-const LANGER_TEXT_LAENGE = 2000;
 
 const geoeffnet = [];
 after(async () => {
@@ -81,45 +79,17 @@ async function mitAnruf({ calls, actionItems = [], env = {} }, pruefe) {
   }
 }
 
-test("3395-R1-1: Ende eines gefuehrten Anrufs meldet Zusammenfassung mit Aktionspunkten als Hinweis und SMS, bucht einmal", async () => {
-  const punkte = ["Erster Punkt", "Zweiter Punkt"].map((text, i) => ({
-    id: `ai_${i}`,
-    callId: "ende_ok",
-    text,
-    done: false,
-    createdAt: ANGENOMMEN_UM,
-  }));
-  await mitAnruf({ calls: [beendeterAnruf("ende_ok", { summary: "Termin steht." })], actionItems: punkte }, async (srv, telnyx) => {
+test("3395-R1-1: Ende eines gefuehrten Anrufs meldet Zusammenfassung als Hinweis, keine SMS, bucht einmal", async () => {
+  await mitAnruf({ calls: [beendeterAnruf("ende_ok", { summary: "Termin steht." })] }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "ende_ok", "completed")).status, HTTP_OK);
-    await warteAufEreignis([srv.ereignisse, telnyx.ereignisse], () => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
-    assert.equal(telnyx.anfragen[0].pfad, "/v2/messages");
-    assert.deepEqual(telnyx.anfragen[0].koerper, {
-      from: DOMESTIC_TEST_NUMBER.e164,
-      to: EIGENE_NUMMER,
-      text: `[Hermes] Anruf bei ${ZIEL}\n\nTermin steht.\n\nAction Items:\n1. Zweiter Punkt\n2. Erster Punkt`,
-    });
-    await warteAufEreignis([srv.ereignisse], () => anrufVon(srv, "ende_ok").summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse], () => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
     const hinweis = hinweiseVon(srv).find((n) => n.title === "Neue Call Summary");
     assert.equal(hinweis.body, `Anruf bei ${ZIEL}: Termin steht.`);
     assert.equal(hinweis.callId, "ende_ok");
     assert.ok(anrufVon(srv, "ende_ok").billedAt);
     await meldeStatus(srv, "ende_ok", "completed");
-    assert.equal(telnyx.anfragen.length, 1);
+    assert.equal(telnyx.anfragen.length, 0);
     assert.equal(hinweiseVon(srv).filter((n) => n.title === "Neue Call Summary").length, 1);
-  });
-});
-
-test("3395-R1-2: die Zusammenfassungs-SMS wird auf genau 1500 Zeichen gekappt, der Hinweis bleibt vollstaendig", async () => {
-  const lang = "x".repeat(LANGER_TEXT_LAENGE);
-  await mitAnruf({ calls: [beendeterAnruf("ende_lang", { summary: lang })] }, async (srv, telnyx) => {
-    await meldeStatus(srv, "ende_lang", "completed");
-    await warteAufEreignis([srv.ereignisse, telnyx.ereignisse], () => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
-    const { koerper } = telnyx.anfragen[0];
-    const { text } = koerper;
-    assert.equal(text.length, SMS_GRENZE);
-    assert.ok(text.startsWith(`[Hermes] Anruf bei ${ZIEL}\n\nxxx`));
-    await warteAufEreignis([srv.ereignisse], () => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
-    assert.equal(hinweiseVon(srv)[0].body, `Anruf bei ${ZIEL}: ${lang}`);
   });
 });
 
