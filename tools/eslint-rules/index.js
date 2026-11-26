@@ -4,7 +4,7 @@ import { join, posix } from "node:path";
 import * as espree from "espree";
 
 import { pfadInDerWurzel } from "./bestand.js";
-import { knotenUnter, schluesselName, zugriffsName } from "./knoten.js";
+import { festerText, knotenUnter, schluesselName, zugriffsName } from "./knoten.js";
 import keinQuelltextAlsText from "./kein-quelltext-als-text.js";
 import keineKommentare from "./keine-kommentare.js";
 import namenOhneBegruendung from "./namen-ohne-begruendung.js";
@@ -665,7 +665,7 @@ function istDateUtcMitRechnung(knoten) {
   return monat.operator === "+" || monat.operator === "-";
 }
 
-const MONAT_SCHEMA = {
+const QUELLE_SCHEMA = {
   type: "object",
   properties: { quelle: { type: "string" } },
   required: ["quelle"],
@@ -675,7 +675,7 @@ const MONAT_SCHEMA = {
 const monatsrechnungAusMonth = {
   meta: {
     type: "problem",
-    schema: [MONAT_SCHEMA],
+    schema: [QUELLE_SCHEMA],
     messages: { monat: MONAT_MELDUNG },
   },
   create(context) {
@@ -787,6 +787,31 @@ const eingabeNurMitSchema = {
   },
 };
 
+const ERGEBNIS_MELDUNG =
+  "Kein Objektliteral mit ok: false. Ein innerer Fehlschlag entsteht nur mit fehler(grund) aus {{quelle}} und hat den Typ Ergebnis<T, F>; der Aufrufer verengt mit ergebnis.ok.";
+
+function istOkFalsch(eigenschaft) {
+  const name = eigenschaft.computed ? festerText(eigenschaft.key) : schluesselName(eigenschaft);
+  return name === "ok" && ohneTypHuelle(eigenschaft.value).value === false;
+}
+
+const ergebnisNurAusHelfer = {
+  meta: {
+    type: "problem",
+    schema: [QUELLE_SCHEMA],
+    messages: { frei: ERGEBNIS_MELDUNG },
+  },
+  create(context) {
+    const [{ quelle }] = context.options;
+    if (pfadInDerWurzel(context.cwd, context.filename) === quelle) return {};
+    return {
+      "ObjectExpression > Property": (node) => {
+        if (istOkFalsch(node)) context.report({ node, messageId: "frei", data: { quelle } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "hermes" },
   rules: {
@@ -803,5 +828,6 @@ export default {
     "zeiteinheiten-aus-timer": zeiteinheitenAusTimer,
     "monatsrechnung-aus-month": monatsrechnungAusMonth,
     "eingabe-nur-mit-schema": eingabeNurMitSchema,
+    "ergebnis-nur-aus-helfer": ergebnisNurAusHelfer,
   },
 };

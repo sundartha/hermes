@@ -65,8 +65,7 @@ test("Ergebnisregel: ein Objektmuster mit Vorgabe ok false bleibt frei", () =>
 test("Ergebnisregel: ein Spread im Objektliteral bleibt frei", () =>
   erwarteKeinen(PRODUKT_TS, "export const a = (rest: object): object => ({ ...rest });\n"));
 
-test("Ergebnisregel: der Helfer src/utils/ergebnis.ts ist frei", () =>
-  erwarteKeinen(HELFER, readFileSync(resolve(WURZEL, HELFER), "utf8")));
+test("Ergebnisregel: der Helfer src/utils/ergebnis.ts ist frei", () => erwarteKeinen(HELFER, LITERAL));
 test("Ergebnisregel: eine .js-Datei unter src ist frei", () => erwarteKeinen("src/probe-ergebnis.js", LITERAL_JS));
 test("Ergebnisregel: eine .ts-Datei unter test ist frei", () =>
   erwarteKeinen("test/anrufe/6183-anrufstart.test.ts", LITERAL));

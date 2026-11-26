@@ -264,6 +264,7 @@ const KONFIG_TABELLE = { datei: "src/config.ts", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.ts";
 const ZEIT_MODUL = "src/utils/timer.ts";
 const MONAT_MODUL = "src/utils/month.js";
+const ERGEBNIS_MODUL = "src/utils/ergebnis.ts";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
@@ -350,6 +351,11 @@ const hermesBloecke = [
     name: "hermes-monatsrechnung-aus-month",
     files: [QUELL_DATEIEN],
     rules: { "hermes/monatsrechnung-aus-month": ["error", { quelle: MONAT_MODUL }] },
+  },
+  {
+    name: "hermes-ergebnis-nur-aus-helfer",
+    files: [`src/**/*.${TS_ENDUNGEN}`],
+    rules: { "hermes/ergebnis-nur-aus-helfer": ["error", { quelle: ERGEBNIS_MODUL }] },
   },
   {
     name: "hermes-eingabe-nur-mit-schema",
