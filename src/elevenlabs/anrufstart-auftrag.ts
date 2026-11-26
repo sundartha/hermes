@@ -15,7 +15,7 @@ export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gese
 
 export const ANRUFSTART_GRUND_NICHT_LESBAR = "anruf-nicht-lesbar";
 
-const LESE_VERSUCHE = 5;
+const LESE_VERSUCHE = 9;
 
 export const ANRUFSTART_GRUND_ABSCHALTEN = "abschalten";
 
@@ -121,7 +121,10 @@ async function leseOderBeende<A extends Anruf>(
   callId: string,
 ): Promise<A | null> {
   const call = await leseMitWiederholung(abhaengig, callId);
-  if (!call) await abhaengig.beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch(() => undefined);
+  if (!call)
+    await abhaengig.beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch((fehler: unknown) => {
+      console.error(`[anrufstart] Beenden des unlesbaren Anrufs gescheitert call=${callId}:`, fehler instanceof Error ? fehler.message : String(fehler));
+    });
   return call;
 }
 
