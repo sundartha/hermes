@@ -59,7 +59,7 @@ test("number.providerAgentPhoneNumberId ueberlebt einen echten Reopen", async ()
     tenantId: "t_pg_test1",
     maxNumbers: 10,
     maxNumbersPerTenant: 5,
-  });
+  }).wert;
   beginProvisioning(state, number.id);
   activateNumber(state, number.id, { e164: "+18643028341", providerNumberId: "ext_1" });
   attachNumberRegistration(state, number.id, "phnum_pg_test1");
@@ -84,7 +84,7 @@ test("Bestandszeile ohne gesetzte Werte hydriert als null (kein Backfill, kein u
     tenantId: "t_pg_test2",
     maxNumbers: 10,
     maxNumbersPerTenant: 5,
-  });
+  }).wert;
   beginProvisioning(state, number.id);
   activateNumber(state, number.id, { e164: "+15005559999", providerNumberId: "ext_2" });
   await store.save();

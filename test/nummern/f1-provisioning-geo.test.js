@@ -25,7 +25,7 @@ const ACTIVE_PURCHASE_COUNTRIES = Object.freeze(["DE", "FR", "GB", "US"]);
 
 function requestFor(s, tenantId, country) {
   registerTenant(s, tenantId);
-  return requestNumber(s, { tenantId, country, ...CAPS }).number.id;
+  return requestNumber(s, { tenantId, country, ...CAPS }).wert.number.id;
 }
 
 function seedRequested(country = "DE") {

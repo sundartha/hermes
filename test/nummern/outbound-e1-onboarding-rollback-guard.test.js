@@ -25,7 +25,7 @@ function seedRequested() {
     paymentMethodId: "pm_1",
     paymentMethodType: "card",
   });
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS }).wert;
   return { state, numberId: number.id };
 }
 
@@ -82,7 +82,7 @@ test("Capture wirft + Bindung gehoert dem eigenen Tenant -> Nummer wird beim Anb
   const state = makeDefaultState();
   registerTenant(state, "t_user1");
   setTenantStripe(state, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1", paymentMethodType: "card" });
-  const { number } = requestNumber(state, { tenantId: "t_user1", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number } = requestNumber(state, { tenantId: "t_user1", maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   bindPlatformNumber(state, { e164: OWN_E164, purpose: "outbound_ani", provider: "telnyx", tenantId: "t_user1" });
   const prov = fakeProvisioner({
     async orderNumber() {
