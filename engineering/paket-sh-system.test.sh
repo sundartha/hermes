@@ -209,4 +209,14 @@ pruefe "Fehlertext nennt die fehlende workflow-Berechtigung: Halt nennt Grund un
 pruefe "anderer gh-Fehler (keine workflow-Berechtigung betroffen): bisheriges Verhalten bleibt (Halt 'Freigabe nicht ausgeführt')" \
   "$(freigeben_lauf 6293 'HTTP 502: Bad Gateway')" \
   "Freigabe nicht ausgeführt (PR 6293)"
+
+# Kette #6183/PR 6402, 26.11.: WARTET=<PR> auf einem offenen eigenen Zweig (paket/<ISSUE>-*) lief nie an, weil kein Prüfer draufwartete. Ist WA selbst ein solcher PR, läuft die Kette wie bei einem gemeldeten PR=<WA> weiter statt zu halten.
+STELLE_WARTET=$(grep -oE 'WA=\$\(grep -oE .WARTET=\[0-9\]\+. \$LOG/bau-\$N\.log \| tail -1 \| cut -d= -f2\); if .*fi; fi' $S | head -1)
+[ -n "$STELLE_WARTET" ] || { echo "ROT  WARTET-Stelle nicht in paket.sh gefunden"; exit 1; }
+wa() { local D=$(mktemp -d); LOG=$D; N=1; ISSUE=6183; echo "$2" > $LOG/bau-1.log; ERGEBNIS=$1; local MOCK=$3; gh() { echo "$MOCK"; }
+  ( eval "$STELLE_WARTET" 2>/dev/null; echo "ERGEBNIS=$ERGEBNIS" > $LOG/erg.txt ) 2>/dev/null
+  echo "$(cat $LOG/erg.txt 2>/dev/null)|WA_FILE=$(cat $LOG/wartet-auf.txt 2>/dev/null)|HALT=$(cat $LOG/halt.txt 2>/dev/null)"; }
+pruefe "WA ist offener PR auf eigenem Zweig: laeuft als PR weiter statt zu halten" "$(wa keiner "WARTET=6402" "paket/6183-foo")" "ERGEBNIS=6402|WA_FILE=|HALT="
+pruefe "WA ist kein offener eigener Zweig (Issue, Vorgaenger, fremder PR): haelt wie bisher" "$(wa keiner "WARTET=6402" "")" "|WA_FILE=6402|HALT=wartet auf PR 6402 (Neustart danach von selbst, sobald #6402 geschlossen ist)"
+pruefe "ist der Bau schon mit PR=<nummer> fertig, greift die WARTET-Pruefung gar nicht" "$(wa 5555 "PR=5555" "paket/6183-foo")" "ERGEBNIS=5555|WA_FILE=|HALT="
 exit $fehler
