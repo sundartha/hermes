@@ -79,9 +79,9 @@ test("Reserve von Anruf A bleibt, bis seine Kosten in usage stehen; Anruf B uebe
     await zeilenBis(async () => (await sql(SCHREIBER_WARTET_SQL)).rows, (z) => z.length > 0);
     await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 0, NEGATIV_WARTEN_MS).catch(() => null);
     const zweite = rufeAn(b);
-    await zeilenBis(async () => (await sql(RESERVEN_SQL)).rows, (z) => z.length === 2, NEGATIV_WARTEN_MS);
-    await sperre.query("COMMIT");
     const antwortB = await zweite;
+    assert.equal((await sql(RESERVEN_SQL)).rows.length, 1, "nur die Reserve von A darf stehen");
+    await sperre.query("COMMIT");
 
     await zeilenBis(
       async () => (await sql(VERBRAUCH_SQL, [MANDANT.id])).rows,
