@@ -26,6 +26,12 @@ let ereignisZaehler = 0;
 const meldeFehler = (fehler) => console.error("[attrappe] ereignis:", fehler.message);
 const AUFLEGEN_SCHRITT = "Auflegen";
 
+function festhalten(eigeneFehler, fehler) {
+  eigeneFehler.push(fehler.message);
+  attrappenFehler.add(fehler.message);
+  meldeFehler(fehler);
+}
+
 async function mitSchritt(callId, schritt, lauf) {
   try {
     return await lauf();
@@ -50,6 +56,11 @@ async function sendeEreignis({ url, signer }, callId, { typ, bein, status }) {
     body: roh,
   });
   assert.equal(antwort.status, HTTP_OK, await antwort.text());
+}
+
+async function sendeNachBindung(sende, url, callId) {
+  await sende(url, callId, { typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
+  await sende(url, callId, { typ: "call.answered", bein: elVon(callId) });
 }
 
 async function bindeGespraech({ url, agentId }, callId, { streamToken, from }) {
@@ -86,11 +97,7 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
   function imHintergrund(lauf) {
     const festgehalten = new Promise((fertig) => setImmediate(fertig))
       .then(lauf)
-      .catch((fehler) => {
-        eigeneFehler.push(fehler.message);
-        attrappenFehler.add(fehler.message);
-        meldeFehler(fehler);
-      })
+      .catch((fehler) => festhalten(eigeneFehler, fehler))
       .finally(() => laeufe.delete(festgehalten));
     laeufe.add(festgehalten);
   }
@@ -100,10 +107,7 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
     await schritt("Annahme", () => sende(hermes.url, callId, { typ: "call.answered", bein: calleeVon(callId) }));
     await schritt("EL-Wahl", () => waitUntil(() => elGewaehlt(callId), { timeoutMs: WARTE_FRIST_MS }));
     await schritt("Bindung", async () => bindeGespraech(hermes, callId, await hermes.leseAnruf(callId)));
-    await schritt("Ereignis", async () => {
-      await sende(hermes.url, callId, { typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
-      await sende(hermes.url, callId, { typ: "call.answered", bein: elVon(callId) });
-    });
+    await schritt("Ereignis", () => sendeNachBindung(sende, hermes.url, callId));
   }
 
   function beantworteWahl(anfrage, res) {
