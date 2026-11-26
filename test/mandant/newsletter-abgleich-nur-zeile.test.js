@@ -1,8 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { speicherBereiche } from "../../src/store/bereiche.js";
+import { BASE_ENV, tempDataDir } from "../helpers.js";
 import { makePgStoreMitSperre, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
+
+Object.assign(process.env, BASE_ENV, { DATA_DIR: tempDataDir(), STORE_BACKEND: "json" });
+
+const { speicherBereiche } = await import("../../src/store.js");
 
 const JETZT = "2026-11-19T10:00:00.000Z";
 const ABLAUF = "2026-11-20T10:00:00.000Z";
