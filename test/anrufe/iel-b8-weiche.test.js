@@ -164,7 +164,7 @@ test("IEX-A3-10: first_message hat genau einen Schreiber je Richtung - Inbound-B
   const schreiber = quelltexteUnter("src")
     .map(([datei, inhalt]) => [datei, inhalt.split("first_message:").length - EINMAL])
     .filter(([, anzahl]) => anzahl > 0);
-  assert.deepEqual(Object.fromEntries(schreiber), { "src/elevenlabs/inbound-initiation.js": EINMAL, "src/elevenlabs/outbound.js": EINMAL });
+  assert.deepEqual(Object.fromEntries(schreiber), { "src/anrufe/start/anrufstart.ts": EINMAL, "src/elevenlabs/inbound-initiation.js": EINMAL });
 });
 
 test("IEL-B8-10: Idempotenz-Anker der zwei Routen - callId plus Unterscheider, sonst nichts", () => {
