@@ -32,8 +32,12 @@ function nichtErledigt(grund: string): ErgebnisZustand {
   return { result_state: RESULT_STATE.NOT_DONE, result_reason: grund };
 }
 
-function gegenseitenZeilen(call: AnrufSicht): number {
-  return call.transcript.filter((zeile) => zeile.role !== AGENT_ROLE && (zeile.text ?? "").trim() !== "").length;
+function gegenseitenTexte(transcript: AnrufSicht["transcript"]): string[] {
+  const texte: string[] = [];
+  for (const zeile of transcript) {
+    if (zeile.role !== AGENT_ROLE && typeof zeile.text === "string" && zeile.text.trim() !== "") texte.push(zeile.text);
+  }
+  return texte;
 }
 
 function urteilZustand(call: AnrufSicht): ErgebnisZustand {
@@ -49,7 +53,7 @@ export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
   if (failureReasonBase(call.failureReason) === RESULT_REASON.NO_ANSWER || call.answeredAt == null) {
     return nichtErledigt(RESULT_REASON.NO_ANSWER);
   }
-  if (call.transcript.length > 0 && gegenseitenZeilen(call) === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
+  if (call.transcript.length > 0 && gegenseitenTexte(call.transcript).length === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
   return urteilZustand(call);
 }
 
@@ -70,9 +74,7 @@ function zitatBelegt(zitat: unknown, transcript: AnrufSicht["transcript"]): bool
   if (typeof zitat !== "string") return false;
   const gesucht = normalisiert(zitat);
   if (gesucht === "") return false;
-  return transcript.some(
-    (zeile) => zeile.role !== AGENT_ROLE && normalisiert(zeile.text ?? "").includes(gesucht),
-  );
+  return gegenseitenTexte(transcript).some((text) => normalisiert(text).includes(gesucht));
 }
 
 export function gegenseitenUrteil(antwort: ModellAntwort, transcript: AnrufSicht["transcript"]): GegenseitenUrteil {
