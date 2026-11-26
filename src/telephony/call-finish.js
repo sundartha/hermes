@@ -1,7 +1,7 @@
 import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
 import { ergebnisGrundSatz } from "../i18n/ergebnis-zustand-texte.ts";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { ergebnisZustand } from "./ergebnis-zustand.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
@@ -118,7 +118,7 @@ async function summaryOf({ store, config, summarizeCall, call }) {
 
 function grundSatzZu(call) {
   if (call.direction !== "outbound") return null;
-  return ergebnisGrundSatz(localeFor(call.language).language, ergebnisZustand(call).result_reason);
+  return ergebnisGrundSatz(textePaketFuer(call).language, ergebnisZustand(call).result_reason);
 }
 
 const mitGrundSatz = (text, grundSatz) => [text, grundSatz].filter(Boolean).join(" ");
@@ -209,7 +209,7 @@ export function makeCallFinish({
     if (lehneUnbekanntenZustandAb(call)) return;
     messeEnde(call);
     if (endeSteht(call)) leitungsplaetze?.freigeben(call.id);
-    const texts = localeFor(call.language).postCall;
+    const texts = textePaketFuer(call).postCall;
     await settleBilling(call).catch((err) => console.error("[billing] settle:", err.message));
     await store.save();
     await releaseReserve(call);
