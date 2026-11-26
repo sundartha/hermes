@@ -3,7 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { config } from "./config.ts";
 import { audit, safeEqual } from "./util.ts";
 import { pruefeAblehnungsDrossel, sende429WennGesperrt } from "./middleware.ts";
-import { anfrage } from "./utils/anfrage.js";
+import { anfrage } from "./utils/anfrage.ts";
 
 const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);

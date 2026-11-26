@@ -21,7 +21,7 @@ const GRUPPE = /\(([^)|]+)(?:\|[^)]*)?\)/g;
 
 const ROUTE = `import { Router, type RequestHandler } from "express";
 import { z } from "zod";
-import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import { HTTP_NOT_FOUND, antworteFehler } from "../utils/http.ts";
 
 export const %KONSTANTE%_PATH = "/api/%NAME%";
@@ -127,7 +127,7 @@ function planeFachdatei(wurzel, baustein, name) {
     KONSTANTE: name.toUpperCase().replaceAll("-", "_"),
     BEGRIFF: begriff[1],
     ZU_BEGRIFFEN: relativ(datei, quelle),
-    ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.js"),
+    ZU_ANFRAGE: relativ(datei, "src/utils/anfrage.ts"),
     ZU_TIMER: relativ(datei, "src/utils/timer.ts"),
     ZU_ERGEBNIS: relativ(datei, "src/utils/ergebnis.ts"),
   };

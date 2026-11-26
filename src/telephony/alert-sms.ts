@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { findActiveNumber } from "../store/views.ts";
 import type { Zustand } from "../store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.ts";

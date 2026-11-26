@@ -2,7 +2,7 @@ import { Router } from "express";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { normNum } from "../begriffe/rufnummern.ts";
 import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.ts";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { callLocaleOf, inboundElLocaleOf, type LocaleSpeicher } from "./call-locale.ts";
 import { fetchAgent, type ConvaiKonto } from "./convai.ts";

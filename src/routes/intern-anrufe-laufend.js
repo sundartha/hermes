@@ -3,7 +3,7 @@ import { AUTH_FAILED_GRUND } from "../util.ts";
 import { bearerAbgewiesen } from "./bearer-schluessel.js";
 import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { antworteFehler, HTTP_SERVER_ERROR } from "../utils/http.ts";
-import { abgewieseneWebhooks } from "../utils/webhook-abweisungen.js";
+import { abgewieseneWebhooks } from "../utils/webhook-abweisungen.ts";
 
 export const ANRUFE_LAUFEND_PATH = "/intern/anrufe-laufend";
 export const DEPLOY_TOKEN_MIN_LENGTH = 32;

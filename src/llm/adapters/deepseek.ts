@@ -1,7 +1,7 @@
 import { TOOL_RESULTS_ROLE } from "../messages.ts";
 import { LLM_TOOL_CHOICE } from "../tool-choice.ts";
 import { makeTransientClassifier } from "../transient-errors.ts";
-import { anfrage } from "../../utils/anfrage.js";
+import { anfrage } from "../../utils/anfrage.ts";
 
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";
 const CHAT_COMPLETIONS_PATH = "/chat/completions";

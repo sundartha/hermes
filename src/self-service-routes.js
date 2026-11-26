@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { pruefeAbfrage, pruefeKoerper } from "./utils/eingabe-pruefen.js";
+import { pruefeAbfrage, pruefeKoerper } from "./utils/eingabe-pruefen.ts";
 import { createRateLimiter, createSameOriginGuard } from "./middleware.ts";
 import { config } from "./config.ts";
 import { anteiligesLimit } from "./utils/rate-limit-anteil.ts";
