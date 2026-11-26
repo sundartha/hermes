@@ -188,12 +188,11 @@ export const KOSTENARTEN = Object.freeze({
       "EL-Gespraechs).",
   },
   [KOSTENART.SMS]: {
-    quelle: "eigen, config.billing.smsCostCents (Default 0), Versand vor Buchung (call-finish.js)",
+    quelle: "eigen, nur bestehende Ereignisse (kein Versandpfad mehr)",
     waehrung: "Bucket (EUR-Cent)",
     pflicht: false,
     preisquelle:
-      "Konfigurationswert ohne Anbieterbeleg, Default 0 - kein Fail-closed, ein " +
-      "fehlender Preis ist hier lautlos 0.",
+      "Kein Preis mehr; Ereignisse dieser Art entstehen nicht neu.",
   },
   [KOSTENART.EIGEN_TTS_ZEICHEN]: {
     quelle: "eigen, recordTtsCharacters (state-ops.js), zaehlt Zeichen je Tenant",

@@ -197,12 +197,6 @@ export const LOCALES = Object.freeze({
       summaryTitle: "Neue Call Summary",
       subjectOutbound: (to: string) => `Anruf bei ${to}`,
       subjectInbound: (from: string) => `Anruf von ${from}`,
-      actionItemsHeading: "Action Items:",
-      mailTimeLabel: "Zeitpunkt:",
-      mailDurationLabel: "Dauer:",
-      notPlacedMailHint:
-        "Der Fehler lag auf unserer Seite, nicht bei dir. Wir kuemmern uns darum; du kannst es spaeter erneut versuchen.",
-      unsubscribeLinkLabel: "Abmelden:",
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Bestätigung: Anruf-Zusammenfassungen erhalten",
@@ -284,12 +278,6 @@ export const LOCALES = Object.freeze({
       summaryTitle: "Nouveau résumé d'appel",
       subjectOutbound: (to: string) => `Appel vers ${to}`,
       subjectInbound: (from: string) => `Appel de ${from}`,
-      actionItemsHeading: "Actions à mener :",
-      mailTimeLabel: "Heure :",
-      mailDurationLabel: "Durée :",
-      notPlacedMailHint:
-        "L'erreur vient de chez nous, pas de vous. Nous nous en occupons ; vous pouvez réessayer plus tard.",
-      unsubscribeLinkLabel: "Se désabonner :",
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Confirmation : recevoir les résumés d'appel",
@@ -369,12 +357,6 @@ export const LOCALES = Object.freeze({
       summaryTitle: "New call summary",
       subjectOutbound: (to: string) => `Call to ${to}`,
       subjectInbound: (from: string) => `Call from ${from}`,
-      actionItemsHeading: "Action items:",
-      mailTimeLabel: "Time:",
-      mailDurationLabel: "Duration:",
-      notPlacedMailHint:
-        "The problem was on our side, not yours. We are looking into it; you can try again later.",
-      unsubscribeLinkLabel: "Unsubscribe:",
     }),
     newsletter: Object.freeze({
       confirmMailSubject: "Confirm: receive call summaries",

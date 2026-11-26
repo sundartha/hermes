@@ -344,8 +344,6 @@ services:
         value: "false"
       - key: WEB_DIST_DIR
         value: "apps/web/dist"
-      - key: SEND_SMS_SUMMARY
-        value: "true"
       - key: PUBLIC_URL
         value: https://app.sundartha.com
 

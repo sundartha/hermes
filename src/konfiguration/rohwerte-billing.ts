@@ -52,7 +52,6 @@ interface BillingEnv {
   PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER?: string | undefined;
   PROVIDER_CURRENCY?: string | undefined;
   PROVIDER_TO_BUCKET_RATE_MICRO?: string | undefined;
-  SMS_COST_CENTS?: string | undefined;
   STRIPE_API_BASE?: string | undefined;
   STRIPE_BUSINESS_PRICE_ID?: string | undefined;
   STRIPE_CUSTOMER_RETRY_DELAY_MS?: string | undefined;
@@ -153,7 +152,6 @@ function tarifRohwerte(
       fallback: 1500,
       min: 0,
     }),
-    smsCostCents: numEnv("SMS_COST_CENTS", env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
     platformSpendWarnPercent: numEnv(
       "PLATFORM_SPEND_WARN_PERCENT",
       env.PLATFORM_SPEND_WARN_PERCENT,
