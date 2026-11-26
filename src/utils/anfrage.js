@@ -1,6 +1,7 @@
-export function anfrage(url, { fristMs, signal, ...optionen } = {}) {
+export function anfrage(url, optionen) {
+  const { fristMs, signal, ...uebrige } = optionen;
   return fetch(url, {
-    ...optionen,
+    ...uebrige,
     signal: AbortSignal.any([AbortSignal.timeout(fristMs), ...(signal ? [signal] : [])]),
   });
 }

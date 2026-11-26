@@ -5,7 +5,7 @@ const MONTH_KEY_DIGITS = 2;
 
 export function yearMonthKey(at) {
   const month = String(at.getUTCMonth() + ONE_MONTH).padStart(MONTH_KEY_DIGITS, "0");
-  return `${at.getUTCFullYear()}-${month}`;
+  return `${String(at.getUTCFullYear())}-${month}`;
 }
 
 export function monthStart(at) {

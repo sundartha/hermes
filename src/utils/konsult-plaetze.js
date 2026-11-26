@@ -12,15 +12,16 @@ export function makeKonsultPlaetze({ jetztMs = Date.now } = {}) {
     return [...plaetze.values()];
   };
 
-  async function belegen({ callId, tenantId, jeAnruf, jeMandant, haltefristMs }) {
-    if (!konsultPlatzFrei(aktuelle(), { callId, tenantId, jeAnruf, jeMandant })) return null;
+  function belegen({ callId, tenantId, jeAnruf, jeMandant, haltefristMs }) {
+    if (!konsultPlatzFrei(aktuelle(), { callId, tenantId, jeAnruf, jeMandant })) return Promise.resolve(null);
     zaehler += 1;
     plaetze.set(zaehler, { callId, tenantId, ablaufMs: jetztMs() + haltefristMs });
-    return zaehler;
+    return Promise.resolve(zaehler);
   }
 
-  async function freigeben(platzId) {
+  function freigeben(platzId) {
     plaetze.delete(platzId);
+    return Promise.resolve();
   }
 
   const offenJeAnruf = (callId) => aktuelle().filter((platz) => platz.callId === callId).length;
