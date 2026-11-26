@@ -23,6 +23,8 @@ function awaitEventView({ callId, event, finished, texts }) {
     ...outcome,
     result_summary: done?.result_summary ?? null,
     objective_achieved: done?.objective_achieved ?? null,
+    result_state: done?.result_state ?? null,
+    result_reason: done?.result_reason ?? null,
     ...maskedResultCard(result),
     next_steps: maskedNextSteps(result),
   };

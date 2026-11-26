@@ -51,6 +51,8 @@ export const AWAIT_EVENT_OUTPUT = {
   failure_reason: z.string().nullable(),
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
+  result_state: z.string().nullable(),
+  result_reason: z.string().nullable(),
   ...RESULT_CARD_OUTPUT,
   next_steps: z.array(NEXT_STEP_OUTPUT),
 };
