@@ -14,7 +14,7 @@ import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
-import { callLocaleOf as callLocaleAusSprachwahl, providerVoicemailMessage } from "./call-locale.ts";
+import { callLocaleOf, providerVoicemailMessage } from "./call-locale.ts";
 import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation, listConversations } from "./convai.ts";
 import { makeAnrufstartAuftrag } from "./anrufstart-auftrag.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
@@ -340,10 +340,6 @@ export function dynamicVariables({
     inbound_situation: "",
     tenant_token: tenantToken,
   };
-}
-
-export function callLocaleOf(eingabe) {
-  return callLocaleAusSprachwahl(eingabe);
 }
 
 function recordAbsenderMessung(store, callId, conversation) {

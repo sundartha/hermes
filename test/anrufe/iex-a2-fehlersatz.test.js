@@ -5,7 +5,7 @@ import express from "express";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../../src/elevenlabs/inbound-bridge-state.ts";
 import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "../../src/elevenlabs/inbound-bridges.ts";
-import { inboundElLocaleOf } from "../../src/elevenlabs/inbound-initiation.js";
+import { inboundElLocaleOf } from "../../src/elevenlabs/call-locale.ts";
 import {
   EL_MIN_CONVERSATION_MS,
   RUECKFALL_ENTSCHEIDUNG,
