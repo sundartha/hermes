@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { callLocaleFor } from "../../src/elevenlabs/call-locale.ts";
 import { assertEroeffnungGeprueft } from "../../src/elevenlabs/convai.ts";
-import { LOCALES, disclosurePrefixFor } from "../../src/i18n/locales.ts";
+import { disclosurePrefixFor } from "../../src/i18n/locales.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -80,14 +80,8 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
       const eroeffnung = inhalt.dynamic_variables.eroeffnung_gesagt;
       assert.match(inhalt.conversation_config_override.agent.first_message, /\. (Bitte sprechen Sie|Please go ahead|Je vous écoute)\.$/);
       assert.equal(typeof eroeffnung, "string");
-      assert.ok(
-        eroeffnung.startsWith(disclosurePrefixFor("de")),
-        `eroeffnung_gesagt beginnt nicht mit dem deutschen Pflichtsatz: ${JSON.stringify(eroeffnung)}`,
-      );
-      assert.ok(
-        !eroeffnung.includes("mandaté par") && !eroeffnung.includes("résumée"),
-        "die Eroeffnung darf kein franzoesisches Offenlegungs-Fragment tragen",
-      );
+      assert.match(eroeffnung, /assistant IA/, `eroeffnung_gesagt nennt die KI nicht auf franzoesisch: ${JSON.stringify(eroeffnung)}`);
+      assert.ok(!eroeffnung.includes("KI-Assistent"), "die Eroeffnung darf kein deutsches Offenlegungs-Fragment tragen");
     });
   });
 
@@ -158,8 +152,8 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
       },
     );
     assert.equal(ergebnis.language, "fr");
-    assert.equal(ergebnis.disclosureLanguage, "de");
-    assert.ok(ergebnis.firstMessage.startsWith(LOCALES.de.disclosure(OWNER_NAME)));
+    assert.equal(ergebnis.disclosureLanguage, "fr");
+    assert.equal(ergebnis.firstMessage, "{{eroeffnung}}");
     assert.equal(ergebnis.voiceId, "cqPdIo76zSHFDcSZpFov");
   });
 
@@ -188,7 +182,7 @@ describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein",
     assert.notEqual(fall1.language, fall2.language);
     assert.equal(fall2.language, fall3.language, "Voraussetzung: fall2/fall3 unterscheiden sich nur in disclosureLanguage");
     assert.notEqual(fall2.disclosureLanguage, fall3.disclosureLanguage);
-    assert.notEqual(fall1.disclosureLanguage, fall1.language, "fall1 ist der Abweichungsfall selbst");
+    assert.equal(fall1.disclosureLanguage, fall1.language, "fall1: eine Sprache je Anruf");
   });
 });
 
