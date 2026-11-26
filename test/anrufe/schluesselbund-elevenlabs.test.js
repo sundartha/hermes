@@ -1,37 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "node:test";
 
-import {
-  liesAusSchluesselbund,
-  SCHLUESSELBUND_HINWEIS,
-  schluesselbundEinsetzen,
-} from "../../scripts/lib/schluesselbund-env.mjs";
+import { elevenLabsSchluessel, SCHLUESSELBUND_HINWEIS } from "../../scripts/lib/schluesselbund.mjs";
 import { SCHLUESSELBUND_ELEVENLABS_SCHLUESSEL as WERT } from "../gemeinsam/erfundene-geheimnisse.js";
 
 const VARIABLE = "ELEVENLABS_API_KEY";
 const HINWEIS = 'security add-generic-password -s elevenlabs -a "$USER" -w';
-
-function stubVerzeichnis(skript) {
-  const ordner = mkdtempSync(join(tmpdir(), "security-stub-"));
-  const datei = join(ordner, "security");
-  writeFileSync(datei, `#!/bin/sh\n${skript}\n`);
-  chmodSync(datei, 0o755);
-  return ordner;
-}
-
-function mitPfad(pfad, aktion) {
-  const alt = process.env.PATH;
-  process.env.PATH = pfad;
-  try {
-    return aktion();
-  } finally {
-    process.env.PATH = alt;
-  }
-}
 
 function skriptLauf(skript, env) {
   return spawnSync(process.execPath, [skript, "--pruefen"], {
@@ -40,57 +15,63 @@ function skriptLauf(skript, env) {
   });
 }
 
-test("Treffer unter darwin: der Wert ohne Zeilenumbruch landet in der Variable", () => {
-  const stub = stubVerzeichnis(`[ "$1 $2 $3 $4" = "find-generic-password -s elevenlabs -w" ] || exit 9\necho ${WERT}`);
-  const env = {};
-  mitPfad(stub, () => schluesselbundEinsetzen({ env, plattform: "darwin" }));
-  assert.equal(env[VARIABLE], WERT);
+function zaehler(antwort) {
+  const aufrufe = [];
+  const ausfuehren = (befehl, args) => {
+    aufrufe.push([befehl, ...args]);
+    if (antwort instanceof Error) throw antwort;
+    return antwort;
+  };
+  return { aufrufe, ausfuehren };
+}
+
+test("Treffer unter darwin: der Wert ohne Zeilenumbruch ist der Schluessel", () => {
+  const { aufrufe, ausfuehren } = zaehler(`${WERT}\n`);
+  assert.equal(elevenLabsSchluessel("", { plattform: "darwin", ausfuehren }), WERT);
+  assert.deepEqual(aufrufe, [["security", "find-generic-password", "-s", "elevenlabs", "-w"]]);
 });
 
 test("gesetzte Variable hat Vorrang und security wird nicht aufgerufen", () => {
-  const env = { [VARIABLE]: "aus-der-umgebung" };
-  let aufrufe = 0;
-  schluesselbundEinsetzen({ env, plattform: "darwin", lesen: () => (aufrufe++, WERT) });
-  assert.equal(env[VARIABLE], "aus-der-umgebung");
-  assert.equal(aufrufe, 0);
+  const { aufrufe, ausfuehren } = zaehler(WERT);
+  assert.equal(elevenLabsSchluessel("aus-der-umgebung", { plattform: "darwin", ausfuehren }), "aus-der-umgebung");
+  assert.equal(aufrufe.length, 0);
 });
 
-test("leere Variable aus Leerzeichen zaehlt als leer", () => {
-  const env = { [VARIABLE]: "   " };
-  schluesselbundEinsetzen({ env, plattform: "darwin", lesen: () => WERT });
-  assert.equal(env[VARIABLE], WERT);
+test("Wert aus Leerzeichen zaehlt als leer", () => {
+  const { ausfuehren } = zaehler(WERT);
+  assert.equal(elevenLabsSchluessel("   ", { plattform: "darwin", ausfuehren }), WERT);
 });
 
 test("Nicht-darwin: security wird nicht aufgerufen", () => {
-  const env = {};
-  let aufrufe = 0;
-  schluesselbundEinsetzen({ env, plattform: "linux", lesen: () => (aufrufe++, WERT) });
-  assert.equal(aufrufe, 0);
-  assert.equal(env[VARIABLE], undefined);
+  const { aufrufe, ausfuehren } = zaehler(WERT);
+  assert.equal(elevenLabsSchluessel("", { plattform: "linux", ausfuehren }), "");
+  assert.equal(aufrufe.length, 0);
 });
 
-test("kein Eintrag (Exit ungleich 0): leer, kein Wurf, nichts auf stdout oder stderr", () => {
-  const stub = stubVerzeichnis(`echo ${WERT}\nexit 44`);
-  const geschrieben = [];
-  const alt = [process.stdout.write, process.stderr.write];
-  process.stdout.write = (text) => (geschrieben.push(String(text)), true);
-  process.stderr.write = (text) => (geschrieben.push(String(text)), true);
-  let wert;
-  try {
-    wert = mitPfad(stub, () => liesAusSchluesselbund());
-  } finally {
-    [process.stdout.write, process.stderr.write] = alt;
+test("kein Eintrag oder security fehlt: leer, kein Wurf, der Fehlertext traegt den Wert nicht", () => {
+  for (const fehler of [Object.assign(new Error(`Exit 44 ${WERT}`), { status: 44 }), Object.assign(new Error("ENOENT"), { code: "ENOENT" })]) {
+    const { ausfuehren } = zaehler(fehler);
+    const geschrieben = [];
+    const alt = [process.stdout.write, process.stderr.write];
+    process.stdout.write = (text) => (geschrieben.push(String(text)), true);
+    process.stderr.write = (text) => (geschrieben.push(String(text)), true);
+    let wert;
+    try {
+      wert = elevenLabsSchluessel("", { plattform: "darwin", ausfuehren });
+    } finally {
+      [process.stdout.write, process.stderr.write] = alt;
+    }
+    assert.equal(wert, "");
+    assert.equal(geschrieben.join(""), "");
   }
-  assert.equal(wert, "");
-  assert.equal(geschrieben.join("").includes(WERT), false);
 });
 
-test("security fehlt: leer, kein Wurf", () => {
-  const leer = mkdtempSync(join(tmpdir(), "ohne-security-"));
-  assert.equal(mitPfad(leer, () => liesAusSchluesselbund()), "");
-  const env = {};
-  mitPfad(leer, () => schluesselbundEinsetzen({ env, plattform: "darwin" }));
-  assert.equal(env[VARIABLE], undefined);
+test("security wird mit Frist und ohne geerbten stderr aufgerufen", () => {
+  let optionen;
+  elevenLabsSchluessel("", { plattform: "darwin", ausfuehren: (_b, _a, o) => ((optionen = o), WERT) });
+  assert.equal(optionen.encoding, "utf8");
+  assert.equal(optionen.timeout, 5000);
+  assert.deepEqual(optionen.stdio, ["ignore", "pipe", "ignore"]);
 });
 
 test("Treffer: die Hinterlege-Anweisung nennt den Befehl und keinen Wert", () => {

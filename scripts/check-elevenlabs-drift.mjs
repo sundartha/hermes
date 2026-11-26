@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import "./lib/schluesselbund-env.mjs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

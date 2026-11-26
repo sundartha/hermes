@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import "./lib/schluesselbund-env.mjs";
 import { anfrage } from "../src/utils/anfrage.js";
 import { config } from "../src/config.ts";
 import { NUMBER_STATUS } from "../src/begriffe/nummern.js";
@@ -15,15 +14,19 @@ import {
 } from "../src/elevenlabs/nummern-registrierung.ts";
 import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
-import { SCHLUESSELBUND_HINWEIS } from "./lib/schluesselbund-env.mjs";
+import { elevenLabsSchluessel, SCHLUESSELBUND_HINWEIS } from "./lib/schluesselbund.mjs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LOG_PREFIX = "[elevenlabs-nummern]";
 const CLI_ARGS_OFFSET = 2;
 
+function elZugang() {
+  return { ...config.voice.elevenLabsOutbound, apiKey: elevenLabsSchluessel(config.voice.elevenLabsOutbound.apiKey) };
+}
+
 function schluesselFehlt() {
-  if (!config.voice.elevenLabsOutbound.apiKey) return `ELEVENLABS_API_KEY fehlt. ${SCHLUESSELBUND_HINWEIS}`;
+  if (!elZugang().apiKey) return `ELEVENLABS_API_KEY fehlt. ${SCHLUESSELBUND_HINWEIS}`;
   return null;
 }
 
@@ -229,7 +232,7 @@ function laufeLoeschModus(modus) {
   if (!modus.id || !REGISTRIERUNGS_ID_MUSTER.test(modus.id)) {
     return argumentFehler(`${SCHALTER.REGISTRIERUNG_LOESCHEN} verlangt ${SCHALTER.ID}<phnum_...>.`);
   }
-  return registrierungLoeschen({ el: config.voice.elevenLabsOutbound, id: modus.id, jaWirklich: modus.jaWirklich });
+  return registrierungLoeschen({ el: elZugang(), id: modus.id, jaWirklich: modus.jaWirklich });
 }
 
 async function runCli(argv) {
@@ -246,7 +249,7 @@ async function runCli(argv) {
       `${SCHALTER.ANLEGEN}, ${SCHALTER.TRUNK_INVENTAR} und ${SCHALTER.REGISTRIERUNG_LOESCHEN} schliessen sich aus.`,
     );
   }
-  if (modus.trunkInventar) return trunkInventar({ el: config.voice.elevenLabsOutbound });
+  if (modus.trunkInventar) return trunkInventar({ el: elZugang() });
   if (modus.registrierungLoeschen) return laufeLoeschModus(modus);
   return laufeStoreModus(modus);
 }
@@ -256,7 +259,7 @@ async function laufeStoreModus(modus) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): --anlegen verlangt zusaetzlich --ja-wirklich.`);
     return 1;
   }
-  const el = config.voice.elevenLabsOutbound;
+  const el = elZugang();
   const grundZugang = modus.anlegen ? fehlendeZugangsdaten({ el }) : null;
   if (grundZugang) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grundZugang}`);

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import "./lib/schluesselbund-env.mjs";
 import { anfrage } from "../src/utils/anfrage.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 import { config } from "../src/config.ts";
+import { elevenLabsSchluessel } from "./lib/schluesselbund.mjs";
 import { fetchConvaiSettings, patchConvaiSettings } from "../src/elevenlabs/convai.ts";
 import {
   HERMES_RENDER_SERVICE_ID,
@@ -57,7 +57,8 @@ const AGENT_PROMPT_FREIGABEN = "agent.prompt";
 export const INIT_WEBHOOK_SETTINGS_SCHLUESSEL = "conversation_initiation_client_data_webhook";
 const OHNE_WERT_MARKE = "-";
 
-const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
+const { apiBase } = config.voice.elevenLabsPlayTts;
+const apiKey = elevenLabsSchluessel(config.voice.elevenLabsPlayTts.apiKey);
 
 function zerlegeSchalter(token) {
   const stelle = token.indexOf(WERT_TRENNER);

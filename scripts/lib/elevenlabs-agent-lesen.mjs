@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { config } from "../../src/config.ts";
 
-import { SCHLUESSELBUND_HINWEIS } from "./schluesselbund-env.mjs";
+import { elevenLabsSchluessel, SCHLUESSELBUND_HINWEIS } from "./schluesselbund.mjs";
 import { VORLAGE_REL } from "./elevenlabs-besitz.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -17,7 +17,8 @@ const ABRUF_TIMEOUT_MS = 15000;
 export const FEHLER_VORSCHAU_ZEICHEN = 400;
 const SCHLUESSEL_MASKE = "<ELEVENLABS_API_KEY>";
 
-const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
+const { apiBase } = config.voice.elevenLabsPlayTts;
+const apiKey = elevenLabsSchluessel(config.voice.elevenLabsPlayTts.apiKey);
 
 export function zielAgentId(argument) {
   return argument || config.voice.elevenLabsOutbound.agentId || null;
