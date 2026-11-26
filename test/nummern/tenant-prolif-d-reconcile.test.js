@@ -194,7 +194,7 @@ test("DID-17 (Mechanismus, gruen) - Observe-Only-Grace haelt die DID belegt und 
   const blockiert = requestNumber(s, { tenantId: NEUER_TENANT, ...KNAPPER_CAP });
   assert.equal(blockiert.ok, false);
   assert.equal(
-    blockiert.reason,
+    blockiert.fehler,
     GLOBAL_CAP_REASON,
     "die Nummer eines seit 30 Tagen suspendierten Tenants sperrt den Platz fuer einen neuen Kunden",
   );

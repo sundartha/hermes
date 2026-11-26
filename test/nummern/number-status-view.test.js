@@ -17,7 +17,7 @@ const TENANT = "t_user1";
 function seedRequested(tenantId = TENANT) {
   const s = makeDefaultState();
   registerTenant(s, tenantId);
-  const { number } = requestNumber(s, { tenantId, ...CAPS });
+  const { number } = requestNumber(s, { tenantId, ...CAPS }).wert;
   return { s, numberId: number.id };
 }
 
@@ -79,7 +79,7 @@ test("numberStatusFor: eine spaeter aktive Nummer ueberlagert den Skip-Marker (I
   requestNumber(s, { tenantId: "a", ...tight });
   requestNumber(s, { tenantId: "b", ...tight });
   assert.equal(numberStatusFor(s, "b"), "blocked");
-  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   beginProvisioning(s, number.id);
   activateNumber(s, number.id, { e164: "+4915799990003", providerNumberId: "num_b" });
   assert.equal(numberStatusFor(s, "b"), "active");
@@ -104,13 +104,13 @@ test("numberStatusFor: 'failed' hat Vorrang vor gleichzeitigem globalem Cap-Skip
   const s = makeDefaultState();
   registerTenant(s, "a");
   registerTenant(s, "b");
-  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   beginProvisioning(s, number.id);
   failNumber(s, number.id);
   requestNumber(s, { tenantId: "a", maxNumbers: 1, maxNumbersPerTenant: 1 });
   const retry = requestNumber(s, { tenantId: "b", maxNumbers: 1, maxNumbersPerTenant: 1 });
   assert.equal(retry.ok, false);
-  assert.equal(retry.reason, "global_cap");
+  assert.equal(retry.fehler, "global_cap");
   assert.equal(numberStatusFor(s, "b"), "failed");
 });
 

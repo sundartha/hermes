@@ -16,7 +16,7 @@ const ARGS = { countryCode: "US", connectionId: "conn_1" };
 function seedRequested() {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   return { s, numberId: number.id };
 }
 
