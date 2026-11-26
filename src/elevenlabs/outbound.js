@@ -1,5 +1,5 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
-import { uebergabeEroeffnung } from "./uebergabe-override.ts";
+import { anrufStart } from "../anrufe/start/anrufstart.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
@@ -455,25 +455,12 @@ function vornameOhnePlatzhalter(firstName) {
   return vorname.includes(PLACEHOLDER_OPENER) ? "" : vorname;
 }
 
-function eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
-  if (ownerEroeffnung) return ownerEroeffnung;
-  return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
-}
-
 function openingLinesOf({ call, locale }) {
   const bundle = localeFor(locale.language);
   return {
     openingLine: verifiedOpeningLine({ call, locale: bundle }),
     ownerLine: ownerOpeningLine({ call, locale: bundle }),
   };
-}
-
-function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
-  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
-  if (ownerEroeffnung) return ownerEroeffnung;
-  if (locale.providerLanguage === locale.disclosureLanguage) return "";
-  return drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text;
 }
 
 export function eroeffnungFuerAnruf({ store, config, call }) {
@@ -488,19 +475,6 @@ export function eroeffnungFuerAnruf({ store, config, call }) {
   }
   const { text, pflichtsatz } = drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine });
   return { text, pflichtsatz, voiceId: locale.voiceId };
-}
-
-function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine, eroeffnungGesagt }) {
-  const perCallEroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
-  const { ersteNachricht: uebergabe } = uebergabeEroeffnung({ eroeffnungGesagt, eroeffnung: "", perCallEroeffnung });
-  const ersteNachricht = eroeffnungGesagt ? anschlussSatz({ language: locale.language, anlass: openingLine }) : uebergabe;
-  return {
-    agent: {
-      language: locale.providerLanguage,
-      ...(ersteNachricht === null ? {} : { first_message: ersteNachricht }),
-    },
-    ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
-  };
 }
 
 export function initiationContent({
@@ -519,10 +493,12 @@ export function initiationContent({
   const offenlegung = localeFor(locale.disclosureLanguage);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
-  const { variable: eroeffnung } = uebergabeEroeffnung({
-    eroeffnungGesagt,
-    eroeffnung: eroeffnungVariable({ call, locale, offenlegung, firstName, owner, openingLine }),
-    perCallEroeffnung: "",
+  const start = anrufStart({
+    sprachen: locale,
+    dritt: drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine }).text,
+    ownerEroeffnung: ownerFirstMessage({ call, offenlegung, firstName }),
+    eroeffnungGesagt: Boolean(eroeffnungGesagt),
+    folgesatz: eroeffnungGesagt ? anschlussSatz({ language: locale.language, anlass: openingLine }) : "",
   });
   return {
     dynamic_variables: dynamicVariables({
@@ -530,7 +506,7 @@ export function initiationContent({
       owner,
       offenlegung,
       openingLine,
-      eroeffnung,
+      eroeffnung: start.eroeffnung,
       voicemailOpening: composedOpeningLine(ownerLine, bundle),
       time,
       consultAllowed,
@@ -538,15 +514,7 @@ export function initiationContent({
       tenantToken,
       eroeffnungGesagt,
     }),
-    conversation_config_override: conversationConfigOverride({
-      call,
-      locale,
-      offenlegung,
-      firstName,
-      owner,
-      openingLine,
-      eroeffnungGesagt,
-    }),
+    conversation_config_override: start.override,
     ...(environment === "production" ? {} : { environment }),
   };
 }
