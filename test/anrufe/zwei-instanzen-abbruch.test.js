@@ -21,10 +21,10 @@ const vorspannGesprochen = (sql, callId) =>
     (anzahl) => anzahl >= 1,
   );
 
-const endeVerarbeitet = (sql, callId) =>
+const endeVerarbeitet = (sql, callId, mindestens) =>
   zeilenBis(
     async () => (await sql(BENACHRICHTIGUNG_SQL, [callId])).rows[0].anzahl,
-    (anzahl) => anzahl >= 1,
+    (anzahl) => anzahl >= mindestens,
   );
 
 async function zeile(sql, callId) {
@@ -43,7 +43,7 @@ test("T9 Abbruch auf B, danach Ende auf A: der Anruf bleibt abgebrochen und A ue
     assert.equal(nachAbbruch.status, "cancelled");
     beendeGespraech(`conv_${callId}`, GESPRAECH);
     await sendeEnde(a, callId);
-    await endeVerarbeitet(sql, callId);
+    await endeVerarbeitet(sql, callId, 2);
     assert.deepEqual(await zeile(sql, callId), nachAbbruch);
   });
 });
@@ -55,7 +55,7 @@ test("T9 Ende auf A, danach Abbruch auf B: der beendete Anruf bleibt beendet und
     await vorspannGesprochen(sql, callId);
     beendeGespraech(`conv_${callId}`, GESPRAECH);
     await sendeEnde(a, callId);
-    await endeVerarbeitet(sql, callId);
+    await endeVerarbeitet(sql, callId, 1);
     const nachEnde = await zeile(sql, callId);
     assert.notEqual(nachEnde.status, "active");
     const abbruch = await brecheAb(b, callId);
