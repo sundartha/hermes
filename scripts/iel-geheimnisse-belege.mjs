@@ -147,8 +147,8 @@ async function probeSynthese({ abh, voiceId, model }) {
     firstChunkTimeoutMs: PROBE_ERSTES_PAKET_MS,
     totalTimeoutMs: PROBE_GESAMT_MS,
   });
-  if (!ergebnis.ok) return statusAusGrund(ergebnis.reason);
-  await ergebnis.audio;
+  if (!ergebnis.ok) return statusAusGrund(ergebnis.fehler.reason ?? ergebnis.fehler);
+  await ergebnis.wert.audio;
   return HTTP.OK;
 }
 

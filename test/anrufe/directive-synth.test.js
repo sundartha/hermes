@@ -422,3 +422,33 @@ test("Ein noch nicht erschoepftes Kontingent laesst den Vorspann synthetisieren 
   assert.equal(sprachAnfragen.length, 1);
   assert.deepEqual(buchungen, [5]);
 });
+
+async function warnungenBeiSynthese(fetchImpl) {
+  const warnungen = [];
+  const stumm = mock.method(console, "warn", (zeile) => warnungen.push(zeile));
+  const { synthesizeDirectiveAudio } = synthMitAblage(() => FIXED_TOKEN);
+  try {
+    await withFakeFetch(fetchImpl, () => synthesizeDirectiveAudio({ provider: "telnyx" }, [say("Guten Tag")]));
+  } finally {
+    stumm.mock.restore();
+  }
+  return warnungen;
+}
+
+test("Synthese mit HTTP-Fehler und Text -> Warnung nennt Grund und Detail", async () => {
+  assert.deepEqual(await warnungenBeiSynthese(failFetch()), [
+    "[play-tts] Synth fehlgeschlagen (http_500: boom) -> Azure-Fallback",
+  ]);
+});
+
+test("Synthese mit HTTP-Fehler ohne Text -> Warnung nennt nur den Grund", async () => {
+  assert.deepEqual(await warnungenBeiSynthese(async () => ({ ok: false, status: 500 })), [
+    "[play-tts] Synth fehlgeschlagen (http_500) -> Azure-Fallback",
+  ]);
+});
+
+test("Synthese ohne lesbaren Strom -> Warnung nennt den Grund", async () => {
+  assert.deepEqual(await warnungenBeiSynthese(async () => ({ ok: true, headers: { get: () => "audio/mpeg" } })), [
+    "[play-tts] Synth fehlgeschlagen (no_stream) -> Azure-Fallback",
+  ]);
+});
