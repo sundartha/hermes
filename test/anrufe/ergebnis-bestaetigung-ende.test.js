@@ -9,6 +9,7 @@ import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.
 const FRIST_MS = 15000;
 const POLL_TAKT_MS = 100;
 const TENANT = "t_4059_ende";
+const ANRUFZEIT = "2026-11-20T10:00:05.000Z";
 const GOAL = "Termin am Dienstag um 10 Uhr vereinbaren";
 const OUTBOUND_EL = { costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI };
 
@@ -87,8 +88,8 @@ before(async () => {
       tenantId: TENANT,
       goal: GOAL,
       elevenlabsConversationId: `conv_${name}`,
-      answeredAt: new Date().toISOString(),
-      fristAbfrageAt: new Date().toISOString(),
+      answeredAt: ANRUFZEIT,
+      fristAbfrageAt: ANRUFZEIT,
     }),
   );
   srv = await startServer({
