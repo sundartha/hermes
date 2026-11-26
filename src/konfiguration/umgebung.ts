@@ -40,6 +40,19 @@ interface EnumEnvOptionen {
   fallback: string;
 }
 
+function grenzErgebnis(
+  name: string,
+  parsed: number,
+  { min, max, maxIstFehler }: Partial<Record<"min" | "max", number | undefined>> & { maxIstFehler: boolean },
+): { wert: number } | { fehler: string } {
+  if (min !== undefined && parsed < min) {
+    return { fehler: `${name}=${String(parsed)} unterschreitet das Minimum ${String(min)}.` };
+  }
+  if (max === undefined || parsed <= max) return { wert: parsed };
+  if (!maxIstFehler) return { wert: max };
+  return { fehler: `${name}=${String(parsed)} ueberschreitet das Maximum ${String(max)}.` };
+}
+
 function numEnvMit(fehlerliste: string[]) {
   function numEnv(
     name: string,
@@ -64,16 +77,12 @@ function numEnvMit(fehlerliste: string[]) {
       );
       return fallback;
     }
-    if (min !== undefined && parsed < min) {
-      fehlerliste.push(`${name}=${String(parsed)} unterschreitet das Minimum ${String(min)}.`);
+    const ergebnis = grenzErgebnis(name, parsed, { min, max, maxIstFehler });
+    if ("fehler" in ergebnis) {
+      fehlerliste.push(ergebnis.fehler);
       return fallback;
     }
-    if (max !== undefined && parsed > max) {
-      if (!maxIstFehler) return max;
-      fehlerliste.push(`${name}=${String(parsed)} ueberschreitet das Maximum ${String(max)}.`);
-      return fallback;
-    }
-    return parsed;
+    return ergebnis.wert;
   }
   return numEnv;
 }
