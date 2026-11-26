@@ -1,8 +1,8 @@
 import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { INBOUND_NOTICES, withInboundNotice } from "./inbound-notice.ts";
-import { PROMPT_DE } from "./prompts/de.js";
-import { PROMPT_FR } from "./prompts/fr.js";
-import { PROMPT_EN } from "./prompts/en.js";
+import { PROMPT_DE } from "./prompts/de.ts";
+import { PROMPT_FR } from "./prompts/fr.ts";
+import { PROMPT_EN } from "./prompts/en.ts";
 import { MCP_TEXTS } from "./mcp-texts.js";
 import { GATE_TEXTS } from "./gate-texts.js";
 import { afterGreeting, besitzerEroeffnung, besitzerFrage } from "./eroeffnung.js";

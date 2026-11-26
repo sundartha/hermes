@@ -344,17 +344,17 @@
       "count": 1
     }
   },
-  "src/i18n/prompts/de.js": {
+  "src/i18n/prompts/de.ts": {
     "id-length": {
       "count": 2
     }
   },
-  "src/i18n/prompts/en.js": {
+  "src/i18n/prompts/en.ts": {
     "id-length": {
       "count": 2
     }
   },
-  "src/i18n/prompts/fr.js": {
+  "src/i18n/prompts/fr.ts": {
     "id-length": {
       "count": 2
     }
