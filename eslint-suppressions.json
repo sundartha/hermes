@@ -393,11 +393,6 @@
       "count": 1
     }
   },
-  "src/mail-summary.ts": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "src/middleware.ts": {
     "id-length": {
       "count": 2
@@ -570,9 +565,6 @@
   },
   "src/telephony/call-finish.js": {
     "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
       "count": 1
     }
   },
@@ -868,11 +860,6 @@
     },
     "no-negated-condition": {
       "count": 2
-    }
-  },
-  "test/posteingang/f2-mail-summary-finish-call.test.js": {
-    "no-param-reassign": {
-      "count": 1
     }
   },
   "test/website-onboarding/f2-self-service-private-number.test.js": {
