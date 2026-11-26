@@ -106,7 +106,7 @@ async function ersterSperrGrund<A>(sperren: Sperren<A>, call: A): Promise<string
 }
 
 async function leseMitWiederholung<A extends Anruf>(
-  { store, platz }: Pick<Abhaengigkeiten<A>, "store" | "platz">,
+  { store, platz }: Pick<Abhaengigkeiten<A>, "store"> & { platz?: Platz<A> | undefined },
   callId: string,
   versuch = 1,
 ): Promise<A | null> {
@@ -117,7 +117,7 @@ async function leseMitWiederholung<A extends Anruf>(
 }
 
 async function leseOderBeende<A extends Anruf>(
-  abhaengig: Pick<Abhaengigkeiten<A>, "store" | "platz" | "beendeOhneWahl">,
+  abhaengig: Pick<Abhaengigkeiten<A>, "store" | "beendeOhneWahl"> & { platz?: Platz<A> | undefined },
   callId: string,
 ): Promise<A | null> {
   const call = await leseMitWiederholung(abhaengig, callId);
