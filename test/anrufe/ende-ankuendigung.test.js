@@ -50,7 +50,8 @@ async function ausgehenderAnruf() {
 
 function vorlagenPrompt() {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
-  return vorlage.agent.conversation_config.agent.prompt.prompt;
+  const agent = vorlage.agent.conversation_config.agent;
+  return agent.prompt.prompt;
 }
 
 test("AK4-1: der Anrufstart nennt dem Agenten die Grenze des Anrufs in Sekunden (nach Kappung durch den Anbieter)", async () => {
