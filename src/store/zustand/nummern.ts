@@ -176,16 +176,16 @@ export function requestNumber(
     maxNumbers: number;
     maxNumbersPerTenant: number;
   },
-): { ok: false; reason: string } | { ok: true; number: Nummernsatz } {
+): Ergebnis<{ number: Nummernsatz }> {
   const tenant = findTenant(state, tenantId);
   if (!tenant || !tenantMayRequestNumber(state, tenantId))
-    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
+    return fehler(REQUEST_NUMBER_REASON.TENANT_INACTIVE);
   if (liveNumbers(state).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
-    return { ok: false, reason: GLOBAL_CAP_REASON };
+    return fehler(GLOBAL_CAP_REASON);
   }
   if (liveNumbers(state, tenantId).length >= maxNumbersPerTenant)
-    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_CAP };
+    return fehler(REQUEST_NUMBER_REASON.TENANT_CAP);
   const number: Nummernsatz = {
     id: newId("num"),
     e164: null,
@@ -199,7 +199,7 @@ export function requestNumber(
   };
   state.numbers.push(number);
   clearNumberProvisionSkip(tenant);
-  return { ok: true, number };
+  return ok({ number });
 }
 
 function findSwapTrace(state: MitJobs, oldNumberId: string): Bereitstellung | undefined {

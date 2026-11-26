@@ -174,11 +174,11 @@ async function seedAndEnqueue(state, orchestrator, tenantId) {
     maxNumbers: 10,
     maxNumbersPerTenant: 5,
   });
-  assert.ok(r.ok, `requestNumber fuer ${tenantId} fehlgeschlagen: ${r.reason}`);
-  const jobRes = await orchestrator.queueProvisioning(r.number.id, tenantId);
+  assert.ok(r.ok, `requestNumber fuer ${tenantId} fehlgeschlagen: ${r.fehler}`);
+  const jobRes = await orchestrator.queueProvisioning(r.wert.number.id, tenantId);
   assert.ok(jobRes.ok, `queueProvisioning fuer ${tenantId} fehlgeschlagen`);
   void orchestrator.runProvisioningDrainExclusive();
-  return { numberId: r.number.id, jobId: jobRes.wert.jobId };
+  return { numberId: r.wert.number.id, jobId: jobRes.wert.jobId };
 }
 
 test("redrive-Erfolg: 200, reason=redrive, jobId gesetzt, danach GENAU EIN Kauf (kein Doppelkauf)", async (t) => {
