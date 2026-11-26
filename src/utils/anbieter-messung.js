@@ -27,11 +27,12 @@ const ANBIETER = Object.freeze({
       findPhoneNumber: "nummer-nachschlagen",
     }),
     istDrosselung: (fehler) =>
-      fehler.providerStatus === HTTP_TOO_MANY_REQUESTS || fehler.providerCode === TELNYX_DROSSEL_CODE,
+      Reflect.get(Object(fehler), "providerStatus") === HTTP_TOO_MANY_REQUESTS ||
+      Reflect.get(Object(fehler), "providerCode") === TELNYX_DROSSEL_CODE,
   }),
   brevo: Object.freeze({
     vorgaenge: Object.freeze({ sendMail: "mail-senden" }),
-    istDrosselung: (fehler) => fehler.code === BREVO_DROSSEL_CODE,
+    istDrosselung: (fehler) => Reflect.get(Object(fehler), "code") === BREVO_DROSSEL_CODE,
   }),
   stripe: Object.freeze({
     vorgaenge: Object.freeze({
@@ -51,7 +52,7 @@ const ANBIETER = Object.freeze({
       retrievePaymentMethodType: "zahlart-lesen",
       retrievePriceAmount: "preis-lesen",
     }),
-    istDrosselung: (fehler) => fehler.providerStatus === HTTP_TOO_MANY_REQUESTS,
+    istDrosselung: (fehler) => Reflect.get(Object(fehler), "providerStatus") === HTTP_TOO_MANY_REQUESTS,
   }),
   workos: Object.freeze({
     vorgaenge: Object.freeze({
@@ -63,9 +64,15 @@ const ANBIETER = Object.freeze({
   }),
 });
 
+function beschreibungVon(anbieter) {
+  const beschreibung = ANBIETER[anbieter];
+  if (!beschreibung) throw new TypeError(anbieter);
+  return beschreibung;
+}
+
 function ergebnisVon(anbieter, fehler) {
-  if (fehler?.name === FRIST_FEHLERNAME) return ERGEBNIS.ZEITUEBERSCHREITUNG;
-  if (fehler && ANBIETER[anbieter].istDrosselung(fehler)) return ERGEBNIS.DROSSELUNG;
+  if (Reflect.get(Object(fehler), "name") === FRIST_FEHLERNAME) return ERGEBNIS.ZEITUEBERSCHREITUNG;
+  if (beschreibungVon(anbieter).istDrosselung(fehler)) return ERGEBNIS.DROSSELUNG;
   return ERGEBNIS.FEHLER;
 }
 
@@ -83,7 +90,8 @@ function gemessen({ anbieter, vorgang }, objekt, original) {
     const dauerMs = () => Number(process.hrtime.bigint() - beginn) / NANOSEKUNDEN_JE_MS;
     let ergebnis;
     try {
-      ergebnis = await original.apply(objekt, argumente);
+      if (typeof original !== "function") throw new TypeError(vorgang);
+      ergebnis = await Reflect.apply(original, objekt, argumente);
     } catch (fehler) {
       erfasse({ anbieter, vorgang, ergebnis: ergebnisVon(anbieter, fehler), dauerMs: dauerMs() });
       throw fehler;
@@ -95,8 +103,8 @@ function gemessen({ anbieter, vorgang }, objekt, original) {
 
 export function umhuelleAnbieter(anbieter, objekt) {
   const ersetzt = {};
-  for (const [methode, vorgang] of Object.entries(ANBIETER[anbieter].vorgaenge)) {
-    if (methode in objekt) ersetzt[methode] = gemessen({ anbieter, vorgang }, objekt, objekt[methode]);
+  for (const [methode, vorgang] of Object.entries(beschreibungVon(anbieter).vorgaenge)) {
+    if (methode in objekt) ersetzt[methode] = gemessen({ anbieter, vorgang }, objekt, Reflect.get(objekt, methode));
   }
   return Object.assign(objekt, ersetzt);
 }

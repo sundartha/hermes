@@ -27,7 +27,7 @@ function macheFruehwarnungsFelder() {
       zuletztGeloggt = null;
       return {};
     }
-    const zeile = `[fruehwarnung] webhooksAbgewiesen=${webhooksAbgewiesen} anrufeUeberHoechstdauer=${anrufeUeberHoechstdauer}`;
+    const zeile = `[fruehwarnung] webhooksAbgewiesen=${String(webhooksAbgewiesen)} anrufeUeberHoechstdauer=${String(anrufeUeberHoechstdauer)}`;
     if (zeile !== zuletztGeloggt) console.error(zeile);
     zuletztGeloggt = zeile;
     const felder = {};
@@ -42,7 +42,7 @@ export function makeHealthzRoutes({
   poolZustand,
   schwellen = HEALTHZ_SCHWELLEN,
   uhr = MONOTONE_UHR,
-  zeitplaene = async () => [],
+  zeitplaene = () => Promise.resolve([]),
   fruehwarnung = () => ({ webhooksAbgewiesen: 0, anrufeUeberHoechstdauer: 0 }),
 }) {
   const router = Router();
@@ -63,16 +63,22 @@ export function makeHealthzRoutes({
     return poolGestaut() ? SCHADEN_POOL : null;
   }
 
-  router.get(HEALTHZ_PATH, async (_req, res) => {
+  router.get(HEALTHZ_PATH, (_req, res, next) => {
     const commit = config.server.deployedCommit;
     const grund = schaden();
-    if (grund) return res.status(HTTP_SERVICE_UNAVAILABLE).json({ ok: false, schaden: grund, commit });
-    const ueberfaellig = await zeitplaene();
-    const warnung = fruehwarnungsFelder(fruehwarnung());
-    if (ueberfaellig.length > 0) console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
-    const felder = ueberfaellig.length > 0 ? { zeitplaeneUeberfaellig: ueberfaellig.length } : {};
-    const instanz = config.telemetry?.telemetryInstanceId;
-    return res.json({ ok: true, commit, instanz, ...felder, ...warnung });
+    if (grund) {
+      res.status(HTTP_SERVICE_UNAVAILABLE).json({ ok: false, schaden: grund, commit });
+      return;
+    }
+    zeitplaene()
+      .then((ueberfaellig) => {
+        const warnung = fruehwarnungsFelder(fruehwarnung());
+        if (ueberfaellig.length > 0) console.error(`[zeitplan] Herzschlag überfällig: ${ueberfaellig.join(", ")}`);
+        const felder = ueberfaellig.length > 0 ? { zeitplaeneUeberfaellig: ueberfaellig.length } : {};
+        const instanz = config.telemetry?.telemetryInstanceId;
+        res.json({ ok: true, commit, instanz, ...felder, ...warnung });
+      })
+      .catch(next);
   });
 
   return router;

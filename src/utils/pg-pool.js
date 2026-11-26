@@ -40,12 +40,15 @@ export function clientFehlerZeile(name, fehler) {
 export function ueberwacheClients(pool, name) {
   const hoerer = new Map();
   pool.on("acquire", (client) => {
-    const meldung = (fehler) => console.error(clientFehlerZeile(name, fehler));
+    const meldung = (fehler) => {
+      console.error(clientFehlerZeile(name, fehler));
+    };
     hoerer.set(client, meldung);
     client.on("error", meldung);
   });
   pool.on("release", (_fehler, client) => {
-    client.removeListener("error", hoerer.get(client));
+    const meldung = hoerer.get(client);
+    if (meldung) client.removeListener("error", meldung);
     hoerer.delete(client);
   });
 }
