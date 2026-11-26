@@ -98,6 +98,21 @@ pflicht_ausser_urteil 5; pruefe "andere offene Prüfung bleibt ein Halt" "$?" "1
 CHECKS="${PASSALLE}Freigabe-Prüfung${TAB}pass${TAB}5s${TAB}https://x/runs/77/job/8\n"
 pflicht_ausser_urteil 5; pruefe "alles grün: kein Halt" "$?" "0"
 CHECKS=""; pflicht_ausser_urteil 5; pruefe "keine Auskunft von GitHub ist kein Freibrief" "$?" "1"
+# A-WZN9ZN 26.11.: cwarten wertete gh pr checks' eigenen Exit-Code aus (1, sobald irgendein Check rot ist, auch die Freigabe-Prüfung, die erst durch das von PASS ausgelöste Approve grün wird, während andere Checks noch laufen) statt der Checks ohne die Freigabe-Prüfung zu bewerten (Halt "PR 6365: PASS, aber Checks weiter rot", Kette 6343, 26.11. 19:16). Die Stelle wird aus paket.sh gelesen, derselbe gh-Ersatz wie oben.
+CWST=$(grep -oP 'O=\$\(gh pr checks \$1 -R sundartha/hermes 2>/dev/null\);.*?fi;' $S | head -1)
+[ -n "$CWST" ] || { echo "ROT  cwarten-Stelle nicht in paket.sh gefunden"; exit 1; }
+cw() { eval "$CWST"; echo $rc; }
+CHECKS="${FREI_ROT}Tests 1/3${TAB}pending${TAB}0${TAB}https://x/runs/9/job/1\n"
+pruefe "nur Freigabe-Prüfung rot, Rest wartet noch: cwarten wartet weiter" "$(cw 6365)" "8"
+CHECKS="${FREI_ROT}Tests 1/3${TAB}pass${TAB}1m${TAB}https://x/runs/9/job/1\n"
+pruefe "nur Freigabe-Prüfung rot, Rest ist fertig und grün: cwarten ist grün" "$(cw 6365)" "0"
+CHECKS="${FREI_ROT}Tests 1/3${TAB}fail${TAB}1m${TAB}https://x/runs/9/job/1\n"
+pruefe "ein anderer Check ist rot: cwarten bleibt rot" "$(cw 6365)" "1"
+CHECKS="$PASSALLE"
+pruefe "alles grün: cwarten ist grün" "$(cw 6365)" "0"
+CHECKS=""
+pruefe "keine Auskunft von GitHub: cwarten bleibt rot" "$(cw 6365)" "1"
+unset -f cw
 # A-DXDZU8 26.11.: Ein abgelaufenes oder leeres Log ($G leer, z. B. nach Ablauf) gab bisher sofort "fail" zurück und hielt die Kette im Deadlock ("PASS, aber Checks weiter rot"), obwohl die Freigabe-Prüfung erst durch das von PASS ausgelöste Approve grün werden kann. Jetzt wird der Lauf einmal je Kopf (Lauf-ID) neu gestartet und auf ein lesbares Log gewartet, erst dann wie bisher entschieden.
 PAKET_URTEIL_WARTE=0; LOG=$T/urteil; mkdir -p $LOG
 rerunids() { tr '\n' ' ' < $T/rerun.ids 2>/dev/null; }
