@@ -1,5 +1,6 @@
 import { PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { speicherBereiche } from "../store.js";
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { providerMicroCentsToBucketCents } from "./cost-calibration.ts";
 import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.ts";
 import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.ts";
@@ -7,7 +8,13 @@ import { LEERE_LISTE } from "./kosten-abschluss.ts";
 
 type Zustand = Parameters<typeof belegSummeJeTraegerFuerMonat>[0]["state"];
 
-type Rechnung = { ok: true; totalMicroCents: number } | { ok: false; reason: string };
+interface Rechnungsbetrag {
+  totalMicroCents: number;
+}
+
+type Rechnungsantwort = ({ ok: true } & Rechnungsbetrag) | { ok: false; reason: string };
+
+type Rechnung = Ergebnis<Rechnungsbetrag>;
 
 interface TraegerSumme {
   traeger: string;
@@ -25,7 +32,7 @@ interface Zeilenwerte {
 }
 
 interface VoiceControl {
-  fetchMonthlyInvoiceTotal: (args: { month: string }) => Promise<Rechnung>;
+  fetchMonthlyInvoiceTotal: (args: { month: string }) => Promise<Rechnungsantwort>;
 }
 
 interface CostCrossCheckDeps {
@@ -65,7 +72,7 @@ function traegerZeile(traegerSummen: TraegerSumme[]): string {
 }
 
 function rechnungsDifferenzFeld(
-  invoice: { totalMicroCents: number },
+  invoice: Rechnungsbetrag,
   istTelnyxMicroCents: number | null,
 ): string {
   if (istTelnyxMicroCents === null)
@@ -74,7 +81,7 @@ function rechnungsDifferenzFeld(
 }
 
 function crossCheckLineOk(
-  params: Zeilenwerte & { invoice: { ok: true; totalMicroCents: number } },
+  params: Zeilenwerte & { invoice: Extract<Rechnung, { ok: true }> },
 ): string {
   const { monthKey, invoice, istTelnyxMicroCents, istGesamtMicroCents } = params;
   const { traegerSummen, gateCarrierEurCents, rateMicro } = params;
@@ -82,8 +89,8 @@ function crossCheckLineOk(
   const diffIstMinusGate =
     convertedEurCents === null ? null : convertedEurCents - gateCarrierEurCents;
   return (
-    `[cost-cross-check] monat=${monthKey} telnyx_rechnung_usd_micro_cent=${String(invoice.totalMicroCents)} ` +
-    `ist_telnyx_usd_micro_cent=${String(istTelnyxMicroCents)} ${rechnungsDifferenzFeld(invoice, istTelnyxMicroCents)} ` +
+    `[cost-cross-check] monat=${monthKey} telnyx_rechnung_usd_micro_cent=${String(invoice.wert.totalMicroCents)} ` +
+    `ist_telnyx_usd_micro_cent=${String(istTelnyxMicroCents)} ${rechnungsDifferenzFeld(invoice.wert, istTelnyxMicroCents)} ` +
     `ist_je_traeger=${traegerZeile(traegerSummen)} ` +
     `ist_gesamt_usd_micro_cent=${String(istGesamtMicroCents)} gate_carrier_eur_cent=${String(gateCarrierEurCents)} ` +
     `ist_konvertiert_eur_cent(rate=${String(rateMicro)})=${String(convertedEurCents)} ` +
@@ -97,9 +104,9 @@ function crossCheckLineUnavailable({
   istGesamtMicroCents,
   traegerSummen,
   gateCarrierEurCents,
-}: Zeilenwerte & { invoice: { ok: false; reason: string } }): string {
+}: Zeilenwerte & { invoice: Extract<Rechnung, { ok: false }> }): string {
   return (
-    `[cost-cross-check] monat=${monthKey} telnyx_rechnung=nicht_verfuegbar(reason=${invoice.reason}) ` +
+    `[cost-cross-check] monat=${monthKey} telnyx_rechnung=nicht_verfuegbar(reason=${invoice.fehler}) ` +
     `ist_je_traeger=${traegerZeile(traegerSummen)} ` +
     `ist_gesamt_usd_micro_cent=${String(istGesamtMicroCents)} gate_carrier_eur_cent=${String(gateCarrierEurCents)}`
   );
@@ -116,16 +123,20 @@ function logCrossCheckLine(params: Zeilenwerte): void {
 
 function resolveTelnyxInvoiceControl(
   voiceControl: CostCrossCheckDeps["voiceControl"],
-): { control: VoiceControl; reason: null } | { control: null; reason: string } {
+): Ergebnis<VoiceControl> {
   let control: VoiceControl;
   try {
     control = voiceControl(PROVIDER.TELNYX);
   } catch {
-    return { control: null, reason: UNAVAILABLE_REASON.NO_TELNYX_ADAPTER };
+    return fehler(UNAVAILABLE_REASON.NO_TELNYX_ADAPTER);
   }
   if (typeof control.fetchMonthlyInvoiceTotal !== "function")
-    return { control: null, reason: UNAVAILABLE_REASON.PORT_MISSING };
-  return { control, reason: null };
+    return fehler(UNAVAILABLE_REASON.PORT_MISSING);
+  return ok(control);
+}
+
+function uebersetzteRechnung(antwort: Rechnungsantwort): Rechnung {
+  return antwort.ok ? ok(antwort) : fehler(antwort.reason);
 }
 
 export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossCheckDeps): {
@@ -134,11 +145,11 @@ export function makeCostCrossCheck({ store, config, voiceControl }: CostCrossChe
   const bereiche = bereicheVon(store);
 
   async function fetchInvoiceTotal(monthKey: string): Promise<Rechnung> {
-    const { control, reason } = resolveTelnyxInvoiceControl(voiceControl);
-    if (control === null) return { ok: false, reason };
-    return control
+    const steuerung = resolveTelnyxInvoiceControl(voiceControl);
+    if (!steuerung.ok) return steuerung;
+    return steuerung.wert
       .fetchMonthlyInvoiceTotal({ month: monthKey })
-      .catch(() => ({ ok: false, reason: UNAVAILABLE_REASON.FETCH_REJECTED }));
+      .then(uebersetzteRechnung, () => fehler(UNAVAILABLE_REASON.FETCH_REJECTED));
   }
 
   async function runMonthlyCrossCheck(

@@ -576,15 +576,15 @@ export function makeSelfServiceRoutes({
         const tenant = req.tenant.tenantId;
         const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: true });
         if (!result.ok) {
-          audit("self_service_cancel_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(HTTP_CONFLICT).json({ error: result.reason });
+          audit("self_service_cancel_rejected", req, `tenant=${tenant} reason=${result.fehler}`);
+          return res.status(HTTP_CONFLICT).json({ error: result.fehler });
         }
-        if (!result.alreadyApplied) {
+        if (!result.wert.alreadyApplied) {
           await auditStore.record({
             actorSub: req.tenant.sub,
             tenantId: tenant,
             action: "self_service_cancel_scheduled",
-            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+            detail: `current_period_end=${result.wert.currentPeriodEnd ?? "unknown"}`,
           });
           try {
             store.setCancellationMailPending(tenant, {
@@ -606,9 +606,9 @@ export function makeSelfServiceRoutes({
         audit(
           "self_service_cancel",
           req,
-          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+          `tenant=${tenant} already_applied=${result.wert.alreadyApplied}`,
         );
-        res.json({ cancelAtPeriodEnd: true, currentPeriodEnd: result.currentPeriodEnd });
+        res.json({ cancelAtPeriodEnd: true, currentPeriodEnd: result.wert.currentPeriodEnd });
       },
       billingUnavailable,
     ),
@@ -623,23 +623,23 @@ export function makeSelfServiceRoutes({
         const tenant = req.tenant.tenantId;
         const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: false });
         if (!result.ok) {
-          audit("self_service_resume_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(HTTP_CONFLICT).json({ error: result.reason });
+          audit("self_service_resume_rejected", req, `tenant=${tenant} reason=${result.fehler}`);
+          return res.status(HTTP_CONFLICT).json({ error: result.fehler });
         }
-        if (!result.alreadyApplied) {
+        if (!result.wert.alreadyApplied) {
           await auditStore.record({
             actorSub: req.tenant.sub,
             tenantId: tenant,
             action: "self_service_cancel_resumed",
-            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+            detail: `current_period_end=${result.wert.currentPeriodEnd ?? "unknown"}`,
           });
         }
         audit(
           "self_service_resume",
           req,
-          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+          `tenant=${tenant} already_applied=${result.wert.alreadyApplied}`,
         );
-        res.json({ cancelAtPeriodEnd: false, currentPeriodEnd: result.currentPeriodEnd });
+        res.json({ cancelAtPeriodEnd: false, currentPeriodEnd: result.wert.currentPeriodEnd });
       },
       billingUnavailable,
     ),
