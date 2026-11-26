@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { CONVERSATION_IN_PROGRESS } from "../fixtures/elevenlabs-conversations.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { attrappenFehler } from "../gemeinsam/instanz-ausgabe.js";
 import { EL_INBOUND_ACCESS_BOOT_ENV, nowSeconds, waitUntil } from "../helpers.js";
 import { initBindungsKoerper } from "../_iel-inbound-harness.js";
 import { starteAttrappe } from "./attrappen-server.js";
@@ -23,6 +24,15 @@ const calleeVon = (callId) => `cc_callee_${callId}`;
 const elVon = (callId) => `cc_el_${callId}`;
 let ereignisZaehler = 0;
 const meldeFehler = (fehler) => console.error("[attrappe] ereignis:", fehler.message);
+const AUFLEGEN_SCHRITT = "Auflegen";
+
+async function mitSchritt(callId, schritt, lauf) {
+  try {
+    return await lauf();
+  } catch (fehler) {
+    throw new Error(`Anruf ${callId} Schritt ${schritt}: ${fehler.message}`, { cause: fehler });
+  }
+}
 
 function signaturKopf(signer, roh) {
   if (!signer) return {};
@@ -68,6 +78,7 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
   const besitzer = new Map();
   const aufgelegteAnrufe = new Set();
   const laeufe = new Set();
+  const eigeneFehler = [];
   const besitzerVon = (callId) => besitzer.get(callId) ?? [...instanzen.values()].at(-1);
   const elGewaehlt = (callId) =>
     anfragen.some((a) => a.pfad === WAHL_PFAD && gewaehlterBefehl(a) === `vorspann-${callId}${EL_BEIN_ENDUNG}`);
@@ -75,17 +86,24 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
   function imHintergrund(lauf) {
     const festgehalten = new Promise((fertig) => setImmediate(fertig))
       .then(lauf)
-      .catch(meldeFehler)
+      .catch((fehler) => {
+        eigeneFehler.push(fehler.message);
+        attrappenFehler.add(fehler.message);
+        meldeFehler(fehler);
+      })
       .finally(() => laeufe.delete(festgehalten));
     laeufe.add(festgehalten);
   }
 
   async function nimmAn(callId, hermes) {
-    await sende(hermes.url, callId, { typ: "call.answered", bein: calleeVon(callId) });
-    await waitUntil(() => elGewaehlt(callId), { timeoutMs: WARTE_FRIST_MS });
-    await bindeGespraech(hermes, callId, await hermes.leseAnruf(callId));
-    await sende(hermes.url, callId, { typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
-    await sende(hermes.url, callId, { typ: "call.answered", bein: elVon(callId) });
+    const schritt = (name, lauf) => mitSchritt(callId, name, lauf);
+    await schritt("Annahme", () => sende(hermes.url, callId, { typ: "call.answered", bein: calleeVon(callId) }));
+    await schritt("EL-Wahl", () => waitUntil(() => elGewaehlt(callId), { timeoutMs: WARTE_FRIST_MS }));
+    await schritt("Bindung", async () => bindeGespraech(hermes, callId, await hermes.leseAnruf(callId)));
+    await schritt("Ereignis", async () => {
+      await sende(hermes.url, callId, { typ: "call.playback.ended", bein: calleeVon(callId), status: "completed" });
+      await sende(hermes.url, callId, { typ: "call.answered", bein: elVon(callId) });
+    });
   }
 
   function beantworteWahl(anfrage, res) {
@@ -102,7 +120,9 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
 
   function beantworteAufgelegt([, bein, callId], res) {
     aufgelegteAnrufe.add(callId);
-    imHintergrund(() => sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein }));
+    imHintergrund(() =>
+      mitSchritt(callId, AUFLEGEN_SCHRITT, () => sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein })),
+    );
     jsonAntwort(res, { data: { result: "ok" } });
   }
 
@@ -156,8 +176,10 @@ export async function starteAnrufstartAttrappe({ signer } = {}) {
       const callId = konversation.slice(KONVERSATION_VORSATZ.length);
       return sende(besitzerVon(callId).url, callId, { typ: "call.hangup", bein: calleeVon(callId) });
     },
+    fehler: () => [...eigeneFehler],
     schliessen: async () => {
       while (laeufe.size > 0) await Promise.allSettled([...laeufe]);
+      eigeneFehler.forEach((meldung) => attrappenFehler.delete(meldung));
       await attrappe.close();
     },
   };

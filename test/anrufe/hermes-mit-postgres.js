@@ -3,7 +3,7 @@ import pg from "pg";
 
 import { ANRUF_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.ts";
 import { echtWarten } from "../echt-warten.js";
-import { fristAblaufMeldung } from "../gemeinsam/instanz-ausgabe.js";
+import { attrappenFehlerText, fristAblaufMeldung, instanzAusgabeText } from "../gemeinsam/instanz-ausgabe.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
@@ -56,14 +56,25 @@ export async function starteAnAnbieter(db, anbieter, env) {
     host,
     url: srv.localUrl,
     agentId: env.ELEVENLABS_AGENT_ID ?? EL_WEG.ELEVENLABS_AGENT_ID,
-    leseAnruf: async (callId) => {
-      const { rows } = await mitVerbindung(adminAdresse(db.adresse), (verwaltung) =>
-        verwaltung.query(ANRUF_TOKEN_SQL, [callId]),
-      );
-      return rows[0] ? { streamToken: rows[0].stream_token, from: rows[0].from_e164 } : null;
-    },
+    leseAnruf: (callId) =>
+      leseAnrufBis(async () => {
+        const { rows } = await mitVerbindung(adminAdresse(db.adresse), (verwaltung) =>
+          verwaltung.query(ANRUF_TOKEN_SQL, [callId]),
+        );
+        return rows;
+      }, callId),
   });
   return srv;
+}
+
+export async function leseAnrufBis(lies, callId, fristMs = SQL_FRIST_MS) {
+  const start = Date.now();
+  for (;;) {
+    const rows = await lies();
+    if (rows[0]) return { streamToken: rows[0].stream_token, from: rows[0].from_e164 };
+    assert.ok(Date.now() - start < fristMs, `Zeile des Anrufs ${callId} nach ${Date.now() - start} ms nicht lesbar`);
+    await echtWarten(SQL_TAKT_MS);
+  }
 }
 
 export function postgresVorhanden() {
@@ -237,7 +248,7 @@ export async function anrufAnBis(sql, { ziel, genug, fristMs = SQL_FRIST_MS }) {
   while (!anruf || !genug(anruf)) {
     assert.ok(
       Date.now() < ende,
-      `Anruf an ${ziel} per SQL nach ${Date.now() - start} ms nicht erreicht: ${JSON.stringify(anruf)}`,
+      `Anruf an ${ziel} per SQL nach ${Date.now() - start} ms nicht erreicht: ${JSON.stringify(anruf)}\n${instanzAusgabeText()}${attrappenFehlerText()}`,
     );
     await echtWarten(SQL_TAKT_MS);
     [anruf] = (await sql(ANRUF_AN_SQL, [ziel])).rows;
