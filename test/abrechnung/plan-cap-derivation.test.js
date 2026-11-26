@@ -278,7 +278,7 @@ test("(e3) activateSubscriptionFromCheckoutSession Heilungs-Pfad (Karte fehlt, A
     expectedPlanSlug: "business",
   });
   assert.equal(result.ok, false);
-  assert.equal(result.reason, "already_subscribed");
+  assert.equal(result.fehler.reason, "already_subscribed");
   assert.equal(
     store.tenantBudgetSnapshot(tenantId, config.billing).capCents,
     900,
