@@ -946,7 +946,7 @@ function mandantEinstellungenMethoden({ requireState, save, posteingang, mandant
       mandant.listeAendern(result.tenantId, empfaengerAbmelden(token));
       return result;
     },
-    newsletterAbgleichen: () => mandant.listenAbgleichen(),
+    newsletterAbgleichen: (filter) => mandant.listenAbgleichen(filter),
 
     addNotification(title, body, callId) {
       const state = requireState();

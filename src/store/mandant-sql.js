@@ -1,4 +1,4 @@
-import { NEWSLETTER_LISTEN_LESEN_SQL } from "./newsletter-liste-sql.ts";
+import { listenLesen } from "./newsletter-liste-sql.ts";
 import {
   billingHoldActive,
   findTenant,
@@ -172,9 +172,10 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
     return vorgang;
   }
 
-  async function listenAbgleichen() {
+  async function listenAbgleichen(filter) {
     await Promise.all([...letzte.values()]);
-    const { rows } = await runner.withClient((client) => client.query(NEWSLETTER_LISTEN_LESEN_SQL));
+    const { sql, werte } = listenLesen(filter);
+    const { rows } = await runner.withClient((client) => client.query(sql, werte));
     rows.forEach((zeile) => listenUebernehmen(zeile.id, zeile));
   }
 
