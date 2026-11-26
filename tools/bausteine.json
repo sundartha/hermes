@@ -297,6 +297,7 @@
       "quellen": [
         "src/telephony/",
         "src/elevenlabs/",
+        "src/anrufe/",
         "src/conversation/",
         "src/llm/",
         "src/tts/",

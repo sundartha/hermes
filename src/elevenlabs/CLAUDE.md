@@ -16,6 +16,6 @@ einem Commit, danach `npm run elevenlabs:drift` (und bei Live-Wirkung: Push mit 
 
 ## Baustein anrufe (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck und Darf nutzen: stehen in `src/telephony/CLAUDE.md`, dem ersten Ordner von anrufe.
-- Ort für Neues: Neue Dateien in `src/elevenlabs/` gehören zu anrufe, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von anrufe: `src/telephony/`, `src/conversation/`, `src/llm/`, `src/tts/`, `src/research/`.
+- Ort für Neues: Neue Dateien in `src/elevenlabs/` gehören zu anrufe, solange tools/bausteine.json sie keinem anderen Baustein nennt. Weitere Ordner von anrufe: `src/telephony/`, `src/anrufe/`, `src/conversation/`, `src/llm/`, `src/tts/`, `src/research/`.
 - Eingang: Andere Bausteine importieren aus `src/elevenlabs/` nur inbound-bridge-state.js, inbound-path-decision.js, inbound-rueckfall.js, nummern-konto-port.js, registry.js.
 - Andere Bausteine in diesem Ordner: abrechnung (kosten-beleg.js); nummern (inbound-trunk-beleg.js, nummern-port.js, nummern-registrierung.js)
