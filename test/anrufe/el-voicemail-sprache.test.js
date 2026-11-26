@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.ts";
+import { providerVoicemailMessage } from "../../src/anrufe/start/anrufstart.ts";
 import { consultAllowedForCall } from "../../src/consult/gate.ts";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";

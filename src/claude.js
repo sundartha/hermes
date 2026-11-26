@@ -6,6 +6,7 @@ import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.ts";
 import { resolveTimezone } from "./begriffe/sprache-zeit.ts";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";
+import { offenlegungssatz } from "./anrufe/start/anrufstart.ts";
 import { textePaketFuer } from "./i18n/texte-paket.ts";
 import { metrics } from "./metrics.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
@@ -205,7 +206,7 @@ function callMemorySection({ memory, loc }) {
 
 export function disclosureSentence(call) {
   const name = store.tenantContext(call.tenantId).ownerName;
-  return textePaketFuer(call).disclosure(name);
+  return offenlegungssatz(textePaketFuer(call), name);
 }
 
 const END_CALL_TOOL_NAME = "end_call";

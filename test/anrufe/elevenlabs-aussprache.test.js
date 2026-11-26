@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { providerVoicemailMessage } from "../../src/elevenlabs/call-locale.ts";
+import { providerVoicemailMessage } from "../../src/anrufe/start/anrufstart.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";

@@ -6,7 +6,7 @@ import * as espree from "espree";
 import { builtinRules } from "eslint/use-at-your-own-risk";
 import tseslint from "typescript-eslint";
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const ZEITGLIEDER_BESTAND_DATEI = new URL(
   "./tools/basis/zeitglieder-bestand.json",
@@ -105,7 +105,32 @@ function vorhandenerPfad(datei) {
   const zwilling = datei.replace(/\.js$/, ".ts");
   return !vorhanden(datei) && vorhanden(zwilling) ? zwilling : datei;
 }
+const ANRUFSTART = "src/anrufe/start/anrufstart.ts";
+const I18N_DATEIEN = readdirSync(new URL("src/i18n/", WURZEL), { recursive: true })
+  .filter((datei) => ENDUNGEN_LISTE.includes(datei.split(".").pop()))
+  .map((datei) => `src/i18n/${datei.replaceAll("\\", "/")}`);
+const EROEFFNUNG_NUR_IN = [ANRUFSTART, ...I18N_DATEIEN];
 const WORT_NUR_IN_EINTRAEGE = [
+  {
+    name: "eroeffnung-platzhalter",
+    nurIn: EROEFFNUNG_NUR_IN,
+    meldung:
+      "Die Platzhalter {{eroeffnung}} und {{opening_line}} der ersten Äußerung kommen nur aus src/anrufe/start/anrufstart.ts (anrufStart) und src/i18n; andere Stellen beziehen die Eröffnung von dort.",
+  },
+  {
+    name: "eroeffnung-schreiben",
+    art: "schluessel",
+    nurIn: EROEFFNUNG_NUR_IN,
+    meldung:
+      "first_message und opening_line schreibt nur src/anrufe/start/anrufstart.ts (anrufStart) und src/i18n; Lesen bleibt überall erlaubt, geschrieben wird an keiner zweiten Stelle.",
+  },
+  {
+    name: "offenlegung-lesen",
+    art: "aufruf",
+    nurIn: EROEFFNUNG_NUR_IN,
+    meldung:
+      "Den Offenlegungssatz liest nur src/anrufe/start/anrufstart.ts oder src/i18n über LOCALES.<lang>.disclosure; andere Stellen beziehen ihn als Ausfuhr von dort (CLAUDE.md Regel 2: keine zweite Stelle).",
+  },
   {
     name: "telnyx-belegabruf",
     nurIn: ["src/billing/cost-truing.ts", "src/telephony/adapters/telnyx/voice.js"],

@@ -1,5 +1,6 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
-import { anrufStart } from "../anrufe/start/anrufstart.ts";
+import { anrufStart, eroeffnungsVariablen, offenlegungssatz, providerVoicemailMessage } from "../anrufe/start/anrufstart.ts";
+import { callLocaleOf } from "./call-locale.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.ts";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
@@ -14,7 +15,6 @@ import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
-import { callLocaleOf, providerVoicemailMessage } from "./call-locale.ts";
 import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation, listConversations } from "./convai.ts";
 import { makeAnrufstartAuftrag } from "./anrufstart-auftrag.ts";
 import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.ts";
@@ -256,7 +256,7 @@ export { PLACEHOLDER_OPENER };
 
 function calleeRelationText({ call, owner, offenlegung }) {
   if (call.calleeIsOwner !== true) return "";
-  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: offenlegung.disclosure(owner) })}`;
+  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: offenlegungssatz(offenlegung, owner) })}`;
   return block.includes(PLACEHOLDER_OPENER) ? "" : block;
 }
 
@@ -324,8 +324,7 @@ export function dynamicVariables({
     ...(eroeffnungGesagt ? { eroeffnung_gesagt: eroeffnungGesagt } : {}),
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
-    opening_line: afterGreeting(openingLine),
-    eroeffnung,
+    ...eroeffnungsVariablen({ openingLine: afterGreeting(openingLine), eroeffnung }),
     owner_name: owner,
     callee: alsText(call.to),
     objective: alsText(call.goal),
@@ -442,7 +441,7 @@ function drittEroeffnung({ locale, offenlegung, owner, firstName, openingLine })
     });
     return { text: sichereEroeffnung([text]), pflichtsatz };
   }
-  const pflichtsatz = offenlegung.disclosure(owner);
+  const pflichtsatz = offenlegungssatz(offenlegung, owner);
   return { text: sichereEroeffnung([pflichtsatz, openingLine]), pflichtsatz };
 }
 
