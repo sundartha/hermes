@@ -71,6 +71,9 @@ const FEHLERKLASSEN = Object.freeze([
   ["token", "nicht_angemeldet"],
 ]);
 const UNKLARE_KLASSE = "unklar";
+const FESTE_TEXTE = Object.freeze(
+  Object.values(LOCALES).flatMap(({ mcp }) => [...Object.entries(mcp.denials), ...Object.entries(mcp.errors)]),
+);
 
 function textTeil(ergebnis) {
   const teile = Array.isArray(ergebnis?.content) ? ergebnis.content : [];
@@ -78,7 +81,10 @@ function textTeil(ergebnis) {
 }
 
 function detailVon(ergebnis) {
-  const klein = (textTeil(ergebnis)?.text ?? "").toLowerCase();
+  const wortlaut = textTeil(ergebnis)?.text ?? "";
+  const fest = FESTE_TEXTE.find(([, text]) => text === wortlaut);
+  if (fest !== undefined) return fest[0];
+  const klein = wortlaut.toLowerCase();
   const treffer = FEHLERKLASSEN.find(([stichwort]) => klein.includes(stichwort));
   return treffer === undefined ? UNKLARE_KLASSE : treffer[1];
 }
