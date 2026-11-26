@@ -8,7 +8,7 @@ import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";
 import { metrics } from "./metrics.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
-import { BESTAETIGUNGS_KLAUSEL, gegenseitenUrteil } from "./telephony/ergebnis-bestaetigung.ts";
+import { BESTAETIGUNGS_KLAUSEL, gegenseitenUrteil } from "./telephony/ergebnis-zustand.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
 import { GET_CONSULT_TOOL_NAME, consultAvailableFor } from "./consult/in-call.js";
 import { LOOK_UP_TOOL_NAME, lookupAvailableFor } from "./research/in-call.js";
