@@ -31,7 +31,7 @@ describe("Alarmregeln und Anleitungen", () => {
     const regeln = JSON.parse(fs.readFileSync(path.join(wurzel, REGELN), "utf8"));
     assert.deepEqual(
       regeln.map((regel) => regel.uid),
-      ["http-dauer-p95", "eventloop-p99", "db-pool-wartend", "anbieter-fehlerquote"],
+      ["http-dauer-p95", "eventloop-p99", "db-pool-wartend", "anbieter-fehlerquote", "anruf-frist-versaeumt"],
     );
   });
 

@@ -30,10 +30,12 @@ const NAMEN = Object.freeze({
   anrufBeendet: "hermes.call.ended",
   anrufDauer: "hermes.call.duration",
   anrufAnnahmezeit: "hermes.call.answer_time",
+  anrufFristVersaeumt: "hermes.call.deadline_missed",
   speichernDauer: "hermes.store.save.duration",
   speichernFehler: "hermes.store.save.failed",
 });
 
+export const VERSAEUMTE_FRIST = Object.freeze({ annahme: "el_angenommen", abschluss: "abschluss" });
 
 let anrufZaehler = null;
 let speichernZaehler = null;
@@ -126,7 +128,9 @@ function anrufMessung(meter) {
     beendet: meter.createCounter(NAMEN.anrufBeendet),
     dauer: meter.createHistogram(NAMEN.anrufDauer, { unit: "s" }),
     annahmezeit: meter.createHistogram(NAMEN.anrufAnnahmezeit, { unit: "s" }),
+    fristVersaeumt: meter.createCounter(NAMEN.anrufFristVersaeumt),
   };
+  for (const frist of Object.values(VERSAEUMTE_FRIST)) zaehleFristVersaeumt(frist, 0);
   return () => {
     anrufZaehler = null;
   };
@@ -166,6 +170,10 @@ export function zaehleAnrufGestartet(richtung) {
 
 export function zaehleAnrufAbgelehnt(grund) {
   fangeFehler("anruf_abgelehnt", () => anrufZaehler?.abgelehnt.add(1, { grund }));
+}
+
+export function zaehleFristVersaeumt(frist, anzahl = 1) {
+  fangeFehler("anruf_frist_versaeumt", () => anrufZaehler?.fristVersaeumt.add(anzahl, { frist }));
 }
 
 export function messeAnrufEnde({ richtung, ergebnis, grund, dauerS, annahmeS }) {
