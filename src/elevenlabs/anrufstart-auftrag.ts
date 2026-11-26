@@ -11,7 +11,9 @@ const ABGLEICH_SEITE = 50;
 
 export const ANRUFSTART_WARTE_TAKT_MS = MS_PER_SECOND;
 
-export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt" });
+export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt", NICHT_LESBAR: "anruf-nicht-lesbar" });
+
+const LESE_VERSUCHE = 5;
 
 export const ANRUFSTART_GRUND_ABSCHALTEN = "abschalten";
 
@@ -197,10 +199,24 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
     return wartePlatz(neu, fristEnde);
   }
 
+  async function leseAnrufMitWiederholung(callId: string, versuch = 1): Promise<A | null> {
+    const call = await store.leseCall(callId);
+    if (call || versuch >= LESE_VERSUCHE || !platz) return call ?? null;
+    await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
+    return leseAnrufMitWiederholung(callId, versuch + 1);
+  }
+
+  async function beendeUnlesbaren(callId: string): Promise<void> {
+    await beendeOhneWahl(callId, ANRUFSTART_GRUND.NICHT_LESBAR).catch(() => undefined);
+  }
+
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
     const gelesen = AUFTRAG.safeParse(auftrag?.payload);
-    const call = gelesen.success ? await store.leseCall(gelesen.data.callId) : null;
-    if (!call) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
+    const call = gelesen.success ? await leseAnrufMitWiederholung(gelesen.data.callId) : null;
+    if (!call) {
+      if (gelesen.success) await beendeUnlesbaren(gelesen.data.callId);
+      throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
+    }
     if (call.elevenlabsConversationId) return ANRUFSTART_AUSGANG.GESTARTET;
     const versuchtIso = await store.anrufstartMarker.lies(call.id);
     if (versuchtIso) return gleicheMitAnbieterAb(call, versuchtIso);
