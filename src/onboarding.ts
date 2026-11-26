@@ -136,7 +136,7 @@ export async function provisionNumber(
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
     if (err instanceof NummerGekauftIdOffen) {
-      const gekauftE164 = String(Reflect.get(err, "e164"));
+      const gekauftE164 = err.e164;
       markNumberGekauft(state, numberId, gekauftE164);
       logger.warn(`[nummer-gekauft-id-offen] number=${numberId} e164=${gekauftE164}: ${err.message} - Hold bleibt, manuelle Klaerung`);
       throw err;
