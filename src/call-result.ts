@@ -18,6 +18,11 @@ export interface NaechsterSchritt {
 const ZEITPUNKT_FORM =
   /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/;
 
+export interface GegenseitenUrteil {
+  confirmed: boolean;
+  declined: boolean;
+}
+
 export interface ErgebnisKarte {
   outcome: string | null;
   commitments: string[];
@@ -27,6 +32,7 @@ export interface ErgebnisKarte {
   nextSteps: NaechsterSchritt[];
   facts: string[];
   evidence?: string[];
+  counterparty?: GegenseitenUrteil;
 }
 
 interface GelesenesErgebnis {
@@ -109,7 +115,7 @@ function kartenHatInhalt(card: ErgebnisKarte) {
     card.facts,
     card.evidence ?? [],
   ];
-  return card.outcome !== null || card.nextStep !== null || listen.some((liste) => liste.length > 0);
+  return card.outcome !== null || card.nextStep !== null || card.counterparty !== undefined || listen.some((liste) => liste.length > 0);
 }
 
 function karteAus(parsed: GelesenesErgebnis | null | undefined): ErgebnisKarte {
@@ -130,9 +136,10 @@ function karteAus(parsed: GelesenesErgebnis | null | undefined): ErgebnisKarte {
 
 export function normalizeCallResult(
   parsed: GelesenesErgebnis | null | undefined,
-  { evidenceAllowed }: { evidenceAllowed: boolean },
+  { evidenceAllowed, counterparty }: { evidenceAllowed: boolean; counterparty?: GegenseitenUrteil },
 ): ErgebnisKarte | null {
   const card = karteAus(parsed);
+  if (counterparty && (counterparty.confirmed || counterparty.declined)) card.counterparty = counterparty;
   if (evidenceAllowed) {
     card.evidence = clampedList(parsed?.evidence, RESULT_EVIDENCE_MAX_ITEMS, RESULT_EVIDENCE_MAX_CHARS);
   }

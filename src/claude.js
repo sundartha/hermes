@@ -8,6 +8,7 @@ import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";
 import { metrics } from "./metrics.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
+import { BESTAETIGUNGS_KLAUSEL, gegenseitenUrteil } from "./telephony/ergebnis-bestaetigung.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
 import { GET_CONSULT_TOOL_NAME, consultAvailableFor } from "./consult/in-call.js";
 import { LOOK_UP_TOOL_NAME, lookupAvailableFor } from "./research/in-call.js";
@@ -328,7 +329,10 @@ export async function summarizeCall(call) {
     model,
     maxTokens: SUMMARY_MAX_TOKENS,
     system:
-      loc.summarySystem(owner) + loc.summaryNextStepsClause + (evidenceAllowed ? loc.summaryEvidenceClause : ""),
+      loc.summarySystem(owner) +
+      loc.summaryNextStepsClause +
+      BESTAETIGUNGS_KLAUSEL +
+      (evidenceAllowed ? loc.summaryEvidenceClause : ""),
     messages: [
       {
         role: "user",
@@ -349,7 +353,10 @@ export async function summarizeCall(call) {
 
   call.summary = parsed.summary || call.summary || null;
   call.objectiveAchieved = parsed.objective_achieved ?? "unclear";
-  call.result = normalizeCallResult(parsed, { evidenceAllowed });
+  call.result = normalizeCallResult(parsed, {
+    evidenceAllowed,
+    counterparty: gegenseitenUrteil(parsed, call.transcript),
+  });
   store.save();
   for (const item of parsed.actionItems || []) await bereiche.posteingang.addActionItem(call.id, item, "todo");
   return parsed;
