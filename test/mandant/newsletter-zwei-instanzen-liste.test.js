@@ -274,3 +274,29 @@ test("der Abgleich wartet, bis ein laufendes Schreiben der Liste fertig ist, und
 
   assert.equal(beimLesenBegonnen, true);
 });
+
+test("zwei gleichzeitige Eintragungen: die Kopie behält beide, solange die zweite noch schreibt", async () => {
+  laufendeNummer += 1;
+  const tenant = `t_liste_${laufendeNummer}`;
+  await gemeinsam.query("INSERT INTO tenant (id, status, country) VALUES ($1, 'active', 'DE')", [tenant]);
+  let b;
+  let ersteFertig = false;
+  let kopieWaehrendZweiter = null;
+  let updates = 0;
+  b = await instanz(gemeinsam, async (text) => {
+    if (!/^UPDATE tenant SET newsletter_recipients = /.test(text)) return;
+    updates += 1;
+    if (updates !== 2) return;
+    for (let runde = 0; runde < 200; runde += 1) await Promise.resolve();
+    ersteFertig = true;
+    kopieWaehrendZweiter = b.tenantNewsletterRecipients(tenant).map((eintrag) => eintrag.email);
+  });
+
+  b.addNewsletterRecipient(tenant, empfaenger("y@example.com", tenant));
+  b.addNewsletterRecipient(tenant, empfaenger("z@example.com", tenant));
+  await b.drainFlushes();
+
+  assert.equal(ersteFertig, true);
+  assert.deepEqual(kopieWaehrendZweiter, ["y@example.com", "z@example.com"]);
+  assert.deepEqual(await adressen(tenant), ["y@example.com", "z@example.com"]);
+});
