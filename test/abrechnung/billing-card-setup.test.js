@@ -39,7 +39,7 @@ test("bindCardFromSession: fremder Customer -> ok:false, nichts persistiert", as
     getCheckoutSessionResult: async () => ({ customerId: "cus_fremd", paymentMethodId: "pm_new" }),
   };
   const result = await bindCardFromSession({ store, billing, tenant: TENANT, sessionId: "cs_1" });
-  assert.deepEqual(result, { ok: false });
+  assert.deepEqual(result, { ok: false, fehler: "customer_mismatch" });
   assert.equal(store.state.stripe.paymentMethodId, null, "keine fremde Karte gebunden");
 });
 
@@ -53,7 +53,7 @@ test("bindCardFromSession: passender Customer -> ok:true, Karte UND Typ persisti
     }),
   };
   const result = await bindCardFromSession({ store, billing, tenant: TENANT, sessionId: "cs_1" });
-  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(result, { ok: true, wert: null });
   assert.equal(store.state.stripe.paymentMethodId, "pm_new");
   assert.equal(store.state.stripe.paymentMethodType, "card", "GP-P2: der Typ wandert mit");
 });

@@ -50,6 +50,7 @@ import {
 } from "./newsletter-recipients.ts";
 import { newsletterConfirmUrl } from "./begriffe/newsletter-links.ts";
 import { hashEmail } from "./util.ts";
+import { ok } from "./utils/ergebnis.ts";
 import {
   HTTP_BAD_GATEWAY,
   HTTP_BAD_REQUEST,
@@ -144,7 +145,13 @@ async function subscribeAndActivate({ store, billing, config, accounts, provisio
   const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
   if (!result.ok) return result;
   const { profile, provisioned } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
-  return { ...result, profile, provisioned };
+  return ok({ ...result.wert, profile, provisioned });
+}
+
+function aktivierungsFelder(result) {
+  if (result.ok) return result.wert;
+  if (typeof result.fehler === "string") return { reason: result.fehler };
+  return result.fehler;
 }
 
 function asyncBilling(fn, onError) {
@@ -515,25 +522,26 @@ export function makeSelfServiceRoutes({
         const result = await activateSubscriptionFromCheckoutSession({
           store, billing, accounts, provision, tenant, sessionId, expectedPlanSlug: carriedPlan,
         });
-        if (result.reason === "customer_mismatch" || result.reason === "plan_mismatch") {
-          audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${result.reason}`);
+        const felder = aktivierungsFelder(result);
+        if (felder.reason === "customer_mismatch" || felder.reason === "plan_mismatch") {
+          audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${felder.reason}`);
           return res.status(HTTP_FORBIDDEN).json({ error: "Customer-Mismatch" });
         }
-        if (result.reason === "subscription_conflict") {
+        if (felder.reason === "subscription_conflict") {
           audit(
             "self_service_subscription_conflict",
             req,
-            `tenant=${tenant} plan=${carriedPlan} orphanedSubscriptionId=${result.subscriptionId}`,
+            `tenant=${tenant} plan=${carriedPlan} orphanedSubscriptionId=${felder.subscriptionId}`,
           );
           return res.redirect(CHECKOUT_RETURN.SUB_FAILED);
         }
         audit(
           "self_service_subscribe",
           req,
-          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ` +
-            `${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
+          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : felder.reason} ` +
+            `${profileAuditDetail(felder.profile)} ${provisionAuditDetail(felder.provisioned)}`,
         );
-        const returnPath = subscriptionReturnPath(result);
+        const returnPath = subscriptionReturnPath({ ok: result.ok, reason: felder.reason });
         res.redirect(returnPath);
       },
       (res) => res.redirect(CHECKOUT_RETURN.CARD_ERROR),
@@ -552,16 +560,16 @@ export function makeSelfServiceRoutes({
           store, billing, config, accounts, provision, tenant, planSlug,
         });
         if (!result.ok) {
-          audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          const { status, body } = subscribeReject(result.reason, planSlug);
+          audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.fehler}`);
+          const { status, body } = subscribeReject(result.fehler, planSlug);
           return res.status(status).json(body);
         }
         audit(
           "self_service_subscribe",
           req,
-          `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
+          `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.wert.profile)} ${provisionAuditDetail(result.wert.provisioned)}`,
         );
-        res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
+        res.json({ plan: result.wert.planSlug, currentPeriodEnd: result.wert.currentPeriodEnd });
       },
       billingUnavailable,
     ),

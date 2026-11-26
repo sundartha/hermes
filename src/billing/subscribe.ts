@@ -1,5 +1,6 @@
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS, isKnownPlanSlug } from "../plans.ts";
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { activatePaidTenant } from "./activation.ts";
 import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.ts";
 
@@ -70,22 +71,25 @@ interface Billing {
   getSubscriptionCheckoutResult: (sessionId: string) => Promise<CheckoutOutcome>;
 }
 
-type ActivationResult =
-  | {
-      ok: false;
-      reason: string;
-      subscriptionId?: string;
-      profile?: Profile;
-      provisioned?: Provisioned;
-    }
-  | {
-      ok: true;
-      subscriptionId: string;
-      planSlug: string;
-      currentPeriodEnd: number | null;
-      profile: Profile;
-      provisioned: Provisioned;
-    };
+interface BookedSubscription {
+  subscriptionId: string;
+  planSlug: string;
+  currentPeriodEnd: number | null;
+}
+
+type SubscriptionRejection = "unknown_plan" | "plan_unconfigured" | "already_subscribed" | "no_card";
+
+type ActivationRejection =
+  | "customer_mismatch"
+  | "plan_mismatch"
+  | "already_subscribed"
+  | { reason: "already_subscribed"; profile: Profile; provisioned: Provisioned }
+  | { reason: "subscription_conflict"; subscriptionId: string };
+
+type ActivationResult = Ergebnis<
+  BookedSubscription & { profile: Profile; provisioned: Provisioned },
+  ActivationRejection
+>;
 
 interface Config {
   billing: Record<"stripeStarterPriceId" | "stripeBusinessPriceId", string>;
@@ -149,16 +153,13 @@ export async function createTenantSubscription({
   config: Config;
   tenant: string;
   planSlug: string;
-}): Promise<
-  | { ok: false; reason: string }
-  | { ok: true; subscriptionId: string; planSlug: string; currentPeriodEnd: number | null }
-> {
-  if (!isKnownPlanSlug(planSlug)) return { ok: false, reason: "unknown_plan" };
+}): Promise<Ergebnis<BookedSubscription, SubscriptionRejection>> {
+  if (!isKnownPlanSlug(planSlug)) return fehler("unknown_plan");
   const priceId = priceIdForPlan(planSlug, config);
-  if (!priceId) return { ok: false, reason: "plan_unconfigured" };
-  if (hasActiveSubscription(store, tenant)) return { ok: false, reason: "already_subscribed" };
+  if (!priceId) return fehler("plan_unconfigured");
+  if (hasActiveSubscription(store, tenant)) return fehler("already_subscribed");
   const { customerId, paymentMethodId } = store.tenantStripe(tenant);
-  if (!paymentMethodId) return { ok: false, reason: "no_card" };
+  if (!paymentMethodId) return fehler("no_card");
   const { subscriptionId, currentPeriodEnd, currentPeriodStart } = await billing.createSubscription(
     {
       tenantRef: tenant,
@@ -175,7 +176,7 @@ export async function createTenantSubscription({
     currentPeriodEnd,
     currentPeriodStart,
   });
-  return { ok: true, subscriptionId, planSlug, currentPeriodEnd };
+  return ok({ subscriptionId, planSlug, currentPeriodEnd });
 }
 
 export async function activateSubscriptionFromCheckoutSession({
@@ -196,15 +197,12 @@ export async function activateSubscriptionFromCheckoutSession({
   expectedPlanSlug: string;
 }): Promise<ActivationResult> {
   const outcome = await billing.getSubscriptionCheckoutResult(sessionId);
-  if (!customerMatches(store, tenant, outcome.customerId))
-    return { ok: false, reason: "customer_mismatch" };
-  if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug)
-    return { ok: false, reason: "plan_mismatch" };
+  if (!customerMatches(store, tenant, outcome.customerId)) return fehler("customer_mismatch");
+  if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug) return fehler("plan_mismatch");
   if (hasActiveSubscription(store, tenant)) {
     const existing = store.tenantSubscription(tenant);
     if (existing.subscriptionId === outcome.subscriptionId) {
-      if (hasCardOnFileOf(store.tenantStripe(tenant)))
-        return { ok: false, reason: "already_subscribed" };
+      if (hasCardOnFileOf(store.tenantStripe(tenant))) return fehler("already_subscribed");
       bindPaymentMethodOnTenant(store, tenant, outcome);
       store.setTenantSubscription(tenant, {
         subscriptionId: outcome.subscriptionId,
@@ -219,9 +217,9 @@ export async function activateSubscriptionFromCheckoutSession({
         billing,
         tenant,
       });
-      return { ok: false, reason: "already_subscribed", profile, provisioned };
+      return fehler({ reason: "already_subscribed", profile, provisioned });
     }
-    return { ok: false, reason: "subscription_conflict", subscriptionId: outcome.subscriptionId };
+    return fehler({ reason: "subscription_conflict", subscriptionId: outcome.subscriptionId });
   }
   bindPaymentMethodOnTenant(store, tenant, outcome);
   store.setTenantSubscription(tenant, {
@@ -237,12 +235,11 @@ export async function activateSubscriptionFromCheckoutSession({
     billing,
     tenant,
   });
-  return {
-    ok: true,
+  return ok({
     subscriptionId: outcome.subscriptionId,
     planSlug: outcome.planSlug,
     currentPeriodEnd: outcome.currentPeriodEnd,
     profile,
     provisioned,
-  };
+  });
 }

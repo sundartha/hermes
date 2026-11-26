@@ -227,7 +227,7 @@ test("GP-P2: activateSubscriptionFromCheckoutSession persistiert den Typ auch im
   const store = fakeStore();
   store.state.subscription.subscriptionId = CHECKOUT_OUTCOME.subscriptionId;
   const result = await runActivateFromCheckout(store);
-  assert.equal(result.reason, "already_subscribed", "der Heal-Zweig lief");
+  assert.equal(result.fehler.reason, "already_subscribed", "der Heal-Zweig lief");
   assert.equal(
     store.state.stripe.paymentMethodType,
     "card",

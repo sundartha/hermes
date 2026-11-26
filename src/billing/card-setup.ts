@@ -1,3 +1,4 @@
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { CustomerMissingError } from "./errors.ts";
 
 interface Store {
@@ -108,10 +109,10 @@ export async function bindCardFromSession({
   billing: Billing;
   tenant: string;
   sessionId: string;
-}): Promise<{ ok: boolean }> {
+}): Promise<Ergebnis<null, "customer_mismatch">> {
   const { customerId, paymentMethodId, paymentMethodType } =
     await billing.getCheckoutSessionResult(sessionId);
-  if (!customerMatches(store, tenant, customerId)) return { ok: false };
+  if (!customerMatches(store, tenant, customerId)) return fehler("customer_mismatch");
   bindPaymentMethodOnTenant(store, tenant, { customerId, paymentMethodId, paymentMethodType });
-  return { ok: true };
+  return ok(null);
 }
