@@ -21,6 +21,7 @@ const ZEITPUNKT_FORM =
 export interface GegenseitenUrteil {
   confirmed: boolean;
   declined: boolean;
+  mailbox?: boolean;
 }
 
 export interface ErgebnisKarte {
@@ -139,7 +140,7 @@ export function normalizeCallResult(
   { evidenceAllowed, counterparty }: { evidenceAllowed: boolean; counterparty?: GegenseitenUrteil },
 ): ErgebnisKarte | null {
   const card = karteAus(parsed);
-  if (counterparty && (counterparty.confirmed || counterparty.declined)) card.counterparty = counterparty;
+  if (counterparty && (counterparty.confirmed || counterparty.declined || counterparty.mailbox)) card.counterparty = counterparty;
   if (evidenceAllowed) {
     card.evidence = clampedList(parsed?.evidence, RESULT_EVIDENCE_MAX_ITEMS, RESULT_EVIDENCE_MAX_CHARS);
   }

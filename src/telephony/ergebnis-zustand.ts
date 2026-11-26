@@ -9,6 +9,7 @@ export const RESULT_STATE = Object.freeze({
 
 export const RESULT_REASON = Object.freeze({
   MENU_ONLY: "menu-only",
+  MAILBOX: "mailbox",
   NO_ANSWER: "no-answer",
   DECLINED: "declined",
 });
@@ -22,7 +23,7 @@ interface AnrufSicht {
   answeredAt?: string | null;
   failureReason?: string | null;
   objectiveAchieved?: boolean | string | null;
-  result?: { counterparty?: { confirmed: boolean; declined: boolean } } | null;
+  result?: { counterparty?: GegenseitenUrteil } | null;
   transcript: readonly { role?: string; text?: string }[];
 }
 
@@ -53,17 +54,19 @@ export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
   if (failureReasonBase(call.failureReason) === RESULT_REASON.NO_ANSWER || call.answeredAt == null) {
     return nichtErledigt(RESULT_REASON.NO_ANSWER);
   }
+  if (call.result?.counterparty?.mailbox) return nichtErledigt(RESULT_REASON.MAILBOX);
   if (call.transcript.length > 0 && gegenseitenTexte(call.transcript).length === 0) return nichtErledigt(RESULT_REASON.MENU_ONLY);
   return urteilZustand(call);
 }
 
 export const BESTAETIGUNGS_KLAUSEL =
-  ' Ergaenze ausserdem "confirmed_by_counterparty" (true nur, wenn die Gegenseite das Ergebnis AUSDRUECKLICH bestaetigt hat, z.B. "ja, Dienstag um 10 Uhr passt"; sonst false), "confirmation_quote" (das woertliche Zitat der Gegenseite aus dem Transkript, das die Bestaetigung belegt, sonst null) und "declined" (true nur, wenn die Gegenseite den Auftrag ausdruecklich abgelehnt hat, sonst false). Eine Zusage des Assistenten oder ein Schweigen der Gegenseite ist keine Bestaetigung.';
+  ' Ergaenze ausserdem "confirmed_by_counterparty" (true nur, wenn die Gegenseite das Ergebnis AUSDRUECKLICH bestaetigt hat, z.B. "ja, Dienstag um 10 Uhr passt"; sonst false), "confirmation_quote" (das woertliche Zitat der Gegenseite aus dem Transkript, das die Bestaetigung belegt, sonst null), "declined" (true nur, wenn die Gegenseite den Auftrag ausdruecklich abgelehnt hat, sonst false) und "mailbox_only" (true nur, wenn ausser einem Anrufbeantworter oder einer Mailbox niemand erreicht wurde; sonst false). Eine Zusage des Assistenten oder ein Schweigen der Gegenseite ist keine Bestaetigung.';
 
 interface ModellAntwort {
   confirmed_by_counterparty?: unknown;
   confirmation_quote?: unknown;
   declined?: unknown;
+  mailbox_only?: unknown;
 }
 
 function normalisiert(text: string): string {
@@ -81,5 +84,6 @@ export function gegenseitenUrteil(antwort: ModellAntwort, transcript: AnrufSicht
   return {
     confirmed: antwort.confirmed_by_counterparty === true && zitatBelegt(antwort.confirmation_quote, transcript),
     declined: antwort.declined === true,
+    ...(antwort.mailbox_only === true && { mailbox: true }),
   };
 }
