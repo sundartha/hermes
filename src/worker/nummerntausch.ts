@@ -3,10 +3,11 @@ import { searchParamsForCountry } from "../telephony/provisioning-geo.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { performNumberRelease } from "../release-reconcile.ts";
 import { TAUSCH_ERGEBNIS, NUMBER_STATUS, speicherBereiche } from "../store.js";
+import type { Ergebnis } from "../utils/ergebnis.ts";
 
 type Nummer = Awaited<ReturnType<typeof provisionNumber>>;
 type Alt = Nummer;
-type Anspruch = { ok: false; grund: string } | { ok: true; number: Nummer; purchase: boolean };
+type Anspruch = Ergebnis<{ number: Nummer; purchase: boolean }>;
 
 interface NummernBereich {
   nummerntauschKandidaten: () => Promise<Alt[]>;
@@ -21,7 +22,7 @@ interface Bereiche {
   nummern: NummernBereich;
 }
 
-type Ergebnis = (typeof TAUSCH_ERGEBNIS)[keyof typeof TAUSCH_ERGEBNIS];
+type Ausgang = (typeof TAUSCH_ERGEBNIS)[keyof typeof TAUSCH_ERGEBNIS];
 type SipRegistrar = NonNullable<ProvisionDeps["sipRegistrar"]>;
 type NummernPort = ReturnType<typeof elevenlabsNummern>;
 type Konfiguration = Parameters<NummernPort["sipRegistrarWennAktiv"]>[0] &
@@ -88,7 +89,7 @@ async function fordereErsatzAn({ store, bereiche, config }: Kontext, alt: Alt): 
   });
 }
 
-async function kaufeErsatz({ store, deps }: Kontext, number: Nummer): Promise<Ergebnis> {
+async function kaufeErsatz({ store, deps }: Kontext, number: Nummer): Promise<Ausgang> {
   try {
     await provisionNumber(store.load(), deps, {
       numberId: number.id,
@@ -109,7 +110,7 @@ async function sichereRegistrierung(
   { store, bereiche, deps }: Kontext,
   sipRegistrar: SipRegistrar,
   number: Nummer,
-): Promise<Ergebnis> {
+): Promise<Ausgang> {
   try {
     const { phoneNumberId } = await sipRegistrar.ensureRegistration({
       e164: number.e164,
@@ -129,8 +130,8 @@ async function sichereRegistrierung(
 async function pruefeRegistrierung(
   kontext: Kontext,
   number: Nummer,
-  ergebnis: Ergebnis,
-): Promise<Ergebnis> {
+  ergebnis: Ausgang,
+): Promise<Ausgang> {
   if (ergebnis !== TAUSCH_ERGEBNIS.ERSATZ_AKTIV) return ergebnis;
   if (number.providerAgentPhoneNumberId) return ergebnis;
   const { sipRegistrar } = kontext.deps;
@@ -143,7 +144,7 @@ function ersatzBereit({ store }: Kontext, neu: Nummer): boolean {
   return frisch?.status === NUMBER_STATUS.ACTIVE && Boolean(frisch.providerAgentPhoneNumberId);
 }
 
-async function gibAlteNummerFrei(kontext: Kontext, alt: Alt, neu: Nummer): Promise<Ergebnis> {
+async function gibAlteNummerFrei(kontext: Kontext, alt: Alt, neu: Nummer): Promise<Ausgang> {
   const { store, deps } = kontext;
   if (!deps.audit) {
     deps.logger.warn(
@@ -169,16 +170,17 @@ async function tausche(
   alt: Alt,
 ): Promise<Pick<Eintrag, "ergebnis"> & { neu?: Nummer }> {
   const anspruch = await fordereErsatzAn(kontext, alt);
-  if (!anspruch.ok) return { ergebnis: anspruch.grund };
-  const gekauft = anspruch.purchase
-    ? await kaufeErsatz(kontext, anspruch.number)
+  if (!anspruch.ok) return { ergebnis: anspruch.fehler };
+  const { number, purchase } = anspruch.wert;
+  const gekauft = purchase
+    ? await kaufeErsatz(kontext, number)
     : TAUSCH_ERGEBNIS.ERSATZ_AKTIV;
-  const registriert = await pruefeRegistrierung(kontext, anspruch.number, gekauft);
+  const registriert = await pruefeRegistrierung(kontext, number, gekauft);
   const ergebnis =
     registriert === TAUSCH_ERGEBNIS.ERSATZ_AKTIV
-      ? await gibAlteNummerFrei(kontext, alt, anspruch.number)
+      ? await gibAlteNummerFrei(kontext, alt, number)
       : registriert;
-  return { ergebnis, neu: anspruch.number };
+  return { ergebnis, neu: number };
 }
 
 async function tauscheEinen(kontext: Kontext, alt: Alt): Promise<Eintrag> {
