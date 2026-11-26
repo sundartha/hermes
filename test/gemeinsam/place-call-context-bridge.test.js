@@ -27,7 +27,6 @@ const PLACE_CALL_SHAPE = {
   mandate: { optional: true },
   context: { optional: true },
   language: { optional: true },
-  max_duration_s: { optional: true },
   diagnostic: { optional: true },
 };
 

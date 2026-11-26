@@ -313,7 +313,7 @@ model in the field description, not a server-side check.
   `src/routes/api-calls.ts#router.post("/api/calls")`; there is no global switch for it any more.
   On that path, `decline` and `accept_best` are therefore not applied. The field's
   description says only "Not applied on every call path." and does not name the path.
-- `language`, `max_duration_s`, `diagnostic` - call settings.
+- `language`, `diagnostic` - call settings.
 
 Purpose rule. The server instructions carry this sentence:
 

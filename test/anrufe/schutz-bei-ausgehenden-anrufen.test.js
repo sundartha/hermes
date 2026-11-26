@@ -13,6 +13,7 @@ import {
 } from "../helpers.js";
 import { DISCLOSURE_JONAS, KI_HINWEIS_JONAS } from "../_outbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverUhrUmgebung, stelleServerUhrVor } from "../helpers/server-uhr.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { initInhaltFuer, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import { calleeVon, elVon } from "./el-bein-attrappe.js";
@@ -243,28 +244,21 @@ test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-An
 });
 
 test("GW0-KOSTENDECKE im Gespraech Kontrolle: unter der Decke beendet die Geld-Wache den EL-Anruf nicht", async () => {
-  await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40" }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv }) => {
-    assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
+  await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40", ...serverUhrUmgebung() }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv }) => {
+    assert.equal((await rufeAn(srv)).status, HTTP_OK);
+    stelleServerUhrVor(srv);
     assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "max-duration-cap");
   });
 });
 
-const LANGER_AUFTRAG = "Laengerer Anruf (GW0)";
-const LANGES_ZIEL = "+4915112340003";
-
-test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterdeckel, ein laengerer laeuft weiter", async () => {
-  await aufDemElWeg({ env: { FRISTEN_TAKT_MS: "40" } }, async ({ srv, anbieter }) => {
-    const lang = await rufeAn(srv, { to: LANGES_ZIEL, objective: LANGER_AUFTRAG, max_duration_s: 30 });
-    assert.equal(lang.status, HTTP_OK);
-    await initInhaltFuer(srv, { callId: anrufAn(srv, LANGES_ZIEL).id, agentId: EL_WEG.ELEVENLABS_AGENT_ID });
-    assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
+test("GW0-MAXDAUER: ein EL-Anruf endet nach seiner Max-Dauer unter dem Anbieterdeckel", async () => {
+  await aufDemElWeg({ env: { FRISTEN_TAKT_MS: "40", ...serverUhrUmgebung() } }, async ({ srv, anbieter }) => {
+    assert.equal((await rufeAn(srv)).status, HTTP_OK);
+    stelleServerUhrVor(srv);
     const anruf = await endeDesAuftragsAnrufs(srv);
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failureReason, "max-duration-cap");
     assert.ok(Date.parse(anruf.endedAt) - Date.parse(anruf.startedAt) >= 2000);
     await waitUntil(() => anbieter.legtUnangenommenenAnrufAuf(anruf.id), { timeoutMs: 3000 });
-    const langerAnruf = anrufAn(srv, LANGES_ZIEL);
-    assert.equal(langerAnruf.status, "active");
-    assert.equal(anbieter.beendetGespraech(langerAnruf.id), false);
   });
 });

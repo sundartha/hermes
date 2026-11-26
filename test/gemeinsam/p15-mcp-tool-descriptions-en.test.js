@@ -27,7 +27,6 @@ const EXPECTED_MARKERS = {
   "place_call.context.recipient_relationship": [],
   "place_call.context.desired_outcome": [],
   "place_call.context.open_questions": ["BEFORE"],
-  "place_call.max_duration_s": ["SHORTER"],
   "place_call.language": ["SPEAKS", "REJECTED", "NOT"],
   "place_call.diagnostic": ["OWN", "NOT", "ONLY"],
   get_call_status: [],

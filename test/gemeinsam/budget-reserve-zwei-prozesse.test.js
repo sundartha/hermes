@@ -6,6 +6,7 @@ import { makePostgresBudgetReserve } from "../../src/store.js";
 import { abrufMitFrist } from "./antwortfrist.mjs";
 import {
   anrufAnBis,
+  hoechstdauerFaellig,
   mitHermesAufPostgres,
   mitZweiHermesAufPostgres,
   neueAnrufe,
@@ -24,7 +25,7 @@ const DECKE_CENT = "100";
 const TARIF_CENT = "30";
 const NACHLAUF_MS = 2_500;
 const NACHLAUF_AUFGERUNDET_S = 3;
-const MAX_DAUER_S = 10;
+const BREMSE_BEI_DECKE_S = 240;
 const MANDANT = "owner";
 const FREMDER_MANDANT = "tenant_fremd";
 const SPERRE_NAMENSRAUM = 2666;
@@ -69,12 +70,13 @@ test(
     const { ziel } = neueAnrufe();
     await mitZweiHermesAufPostgres(t, { env: RESERVE_ENV }, async ({ a, b, sql }) => {
       const erster = ziel();
-      assert.equal((await rufeAnMit(a, { to: erster, max_duration_s: MAX_DAUER_S })).status, HTTP_OK);
+      assert.equal((await rufeAnMit(a, { to: erster })).status, HTTP_OK);
       const { rows } = await sql(
         "SELECT EXTRACT(EPOCH FROM ablauf_um - angelegt_um)::int AS frist_s FROM budget_reservierung",
       );
-      assert.deepEqual(rows, [{ frist_s: MAX_DAUER_S + NACHLAUF_AUFGERUNDET_S }]);
+      assert.deepEqual(rows, [{ frist_s: BREMSE_BEI_DECKE_S + NACHLAUF_AUFGERUNDET_S }]);
       assert.equal((await rufeAnMit(b, { to: ziel() })).status, HTTP_PAYMENT_REQUIRED);
+      await hoechstdauerFaellig(sql, erster);
       await anrufAnBis(sql, { ziel: erster, genug: beendet, fristMs: ENDE_FRIST_MS });
       await zeilenBis(async () => summe(sql), (wert) => wert === 0);
       assert.equal((await rufeAnMit(b, { to: ziel() })).status, HTTP_OK);

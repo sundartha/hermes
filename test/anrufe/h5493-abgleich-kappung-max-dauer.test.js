@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 
-import { mitHermesAufPostgres, neueAnrufe, postgresVorhanden, rufeAnMit, zeilenBis } from "./hermes-mit-postgres.js";
+import { hoechstdauerFaellig, mitHermesAufPostgres, neueAnrufe, postgresVorhanden, rufeAnMit, zeilenBis } from "./hermes-mit-postgres.js";
 import { makeTelnyxSigner, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
 
 const HTTP_OK = 200;
@@ -12,7 +12,6 @@ const GEHEIMNIS = "kappung-werkzeug-geheimnis";
 const KENNUNG = "kappung";
 const KONVERSATION = "conv_kappung";
 const KONVERSATION_PFAD = `/v1/convai/conversations/${KONVERSATION}`;
-const MAX_DAUER_S = 2;
 const PLATZ_SQL = `INSERT INTO leitungsplatz (call_id, anbieter, tenant_id, ablauf_um)
   VALUES ($1, 'elevenlabs', $2, now() + interval '1 hour')`;
 const ANRUF_SQL = "SELECT to_e164, tenant_id FROM call WHERE id = $1";
@@ -54,7 +53,7 @@ test("Abgleich-Anruf: nach der Uebernahme beendet der echte Fristen-Takt ihn mit
   };
   await mitHermesAufPostgres(t, { env }, async ({ srv, sql }) => {
     for (let index = 0; index < EL_PLAETZE; index += 1) await sql(PLATZ_SQL, [`voll_${index}`, `t_voll_${index}`]);
-    const antwort = await rufeAnMit(srv, { to: neueAnrufe().ziel(), max_duration_s: MAX_DAUER_S });
+    const antwort = await rufeAnMit(srv, { to: neueAnrufe().ziel() });
     assert.equal(antwort.status, HTTP_OK);
     const { callId } = await antwort.json();
     const [{ to_e164: ziel, tenant_id: mandant }] = (await sql(ANRUF_SQL, [callId])).rows;
@@ -63,6 +62,7 @@ test("Abgleich-Anruf: nach der Uebernahme beendet der echte Fristen-Takt ihn mit
     };
     await sql(MARKER_SQL, [callId, mandant]);
     await sql("DELETE FROM leitungsplatz");
+    await hoechstdauerFaellig(sql, ziel);
     const [ende] = await zeilenBis(
       async () => (await sql(STATUS_SQL, [callId])).rows,
       (zeilen) => zeilen[0]?.status === "completed" || zeilen[0]?.status === "failed",
