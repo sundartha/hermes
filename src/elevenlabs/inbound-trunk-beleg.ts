@@ -1,6 +1,6 @@
 import { HTTP_NOT_FOUND } from "../utils/http.ts";
 import { isDeepStrictEqual } from "node:util";
-import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.ts";
 import { START_ROUTINE } from "../begriffe/speicher.js";
 import {
   e164Endung,

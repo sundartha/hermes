@@ -300,7 +300,7 @@ before(async () => {
   process.env.DATA_DIR = dataDir;
   await import("../../src/config.ts");
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.ts"));
 });
 
 async function ladeOutbound() {

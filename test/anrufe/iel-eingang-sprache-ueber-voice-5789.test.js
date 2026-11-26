@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV, TELNYX_TEST_TENANT_NUMBER, postTelnyxIncoming, seedWithTelnyxNumber, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

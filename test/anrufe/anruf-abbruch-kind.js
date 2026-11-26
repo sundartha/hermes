@@ -60,7 +60,7 @@ async function brichAb(app, callId) {
 async function spieleAbbruchAb(adresse) {
   Object.assign(process.env, pgStartUmgebung(adresse));
   const speicher = await import("../../src/store.js");
-  const { BOOTSTRAP_TENANT_ID: mandant } = await import("../../src/begriffe/mandant.js");
+  const { BOOTSTRAP_TENANT_ID: mandant } = await import("../../src/begriffe/mandant.ts");
   await speicher.oeffneSpeicher();
   const pool = new pg.Pool({ connectionString: adresse });
   const { ANBIETER, leitungsplaetze } = speicher;

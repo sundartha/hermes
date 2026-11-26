@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { z } from "zod";
-import { tenantIdForSubject, TENANT_STATUS } from "./begriffe/mandant.js";
+import { tenantIdForSubject, TENANT_STATUS } from "./begriffe/mandant.ts";
 import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.ts";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.ts";
 import { pruefeKoerper } from "./utils/eingabe-pruefen.js";

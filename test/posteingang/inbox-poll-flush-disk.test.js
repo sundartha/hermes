@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 import { seedState, seedCall } from "../helpers.js";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const TENANT = BOOTSTRAP_TENANT_ID;
 

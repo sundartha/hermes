@@ -7,7 +7,7 @@ import {
   waitForStoreState,
   DOMESTIC_TEST_NUMBER,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const DOMESTIC_TARIFF_CENTS = 20;
 const DOMESTIC_TO = "+4915112345678";

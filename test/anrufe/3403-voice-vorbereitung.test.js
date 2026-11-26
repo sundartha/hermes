@@ -6,7 +6,7 @@ import { webhookEvents } from "../../src/telephony/registry.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { OHNE_EL_ZUGANG } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV, normalizeIncomingTexml, postTelnyxIncoming } from "../helpers.js";
 import { seedCall, seedWithTelnyxNumber, startServer, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, waitForStoreState } from "../helpers.js";
 

@@ -31,7 +31,7 @@ before(async () => {
     () => import("../../src/billing/plan-caps.ts"),
     () => import("../../src/plans.ts"),
     () => import("../../src/begriffe/abrechnung.ts"),
-    () => import("../../src/begriffe/mandant.js"),
+    () => import("../../src/begriffe/mandant.ts"),
   );
   config.billing.stripeStarterPriceId = "price_starter_test";
   config.billing.stripeBusinessPriceId = "price_business_test";

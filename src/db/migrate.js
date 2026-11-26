@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.ts";
 import { countryForE164 } from "../begriffe/rufnummern.js";
 import { DEFAULT_GREETING, languageForCountry } from "../i18n/locales.ts";
 import { periodStartFromEnd } from "../billing/period.ts";

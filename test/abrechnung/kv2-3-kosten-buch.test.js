@@ -8,7 +8,7 @@ import {
   callCostEvidence,
 } from "../../src/store/state-ops.js";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { belegDetailAusRohdaten, costEvidenceSumMicroCents } from "../../src/store/cost-evidence.ts";
 import { CONVERSATION_DONE_MIT_KOSTEN } from "../fixtures/elevenlabs-conversations.js";
 

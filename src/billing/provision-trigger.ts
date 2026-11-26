@@ -6,7 +6,7 @@ import {
 } from "../store/state-ops.js";
 import { languageForCountry } from "../i18n/locales.ts";
 import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.js";
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 import { kauflandFuer } from "../begriffe/rufnummern.js";
 
 interface Ergebnis {

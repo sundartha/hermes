@@ -6,7 +6,7 @@ import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { INBOUND_NACHLAUF_FRIST_MS, PERMANENT_ERROR_STREAK_LIMIT } from "../../src/elevenlabs/outbound.js";
 import { nachlaufPolitikFuer, pollDarfWirken } from "../../src/elevenlabs/nachlauf-politik.ts";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { POLL_TIMEOUT_REASON } from "../../src/telephony/failure-reason.ts";
 import { MS_PER_SECOND } from "../../src/utils/timer.ts";
 import {

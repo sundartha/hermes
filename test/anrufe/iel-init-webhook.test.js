@@ -25,7 +25,7 @@ import {
   makeElevenLabsInitWebhookRoutes,
 } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { templatePlaceholderNames } from ".././helpers/el-vorlage-variablen.mjs";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,

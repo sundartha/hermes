@@ -1,6 +1,6 @@
 import { normNum, E164, countryAllowed, allowedPrivateNumberCodes } from "../../begriffe/rufnummern.js";
-import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../begriffe/nummern.js";
-import { TENANT_STATUS, KYC_LEVEL, KYC_ORDER } from "../../begriffe/mandant.js";
+import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../begriffe/nummern.ts";
+import { TENANT_STATUS, KYC_LEVEL, KYC_ORDER } from "../../begriffe/mandant.ts";
 import { DEFAULT_LANGUAGE } from "../../konfiguration/standardsprache.ts";
 import { isKnownPlanSlug } from "../../plans.ts";
 import { isDenied } from "../../telephony/number-denylist.ts";

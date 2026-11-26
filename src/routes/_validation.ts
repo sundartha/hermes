@@ -8,7 +8,7 @@ export {
   validateMandate,
 } from "../i18n/anruf-eingabe-texte.ts";
 export type { TextName } from "../begriffe/anruf-pruefung.ts";
-export { KEY_FACTS_LIMITS } from "../begriffe/anrufe.js";
+export { KEY_FACTS_LIMITS } from "../begriffe/anrufe.ts";
 
 export const IDENTITY_MAX_LEN = 254;
 export const validIdentity = (e: unknown): boolean =>

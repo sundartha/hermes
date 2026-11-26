@@ -1,4 +1,4 @@
-import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
 import { speicherBereiche } from "../store.js";
 import { failedNumberCount, tenantActiveSubscriber, tenantStripe } from "../store/state-ops.js";
 import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.ts";

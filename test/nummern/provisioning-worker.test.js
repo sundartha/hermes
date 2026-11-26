@@ -12,7 +12,7 @@ import {
   recordProvisioningJob,
   setTenantStripe,
 } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVISION_NUMBER_JOB } from "../../src/begriffe/nummern-vergabe.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };

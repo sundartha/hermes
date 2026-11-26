@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
 import { NummerGekauftIdOffen } from "../../src/begriffe/nummern-vergabe.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { fakeBilling, fakeProvisioner } from "../helpers.js";
 import { makePgTestStore } from "../pg-helpers.js";
 

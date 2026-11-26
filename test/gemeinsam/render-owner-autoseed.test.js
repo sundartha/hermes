@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, seedBootstrapNumberFromConfig } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { findActiveNumber } from "../../src/store/views.ts";
 

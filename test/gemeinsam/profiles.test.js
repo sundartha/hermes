@@ -16,7 +16,7 @@ import { hashEmail } from "../../src/util.ts";
 import { maskNumber } from "../../src/util.ts";
 import { makeDefaultState, updateSettings } from "../../src/store/state-ops.js";
 import { defaultSettings } from "../../src/store.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 

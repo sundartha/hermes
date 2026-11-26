@@ -8,7 +8,7 @@ import {
   startServer,
   waitForLog,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const FRIST_MS = 10000;
 const E2E_FRIST_MS = 10000;

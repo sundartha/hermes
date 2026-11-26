@@ -8,7 +8,7 @@ import {
   TELNYX_TEST_SIGNATURE_HEADERS,
   postElRueckfall,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const UNKNOWN_TO = "+49999999999";

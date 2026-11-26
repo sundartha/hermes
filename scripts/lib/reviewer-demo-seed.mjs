@@ -1,5 +1,5 @@
 import { MS_PER_HOUR } from "../../src/utils/timer.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const INBOUND = "inbound";
 const ENDED_STATUS = "completed";

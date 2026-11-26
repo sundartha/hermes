@@ -6,7 +6,7 @@ import {
   tenantContext,
   makeDefaultState,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 test("registerTenant komponiert ownerName aus firstName + mehrteiligem lastName", () => {
   const s = makeDefaultState();

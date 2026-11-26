@@ -128,7 +128,7 @@ nie gemessen.
 - Mechanismen im Code (Kette der Ausgangs-Gates, serverseitig, vor dem Waehlen):
   - Globaler Notaus: Gate `outbound_frozen` (`src/telephony/outbound-gates.js#gate "outbound_frozen"`).
   - Verifikation des Kontos: Gate `kyc` (`src/telephony/outbound-gates.js#gate "kyc"`), Mindeststufe
-    `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/begriffe/mandant.js#KYC_OUTBOUND_MIN`).
+    `KYC_OUTBOUND_MIN = KYC_LEVEL.CARD` (`src/begriffe/mandant.ts#KYC_OUTBOUND_MIN`).
   - Sperrliste und Land-Gate: `deniedPrefix` bzw. `countryGateAllowed` in `numberGateError`
     (`src/telephony/outbound-gates.js#numberGateError`, `src/telephony/outbound-gates.js#countryGateAllowed`),
     ausgefuehrt im Gate `number_gate` (`src/telephony/outbound-gates.js#gate "number_gate"`).
@@ -219,7 +219,7 @@ nie gemessen.
   (`src/web-auth.js#mintSession`). Im Onboarding durch den Betreiber sind beide Felder Freitext
   (`src/routes/api-onboard.js#operator.post("/api/onboard")`). Wie die Namensfelder beim Login-Anbieter entstehen,
   belegt der Code nicht. Die Pruefstufe fuer ausgehende Anrufe ist die hinterlegte Karte
-  (`src/begriffe/mandant.js#KYC_OUTBOUND_MIN`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
+  (`src/begriffe/mandant.ts#KYC_OUTBOUND_MIN`), keine Identitaetspruefung; die hoehere Stufe "Identitaet
   geprueft" vergibt der Code nur beim Start an den Mandanten des Betreibers, ohne
   Pruefverfahren (`src/store/state-ops.js#seedBootstrapKyc`). Ein Konto mit fremdem Namen im
   Login-Profil liesse die KI "im Auftrag von" dieser Person anrufen.
@@ -544,10 +544,10 @@ angewendet in `src/precall-briefing.js#sanitizedBriefing`). Ob das Modell im Cha
 says" einhaelt, prueft der Server nicht - er kann es nicht sehen.
 
 **Was darf der Agent?** Nur muendlich zusagen. Das Mandat oeffnet keinen Buchungs- oder
-Kalenderpfad (`src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE`).
+Kalenderpfad (`src/begriffe/anrufe.ts#MANDATE_OUT_OF_SCOPE`).
 Werkzeugtext (place_call): "Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance."
 Der Rahmen ist auf 1000 Zeichen begrenzt (`src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"]`). Die Werte fuer
-Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST`); auf dem
+Angebote ausserhalb des Rahmens stammen aus einer Quelle (`src/begriffe/anrufe.ts#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST`); auf dem
 Budget-/Telnyx-Weg setzt der Prompt `accept_best` so um: das beste Angebot annehmen und als
 Nachricht festhalten (`src/i18n/prompts/en.ts#PROMPT_EN.mandate.outOfScopeSentence`).
 
@@ -806,7 +806,7 @@ bestehende Durchsetzung.
 10. **Auftraggeber-Name nicht identitaetsgeprueft**: der Name im Offenlegungssatz stammt aus
     dem Profil des Login-Anbieters (`src/web-auth.js#makeOidc.exchange.claims`) bzw. aus Freitext im
     Betreiber-Onboarding (`src/routes/api-onboard.js#operator.post("/api/onboard")`); die Pruefstufe fuer ausgehende
-    Anrufe ist die Karte (`src/begriffe/mandant.js#KYC_OUTBOUND_MIN`). Klauseln: "impersonation",
+    Anrufe ist die Karte (`src/begriffe/mandant.ts#KYC_OUTBOUND_MIN`). Klauseln: "impersonation",
     "Identity theft, impersonation".
     Ziel: Entscheidung des Betreibers: ob der Auftraggeber-Name vor ausgehenden Anrufen
     identitaetsgeprueft wird.
@@ -854,7 +854,7 @@ src/restricted-data.ts#RESTRICTED_CATEGORY | IBAN/Bankkonto ist KEINE Kategorie 
 src/telephony/outbound-gates.js#gate "outbound_frozen" | name: "outbound_frozen"
 src/telephony/outbound-gates.js#gate "kyc" | name: "kyc"
 src/telephony/outbound-gates.js#allowlistError | function allowlistError(
-src/begriffe/mandant.js#KYC_OUTBOUND_MIN | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
+src/begriffe/mandant.ts#KYC_OUTBOUND_MIN | KYC_OUTBOUND_MIN = KYC_LEVEL.CARD
 src/telephony/outbound-gates.js#numberGateError | deniedPrefix(to)
 src/telephony/outbound-gates.js#countryGateAllowed | function countryGateAllowed
 src/telephony/outbound-gates.js#gate "number_gate" | name: "number_gate"
@@ -906,9 +906,9 @@ src/audit-store.js#makeAuditStore | Append-only Audit-Log-Schreiber
 src/precall-briefing.js#BRIEFING_OUT_OF_SCOPE_VALUES | MANDATE_OUT_OF_SCOPE.ACCEPT_BEST
 src/precall-briefing.js#withoutSelfGrantedAcceptBest | function withoutSelfGrantedAcceptBest(mandate)
 src/precall-briefing.js#sanitizedBriefing | withoutSelfGrantedAcceptBest(mandate.value)
-src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
+src/begriffe/anrufe.ts#MANDATE_OUT_OF_SCOPE | keinen Kalender- oder Buchungspfad
 src/routes/_validation.ts#TEXT_LIMITS["mandate.decide_freely"] | "mandate.decide_freely": 1000
-src/begriffe/anrufe.js#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
+src/begriffe/anrufe.ts#MANDATE_OUT_OF_SCOPE.ACCEPT_BEST | ACCEPT_BEST: "accept_best"
 src/i18n/prompts/en.ts#PROMPT_EN.mandate.outOfScopeSentence | Accept the best option offered instead of asking back
 src/elevenlabs/outbound-weg.ts#outboundWegFuer | export function outboundWegFuer
 src/routes/api-calls.ts#router.post("/api/calls") | const wahl = outboundWegFuer(

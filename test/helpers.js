@@ -21,7 +21,7 @@ import { kindUmgebung } from "./gemeinsam/kind-umgebung.mjs";
 import { vorspannFuerStart, vorspannSeedNummer } from "./gemeinsam/vorspann-fahrzeug.js";
 import { MCP_STDIO_ARGS } from "./gemeinsam/ppid-waechter.mjs";
 import { laufendeAusgaben } from "./gemeinsam/instanz-ausgabe.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.ts";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";

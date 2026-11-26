@@ -18,8 +18,8 @@ import {
   numberRecordByE164,
   failedNumberCount,
 } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../src/begriffe/nummern.js";
-import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../src/begriffe/nummern.ts";
+import { TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { GLOBAL_CAP_REASON, shouldPersistProvisionResult } from "../../src/begriffe/nummern-vergabe.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
@@ -251,7 +251,7 @@ const nummerAufWeg = (s, weg) => {
 };
 
 test("[NIE1] Uebergangstabelle erlaubt genau die vorgesehenen Zielstatus, aus released keinen", async () => {
-  const { NUMBER_TRANSITIONS } = await import("../../src/begriffe/nummern.js");
+  const { NUMBER_TRANSITIONS } = await import("../../src/begriffe/nummern.ts");
   assert.deepEqual(
     Object.fromEntries(Object.entries(NUMBER_TRANSITIONS).map(([von, nach]) => [von, [...nach]])),
     ERLAUBTE_UEBERGAENGE,
@@ -297,7 +297,7 @@ test("[NIE2] Nummernstatus traegt beim Anfordern bis Freigeben die vorgesehenen 
 });
 
 test("[NIE3] Status eines Bereitstellungsjobs sind queued, done und failed", async () => {
-  const { PROVISIONING_JOB_STATUS } = await import("../../src/begriffe/nummern.js");
+  const { PROVISIONING_JOB_STATUS } = await import("../../src/begriffe/nummern.ts");
   assert.deepEqual(
     { ...PROVISIONING_JOB_STATUS },
     { QUEUED: "queued", DONE: "done", FAILED: "failed" },
@@ -347,7 +347,7 @@ import {
   setKycLevel,
   setTenantSubscription,
 } from "../../src/store/state-ops.js";
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 
 const GRACE_MS = 60_000;

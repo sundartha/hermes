@@ -1,4 +1,4 @@
-import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.js";
+import { ANRUFSTART_WARTEFRIST_MAX_MS } from "../begriffe/anrufe.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 export const ANBIETER = Object.freeze({ TELNYX: "telnyx", ELEVENLABS: "elevenlabs" });

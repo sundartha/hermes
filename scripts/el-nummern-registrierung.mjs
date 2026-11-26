@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { anfrage } from "../src/utils/anfrage.js";
 import { config } from "../src/config.ts";
-import { NUMBER_STATUS } from "../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../src/begriffe/nummern.ts";
 import { PROVIDER } from "../src/begriffe/nummern-vergabe.js";
 import {
   REGISTRIERUNG_KLASSE,

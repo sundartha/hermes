@@ -16,7 +16,7 @@ import {
 } from "../../src/store/state-ops.js";
 import {
   BOOTSTRAP_TENANT_ID,
-} from "../../src/begriffe/mandant.js";
+} from "../../src/begriffe/mandant.ts";
 import {
   DEFAULT_GREETING,
   calendarMap,

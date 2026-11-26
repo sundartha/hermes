@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
 import {
   mcpPost,

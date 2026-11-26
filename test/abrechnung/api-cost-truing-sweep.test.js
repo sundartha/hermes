@@ -8,7 +8,7 @@ import { voiceControl } from "../../src/telephony/registry.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { makeStubStore, fakeConfig } from "../cost-truing-harness.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

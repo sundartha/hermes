@@ -6,7 +6,7 @@ import express from "express";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../../src/elevenlabs/inbound-path-decision.ts";
 import { LOCALES } from "../../src/i18n/locales.ts";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } from "../../src/routes/webhooks-elevenlabs-init.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV } from "../helpers.js";
 import { baueInitZustand, initBindungsKoerper } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

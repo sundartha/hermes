@@ -18,7 +18,7 @@ before(async () => {
   ({ config } = await import("../../src/config.ts"));
   ({ makePgStore } = await import("../../src/store/pg.js"));
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.ts"));
   ({ makeMetering } = await import("../../src/billing/metering.js"));
   ({ makeConfigOverrides } = await import("../helpers.js"));
 });

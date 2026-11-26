@@ -13,7 +13,7 @@ import {
   setTenantSubscription,
   tenantSubscription,
 } from "../../src/store/state-ops.js";
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 
 const TENANT = "t_312k";
 

@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { collectedFieldsOf, makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   createCall,
   makeDefaultState,

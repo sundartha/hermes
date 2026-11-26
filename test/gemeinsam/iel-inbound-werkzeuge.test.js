@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { tenantToolToken } from "../../src/elevenlabs/tenant-tool-token.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { seedCall, seedState, startServer, waitForLog } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

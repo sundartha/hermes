@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { fristSignal } from "../gemeinsam/antwortfrist.mjs";
 import { waitUntil } from "../helpers.js";
 import { starteHermesMitPglite } from "../abrechnung/server-mit-testdatenbank.js";

@@ -11,7 +11,7 @@ before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-detektor-pg-"));
   await import("../../src/config.ts");
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.ts"));
   ({ publicCall } = await import("../../src/store/views.ts"));
 });
 

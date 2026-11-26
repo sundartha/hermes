@@ -1,4 +1,4 @@
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 import { PROVISION_NUMBER_JOB } from "../begriffe/nummern-vergabe.js";
 import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../begriffe/speicher.js";
 import { innerhalbFrist } from "./einstellungen-sql.js";

@@ -10,7 +10,7 @@ import {
 import { agentToolNames } from "./claude.js";
 import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.ts";
 import { validateAssistantContext, validateMandate } from "./i18n/anruf-eingabe-texte.ts";
-import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.js";
+import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./begriffe/anrufe.ts";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
 import { omitKeys } from "./utils/object.ts";

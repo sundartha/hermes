@@ -1,4 +1,4 @@
-import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.js";
+import { PROVISIONING_JOB_STATUS } from "../../../begriffe/nummern.ts";
 import { requireIdempotencyKey } from "../../idempotency-key.ts";
 import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";
 import { normalisiereLauf, type Lauf, type LaufMitMeldung } from "../../../utils/zeitplan-im-prozess.ts";

@@ -33,7 +33,7 @@ for (const [datei, quelltext] of FAELLE) {
 test("Import aus der Begriffsdatei bleibt grün", async () => {
   const meldungen = await wortMeldungen(
     "src/billing/probe-f.js",
-    'import { KYC_LEVEL } from "../begriffe/mandant.js";\nexport const f = KYC_LEVEL;\n',
+    'import { KYC_LEVEL } from "../begriffe/mandant.ts";\nexport const f = KYC_LEVEL;\n',
   );
   assert.deepEqual(meldungen, []);
 });

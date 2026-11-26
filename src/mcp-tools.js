@@ -1,5 +1,5 @@
-import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES, KEY_FACTS_LIMITS } from "./begriffe/anrufe.js";
-import { CONSULT_ANSWER_MODE } from "./begriffe/rueckfrage.js";
+import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES, KEY_FACTS_LIMITS } from "./begriffe/anrufe.ts";
+import { CONSULT_ANSWER_MODE } from "./begriffe/rueckfrage.ts";
 import "./call-result.ts";
 import "./restricted-data.ts";
 import "./telephony/failure-reason.ts";

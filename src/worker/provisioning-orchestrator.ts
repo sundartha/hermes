@@ -1,15 +1,15 @@
 import { makeSingleFlight } from "../single-flight.ts";
 import type { Lauf, LaufMitMeldung } from "../utils/zeitplan-im-prozess.ts";
 import type { handleProvisionJob as HandleProvisionJob } from "./provisioning.ts";
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 import {
   PROVIDER,
   PROVISION_NUMBER_JOB,
   SKIP_VERMERK_SCHLUESSEL,
   shouldPersistProvisionResult,
 } from "../begriffe/nummern-vergabe.js";
-import { ANRUFSTART_JOB } from "../begriffe/anrufe.js";
-import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
+import { ANRUFSTART_JOB } from "../begriffe/anrufe.ts";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.ts";
 import { auftragHaltGrund, speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";

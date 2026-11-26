@@ -13,7 +13,7 @@ import {
 } from "../../src/elevenlabs/inbound-bridges.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { makeFristenLauf } from "../../src/telephony/fristen-lauf.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   captureConsole,

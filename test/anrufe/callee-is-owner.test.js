@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { calleeIsOwner, ownerSelfCallGranted } from "../../src/callee-is-owner.ts";
 import { createCall } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { seedState } from "../helpers.js";
 
 const OWN = "+491713920012";

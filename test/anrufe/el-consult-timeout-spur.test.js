@@ -14,7 +14,7 @@ const { makeConsultRaised, CONSULT_RESULT } = await import(
 );
 const { makeDurableAudit } = await import("../../src/durable-audit.js");
 const ops = await import("../../src/store/state-ops.js");
-const { CONSULT_TIMEOUT_REASON } = await import("../../src/begriffe/rueckfrage.js");
+const { CONSULT_TIMEOUT_REASON } = await import("../../src/begriffe/rueckfrage.ts");
 const { config } = await import("../../src/config.ts");
 
 const STAGES = Object.freeze({ deliveryDeadlineMs: 60, ackDeadlineMs: 120, answerDeadlineMs: 240 });

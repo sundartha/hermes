@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMetering } from "../../src/billing/metering.js";
 import { config } from "../../src/config.ts";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { emptyUsage } from "../../src/store.js";
 import { makeDefaultState, recordUsageEvent } from "../../src/store/state-ops.js";

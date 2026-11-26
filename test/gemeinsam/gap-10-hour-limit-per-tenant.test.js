@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAblehnendeAttrappe, starteErfolgreicheAttrappe } from "./vorspann-fahrzeug.js";
 

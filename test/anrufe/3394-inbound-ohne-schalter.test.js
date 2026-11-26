@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { inboundPfadEntscheidung } from "../../src/elevenlabs/inbound-path-decision.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   normalizeIncomingTexml,

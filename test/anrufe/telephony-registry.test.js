@@ -11,7 +11,7 @@ import {
   inboundSignatureVerifier,
 } from "../../src/telephony/registry.js";
 import { PROVIDER, DEFAULT_PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { telnyxVoice } from "../../src/telephony/adapters/telnyx/voice.js";
 import { renderDirectives as telnyxRenderDirectives } from "../../src/telephony/adapters/telnyx/render.ts";
 import { telnyxNumberProvisioning } from "../../src/telephony/adapters/telnyx/numbers.js";

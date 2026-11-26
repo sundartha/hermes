@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { planProfileFor } from "../../src/plans.ts";
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { TELNYX_TEST_OWNER_NUMBER, placeCall, seedState, startServer, EL_OUTBOUND_BOOT_ENV } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, disclosurePrefixFor, languageForCountry } from "../../src/i18n/locales.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";

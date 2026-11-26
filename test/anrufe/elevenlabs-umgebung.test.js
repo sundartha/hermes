@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import test from "node:test";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   placeCall,
   seedState,

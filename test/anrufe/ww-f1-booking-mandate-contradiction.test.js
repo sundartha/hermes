@@ -1,8 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from ".././helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT, MANDATE_OUT_OF_SCOPE_VALUES } from "../../src/begriffe/anrufe.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
+import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT, MANDATE_OUT_OF_SCOPE_VALUES } from "../../src/begriffe/anrufe.ts";
 
 const OWNER = "Jonas Beispiel";
 const SCOPE = "Termin an einem Werktag zwischen 9 und 12 Uhr, bis 60 Euro";

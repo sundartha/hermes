@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startServer, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { MAX_OPEN_POLLS_PER_CALL } from "../../src/consult/delivery.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { neuePglite } from "../pglite-helfer.js";

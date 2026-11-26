@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { seedCall, seedState, tempDataDir } from "../helpers.js";
 
 const FREMDER_MANDANT = "t_bericht_json_ohne_eintrag";

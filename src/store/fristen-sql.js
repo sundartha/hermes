@@ -1,4 +1,4 @@
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 const ERSTER_PLATZ_NACH_LEASE = 4;

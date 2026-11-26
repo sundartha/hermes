@@ -16,7 +16,7 @@ import {
   schliesseKostenAbgleich,
   oeffneKostenAbgleichErneut,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
 import { KOSTENART, KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { fakeConfig, fakeVoiceControl, isoMinutesAgo, makeStubStore } from "../cost-truing-harness.js";

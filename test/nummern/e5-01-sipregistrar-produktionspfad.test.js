@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { attemptContractEndCleanup } from "../../src/billing/contract-end-cleanup.ts";
 import { sipRegistrarWennAktiv } from "../../src/elevenlabs/nummern-registrierung.ts";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner, fakeSipRegistrar } from "../helpers.js";
 

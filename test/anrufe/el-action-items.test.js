@@ -6,7 +6,7 @@ import { registerTools } from "../../src/mcp-tools.js";
 import { makeElevenLabsOutbound } from "../../src/elevenlabs/outbound.js";
 import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { storeOpsFacade, waitUntil, withFetch } from "../helpers.js";
 

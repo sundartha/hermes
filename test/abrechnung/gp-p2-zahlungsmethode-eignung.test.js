@@ -23,7 +23,7 @@ import {
   findNumber,
 } from "../../src/store/state-ops.js";
 import { makePgStore } from "../../src/store/pg.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 
 const SECRET = "sk_test_gpp2";
 const withStripeStub = makeStripeStub(config, SECRET);

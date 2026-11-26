@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { legeMandantAn, makePgTestStore } from "../pg-helpers.js";
 
 const MIT_NAMEN = "t_mit_namen";

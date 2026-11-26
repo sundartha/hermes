@@ -10,7 +10,7 @@ import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { TRANSLITERATION_STEMS } from "../umlaut-stems-helper.js";
 
 const OWNER = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;

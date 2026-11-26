@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { seedCall, seedState, startServer, waitForStoreState } from "../helpers.js";
 import { startEmpfaenger } from "../gemeinsam/otlp-empfaenger.js";
 import { OTLP_MESSWERTE_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";

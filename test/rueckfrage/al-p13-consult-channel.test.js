@@ -51,9 +51,9 @@ before(async () => {
     () => import("../config-namespaces-helper.js"),
     () => import("../../src/store/state-ops.js"),
     async () => ({
-      ...(await import("../../src/begriffe/rueckfrage.js")),
-      ...(await import("../../src/begriffe/anrufe.js")),
-      ...(await import("../../src/begriffe/mandant.js")),
+      ...(await import("../../src/begriffe/rueckfrage.ts")),
+      ...(await import("../../src/begriffe/anrufe.ts")),
+      ...(await import("../../src/begriffe/mandant.ts")),
     }),
     () => import("../../src/consult/delivery.ts"),
     () => import("../../src/consult/gate.ts"),

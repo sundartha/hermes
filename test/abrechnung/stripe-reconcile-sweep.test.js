@@ -6,7 +6,7 @@ import {
 } from "../../src/billing/stripe-reconcile.ts";
 import { tenantsForStripeReconcile } from "../../src/store/state-ops.js";
 import { SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { fakeProvisioner } from "../helpers.js";
 

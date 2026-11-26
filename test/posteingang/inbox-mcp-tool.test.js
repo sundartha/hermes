@@ -5,7 +5,7 @@ import { registerTools } from "../../src/mcp-tools.js";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.ts";
 import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import * as ops from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { seedState, seedCall, startServer, mcpPost, toolCall, readToolResult } from "../helpers.js";
 
 const HTTP_OK = 200;

@@ -2,7 +2,7 @@ import { createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.ts";
 import * as store from "./store.js";
 import { speicherBereiche } from "./store.js";
-import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.js";
+import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.ts";
 import { resolveTimezone } from "./begriffe/sprache-zeit.ts";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";

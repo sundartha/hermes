@@ -27,7 +27,7 @@ import {
   registerTenant,
   requestNumber,
 } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { fakeProvisioner } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";
