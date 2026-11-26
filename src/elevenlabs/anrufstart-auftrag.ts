@@ -105,13 +105,25 @@ async function ersterSperrGrund<A>(sperren: Sperren<A>, call: A): Promise<string
   return null;
 }
 
+interface Lesung<A> {
+  call: A | null;
+  gescheitert: boolean;
+  fehler?: unknown;
+}
+
+const leseEinmal = <A extends Anruf>(store: Abhaengigkeiten<A>["store"], callId: string): Promise<Lesung<A>> =>
+  store.leseCall(callId).then(
+    (call): Lesung<A> => ({ call: call ?? null, gescheitert: false }),
+    (fehler: unknown): Lesung<A> => ({ call: null, gescheitert: true, fehler }),
+  );
+
 async function leseMitWiederholung<A extends Anruf>(
   { store, platz }: Pick<Abhaengigkeiten<A>, "store"> & { platz?: Platz<A> | undefined },
   callId: string,
   versuch = 1,
-): Promise<A | null> {
-  const call = await store.leseCall(callId);
-  if (call || versuch >= LESE_VERSUCHE || !platz) return call ?? null;
+): Promise<Lesung<A>> {
+  const lesung = await leseEinmal(store, callId);
+  if (lesung.call || versuch >= LESE_VERSUCHE || !platz) return lesung;
   await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
   return leseMitWiederholung({ store, platz }, callId, versuch + 1);
 }
@@ -120,12 +132,13 @@ async function leseOderBeende<A extends Anruf>(
   abhaengig: Pick<Abhaengigkeiten<A>, "store" | "beendeOhneWahl"> & { platz?: Platz<A> | undefined },
   callId: string,
 ): Promise<A | null> {
-  const call = await leseMitWiederholung(abhaengig, callId);
-  if (!call)
+  const lesung = await leseMitWiederholung(abhaengig, callId);
+  if (!lesung.call)
     await abhaengig.beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch((fehler: unknown) => {
       console.error(`[anrufstart] Beenden des unlesbaren Anrufs gescheitert call=${callId}:`, fehler instanceof Error ? fehler.message : String(fehler));
     });
-  return call;
+  if (lesung.gescheitert) throw lesung.fehler;
+  return lesung.call;
 }
 
 const variablenVon = (gespraech: Gespraech | null) => gespraech?.conversation_initiation_client_data?.dynamic_variables;
