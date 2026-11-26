@@ -1494,8 +1494,6 @@ test("Rohwerte Sicherheit und Stimme: ohne Umgebung gelten die Standardwerte der
   });
   assert.equal(ist.voice.elevenLabsToolToken, "");
   assert.equal(ist.voice.elevenLabsTenantTokenRequired, false);
-  assert.equal(ist.voice.sendSmsSummary, true);
-  assert.equal(ist.voice.dailySmsCap, 20);
   assert.equal(ist.voice.sttSpeechTimeoutSec, 2);
   assert.equal(ist.voice.callerSubstanceMinLen, 2);
   assert.equal(ist.voice.thinkingSignalEnabled, false);
@@ -1544,8 +1542,6 @@ const SICHERHEIT_STIMME_GESETZT = {
   ELEVENLABS_OPENING_LINE_LLM_ENABLED: "false",
   ELEVENLABS_ENVIRONMENT: "staging",
   ELEVENLABS_ERWARTETER_MEDIENWEG: " sipgo ",
-  SEND_SMS_SUMMARY: "false",
-  DAILY_SMS_CAP: "7",
   STT_SPEECH_TIMEOUT_SEC: "5",
   CALLER_SUBSTANCE_MIN_LEN: "3",
   THINKING_SIGNAL_ENABLED: "true",
@@ -1603,8 +1599,6 @@ test("Rohwerte Sicherheit und Stimme: gesetzte Werte werden gelesen, gekuerzt un
   });
   assert.equal(ist.voice.elevenLabsToolToken, "werkzeug");
   assert.equal(ist.voice.elevenLabsTenantTokenRequired, true);
-  assert.equal(ist.voice.sendSmsSummary, false);
-  assert.equal(ist.voice.dailySmsCap, 7);
   assert.equal(ist.voice.sttSpeechTimeoutSec, 5);
   assert.equal(ist.voice.callerSubstanceMinLen, 3);
   assert.equal(ist.voice.thinkingSignalEnabled, true);
@@ -1633,7 +1627,6 @@ const SICHERHEIT_STIMME_GRENZEN = [
   ["VORSPANN_KLINGEL_FRIST_MS", ["voice", "elevenLabsOutbound", "vorspannKlingelFristMs"], 100, 75000],
   ["ANRUFSTART_WARTEFRIST_MS", ["voice", "elevenLabsOutbound", "anrufstartWartefristMs"], 100, 120000],
   ["EL_BRIDGE_START_DEADLINE_MS", ["voice", "elevenLabsOutbound", "bridgeStartDeadlineMs"], 100, 30000],
-  ["DAILY_SMS_CAP", ["voice", "dailySmsCap"], 0, 20],
   ["STT_SPEECH_TIMEOUT_SEC", ["voice", "sttSpeechTimeoutSec"], 1, 2],
   ["CALLER_SUBSTANCE_MIN_LEN", ["voice", "callerSubstanceMinLen"], 1, 2],
 ];
@@ -1696,7 +1689,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
     "ELEVENLABS_PLAY_TTS_ENABLED",
     "ELEVENLABS_TENANT_TOKEN_REQUIRED",
     "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
-    "SEND_SMS_SUMMARY",
     "THINKING_SIGNAL_ENABLED",
     "TOOL_FOLLOW_UP_ENABLED",
     "OWNER_SELF_CALL_ENABLED",
@@ -1717,7 +1709,6 @@ test("Rohwerte Sicherheit und Stimme: ungueltige Schalter und Umgebungswahl meld
   assert.equal(ist.voice.elevenLabsOutbound.openingLineLlm, true);
   assert.equal(ist.voice.elevenLabsOutbound.environment, "production");
   assert.equal(ist.voice.elevenLabsOutbound.erwarteterMedienweg, "");
-  assert.equal(ist.voice.sendSmsSummary, true);
 });
 
 test("Rohwerte Sicherheit und Stimme: ein leer gesetzter Medienweg bleibt leer und eine leere Landesliste gilt als leer", () => {
@@ -1766,7 +1757,6 @@ const ABRECHNUNG_ZAHLEN = [
   ["VOICE_TARIFF_INBOUND_CENTS", "voiceTariffInboundCents", 6, 0, undefined],
   ["VOICE_TARIFF_FULL_COST_FLOOR_CENTS", "voiceTariffFullCostFloorCents", 15, 0, undefined],
   ["DEFAULT_TENANT_BUDGET_CENTS", "defaultTenantBudgetCents", 1500, 0, undefined],
-  ["SMS_COST_CENTS", "smsCostCents", 0, 0, undefined],
   ["PLATFORM_SPEND_WARN_PERCENT", "platformSpendWarnPercent", 80, 0, 100],
   ["OUTAGE_ALERT_WINDOW_MS", "outageAlertWindowMs", 3600000, 0, undefined],
   ["OUTAGE_ALERT_MIN_FAILURES", "outageAlertMinFailures", 3, 1, undefined],

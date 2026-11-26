@@ -508,7 +508,6 @@ function flushEpochLabel(flushEpochIso) {
 function paymentConfigBannerLine(billing) {
   return (
     `Zahlungsabwicklung: ${envFlagState("PAYMENT_ENABLED", billing.paymentEnabled)} | ` +
-    `SMS_COST_CENTS=${billing.smsCostCents} ct | ` +
     `BILLING_FLUSH_EPOCH=${flushEpochLabel(billing.flushEpochIso)}`
   );
 }

@@ -73,7 +73,6 @@ billing.priceDriftMinIntervalMs
 billing.priceDriftUnknownEscalateAfter
 billing.providerCurrency
 billing.providerToBucketRateMicro
-billing.smsCostCents
 billing.stripeApiBase
 billing.stripeBusinessPriceId
 billing.stripeCustomerRetryDelayMs
@@ -199,7 +198,6 @@ tenancy.precallBriefingEnabled
 tenancy.profilesSeed
 tenancy.selfServiceEnabled
 voice.callerSubstanceMinLen
-voice.dailySmsCap
 voice.elevenLabsInbound
 voice.elevenLabsOutbound
 voice.elevenLabsPlayTts
@@ -209,7 +207,6 @@ voice.inboundOwnerGreetingEnabled
 voice.inboundOwnerGreetingTenantIds
 voice.ownerSelfCallEnabled
 voice.ownerSelfCallTenantIds
-voice.sendSmsSummary
 voice.sttProfile
 voice.sttSpeechTimeoutSec
 voice.thinkingSignalEnabled
@@ -386,7 +383,6 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   "voiceTariffInboundCents",
   "voiceTariffFullCostFloorCents",
   "defaultTenantBudgetCents",
-  "smsCostCents",
   "usdToEur",
   "modelPricesUsd",
   "numberMonthlyCostCents",

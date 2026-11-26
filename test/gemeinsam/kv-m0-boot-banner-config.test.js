@@ -20,7 +20,6 @@ function bannerConfig({ billing = {}, llm = {}, voice = {} } = {}) {
   return {
     billing: {
       paymentEnabled: false,
-      smsCostCents: 0,
       flushEpochIso: null,
       costTruingRequiredRecordTypes: [],
       ...billing,
@@ -33,7 +32,6 @@ function bannerConfig({ billing = {}, llm = {}, voice = {} } = {}) {
 test("KV-M0-1: costConfigBannerLines folgt der aufgeloesten Config, NICHT process.env (Muster AL-P16-7)", () => {
   const opposite = {
     PAYMENT_ENABLED: "false",
-    SMS_COST_CENTS: "999",
     CLAUDE_MODEL: "opposite-claude-model",
     PRECALL_BRIEFING_MODEL: "opposite-briefing-model",
     ELEVENLABS_PLAY_TTS_ENABLED: "false",
@@ -46,7 +44,6 @@ test("KV-M0-1: costConfigBannerLines folgt der aufgeloesten Config, NICHT proces
     const config = bannerConfig({
       billing: {
         paymentEnabled: true,
-        smsCostCents: 2,
         flushEpochIso: null,
         costTruingRequiredRecordTypes: [],
       },
@@ -55,12 +52,10 @@ test("KV-M0-1: costConfigBannerLines folgt der aufgeloesten Config, NICHT proces
     const lines = costConfigBannerLines(config).join("\n");
 
     assert.match(lines, /AKTIV \(PAYMENT_ENABLED=true\)/);
-    assert.match(lines, /SMS_COST_CENTS=2 ct/);
     assert.match(lines, /CLAUDE_MODEL=claude-haiku-4-5/);
     assert.match(lines, /PRECALL_BRIEFING_MODEL=claude-sonnet-5/);
     assert.match(lines, /AKTIV \(ELEVENLABS_PLAY_TTS_ENABLED=true\)/);
 
-    assert.doesNotMatch(lines, /999/);
     assert.doesNotMatch(lines, /opposite-claude-model/);
     assert.doesNotMatch(lines, /opposite-briefing-model/);
     assert.doesNotMatch(lines, /opposite-record-type/);
@@ -86,7 +81,6 @@ test("KV-M0-3: die fuenf nicht-nullbaren Felder zeigen NIE UNSET_LABEL, auch auf
   const config = bannerConfig({
     billing: {
       paymentEnabled: false,
-      smsCostCents: 0,
       flushEpochIso: "2026-08-03T00:00:00.000Z",
       costTruingRequiredRecordTypes: ["sip-trunking"],
     },
@@ -96,7 +90,6 @@ test("KV-M0-3: die fuenf nicht-nullbaren Felder zeigen NIE UNSET_LABEL, auch auf
   for (const line of lines) {
     assert.doesNotMatch(line, new RegExp(UNSET_LABEL), `Zeile darf "${UNSET_LABEL}" nicht zeigen: ${line}`);
   }
-  assert.match(lines[0], /SMS_COST_CENTS=0 ct/);
 });
 
 const ALL_SEVEN_SET_ENV = {
@@ -104,7 +97,6 @@ const ALL_SEVEN_SET_ENV = {
   STRIPE_SECRET_KEY: "sk_test_x",
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   NUMBER_SETUP_FEE_CENTS: "500",
-  SMS_COST_CENTS: "2",
   BILLING_FLUSH_EPOCH: "2026-08-03T00:00:00Z",
   COST_TRUING_REQUIRED_RECORD_TYPES:
     "sip-trunking,call-control,speech-to-text,text-to-speech,recording,ai-voice-assistant",
@@ -126,7 +118,7 @@ async function startAllSevenSetServer() {
 }
 
 test("KV-M0-4: der echte Boot druckt alle drei Zeilen genau einmal (BASE_ENV-Defaults, Muster AL-P16-8)", async () => {
-  const srv = await startServer({ env: { SMS_COST_CENTS: "0" } });
+  const srv = await startServer({});
   try {
     const res = await abrufMitFrist(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
@@ -136,7 +128,7 @@ test("KV-M0-4: der echte Boot druckt alle drei Zeilen genau einmal (BASE_ENV-Def
     }
     assert.match(
       srv.stdout,
-      /Zahlungsabwicklung: aus \(PAYMENT_ENABLED=false\) \| SMS_COST_CENTS=0 ct \| BILLING_FLUSH_EPOCH=nicht gesetzt/,
+      /Zahlungsabwicklung: aus \(PAYMENT_ENABLED=false\) \| BILLING_FLUSH_EPOCH=nicht gesetzt/,
     );
     assert.match(
       srv.stdout,
@@ -156,7 +148,6 @@ test("KV-M0-5: alle sieben Werte gesetzt - das Banner zeigt sie und leakt keines
   try {
     const stdout = srv.stdout;
     assert.match(stdout, /AKTIV \(PAYMENT_ENABLED=true\)/);
-    assert.match(stdout, /SMS_COST_CENTS=2 ct/);
     assert.match(stdout, /BILLING_FLUSH_EPOCH=2026-08-03T00:00:00\.000Z/);
     assert.match(
       stdout,

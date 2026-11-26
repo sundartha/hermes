@@ -155,8 +155,6 @@ export function rohwerteVoice(
     Parameters<typeof ausgehend>[0] & {
       ELEVENLABS_TOOL_TOKEN?: string | undefined;
       ELEVENLABS_TENANT_TOKEN_REQUIRED?: string | undefined;
-      SEND_SMS_SUMMARY?: string | undefined;
-      DAILY_SMS_CAP?: string | undefined;
       STT_SPEECH_TIMEOUT_SEC?: string | undefined;
       CALLER_SUBSTANCE_MIN_LEN?: string | undefined;
       THINKING_SIGNAL_ENABLED?: string | undefined;
@@ -174,8 +172,6 @@ export function rohwerteVoice(
   elevenLabsToolToken: string;
   elevenLabsTenantTokenRequired: boolean;
   elevenLabsOutbound: ReturnType<typeof ausgehend>;
-  sendSmsSummary: boolean;
-  dailySmsCap: number;
   sttSpeechTimeoutSec: number;
   callerSubstanceMinLen: number;
   thinkingSignalEnabled: boolean;
@@ -197,8 +193,6 @@ export function rohwerteVoice(
       { fallback: false },
     ),
     elevenLabsOutbound: ausgehend(env, helfer, zugang),
-    sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", env.SEND_SMS_SUMMARY, { fallback: true }),
-    dailySmsCap: numEnv("DAILY_SMS_CAP", env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
     sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", env.STT_SPEECH_TIMEOUT_SEC, {
       fallback: 2,
       min: 1,
