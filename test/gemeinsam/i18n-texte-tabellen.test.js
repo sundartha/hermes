@@ -47,16 +47,17 @@ for (const sprache of SPRACHEN) {
 }
 
 test("Transkript und Zusammenfassung speichern keine Klammer-Tags", () => {
-  const state = { calls: [{ id: "c1", transcript: [], summary: "" }] };
+  const anruf = { id: "c1", transcript: [], summary: "" };
+  const state = { calls: [anruf] };
   const speicher = storeOpsFacade(state);
   speicher.addTranscript("c1", "agent", " Hallo [warm] Welt [x]\n");
   speicher.addTranscript("c1", "agent", null);
   speicher.addTranscript("c1", "agent", 5);
-  assert.deepEqual(state.calls[0].transcript.map((z) => z.text), ["Hallo Welt", "", "5"]);
+  assert.deepEqual(anruf.transcript.map((z) => z.text), ["Hallo Welt", "", "5"]);
   speicher.recordProviderCallResult("c1", { summary: "Termin [freundlich] steht", objectiveAchieved: true });
-  assert.equal(state.calls[0].summary, "Termin steht");
+  assert.equal(anruf.summary, "Termin steht");
   speicher.recordProviderCallResult("c1", { summary: "", objectiveAchieved: false });
-  assert.equal(state.calls[0].summary, "");
+  assert.equal(anruf.summary, "");
 });
 
 const GATE = {
