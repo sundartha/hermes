@@ -32,6 +32,7 @@ import { mapStatus } from "../call-result.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
+import type { LocaleSpeicher } from "../elevenlabs/call-locale.ts";
 import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
@@ -76,12 +77,7 @@ const vorabBriefing: (args: {
   to: string;
   tenantId: string | undefined;
 }) => Promise<{ context: AnrufKontext; mandate: unknown } | null> = fetchPrecallBriefing;
-const anrufSprache: (args: {
-  store: Speicher;
-  config: Konfiguration;
-  call: { tenantId: string | undefined; from: string | undefined; to: string; language: string };
-  ownerName: unknown;
-}) => { language: string } = elevenlabsOutbound().callLocaleOf;
+const anrufSprache = elevenlabsOutbound().callLocaleOf;
 const eroeffnungHolen: (args: {
   objective: unknown;
   tenantId: string | undefined;
@@ -202,8 +198,8 @@ interface Speicher {
   save: () => unknown;
   anrufpauseGelesen?: () => Promise<unknown>;
   anrufpauseAktiv?: () => unknown;
-  numberRecordByE164: WegAufruf["store"]["numberRecordByE164"];
-  load: () => unknown;
+  numberRecordByE164: WegAufruf["store"]["numberRecordByE164"] & LocaleSpeicher["numberRecordByE164"];
+  load: LocaleSpeicher["load"];
 }
 
 interface Bereiche {
@@ -221,7 +217,7 @@ interface Bereiche {
     zustellungSchreiben: (callId: string, tenantId: string | undefined, eventId: string) => Promise<unknown>;
   };
   konto: { tenantPrivateNumberLesen: (tenantId: string | undefined) => Promise<string | null | undefined> };
-  mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: unknown }> };
+  mandant: { tenantContext: (tenantId: string | undefined) => Promise<{ ownerName: string | null }> };
   einstellungen: {
     recordCostProfile: (callId: string, profil: string) => Promise<unknown>;
     resolveProfile: (tenantId: string | undefined) => Promise<unknown>;
@@ -912,8 +908,7 @@ export function makeCallRoutes({
       const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
       const callLocale = anrufSprache({
         store,
-        config,
-        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
+        call: { tenantId: String(ctx.tenantId), from: ctx.fromNumber, to: ctx.to, language },
         ownerName,
       });
       const opening = await eroeffnungHolen({

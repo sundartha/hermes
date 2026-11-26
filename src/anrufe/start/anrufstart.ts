@@ -18,6 +18,7 @@ export interface AnrufStartEingabe {
   ownerEroeffnung: string;
   eroeffnungGesagt: boolean;
   folgesatz: string;
+  eingehend?: boolean | undefined;
 }
 
 interface Override {
@@ -44,14 +45,14 @@ function overrideVon({ language, voiceId }: { language: string; voiceId: string 
   };
 }
 
-export function anrufStart({ sprachen, dritt, ownerEroeffnung, eroeffnungGesagt, folgesatz }: AnrufStartEingabe): AnrufStart {
+export function anrufStart({ sprachen, dritt, ownerEroeffnung, eroeffnungGesagt, folgesatz, eingehend }: AnrufStartEingabe): AnrufStart {
   const gemeinsam = { sprache: sprachen.language, offenlegungssprache: sprachen.disclosureLanguage };
   const providerSprache = { language: sprachen.providerLanguage, voiceId: sprachen.voiceId };
   if (eroeffnungGesagt) {
     const nachVorspann = nichtLeer(folgesatz);
     return { ...gemeinsam, sprecher: "vorspann", folgesatz: nachVorspann, eroeffnung: "", firstMessage: nachVorspann, override: overrideVon(providerSprache, nachVorspann) };
   }
-  const gleicheSprache = sprachen.providerLanguage === sprachen.disclosureLanguage;
+  const gleicheSprache = sprachen.providerLanguage === sprachen.disclosureLanguage && !eingehend;
   const erste = ownerEroeffnung || (gleicheSprache ? "" : dritt) || null;
   return { ...gemeinsam, sprecher: "agent", eroeffnung: ownerEroeffnung || dritt, firstMessage: erste, override: overrideVon(providerSprache, erste) };
 }

@@ -2,11 +2,11 @@ import { fetchConversation, fetchPhoneNumber } from "./convai.ts";
 import {
   ANSWERED_REASON_NOT_ANSWERED,
   ELEVENLABS_PROVIDER_MAX_DURATION_S,
-  callLocaleOf,
   endeSchreiberFuer,
   makeElevenLabsOutbound,
   mitAuftragsurteil,
 } from "./outbound.js";
+import { callLocaleOf } from "./call-locale.ts";
 import { makeVorspannErzeuger } from "./outbound-vorspann.js";
 
 export type { ConvaiKonto } from "./convai.ts";

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { localeFor, LOCALES } from "../i18n/locales.ts";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
-import { inboundElLocaleOf as inboundElLocaleAusSprachwahl } from "./call-locale.ts";
+import { anrufStart } from "../anrufe/start/anrufstart.ts";
+import { inboundElLocaleOf } from "./call-locale.ts";
 import { callTimeContext } from "./time-context.ts";
 import {
   OVERRIDE_ALL_LEAF_PATHS,
@@ -67,10 +68,6 @@ export function callBindingTokenOf(body) {
   return tokenAusKopfzeilen(body) || alsToken(body?.dynamic_variables?.[EL_CALL_BINDING_VARIABLE]);
 }
 
-export function inboundElLocaleOf(eingabe) {
-  return inboundElLocaleAusSprachwahl(eingabe);
-}
-
 function inboundDynamicVariables({ owner, bundle, time, situation }) {
   return {
     ...dynamicVariables({
@@ -102,9 +99,10 @@ function inboundEroeffnungFuer({ store, config, call }) {
   const fremd = bundle.inboundEroeffnung(ownerName);
   const ownerText = call.callerIsOwner === true ? bundle.inboundEroeffnungOwner(firstName) : "";
   const variante = ownerText ? EROEFFNUNG_VARIANTE.OWNER : EROEFFNUNG_VARIANTE.FREMD;
+  const start = anrufStart({ sprachen: locale, dritt: fremd, ownerEroeffnung: ownerText, eroeffnungGesagt: false, folgesatz: "", eingehend: true });
   return {
-    text: ownerText || fremd,
-    locale,
+    text: start.eroeffnung,
+    override: start.override,
     fremd,
     sollform: { bundle, ownerName, firstName, variante },
   };
@@ -113,13 +111,6 @@ function inboundEroeffnungFuer({ store, config, call }) {
 export function inboundEroeffnungsDefekteFuer({ store, config, call }) {
   const { text, sollform } = inboundEroeffnungFuer({ store, config, call });
   return inboundEroeffnungDefekte({ text, ...sollform });
-}
-
-function inboundOverride({ text, locale }) {
-  return {
-    agent: { first_message: text, language: locale.language },
-    ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
-  };
 }
 
 const istSichererText = (wert) => TEXT.safeParse(wert).success && !wert.includes(PLACEHOLDER_OPENER);
@@ -174,7 +165,7 @@ export function buildInitiationResponse({ store, config, call, jetzt }) {
       time,
       situation: inboundSituationFuer({ variante, owner, fremdEroeffnung: fremd }),
     }),
-    conversation_config_override: inboundOverride(eroeffnung),
+    conversation_config_override: eroeffnung.override,
   };
   assertAntwortSicher(antwort, { callId: call.id, sollform });
   return antwort;
