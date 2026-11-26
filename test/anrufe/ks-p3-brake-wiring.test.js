@@ -22,9 +22,9 @@ function gateWithRemaining(remainingCents) {
   return makeOutboundGates({ store, config }).gates.find((g) => g.name === "compute_reserve");
 }
 
-async function maxDurFor(remainingCents, rawMaxDurationS) {
+async function maxDurFor(remainingCents) {
   const ctx = {
-    b: { max_duration_s: rawMaxDurationS },
+    b: {},
     to: US_TARGET,
     fromNumber: DE_OWN_DID,
     tenantId: TENANT,
@@ -34,32 +34,17 @@ async function maxDurFor(remainingCents, rawMaxDurationS) {
 }
 
 test("KS-P3: compute_reserve leitet die Frist aus dem Restguthaben ab (Bestand: feste 180 s)", async () => {
-  assert.equal(await maxDurFor(REST_FUER_ZEHN_MINUTEN, undefined), FRIST_BEI_ZEHN_MINUTEN);
+  assert.equal(await maxDurFor(REST_FUER_ZEHN_MINUTEN), FRIST_BEI_ZEHN_MINUTEN);
   assert.equal(
-    await maxDurFor(1_000_000, undefined),
+    await maxDurFor(1_000_000),
     MAX_CALL_DURATION_CAP_S,
     "viel Guthaben -> die absolute Obergrenze, nicht mehr",
   );
 });
 
-test("KS-P3: der Body-Override kann die Frist nur VERKUERZEN, nie verlaengern", async () => {
-  assert.equal(await maxDurFor(REST_FUER_ZEHN_MINUTEN, 60), 60, "kuerzerer Wunsch gewinnt");
-  assert.equal(
-    await maxDurFor(REST_FUER_ZEHN_MINUTEN, 99999),
-    FRIST_BEI_ZEHN_MINUTEN,
-    "ein ueberlanger Wunsch faellt auf die Notbremse - NICHT auf die absolute Obergrenze",
-  );
-  for (const hostile of [-300, 0, NaN, "abc"])
-    assert.equal(
-      await maxDurFor(REST_FUER_ZEHN_MINUTEN, hostile),
-      FRIST_BEI_ZEHN_MINUTEN,
-      `${hostile}: faellt auf die Notbremse zurueck`,
-    );
-});
-
 test("KS-P3: unlesbares Guthaben (D7) gibt die Obergrenze, sperrt aber weiterhin im Geld-Gate", async () => {
   assert.equal(
-    await maxDurFor(null, undefined),
+    await maxDurFor(null),
     MAX_CALL_DURATION_CAP_S,
     "die Frist ist nie unbegrenzt",
   );

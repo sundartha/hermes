@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { OWNER_TEST_FIRST_NAME, nowSeconds, seedCall, seedState, startServer, waitForLog, waitUntil } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverUhrUmgebung, stelleServerUhrVor } from "../helpers/server-uhr.mjs";
 import { OTLP_MESSWERTE_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";
 import { startEmpfaenger } from "../gemeinsam/otlp-empfaenger.js";
 import { calleeVon, elVon, makeTelnyxSigner, neueAnrufNummer, starteAttrappe, vorspannUmgebung } from "./el-bein-attrappe.js";
@@ -14,7 +15,7 @@ const HTTP_OK = 200;
 const WARTE_FRIST_MS = 20_000;
 const ANNAHME_FRIST_MS = 5_000;
 const LANGE_FRIST_MS = 60_000;
-const HOECHSTDAUER_S = 8;
+const UEBER_DER_HOECHSTDAUER_FRIST_MS = 3_600_000;
 const ALLE_DREI = 3;
 const KENNZAHL = "hermes.call.deadline_missed";
 const ENDE = "hermes.call.ended";
@@ -175,16 +176,16 @@ test("frist-alarm-annahme-abschluss: scheitert die Wahl des EL-Beins, zaehlt das
 });
 
 test("frist-alarm-annahme-abschluss: nur der angenommene Anruf ohne Abschluss bis zur Hoechstdauer zaehlt", async () => {
-  await mitDienst({ fristMs: LANGE_FRIST_MS }, async (dienst) => {
-    const kurz = { max_duration_s: HOECHSTDAUER_S };
-    const rechtzeitig = await ruf(dienst, kurz);
+  await mitDienst({ fristMs: UEBER_DER_HOECHSTDAUER_FRIST_MS, umgebung: serverUhrUmgebung() }, async (dienst) => {
+    const rechtzeitig = await ruf(dienst);
     await hebeAb(dienst, rechtzeitig);
     await verbinde(dienst, rechtzeitig);
     await legeAuf(dienst, rechtzeitig);
-    const nieAngenommen = await ruf(dienst, kurz);
-    const ohneAbschluss = await ruf(dienst, kurz);
+    const nieAngenommen = await ruf(dienst);
+    const ohneAbschluss = await ruf(dienst);
     await hebeAb(dienst, ohneAbschluss);
     await verbinde(dienst, ohneAbschluss);
+    stelleServerUhrVor(dienst.srv);
     await erwarteVersaeumt(dienst, ALLE_DREI, { el_angenommen: 0, abschluss: 1 });
     assert.equal(anrufIn(dienst, nieAngenommen).failureReason, "max-duration-cap");
     assert.equal(anrufIn(dienst, ohneAbschluss).failureReason, "max-duration-cap");

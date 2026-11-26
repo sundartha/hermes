@@ -333,7 +333,7 @@ src/telephony/outbound-gates.js#perTargetCapReached | function perTargetCapReach
 src/telephony/outbound-gates.js#numberGateError | grund: "denylist",
 src/telephony/outbound-gates.js#numberGateError | grund: "land",
 src/telephony/outbound-gates.js#tenantBudgetDenial | grund: "budget_tenant",
-src/telephony/outbound-gates.js#gate "compute_reserve" | ctx.maxDur = resolveMaxDurationS(
+src/telephony/outbound-gates.js#gate "compute_reserve" | ctx.maxDur = brakeSecondsFor(
 src/mcp/beschreibungen.js#PLACE_CALL_DESCRIPTION | there is no confirmation step
 src/telephony/call-finish.js#finishCall | store.markInboxEntry(call.id, inboxWorthy);
 src/store/state-ops.js#takeInboxEntries | .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))

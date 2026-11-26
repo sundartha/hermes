@@ -82,11 +82,6 @@ export function tariffCentsPerMin(to, from) {
     : defaultConfig.billing.voiceTariffDefaultCents;
 }
 
-export function resolveMaxDurationS(raw, brakeSeconds) {
-  const requested = parseInt(raw, 10);
-  return Number.isFinite(requested) && requested > 0 ? Math.min(requested, brakeSeconds) : brakeSeconds;
-}
-
 const GATE_CHAIN_LENGTH = 17;
 
 function quotaDenialOf(fehler, ctx) {
@@ -565,7 +560,7 @@ export function makeOutboundGates({
       run(ctx) {
         const tariffCents = tariffCentsPerMin(ctx.to, ctx.fromNumber);
         ctx.reserveCents = outboundReserveCents(tariffCents);
-        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, brakeSecondsFor(ctx.tenantId, tariffCents));
+        ctx.maxDur = brakeSecondsFor(ctx.tenantId, tariffCents);
         return null;
       },
     },

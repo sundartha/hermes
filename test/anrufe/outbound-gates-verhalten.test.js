@@ -254,19 +254,13 @@ test("3395-R4: Tarif, Reserve und Hoechstdauer - Inlandstarif nur bei gleicher V
     { name: "franzoesisch", nr: "+33123456789", to: "+33612345678", reserve: 40, dauer: 360 },
     { name: "plattform", nr: "+15005550006", to: ZIEL, reserve: 60, dauer: 240 },
     { name: "plattformAusland", nr: "+15005550006", to: AT_ZIEL, reserve: 60, dauer: 240 },
-    { name: "kurz", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 100, max: 100 },
-    { name: "text", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: "abc" },
-    { name: "null", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: 0 },
-    { name: "negativ", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: -5 },
-    { name: "zulang", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: 99999 },
-    { name: "gleich", nr: "+4930111222333", to: ZIEL, reserve: 40, dauer: 360, max: 360 },
   ];
   for (let von = 0; von < faelle.length; von += ELEVENLABS_ANRUFE_JE_SERVER) {
     const gruppe = faelle.slice(von, von + ELEVENLABS_ANRUFE_JE_SERVER);
     const budgets = gruppe.map(({ name }) => ({ tenantId: `t-${name}`, budgetCents: 100, hardCapCents: 100 }));
     await mitServer({ seed: aufbau(gruppe, { budgets }), env: { ...TARIFE, DEFAULT_TENANT_BUDGET_CENTS: "100" } }, async (srv) => {
-      for (const { name, to, max } of gruppe) {
-        const antwort = await rufe(srv, name, { to, ...(max === undefined ? {} : { max_duration_s: max }) });
+      for (const { name, to } of gruppe) {
+        const antwort = await rufe(srv, name, { to });
         assert.equal(antwort.status, HTTP_OK, `${name}: ${JSON.stringify(antwort.body)}`);
       }
       for (const { name, reserve, dauer } of gruppe) {

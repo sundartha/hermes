@@ -1735,11 +1735,6 @@
           "language": {
             "type": "string"
           },
-          "max_duration_s": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 1800
-          },
           "diagnostic": {
             "type": "boolean"
           }
@@ -2185,6 +2180,12 @@
       "art": "bruch",
       "begruendung": "await_call_event liefert in der done-Antwort result_state und result_reason wie get_call_result; get_call_result nennt declined als Grund (#4059, Haeppchen 2). Noch nichts veroeffentlicht.",
       "stand_sha256": "daceeb59f46abf51c22c7517259be4f5c511b59b50cf081a2e760b5eb414ecc3"
+    },
+    {
+      "datum": "2026-11-26",
+      "art": "bruch",
+      "begruendung": "Issue 6343: place_call verliert den Parameter max_duration_s; die Anrufdauer ergibt sich allein serverseitig aus Restguthaben und Plan, ein Assistent kann sie nicht mehr verkuerzen. Noch nichts veroeffentlicht.",
+      "stand_sha256": "50e601a525a7346119c734ef3a87c0f63315c0c48e6ed4e0add4e60ff3b89b7f"
     }
   ]
 }

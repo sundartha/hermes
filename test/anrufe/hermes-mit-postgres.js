@@ -245,6 +245,13 @@ export async function anrufAnBis(sql, { ziel, genug, fristMs = SQL_FRIST_MS }) {
   return anruf;
 }
 
+const FRIST_FAELLIG_SQL = `UPDATE call SET frist_hoechstdauer_at = now() - interval '1 second'
+  WHERE to_e164 = $1 AND status = 'active' AND frist_hoechstdauer_at IS NOT NULL RETURNING id`;
+
+export async function hoechstdauerFaellig(sql, ziel) {
+  await zeilenBis(async () => (await sql(FRIST_FAELLIG_SQL, [ziel])).rows, (zeilen) => zeilen.length === 1);
+}
+
 export async function seedeVerbrauch(sql, cent) {
   await sql(VERBRAUCH_SQL, [BOOTSTRAP_TENANT_ID, cent / CENT_JE_EURO]);
 }

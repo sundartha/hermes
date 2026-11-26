@@ -193,18 +193,6 @@ function contextField() {
     );
 }
 
-function maxDurationField(maxDurationCapS) {
-  const wholeSeconds = z.number().int().positive();
-  return wholeSeconds
-    .max(maxDurationCapS)
-    .optional()
-    .describe(
-      "Optional upper bound for the call duration in seconds. The server derives the " +
-        "effective limit from the remaining credit and only ever applies a SHORTER value " +
-        "than that; it never extends a call.",
-    );
-}
-
 function recipientNameField() {
   const eingabe = z.string().max(RECIPIENT_NAME_MAX_LENGTH).optional();
   return eingabe.describe(
@@ -249,7 +237,6 @@ export function placeCallRequestSchema(begriffe) {
           "error. This does NOT change the language of the mandatory " +
           "AI disclosure - that always follows the person being called.",
       ),
-    max_duration_s: maxDurationField(begriffe.MAX_CALL_DURATION_CAP_S),
     diagnostic: z
       .boolean()
       .optional()

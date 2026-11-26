@@ -4,6 +4,7 @@ import { startServer as startServerImpl, waitForStoreState } from "../helpers.js
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";
+import { serverUhrUmgebung, stelleServerUhrVor } from "../helpers/server-uhr.mjs";
 
 const HTTP_OK = 200;
 
@@ -19,15 +20,12 @@ after(async () => {
   await Promise.all(gestartet.map((srv) => srv.stop()));
 });
 
-const MAX_DURATION_S = 1;
-const MS_PER_SECOND = 1000;
-const POLL_PUFFER_MS = 3000;
-const POLL_TIMEOUT_MS = MAX_DURATION_S * MS_PER_SECOND + POLL_PUFFER_MS;
+const POLL_TIMEOUT_MS = 4000;
 const DOMESTIC_TO = "+4915112345678";
 
 async function placeCappedCall() {
   const srv = await startServer({
-    env: { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), FRISTEN_TAKT_MS: "40" },
+    env: { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), ...serverUhrUmgebung(), FRISTEN_TAKT_MS: "40" },
   });
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
@@ -35,11 +33,11 @@ async function placeCappedCall() {
     body: JSON.stringify({
       to: DOMESTIC_TO,
       objective: "Test",
-      max_duration_s: String(MAX_DURATION_S),
     }),
   });
   assert.equal(res.status, HTTP_OK);
   const body = await res.json();
+  stelleServerUhrVor(srv);
   const stand = await waitForStoreState(
     srv,
     (st) => st.calls.find((anruf) => anruf.id === body.callId)?.billedAt,

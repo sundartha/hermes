@@ -4,6 +4,7 @@ import test from "node:test";
 import { waitUntil } from "../helpers.js";
 import {
   anrufAnBis,
+  hoechstdauerFaellig,
   mitHermesAufPostgres,
   mitHermesAufPostgresGeseedet,
   mitHermesAufPostgresHartNeustartbar,
@@ -20,9 +21,6 @@ const HTTP_PAYMENT_REQUIRED = 402;
 const ENDE_FRIST_MS = 30_000;
 const NEUSTART_ENDE_FRIST_MS = 30_000;
 const AUFLEGEN_FRIST_MS = 3_000;
-const KURZ_S = 2;
-const LANG_S = 30;
-const NEUSTART_DAUER_S = 8;
 
 const KOSTENDECKE_CENT = 1000;
 const RESTBUDGET_UNTER_DEN_LAUFENDEN_KOSTEN_CENT = 210;
@@ -78,8 +76,9 @@ test("PG-MAXDAUER: ein EL-Anruf endet per SQL nach seiner Max-Dauer, ein zugleic
   const { ziel } = neueAnrufe();
   await mitHermesAufPostgres(t, { env: FRISTEN_ENV }, async ({ srv, anbieter, sql }) => {
     const [lang, kurz] = [ziel(), ziel()];
-    await startet(srv, { to: lang, max_duration_s: LANG_S });
-    await startet(srv, { to: kurz, max_duration_s: KURZ_S });
+    await startet(srv, { to: lang });
+    await startet(srv, { to: kurz });
+    await hoechstdauerFaellig(sql, kurz);
     const anruf = await anrufAnBis(sql, { ziel: kurz, genug: beendet, fristMs: ENDE_FRIST_MS });
     assert.equal(anruf.status, "completed");
     assert.equal(anruf.failure_reason, "max-duration-cap");
@@ -96,10 +95,11 @@ test("PG-MAXDAUER-NEUSTART: nach hartem Neustart beendet der zweite Lauf den lau
   const { ziel } = neueAnrufe();
   await mitHermesAufPostgresHartNeustartbar(t, { env: FRISTEN_ENV }, async ({ srv, anbieter, sql, neustartHart }) => {
     const to = ziel();
-    await startet(srv, { to, max_duration_s: NEUSTART_DAUER_S });
+    await startet(srv, { to });
     const laufend = await anrufAnBis(sql, { ziel: to, genug: gestartet });
     assert.equal(laufend.status, "active");
     const zweiter = await neustartHart();
+    await hoechstdauerFaellig(sql, to);
     const anruf = await anrufAnBis(sql, {
       ziel: to,
       genug: beendet,
@@ -134,7 +134,8 @@ test("PG-GELD-WACHE Kontrolle: unter der Kostendecke endet der EL-Anruf an seine
   );
   await mitHermesAufPostgresGeseedet(t, { env: WACHE_ENV, seed }, async ({ srv, sql }) => {
     const to = ziel();
-    await startet(srv, { to, max_duration_s: KURZ_S });
+    await startet(srv, { to });
+    await hoechstdauerFaellig(sql, to);
     const anruf = await anrufAnBis(sql, { ziel: to, genug: beendet, fristMs: ENDE_FRIST_MS });
     assert.equal(anruf.failure_reason, "max-duration-cap");
     assert.deepEqual(srv.readStore().calls, []);

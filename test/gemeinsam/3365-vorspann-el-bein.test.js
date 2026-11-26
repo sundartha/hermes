@@ -16,6 +16,7 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverUhrUmgebung, stelleServerUhrVor } from "../helpers/server-uhr.mjs";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -26,7 +27,6 @@ const NUMMER_PRAEFIX = "+4915112370";
 const EINMAL = 1;
 const AUDIO_BYTES = 200_000;
 const ZWEIMAL = 2;
-const MAX_DAUER_S = 2;
 const EL_KLINGEL_FRIST_S = 10;
 const AGENT_ID = "agent_3365_h2b";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren";
@@ -130,6 +130,7 @@ const serverEnv = (attrappe, signer, zusatz = {}) => ({
   TELNYX_PUBLIC_KEY: signer.publicKeyBase64,
   PUBLIC_URL,
   FRISTEN_TAKT_MS: "40",
+  ...serverUhrUmgebung(),
   ...zusatz,
 });
 
@@ -316,9 +317,10 @@ test("3365-D3: cancel_call waehrend der EL-Wahl -> EL-Bein wird nach dem Anlegen
 });
 
 test("3365-D3: Max-Dauer legt beide Beine auf", async () => {
-  const { attrappe } = umgebung;
-  const callId = await neuerAnruf({ max_duration_s: MAX_DAUER_S });
+  const { attrappe, srv } = umgebung;
+  const callId = await neuerAnruf();
   await hebeAb(callId);
+  stelleServerUhrVor(srv);
   await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
 });
 

@@ -33,7 +33,7 @@ test(
     const { ziel } = neueAnrufe();
     await mitZweiHermesAufPostgres(t, { env: WACHE_ENV }, async ({ b, sql }) => {
       const to = ziel();
-      assert.equal((await rufeAnMit(b, { to, max_duration_s: 600 })).status, HTTP_OK);
+      assert.equal((await rufeAnMit(b, { to })).status, HTTP_OK);
       const laufend = await anrufAnBis(sql, { ziel: to, genug: (anruf) => Boolean(anruf.konversation) });
       assert.equal(laufend.status, "active");
       await seedeVerbrauch(sql, DECKE_CENT);

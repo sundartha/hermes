@@ -13,6 +13,7 @@ import {
 } from "../helpers.js";
 import { elInboundInitSpawnEnv } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { serverUhrUmgebung, stelleServerUhrVor } from "../helpers/server-uhr.mjs";
 
 const TENANT_ID = seedCall().tenantId;
 const HTTP_OK = 200;
@@ -23,7 +24,6 @@ const HTTP_SERVER_FEHLER = 500;
 const WARTE_FRIST_MS = 5_000;
 const NUMMER_PRAEFIX = "+4915112350";
 const EINMAL = 1;
-const KURZE_MAX_DAUER_S = 1;
 const AGENT_ID = "agent_3365_h2a2";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren";
 const TTS_PFAD = "/v1/text-to-speech/";
@@ -118,6 +118,7 @@ const serverEinstellungen = (attrappe, env = {}) => ({
     PUBLIC_URL,
     HERMES_DEPLOY_TOKEN: DEPLOY_TOKEN,
     FRISTEN_TAKT_MS: "40",
+    ...serverUhrUmgebung(),
     ...env,
   },
   seed: seedState({ tenants: [{ id: TENANT_ID, status: "active", ownerName: "Jonas Beispiel", firstName: OWNER_TEST_FIRST_NAME }] }),
@@ -184,10 +185,11 @@ test("3365-B2: Schalter an, Vorspann bereit -> genau ein POST /v2/calls mit alle
 });
 
 test("3365-B2: Max-Dauer-Timer des Anrufs legt das Call-Control-Bein auf und beendet den Anruf", async () => {
-  const { attrappe } = umgebung;
+  const { attrappe, srv } = umgebung;
   const to = naechsteNummer();
-  const { callId } = await (await anrufStarten(to, { max_duration_s: KURZE_MAX_DAUER_S })).json();
-  assert.equal(koerper(wahlen(attrappe, callId)[0]).time_limit_secs, KURZE_MAX_DAUER_S);
+  const { callId } = await (await anrufStarten(to)).json();
+  assert.equal(koerper(wahlen(attrappe, callId)[0]).time_limit_secs, anrufIn(callId).maxDurationS);
+  stelleServerUhrVor(srv);
   await warteAuf(() => aufleger(attrappe, callId).length === EINMAL);
   await warteAuf(() => anrufIn(callId).status === "completed");
 });
