@@ -6,6 +6,7 @@ import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.ts";
 import { resolveTimezone } from "./begriffe/sprache-zeit.ts";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.ts";
+import { textePaketFuer } from "./i18n/texte-paket.ts";
 import { metrics } from "./metrics.ts";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.ts";
 import { budgetedMemoryLines } from "./call-memory.ts";
@@ -16,7 +17,7 @@ const bereiche = speicherBereiche(store);
 
 function promptInputs(call, memory) {
   const ctx = store.tenantContext(call.tenantId);
-  const loc = localeFor(call.language);
+  const loc = textePaketFuer(call);
   const timeZone = resolveTimezone(store.tenantTimezone(call.tenantId));
   return {
     call,
@@ -203,7 +204,7 @@ function callMemorySection({ memory, loc }) {
 
 export function disclosureSentence(call) {
   const name = store.tenantContext(call.tenantId).ownerName;
-  return localeFor(call.language).disclosure(name);
+  return textePaketFuer(call).disclosure(name);
 }
 
 const END_CALL_TOOL_NAME = "end_call";
@@ -299,7 +300,7 @@ export async function summarizeCall(call) {
   if (!s.allowSummaries) return null;
   if (!call.transcript.length) return null;
 
-  const loc = localeFor(call.language);
+  const loc = textePaketFuer(call);
   const si = loc.prompt.summaryInput;
   const convo = call.transcript
     .map((t) => `${t.role === "agent" ? si.agentRole : si.callerRole}: ${t.text}`)

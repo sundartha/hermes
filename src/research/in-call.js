@@ -1,7 +1,7 @@
 import { config } from "../config.ts";
 import * as store from "../store.js";
 import { speicherBereiche } from "../store.js";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { callLookups } from "../store/state-ops.js";
 import { LOOKUP_MAX_PER_CALL, inCallSearchProvider } from "./registry.js";
@@ -39,7 +39,7 @@ function logLookupDone({ callId, ok, dauerMs, fakten }) {
 export async function performLookupRequest({ call, toolUses, loopContinues }) {
   const requested = toolUses.find((tu) => tu.name === LOOK_UP_TOOL_NAME);
   if (!requested) return null;
-  const tc = localeFor(call.language).prompt.turnControl;
+  const tc = textePaketFuer(call).prompt.turnControl;
   const declined = { toolResult: tc.lookUpDeclined };
   if (!loopContinues) return declined;
   const provider = lookupProviderFor(call);

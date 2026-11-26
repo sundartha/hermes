@@ -1,7 +1,7 @@
 import { config } from "../config.ts";
 import * as store from "../store.js";
 import { speicherBereiche } from "../store.js";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import { CONSULT_POLL_ABORT_MS } from "./delivery.ts";
 import { consultAllowedFor } from "./gate.ts";
@@ -62,7 +62,7 @@ function logConsultAsked(callId) {
 export async function decideConsultRequest(call, toolUses) {
   const requested = toolUses.find((tu) => tu.name === GET_CONSULT_TOOL_NAME);
   if (!requested) return null;
-  const loc = localeFor(call.language);
+  const loc = textePaketFuer(call);
   const declined = { accepted: false, toolResult: loc.prompt.turnControl.consultDeclined };
   if (toolUses.length > 1) return declined;
   if (!consultAvailableFor(call)) return declined;
