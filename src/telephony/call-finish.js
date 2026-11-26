@@ -1,8 +1,8 @@
 import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
-import { ergebnisGrundSatz } from "../i18n/ergebnis-zustand-texte.ts";
+import { ergebnisGrundSatz, terminSatz } from "../i18n/ergebnis-zustand-texte.ts";
 import { textePaketFuer } from "../i18n/texte-paket.ts";
-import { ergebnisZustand } from "./ergebnis-zustand.ts";
+import { ergebnisZustand, terminLage } from "./ergebnis-zustand.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.ts";
@@ -116,12 +116,14 @@ async function summaryOf({ store, config, summarizeCall, call }) {
   }
 }
 
+const mitGrundSatz = (text, grundSatz) => [text, grundSatz].filter(Boolean).join(" ");
+
 function grundSatzZu(call) {
   if (call.direction !== "outbound") return null;
-  return ergebnisGrundSatz(textePaketFuer(call).language, ergebnisZustand(call).result_reason);
+  const sprache = textePaketFuer(call).language;
+  const grund = ergebnisGrundSatz(sprache, ergebnisZustand(call).result_reason);
+  return mitGrundSatz(grund, terminSatz(sprache, terminLage(call)));
 }
-
-const mitGrundSatz = (text, grundSatz) => [text, grundSatz].filter(Boolean).join(" ");
 
 async function zusammenfassungMitGrund({ store, call, summary, grundSatz }) {
   if (!grundSatz) return summary;

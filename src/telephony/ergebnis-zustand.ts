@@ -1,4 +1,4 @@
-import type { GegenseitenUrteil } from "../call-result.ts";
+import { gueltigerZeitpunkt, type GegenseitenUrteil, type TerminBeleg } from "../call-result.ts";
 import { failureReasonBase } from "./failure-reason.ts";
 
 export const RESULT_STATE = Object.freeze({
@@ -59,14 +59,23 @@ export function ergebnisZustand(call: AnrufSicht): ErgebnisZustand {
   return urteilZustand(call);
 }
 
+export function terminLage(call: AnrufSicht): (TerminBeleg & { bestaetigt: boolean }) | null {
+  const termin = call.result?.counterparty?.appointment;
+  if (!termin) return null;
+  return { ...termin, bestaetigt: ergebnisZustand(call).result_state === RESULT_STATE.DONE_CONFIRMED };
+}
+
 export const BESTAETIGUNGS_KLAUSEL =
-  ' Ergaenze ausserdem "confirmed_by_counterparty" (true nur, wenn die Gegenseite das Ergebnis AUSDRUECKLICH bestaetigt hat, z.B. "ja, Dienstag um 10 Uhr passt"; sonst false), "confirmation_quote" (das woertliche Zitat der Gegenseite aus dem Transkript, das die Bestaetigung belegt, sonst null), "declined" (true nur, wenn die Gegenseite den Auftrag ausdruecklich abgelehnt hat, sonst false) und "mailbox_only" (true nur, wenn ausser einem Anrufbeantworter oder einer Mailbox niemand erreicht wurde; sonst false). Eine Zusage des Assistenten oder ein Schweigen der Gegenseite ist keine Bestaetigung.';
+  ' Ergaenze ausserdem "confirmed_by_counterparty" (true nur, wenn die Gegenseite das Ergebnis AUSDRUECKLICH bestaetigt hat, z.B. "ja, Dienstag um 10 Uhr passt"; sonst false), "confirmation_quote" (das woertliche Zitat der Gegenseite aus dem Transkript, das die Bestaetigung belegt, sonst null), "declined" (true nur, wenn die Gegenseite den Auftrag ausdruecklich abgelehnt hat, sonst false) und "mailbox_only" (true nur, wenn ausser einem Anrufbeantworter oder einer Mailbox niemand erreicht wurde; sonst false). Eine Zusage des Assistenten oder ein Schweigen der Gegenseite ist keine Bestaetigung. Ergaenze ausserdem "appointment_task" (true nur, wenn der Auftrag einen Termin betrifft, also vereinbaren, verschieben oder absagen; sonst false), "appointment_at" (Datum und Uhrzeit des vereinbarten, verschobenen oder abgesagten Termins als "YYYY-MM-DDTHH:MM" oder "YYYY-MM-DD", nur wenn im Transkript genannt, sonst null) und "confirmed_by" (Name der bestaetigenden Person, woertlich wie von der Gegenseite genannt, sonst null).';
 
 interface ModellAntwort {
   confirmed_by_counterparty?: unknown;
   confirmation_quote?: unknown;
   declined?: unknown;
   mailbox_only?: unknown;
+  appointment_task?: unknown;
+  appointment_at?: unknown;
+  confirmed_by?: unknown;
 }
 
 function normalisiert(text: string): string {
@@ -80,10 +89,19 @@ function zitatBelegt(zitat: unknown, transcript: AnrufSicht["transcript"]): bool
   return gegenseitenTexte(transcript).some((text) => normalisiert(text).includes(gesucht));
 }
 
+function terminBeleg(antwort: ModellAntwort, transcript: AnrufSicht["transcript"]): TerminBeleg {
+  const name = antwort.confirmed_by;
+  return {
+    at: gueltigerZeitpunkt(antwort.appointment_at),
+    confirmedBy: zitatBelegt(name, transcript) ? String(name).trim() : null,
+  };
+}
+
 export function gegenseitenUrteil(antwort: ModellAntwort, transcript: AnrufSicht["transcript"]): GegenseitenUrteil {
   return {
     confirmed: antwort.confirmed_by_counterparty === true && zitatBelegt(antwort.confirmation_quote, transcript),
     declined: antwort.declined === true,
     ...(antwort.mailbox_only === true && { mailbox: true }),
+    ...(antwort.appointment_task === true && { appointment: terminBeleg(antwort, transcript) }),
   };
 }

@@ -7,7 +7,7 @@ import { ausgelieferteWidgets, skriptbloecke } from "./ausgelieferte-widgets.js"
 
 const WIDGETS = await ausgelieferteWidgets();
 const ANRUF = WIDGETS.call;
-const NEUE_VERSION = 52;
+const NEUE_VERSION = 53;
 const ERGEBNIS = "ui/notifications/tool-result";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
 
