@@ -1,12 +1,12 @@
-import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.js";
-import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.js";
-import { AWAIT_SUMMARY } from "./platzhalter/warte-texte.js";
+import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.ts";
+import { MCP_DENIAL_TEXTS } from "./mcp-denial-texts.ts";
+import { AWAIT_SUMMARY } from "./platzhalter/warte-texte.ts";
 
-function countedText(lang, singular, plural) {
-  return (count) => (new Intl.PluralRules(lang).select(count) === "one" ? singular(count) : plural(count));
+function countedText(lang: string, singular: (count: number) => string, plural: (count: number) => string) {
+  return (count: number) => (new Intl.PluralRules(lang).select(count) === "one" ? singular(count) : plural(count));
 }
 
-function joinWithAnd(items, and) {
+function joinWithAnd(items: string[], and: string) {
   const front = items.slice(0, -1);
   return front.length === 0 ? items.join("") : `${front.join(", ")} ${and} ${items.slice(-1).join()}`;
 }
@@ -69,14 +69,14 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "Der Anruf konnte nicht gestartet werden. Bitte den Status in list_calls pruefen, " +
         "bevor erneut angerufen wird.",
-      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field: string) =>
         `Nicht gesendet: das Feld ${field} enthaelt offenbar eine Zahlungskartennummer. ` +
         "Hermes nimmt keine Zahlungskartendaten entgegen - bitte entfernen und erneut versuchen.",
-      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field: string) =>
         `Nicht gesendet: das Feld ${field} enthaelt offenbar eine behoerdliche Kennnummer ` +
         "(z.B. Sozialversicherungs-, Steuer- oder Ausweisnummer). Hermes nimmt solche " +
         "Nummern nicht entgegen - bitte entfernen und erneut versuchen.",
-      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field: string) =>
         `Nicht gesendet: das Feld ${field} enthaelt offenbar Zugangsdaten (Passwort, PIN, ` +
         "Einmalcode, Schluessel oder Token). Hermes nimmt keine Zugangsdaten entgegen - " +
         "bitte entfernen und erneut versuchen.",
@@ -88,8 +88,8 @@ export const MCP_TEXTS = Object.freeze({
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
     awaitSummary: AWAIT_SUMMARY.de,
-    consultNotReleasedHint: (tore) =>
-      `Hinweis: Die Rueckfrage an den Auftraggeber ist fuer diesen Anruf NICHT freigegeben (geschlossen: ${tore.map((tor) => `[${tor}]`).join(", ")}). Hermes kann bei einem Problem im Anruf nicht rueckfragen.`,
+    consultNotReleasedHint: (tore: string[]) =>
+      `Hinweis: Die Rueckfrage an den Auftraggeber ist fuer diesen Anruf NICHT freigegeben (geschlossen: ${tore.map((tor: string) => `[${tor}]`).join(", ")}). Hermes kann bei einem Problem im Anruf nicht rueckfragen.`,
     consultPermissionHint:
       "Hinweis: Live-Rueckfragen waehrend des Anrufs erreichen diesen Chat nur, wenn die " +
       "Werkzeug-Berechtigung des Connectors erteilt ist.",
@@ -97,8 +97,8 @@ export const MCP_TEXTS = Object.freeze({
       "Dieser Anruf lief schon - zurueckgegeben wird der laufende Anruf, es wurde kein zweiter gestartet.",
     consultAnswerAccepted: countedText(
       "de",
-      (count) => `${String(count)} Angabe an den Anruf uebergeben.`,
-      (count) => `${String(count)} Angaben an den Anruf uebergeben.`,
+      (count: number) => `${String(count)} Angabe an den Anruf uebergeben.`,
+      (count: number) => `${String(count)} Angaben an den Anruf uebergeben.`,
     ),
     consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
@@ -116,9 +116,9 @@ export const MCP_TEXTS = Object.freeze({
         personalData: "persönliche Daten",
         bankData: "Bankdaten",
       }),
-      permissionsAllowed: (items) => `Darf ${joinWithAnd(items, "und")} weitergeben`,
+      permissionsAllowed: (items: string[]) => `Darf ${joinWithAnd(items, "und")} weitergeben`,
       permissionsNone: "Gibt keine Daten weiter",
-      planUsage: (percent) => `Monatsnutzung: ${String(percent)} % des Minuten-Kontingents`,
+      planUsage: (percent: number) => `Monatsnutzung: ${String(percent)} % des Minuten-Kontingents`,
       planUsageUnknown: "Monatsnutzung: kein Kontingent hinterlegt",
     }),
     callFailedSummary: makeCallFailedSummary(
@@ -164,14 +164,14 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "The call could not be started. Please check the status with list_calls before " +
         "calling again.",
-      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field: string) =>
         `Not sent: the field ${field} contains what looks like a payment card number. ` +
         "Hermes does not accept payment card data - remove it and try again.",
-      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field: string) =>
         `Not sent: the field ${field} contains what looks like a government identifier ` +
         "(such as a social security, tax, or passport number). Hermes does not accept such " +
         "numbers - remove it and try again.",
-      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field: string) =>
         `Not sent: the field ${field} contains what looks like a credential (password, PIN, ` +
         "one-time code, key, or token). Hermes does not accept credentials - remove it and " +
         "try again.",
@@ -182,8 +182,8 @@ export const MCP_TEXTS = Object.freeze({
     inboxSummaryUnavailable: "Summary unavailable (technical error).",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
     awaitSummary: AWAIT_SUMMARY.en,
-    consultNotReleasedHint: (tore) =>
-      `Note: the consult question to the principal is NOT released for this call (closed: ${tore.map((tor) => `[${tor}]`).join(", ")}). Hermes cannot ask the principal if a problem comes up during the call.`,
+    consultNotReleasedHint: (tore: string[]) =>
+      `Note: the consult question to the principal is NOT released for this call (closed: ${tore.map((tor: string) => `[${tor}]`).join(", ")}). Hermes cannot ask the principal if a problem comes up during the call.`,
     consultPermissionHint:
       "Note: live questions during the call only reach this chat if the connector's tool " +
       "permission is granted.",
@@ -191,8 +191,8 @@ export const MCP_TEXTS = Object.freeze({
       "This call was already running - the running call is returned, no second call was started.",
     consultAnswerAccepted: countedText(
       "en",
-      (count) => `${String(count)} detail passed on to the call.`,
-      (count) => `${String(count)} details passed on to the call.`,
+      (count: number) => `${String(count)} detail passed on to the call.`,
+      (count: number) => `${String(count)} details passed on to the call.`,
     ),
     consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
@@ -210,9 +210,9 @@ export const MCP_TEXTS = Object.freeze({
         personalData: "personal data",
         bankData: "bank data",
       }),
-      permissionsAllowed: (items) => `May share ${joinWithAnd(items, "and")}`,
+      permissionsAllowed: (items: string[]) => `May share ${joinWithAnd(items, "and")}`,
       permissionsNone: "Shares no data",
-      planUsage: (percent) => `Monthly usage: ${String(percent)}% of your included minutes`,
+      planUsage: (percent: number) => `Monthly usage: ${String(percent)}% of your included minutes`,
       planUsageUnknown: "Monthly usage: no plan quota on file",
     }),
     callFailedSummary: makeCallFailedSummary("The call did not go through.", FAILURE_REASON_TEXTS.en),
@@ -256,14 +256,14 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.CALL_START_REJECTED]:
         "L'appel n'a pas pu être démarré. Veuillez vérifier l'état dans list_calls avant " +
         "de rappeler.",
-      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD]: (field: string) =>
         `Non envoyé : le champ ${field} semble contenir un numéro de carte de paiement. ` +
         "Hermes n'accepte pas les données de carte de paiement - veuillez le supprimer et réessayer.",
-      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID]: (field: string) =>
         `Non envoyé : le champ ${field} semble contenir un identifiant officiel (par exemple ` +
         "un numéro de sécurité sociale, fiscal ou de passeport). Hermes n'accepte pas ces " +
         "numéros - veuillez le supprimer et réessayer.",
-      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field) =>
+      [MCP_ERROR_CODE.RESTRICTED_CREDENTIAL]: (field: string) =>
         `Non envoyé : le champ ${field} semble contenir des identifiants de connexion (mot de ` +
         "passe, code PIN, code à usage unique, clé ou jeton). Hermes n'accepte pas ces " +
         "identifiants - veuillez les supprimer et réessayer.",
@@ -275,8 +275,8 @@ export const MCP_TEXTS = Object.freeze({
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
     awaitSummary: AWAIT_SUMMARY.fr,
-    consultNotReleasedHint: (tore) =>
-      `Remarque : la question au mandant n'est PAS autorisée pour cet appel (fermé : ${tore.map((tor) => `[${tor}]`).join(", ")}). Hermes ne peut pas interroger le mandant en cas de problème pendant l'appel.`,
+    consultNotReleasedHint: (tore: string[]) =>
+      `Remarque : la question au mandant n'est PAS autorisée pour cet appel (fermé : ${tore.map((tor: string) => `[${tor}]`).join(", ")}). Hermes ne peut pas interroger le mandant en cas de problème pendant l'appel.`,
     consultPermissionHint:
       "Remarque : les questions en direct pendant l'appel n'arrivent dans cette " +
       "conversation que si l'autorisation d'outil du connecteur est accordée.",
@@ -284,8 +284,8 @@ export const MCP_TEXTS = Object.freeze({
       "Cet appel était déjà en cours - l'appel en cours est renvoyé, aucun second appel n'a été lancé.",
     consultAnswerAccepted: countedText(
       "fr",
-      (count) => `${String(count)} information transmise à l'appel.`,
-      (count) => `${String(count)} informations transmises à l'appel.`,
+      (count: number) => `${String(count)} information transmise à l'appel.`,
+      (count: number) => `${String(count)} informations transmises à l'appel.`,
     ),
     consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
@@ -304,9 +304,9 @@ export const MCP_TEXTS = Object.freeze({
         personalData: "les données personnelles",
         bankData: "les données bancaires",
       }),
-      permissionsAllowed: (items) => `Peut partager ${joinWithAnd(items, "et")}`,
+      permissionsAllowed: (items: string[]) => `Peut partager ${joinWithAnd(items, "et")}`,
       permissionsNone: "Ne partage aucune donnée",
-      planUsage: (percent) => `Utilisation mensuelle : ${String(percent)} % des minutes incluses`,
+      planUsage: (percent: number) => `Utilisation mensuelle : ${String(percent)} % des minutes incluses`,
       planUsageUnknown: "Utilisation mensuelle : aucun forfait enregistré",
     }),
     callFailedSummary: makeCallFailedSummary("L'appel n'a pas abouti.", FAILURE_REASON_TEXTS.fr),

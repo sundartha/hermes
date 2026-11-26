@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS } from "../../src/i18n/mcp-texts.ts";
 import { MCP_BASE_INSTRUCTIONS } from "../../src/mcp-server-info.js";
 import { startServer, stdioServerTransport } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";

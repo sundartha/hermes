@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { findRestrictedData, maskRestrictedText, firstRestrictedField } from "../../src/restricted-data.ts";
-import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.ts";
 import { toolErrorText } from "../../src/mcp-tools.js";
 import {
   startServer,

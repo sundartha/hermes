@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
+import { GATE_TEXTS } from "../../src/i18n/gate-texts.ts";
 
 const CONFIG_IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
 const ARG_PLACEHOLDER = "<arg>";

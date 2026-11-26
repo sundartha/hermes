@@ -4,10 +4,10 @@ import { INBOUND_NOTICES, withInboundNotice } from "./inbound-notice.ts";
 import { PROMPT_DE } from "./prompts/de.ts";
 import { PROMPT_FR } from "./prompts/fr.ts";
 import { PROMPT_EN } from "./prompts/en.ts";
-import { MCP_TEXTS } from "./mcp-texts.js";
-import { GATE_TEXTS } from "./gate-texts.js";
-import { afterGreeting, besitzerEroeffnung, besitzerFrage } from "./eroeffnung.js";
-import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.js";
+import { MCP_TEXTS } from "./mcp-texts.ts";
+import { GATE_TEXTS } from "./gate-texts.ts";
+import { afterGreeting, besitzerEroeffnung, besitzerFrage } from "./eroeffnung.ts";
+import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.ts";
 
 type Sprache = "de" | "en" | "fr";
 

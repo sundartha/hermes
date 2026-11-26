@@ -269,7 +269,7 @@ const SPEICHER_FASSADE = {
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],
 };
 const ABLEHNUNGS_TABELLE = {
-  datei: "src/i18n/mcp-denial-texts.js",
+  datei: "src/i18n/mcp-denial-texts.ts",
   tabelle: "MCP_DENIAL_TEXTS",
   sprache: "en",
 };

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { registerTools } from "../../src/mcp-tools.js";
 import { config } from "../../src/config.ts";
 import { localeFor, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
-import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.ts";
 import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { makeConfigOverrides, startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } from "../helpers.js";
 

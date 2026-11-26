@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
-import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS } from "../../src/i18n/mcp-texts.ts";
 import { SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";

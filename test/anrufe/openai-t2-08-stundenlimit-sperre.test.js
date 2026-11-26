@@ -8,7 +8,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { makeCallRoutes } from "../../src/routes/api-calls.ts";
 import { terminateAndBillCall, billThunk } from "../../src/telephony/call-termination.ts";
-import { GATE_TEXTS } from "../../src/i18n/gate-texts.js";
+import { GATE_TEXTS } from "../../src/i18n/gate-texts.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { mitSperreGelesen } from "../gemeinsam/sperre-gelesen-attrappe.js";
 import { vorspannDiAttrappe, vorspannKonfig, vorspannMandantenUmgebung } from "../gemeinsam/vorspann-fahrzeug.js";

@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { MCP_HOP_TIMEOUT_MS, PLACE_CALL_HOP_TIMEOUT_MS } from "../../src/mcp-tools.js";
-import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS, MCP_ERROR_CODE } from "../../src/i18n/mcp-texts.ts";
 import { CONSULT_POLL_ABORT_MS } from "../../src/consult/delivery.ts";
 import { CONSULT_EVENT } from "../../src/consult/delivery.ts";
 import { config } from "../../src/config.ts";

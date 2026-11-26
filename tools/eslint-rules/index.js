@@ -166,7 +166,7 @@ const ablehnungsgruende = {
     messages: {
       tabelleFehlt: TABELLE_FEHLT,
       unbekannt:
-        "Ablehnungsgrund „{{grund}}“ fehlt in MCP_DENIAL_TEXTS (src/i18n/mcp-denial-texts.js). Jeder Grund braucht in jeder Sprache einen neutralen Text.",
+        "Ablehnungsgrund „{{grund}}“ fehlt in MCP_DENIAL_TEXTS (src/i18n/mcp-denial-texts.ts). Jeder Grund braucht in jeder Sprache einen neutralen Text.",
       unbenannt:
         "Ablehnungsgrund nur als Zeichenkette, als GATE_ERROR_GRUND, als grund oder als <wert>.grund angeben, damit jeder Grund einen Tabelleneintrag hat. Schreib den Grund als Zeichenkette (z. B. \"kyc\") oder nimm den Wert aus GATE_ERROR_GRUND.",
       tot: "Tabelleneintrag „{{grund}}“ in MCP_DENIAL_TEXTS wird in dieser Datei nie als Grund vergeben; streichen oder vergeben.",

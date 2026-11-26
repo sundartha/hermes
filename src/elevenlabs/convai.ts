@@ -1,4 +1,4 @@
-import { kiHinweisRahmenFor } from "../i18n/eroeffnung.js";
+import { kiHinweisRahmenFor } from "../i18n/eroeffnung.ts";
 import { disclosurePrefixFor } from "../i18n/locales.ts";
 
 const CONVERSATION_PATH = "/v1/convai/conversations/";

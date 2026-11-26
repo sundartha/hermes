@@ -1,6 +1,6 @@
 import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
 import { anrufStart } from "../anrufe/start/anrufstart.ts";
-import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.js";
+import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.ts";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
@@ -22,7 +22,7 @@ import { medienwegZeilen } from "./medienweg.ts";
 import { spokenTimezoneName } from "./nanp-area-codes.ts";
 import { callTimeContext } from "./time-context.ts";
 import { persistEndWithReason } from "../telephony/call-termination.ts";
-import { entferneKlammern } from "../i18n/audio-tags.js";
+import { entferneKlammern } from "../i18n/audio-tags.ts";
 import { permanentErrorStreakExceeded } from "./fehlerserie.ts";
 import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.ts";
 import { NICHT_ANGENOMMEN_GRUND, nichtErreichtNachFrist } from "./nicht-erreicht-frist.ts";

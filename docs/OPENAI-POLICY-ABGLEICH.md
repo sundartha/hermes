@@ -202,7 +202,7 @@ nie gemessen.
   zusammengefasst wird.
 - Mechanismus, Sprach-Agenten-Weg: `first_message` der Agenten-Vorlage
   (`elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message`) ist nur der
-  Platzhalter der Variable `eroeffnung`; den Satz bildet `src/i18n/eroeffnung.js#drittEroeffnung`, ihn sendet
+  Platzhalter der Variable `eroeffnung`; den Satz bildet `src/i18n/eroeffnung.ts#drittEroeffnung`, ihn sendet
   `src/elevenlabs/outbound.js#dynamicVariables`, und `src/elevenlabs/convai.ts` bricht den Anrufstart ab, wenn der
   KI-Hinweis darin fehlt.
 - Ohne hinterlegten Auftraggeber-Namen kein Anruf: Gate `owner_name`
@@ -867,7 +867,7 @@ src/telephony/outbound-gates.js#gate "owner_name" | name: "owner_name"
 src/claude.js#firstSpokenSentence | ownerOpeningFor(call) || disclosureSentence(call)
 src/claude.js#disclosureSentence | export function disclosureSentence(call)
 src/i18n/locales.ts#LOCALES.en.disclosure | this is an AI assistant calling on behalf of
-src/i18n/eroeffnung.js#drittEroeffnung | export function drittEroeffnung
+src/i18n/eroeffnung.ts#drittEroeffnung | export function drittEroeffnung
 elevenlabs/agent_configs/outbound-agent.template.json#agent.conversation_config.agent.first_message | "first_message": "{{eroeffnung}}"
 src/elevenlabs/outbound.js#dynamicVariables | eroeffnung
 src/callee-is-owner.ts#calleeIsOwner | to === ownNumber

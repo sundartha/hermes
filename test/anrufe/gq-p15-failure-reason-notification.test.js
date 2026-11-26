@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../../src/i18n/locales.ts";
 import { FAILURE_REASON_BASE_TOKENS } from "../../src/telephony/failure-reason.ts";
 import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../../src/telephony/call-lifecycle.ts";
-import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
+import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.ts";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { seedCall } from "../helpers.js";
 

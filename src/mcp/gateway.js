@@ -1,7 +1,7 @@
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "../consult/delivery.ts";
 import { resolveGatewayUrl, config } from "../config.ts";
 import { placeCallHopFristMs } from "../telephony/anruf-fristen.ts";
-import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
+import { MCP_ERROR_CODE } from "../i18n/mcp-texts.ts";
 import { ToolError } from "./fehler.js";
 import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./eingabe.js";
 import { anfrage } from "../utils/anfrage.js";

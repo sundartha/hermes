@@ -1,4 +1,4 @@
-import { kiHinweisKernFor } from "../i18n/eroeffnung.js";
+import { kiHinweisKernFor } from "../i18n/eroeffnung.ts";
 import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.ts";
 import { openingLineHash } from "../store/state-ops.js";
 
