@@ -27,6 +27,8 @@ test("sprachwechsel-jede-sprache: jede Sprache der Quelle ist Agentensprache ode
   const zulaessig = new Set([CONVERSATION.agent.language, ...Object.keys(PRESETS)]);
   const fehlend = SPRACHEN.filter((code) => !zulaessig.has(code));
   assert.deepEqual(fehlend, [], `nicht zulaessig laut ${QUELLE}`);
+  const ueberzaehlig = Object.keys(PRESETS).filter((code) => !SPRACHEN.includes(code));
+  assert.deepEqual(ueberzaehlig, [], `Preset ausserhalb der Quellenliste ${QUELLE}`);
 });
 
 test("sprachwechsel-jede-sprache: die Agentensprache bekommt kein eigenes Preset", () => {

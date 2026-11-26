@@ -24,7 +24,6 @@ const promptText = () => promptObject()?.prompt ?? "";
 const toolIds = () => promptObject()?.tool_ids;
 const builtInTools = () => promptObject()?.built_in_tools;
 const languageDetection = () => builtInTools()?.language_detection;
-const languagePresets = () => conversationConfig().language_presets;
 const declaredToolNames = () => configKeysOf(TEMPLATE.tools);
 const toolEntry = (name) => TEMPLATE.tools?.[name] ?? {};
 
@@ -48,99 +47,6 @@ const BUILT_IN_TOOL_FINGERPRINT = [
 ];
 
 const DEFERRED_BUILT_IN_TOOL = "play_keypad_touch_tone";
-
-const LANGUAGE_PRESET_FINGERPRINT = [
-  "af",
-  "am",
-  "ar",
-  "as",
-  "ast",
-  "az",
-  "be",
-  "bg",
-  "bn",
-  "bs",
-  "ca",
-  "ceb",
-  "ckb",
-  "cs",
-  "cy",
-  "da",
-  "de",
-  "el",
-  "es",
-  "et",
-  "fa",
-  "ff",
-  "fi",
-  "fil",
-  "fr",
-  "gl",
-  "gu",
-  "ha",
-  "he",
-  "hi",
-  "hr",
-  "hu",
-  "hy",
-  "id",
-  "is",
-  "it",
-  "ja",
-  "jv",
-  "ka",
-  "kam",
-  "kk",
-  "kn",
-  "ko",
-  "ky",
-  "lb",
-  "lg",
-  "ln",
-  "lo",
-  "lt",
-  "lv",
-  "mi",
-  "mk",
-  "ml",
-  "mn",
-  "mr",
-  "ms",
-  "mt",
-  "my",
-  "ne",
-  "nl",
-  "no",
-  "oc",
-  "or",
-  "pa",
-  "pl",
-  "ps",
-  "pt",
-  "ro",
-  "ru",
-  "sd",
-  "sk",
-  "sl",
-  "sn",
-  "so",
-  "sr",
-  "sv",
-  "sw",
-  "ta",
-  "te",
-  "tg",
-  "th",
-  "tr",
-  "uk",
-  "ur",
-  "uz",
-  "vi",
-  "wo",
-  "yue",
-  "zh",
-  "zu",
-];
 
 const DRIFT_HINT =
   "Das ist erlaubt - aber nur bewusst: Liste in test/anrufe/elevenlabs-agent-werkzeuge.test.js " +
@@ -412,21 +318,6 @@ test("Sprachwechsel in der ElevenLabs-Vorlage: language_detection gilt den ganze
     `${TEMPLATE_REL}: ${ONLY_AT_START_KEY} steht unter language_detection auf true - dann ` +
       "erkennt das Werkzeug den Wechsel nur beim Gespraechsstart, waehrend der Prompt ihn " +
       "fuer den ganzen Anruf freigibt. Genau der Widerspruch, den E-5 aufgeloest hat.",
-  );
-});
-
-test("Sprachwechsel in der ElevenLabs-Vorlage: language_presets traegt exakt die gepinnten Sprachen", () => {
-  assert.ok(
-    LANGUAGE_PRESET_FINGERPRINT.length > 0,
-    "der Fingerprint ist besetzt - sonst misst er nichts",
-  );
-
-  assert.deepEqual(
-    configKeysOf(languagePresets()),
-    LANGUAGE_PRESET_FINGERPRINT,
-    `Die Zusatzsprachen in ${TEMPLATE_REL} (conversation_config.language_presets) sind andere ` +
-      `als gepinnt. Eine Sprache, die der Agent kann oder nicht kann, ist eine Faehigkeit - ` +
-      DRIFT_HINT,
   );
 });
 

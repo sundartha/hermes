@@ -12,12 +12,6 @@ test("Agent-Vorlage fuehrt die Sprachwechsel-Systemfunktion language_detection",
   assert.equal(werkzeug.name, "language_detection");
 });
 
-test("Agent-Vorlage deckt de, en und fr ab: Basis en, Zusatzsprachen de und fr", () => {
-  assert.equal(konfig.agent.language, "en");
-  assert.ok(Object.keys(konfig.language_presets).includes("de"));
-  assert.ok(Object.keys(konfig.language_presets).includes("fr"));
-});
-
 test("Prompt sagt, dass beim Sprachwechsel die Stimme gleich bleibt", () => {
   const prompt = konfig.agent.prompt.prompt;
   assert.ok(prompt.includes("Your voice is the same in every language, including after a confirmed switch."));
