@@ -2,14 +2,7 @@ import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES, localeFor } from "../i18n/
 import { countryForE164 } from "../begriffe/rufnummern.ts";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
-
-interface Sprachwahl {
-  language: string;
-  voiceProfile: string;
-  disclosure: (ownerName: string | null) => string;
-  voicemailBody: (openingLine: string) => string;
-  disclosureOwnerFallback: string;
-}
+import { ersteAeusserung, type Sprachwahl } from "../anrufe/start/anrufstart.ts";
 
 interface AnrufSprache {
   language: string;
@@ -64,17 +57,6 @@ function disclosureLanguageOf(
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
-
-const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
-
-const providerDisclosureFirst = (locale: Sprachwahl, ownerName: string | null): string =>
-  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
-
-export function providerVoicemailMessage({ locale, ownerName, openingLine }: { locale: Sprachwahl; ownerName: string; openingLine: string }): string {
-  return [locale.disclosure(ownerName), locale.voicemailBody(openingLine)].join(" ");
-}
-
 export function callLocaleFor(
   state: MandantZustand,
   { tenantId, numberRecord, ownerName, to, callLanguage }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined },
@@ -87,10 +69,7 @@ export function callLocaleFor(
     providerLanguage,
     disclosureLanguage: offenlegung.language,
     voiceId: EINE_STIMME_ID,
-    firstMessage:
-      providerLanguage === offenlegung.language
-        ? EROEFFNUNG_PLATZHALTER
-        : providerDisclosureFirst(offenlegung, ownerName),
+    firstMessage: ersteAeusserung({ providerLanguage, offenlegung, ownerName }),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
   };
 }

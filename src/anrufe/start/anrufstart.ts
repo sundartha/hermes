@@ -5,6 +5,37 @@ export type NichtLeer = z.infer<typeof NICHT_LEER>;
 
 export const nichtLeer = (text: string): NichtLeer => NICHT_LEER.parse(text);
 
+export interface Sprachwahl {
+  language: string;
+  voiceProfile: string;
+  disclosure: (ownerName: string | null) => string;
+  voicemailBody: (openingLine: string) => string;
+  disclosureOwnerFallback: string;
+}
+
+const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
+
+const EROEFFNUNG_PLATZHALTER = "{{eroeffnung}}";
+
+const providerDisclosureFirst = (locale: Sprachwahl, ownerName: string | null): string =>
+  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
+
+export function providerVoicemailMessage({ locale, ownerName, openingLine }: { locale: Sprachwahl; ownerName: string; openingLine: string }): string {
+  return [locale.disclosure(ownerName), locale.voicemailBody(openingLine)].join(" ");
+}
+
+export function ersteAeusserung({ providerLanguage, offenlegung, ownerName }: { providerLanguage: string; offenlegung: Sprachwahl; ownerName: string | null }): string {
+  return providerLanguage === offenlegung.language ? EROEFFNUNG_PLATZHALTER : providerDisclosureFirst(offenlegung, ownerName);
+}
+
+export function offenlegungssatz(locale: Sprachwahl, ownerName: string | null): string {
+  return locale.disclosure(ownerName);
+}
+
+export function eroeffnungsVariablen({ openingLine, eroeffnung }: { openingLine: string; eroeffnung: string }): { opening_line: string; eroeffnung: string } {
+  return { opening_line: openingLine, eroeffnung };
+}
+
 interface Sprachen {
   language: string;
   providerLanguage: string;

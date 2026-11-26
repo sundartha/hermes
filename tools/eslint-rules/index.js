@@ -12,6 +12,9 @@ import namenOhneBegruendung from "./namen-ohne-begruendung.js";
 const GEPRUEFTE_KNOTEN = ["Identifier", "PrivateIdentifier", "Literal", "TemplateElement"];
 
 const WOERTER = new Map([
+  ["eroeffnung-platzhalter", /\{\{\s*(eroeffnung|opening_line)\s*\}\}/],
+  ["eroeffnung-schreiben", /^(first_message|opening_line)$/],
+  ["offenlegung-lesen", /^disclosure$/],
   ["telnyx-belegabruf", /^(fetchCostRecordPool|assignCostRecords)$|(^|telnyx\.com)\/v2\/detail_records/],
   ["kein-anrufzeit-gate", /time_?zone|(^|\/)(time-context|nanp-area-codes)(\.[cm]?[jt]s)?$/i],
   ["trunk-beleg-felder", /^elInboundTrunk(ZugangFp|BelegtAt)$|el_inbound_trunk_(zugang_fp|belegt_at)/],
