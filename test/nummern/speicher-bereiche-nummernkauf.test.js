@@ -186,7 +186,7 @@ test("Aufrufer: triggerTenantProvisioning legt den Mandanten ueber den Speicher-
     metering: {},
     numberProvisioning: () => ({}),
     handleProvisionJob: async () => ({}),
-    resolveProvisionRetry: () => ({ ok: false, reason: "grund_nk" }),
+    resolveProvisionRetry: () => ({ ok: false, fehler: "grund_nk" }),
     audit: (aktion, _akteur, detail) => audit.push([aktion, detail]),
     recordProvisioningJob: () => null,
     markProvisioningJob: () => null,

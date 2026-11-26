@@ -8,26 +8,33 @@ import { languageForCountry } from "../i18n/locales.ts";
 import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 import { kauflandFuer } from "../begriffe/rufnummern.js";
-
-interface Ergebnis {
-  ok: boolean;
-  reason?: string;
-  [feld: string]: unknown;
-}
+import { ok, fehler, type Ergebnis } from "../utils/ergebnis.ts";
 
 type Zustand = Parameters<typeof tenantGeo>[0] & {
   provisioningJobs: { id: string; numberId: string; status: string; createdAt?: string | null }[];
 };
 
+interface Neuanfrage {
+  reason?: undefined;
+  number: Zustand["numbers"][number];
+}
+
+interface Wiederaufnahme {
+  reason: "redrive";
+  numberId: string;
+  jobId: string;
+  job: Zustand["provisioningJobs"][number];
+}
+
 export function requestNumberForPaidTenant(
   state: Zustand,
   { tenantId, maxNumbers, maxNumbersPerTenant }: { tenantId: string; maxNumbers: number; maxNumbersPerTenant: number },
-): Ergebnis {
+): Ergebnis<Neuanfrage> {
   if (tenantHasLiveNumber(state, tenantId))
-    return { ok: false, reason: "already_provisioned" };
+    return fehler("already_provisioned");
   const tenantCountry: string | null | undefined = tenantGeo(state, tenantId).country;
   const language: string = languageForCountry(tenantCountry);
-  return requestNumber(state, {
+  const anfrage = requestNumber(state, {
     tenantId,
     provider: PROVIDER.TELNYX,
     country: kauflandFuer(tenantCountry),
@@ -35,17 +42,18 @@ export function requestNumberForPaidTenant(
     maxNumbers,
     maxNumbersPerTenant,
   });
+  return anfrage.ok ? ok({ number: anfrage.number }) : fehler(anfrage.reason);
 }
 
 export function resolveProvisionRetry(
   state: Zustand,
   opts: { tenantId: string; nowMs: number; maxAgeMs: number; maxNumbers: number; maxNumbersPerTenant: number },
-): Ergebnis {
+): Ergebnis<Neuanfrage | Wiederaufnahme> {
   const stuck = findStuckRequestedProvision(state, opts.tenantId);
   if (!stuck) return requestNumberForPaidTenant(state, opts);
   if (redriveAgeHoldReason(stuck.job, opts.nowMs, opts.maxAgeMs))
-    return { ok: false, reason: NEEDS_MANUAL_RECONCILE_REASON };
-  return { ok: true, reason: "redrive", numberId: stuck.number.id, jobId: stuck.job.id, job: stuck.job };
+    return fehler(NEEDS_MANUAL_RECONCILE_REASON);
+  return ok({ reason: "redrive", numberId: stuck.number.id, jobId: stuck.job.id, job: stuck.job });
 }
 
 function findStuckRequestedProvision(

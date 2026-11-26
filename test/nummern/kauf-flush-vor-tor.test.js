@@ -74,7 +74,7 @@ function markProvisioningJob(zustand, id, status) {
 
 function resolveProvisionRetry(zustand, { tenantId }) {
   const eigene = zustand.numbers.filter((nummer) => nummer.tenantId === tenantId && lebend(nummer));
-  if (eigene.length > 0) return { ok: false, reason: "already_provisioned" };
+  if (eigene.length > 0) return { ok: false, fehler: "already_provisioned" };
   const number = {
     id: `num_${randomUUID()}`,
     e164: null,
@@ -87,7 +87,7 @@ function resolveProvisionRetry(zustand, { tenantId }) {
     paymentIntentId: null,
   };
   zustand.numbers.push(number);
-  return { ok: true, number };
+  return { ok: true, wert: { number } };
 }
 
 function anbieter() {

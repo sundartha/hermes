@@ -19,49 +19,49 @@ test("junger stuck-requested+queued -> redrive + numberId + jobId + job (kein fr
   const s = state();
   const r = resolveProvisionRetry(s, opts());
   assert.equal(r.ok, true);
-  assert.equal(r.reason, "redrive");
-  assert.equal(r.numberId, "num1");
-  assert.equal(r.jobId, "job1");
-  assert.equal(r.job?.idempotencyKey, "provision_num1");
+  assert.equal(r.wert.reason, "redrive");
+  assert.equal(r.wert.numberId, "num1");
+  assert.equal(r.wert.jobId, "job1");
+  assert.equal(r.wert.job?.idempotencyKey, "provision_num1");
   assert.equal(s.numbers.length, 1, "KEINE neue Nummer angefragt");
 });
 
 test("Grenzfall Alter == maxAgeMs -> noch redrive (> ist der Block, nicht >=)", () => {
   const r = resolveProvisionRetry(state({ jobs: [job({ createdAt: new Date(NOW - HOUR).toISOString() })] }), opts(HOUR));
-  assert.equal(r.reason, "redrive");
+  assert.equal(r.wert.reason, "redrive");
 });
 
 test("alter stuck (> maxAgeMs) -> needs_manual_reconcile, KEIN Kauf", () => {
   const r = resolveProvisionRetry(state({ jobs: [job({ createdAt: new Date(NOW - 2 * HOUR).toISOString() })] }), opts(HOUR));
   assert.equal(r.ok, false);
-  assert.equal(r.reason, "needs_manual_reconcile");
+  assert.equal(r.fehler, "needs_manual_reconcile");
 });
 
 test("alters-unbekannter stuck (createdAt fehlt) -> needs_manual_reconcile (fail-closed)", () => {
   const r = resolveProvisionRetry(state({ jobs: [job({ createdAt: undefined })] }), opts(HOUR));
-  assert.equal(r.reason, "needs_manual_reconcile");
+  assert.equal(r.fehler, "needs_manual_reconcile");
 });
 
 test("Observe-Only (maxAge=0): junger stuck -> needs_manual_reconcile", () => {
   const r = resolveProvisionRetry(state(), opts(0));
-  assert.equal(r.reason, "needs_manual_reconcile");
+  assert.equal(r.fehler, "needs_manual_reconcile");
 });
 
 test("requested OHNE queued-Job -> already_provisioned (Dry-Run-Onboard, kein stuck)", () => {
   const r = resolveProvisionRetry(state({ jobs: [] }), opts());
   assert.equal(r.ok, false);
-  assert.equal(r.reason, "already_provisioned");
+  assert.equal(r.fehler, "already_provisioned");
 });
 
 test("aktive Nummer -> already_provisioned (Idempotenz, kein Doppelkauf)", () => {
   const r = resolveProvisionRetry(state({ numbers: [num({ status: NUMBER_STATUS.ACTIVE })], jobs: [] }), opts());
-  assert.equal(r.reason, "already_provisioned");
+  assert.equal(r.fehler, "already_provisioned");
 });
 
 test("terminal failed -> frische requested-Nummer (Bestandsschutz)", () => {
   const s = state({ numbers: [num({ id: "num_old", status: NUMBER_STATUS.FAILED })], jobs: [] });
   const r = resolveProvisionRetry(s, opts());
   assert.equal(r.ok, true);
-  assert.equal(r.number?.status, "requested");
+  assert.equal(r.wert.number?.status, "requested");
   assert.equal(s.numbers.length, 2, "eine NEUE requested-Nummer angefragt");
 });

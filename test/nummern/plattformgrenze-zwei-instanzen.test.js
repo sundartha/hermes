@@ -93,7 +93,7 @@ function stubs() {
         status: "requested", providerNumberId: null, paymentIntentId: null,
       };
       zustand.numbers.push(number);
-      return { ok: true, number };
+      return { ok: true, wert: { number } };
     },
   };
 }

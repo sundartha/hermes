@@ -86,7 +86,7 @@ function orchestratorFuer(store) {
     resolveProvisionRetry: (zustand, { tenantId }) => {
       const nummer = { id: `num_${randomUUID()}`, e164: null, tenantId, provider: "telnyx", country: "US", language: "en", status: "requested", providerNumberId: null, paymentIntentId: null };
       zustand.numbers.push(nummer);
-      return { ok: true, number: nummer };
+      return { ok: true, wert: { number: nummer } };
     },
     audit: () => {},
     recordProvisioningJob: (zustand, { numberId, tenantId, idempotencyKey }) => {

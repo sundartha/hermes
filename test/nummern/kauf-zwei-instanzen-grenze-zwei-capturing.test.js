@@ -70,12 +70,12 @@ function markProvisioningJob(zustand, id, status) {
 
 function resolveProvisionRetry(zustand, { tenantId }) {
   const mandant = zustand.tenants.find((eintrag) => eintrag.id === tenantId);
-  if (mandant?.status !== "active") return { ok: false, reason: "tenant_inactive" };
+  if (mandant?.status !== "active") return { ok: false, fehler: "tenant_inactive" };
   const eigene = zustand.numbers.filter((nummer) => nummer.tenantId === tenantId && lebend(nummer));
   const haengend = eigene.find((nummer) => nummer.status === "requested");
   const job = zustand.provisioningJobs.find((eintrag) => eintrag.numberId === haengend?.id && eintrag.status === "queued");
-  if (job) return { ok: true, reason: "redrive", numberId: haengend.id, jobId: job.id, job };
-  if (eigene.length > 0) return { ok: false, reason: "already_provisioned" };
+  if (job) return { ok: true, wert: { reason: "redrive", numberId: haengend.id, jobId: job.id, job } };
+  if (eigene.length > 0) return { ok: false, fehler: "already_provisioned" };
   const number = {
     id: `num_${randomUUID()}`,
     e164: null,
@@ -88,7 +88,7 @@ function resolveProvisionRetry(zustand, { tenantId }) {
     paymentIntentId: null,
   };
   zustand.numbers.push(number);
-  return { ok: true, number };
+  return { ok: true, wert: { number } };
 }
 
 function anbieter() {
