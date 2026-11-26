@@ -1,6 +1,6 @@
 import { registerTools } from "./mcp-tools.js";
 import { oauthBearerChallenge } from "./auth.js";
-import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
+import { MCP_ERROR_CODE } from "./i18n/mcp-texts.ts";
 import { localeFor } from "./i18n/locales.ts";
 import { TENANT_REJECT } from "./request-tenant.js";
 

@@ -9,7 +9,7 @@ import {
   mcpServerOptions,
 } from "../../src/mcp-server-info.js";
 import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
-import { MCP_TEXTS } from "../../src/i18n/mcp-texts.js";
+import { MCP_TEXTS } from "../../src/i18n/mcp-texts.ts";
 import {
   startServer,
   seedState,

@@ -1,4 +1,4 @@
-import { afterGreeting } from "../i18n/eroeffnung.js";
+import { afterGreeting } from "../i18n/eroeffnung.ts";
 
 type Sprache = "de" | "en" | "fr";
 

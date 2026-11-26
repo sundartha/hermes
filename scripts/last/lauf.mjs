@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { MCP_DENIAL_TEXTS } from "../../src/i18n/mcp-denial-texts.js";
+import { MCP_DENIAL_TEXTS } from "../../src/i18n/mcp-denial-texts.ts";
 import { fasseFehlerZusammen } from "./ergebnis.js";
 import { bewerteLauf, nurFehlerquoteUeberGrenze } from "./schwellen.mjs";
 import { fuehreAusWennErlaubt } from "./ziel.mjs";

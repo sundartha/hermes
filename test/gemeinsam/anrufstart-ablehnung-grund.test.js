@@ -5,7 +5,7 @@ import { startServer } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 import { makeTelnyxSigner, vorspannUmgebung } from "../anrufe/el-bein-attrappe.js";
 import { vorspannMandantenUmgebung } from "./vorspann-fahrzeug.js";
-import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.js";
+import { FAILURE_REASON_TEXTS } from "../../src/i18n/failure-reason-texts.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const TO = "+4915112345678";

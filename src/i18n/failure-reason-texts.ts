@@ -1,5 +1,10 @@
 import { failureReasonBase } from "../telephony/failure-reason.ts";
 
+interface FailureBundle {
+  reasonLabel: string;
+  phrases: Readonly<Record<string, string>>;
+}
+
 export const FAILURE_REASON_TEXTS = Object.freeze({
   de: Object.freeze({
     reasonLabel: "Grund:",
@@ -48,16 +53,16 @@ export const FAILURE_REASON_TEXTS = Object.freeze({
   }),
 });
 
-export function makeFailureSentence({ phrases }) {
-  return (failureReason) => {
+export function makeFailureSentence({ phrases }: FailureBundle) {
+  return (failureReason: string | null | undefined): string | null | undefined => {
     const base = failureReasonBase(failureReason);
     return base && Object.hasOwn(phrases, base) ? phrases[base] : null;
   };
 }
 
-export function makeStatusBody(statusLabel, bundle) {
+export function makeStatusBody(statusLabel: string, bundle: FailureBundle) {
   const sentence = makeFailureSentence(bundle);
-  return (target, status, failureReason) => {
+  return (target: string, status: string, failureReason?: string | null): string => {
     const statusPart = `${statusLabel} ${status}`;
     const phrase = sentence(failureReason);
     return phrase
@@ -66,9 +71,9 @@ export function makeStatusBody(statusLabel, bundle) {
   };
 }
 
-export function makeCallFailedSummary(lead, bundle) {
+export function makeCallFailedSummary(lead: string, bundle: FailureBundle) {
   const sentence = makeFailureSentence(bundle);
-  return (failureReason) => {
+  return (failureReason?: string | null): string | null => {
     if (!failureReason) return null;
     const phrase = sentence(failureReason);
     return phrase ? `${lead} ${bundle.reasonLabel} ${phrase}` : lead;

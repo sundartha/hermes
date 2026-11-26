@@ -7,7 +7,7 @@ import {
   WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
 } from "./wing-markup.js";
 import { HUD_CARD_CSS } from "./hud-card-css.js";
-import { AWAIT_SUMMARY } from "../i18n/platzhalter/warte-texte.js";
+import { AWAIT_SUMMARY } from "../i18n/platzhalter/warte-texte.ts";
 
 export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";

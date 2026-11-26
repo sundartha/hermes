@@ -1,4 +1,4 @@
-import { MCP_ERROR_CODE } from "../i18n/mcp-texts.js";
+import { MCP_ERROR_CODE } from "../i18n/mcp-texts.ts";
 import { RESTRICTED_CATEGORY, firstRestrictedField } from "../restricted-data.ts";
 import { ToolError } from "./fehler.js";
 

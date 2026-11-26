@@ -1,5 +1,5 @@
 import { hasInboundNotice } from "./inbound-notice.ts";
-import { PLACEHOLDER_OPENER } from "./eroeffnung.js";
+import { PLACEHOLDER_OPENER } from "./eroeffnung.ts";
 
 export const EROEFFNUNG_DEFEKT = Object.freeze({
   NAMENSSATZ_FEHLT: "namenssatz_fehlt",

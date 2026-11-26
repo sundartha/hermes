@@ -1,4 +1,4 @@
-import { MCP_ERROR_CODE, MCP_TEXTS } from "../i18n/mcp-texts.js";
+import { MCP_ERROR_CODE, MCP_TEXTS } from "../i18n/mcp-texts.ts";
 
 export class ToolError extends Error {
   constructor(code, field) {
