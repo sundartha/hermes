@@ -16,6 +16,7 @@ import {
   requestNumber,
 } from "../store/state-ops.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
+import { fehler } from "../utils/ergebnis.ts";
 import {
   HTTP_BAD_REQUEST,
   HTTP_CONFLICT,
@@ -182,7 +183,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
-        if (shouldPersistProvisionResult(r)) {
+        if (shouldPersistProvisionResult({ ok: r.ok, reason: r.fehler })) {
           store.save();
           store.stammdatenSchreiben?.(tenantId, [...(sub ? ["idpSubject"] : []), ...SKIP_VERMERK_SCHLUESSEL]);
         }
@@ -190,17 +191,17 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
       })
       .catch((e) => {
         console.error("[onboard] Persistenz fehlgeschlagen:", e.message);
-        return { ok: false, reason: "persist_error" };
+        return fehler("persist_error");
       });
-    if (!numberResult.ok && numberResult.reason === "persist_error")
+    if (!numberResult.ok && numberResult.fehler === "persist_error")
       return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "Persistenz fehlgeschlagen");
     if (!numberResult.ok) {
-      audit("onboard_denied", req, `tenant=${tenantId} grund=${numberResult.reason}`);
+      audit("onboard_denied", req, `tenant=${tenantId} grund=${numberResult.fehler}`);
       return res
-        .status(ONBOARD_REASON_STATUS[numberResult.reason] || HTTP_BAD_REQUEST)
-        .json({ error: `Nummer-Anfrage abgelehnt (${numberResult.reason})` });
+        .status(ONBOARD_REASON_STATUS[numberResult.fehler] || HTTP_BAD_REQUEST)
+        .json({ error: `Nummer-Anfrage abgelehnt (${numberResult.fehler})` });
     }
-    const angebot = { tenantId, number: numberResult.number, country, language };
+    const angebot = { tenantId, number: numberResult.wert.number, country, language };
     return nummerBereitstellen({ config, audit, provisioning }, { req, res }, angebot);
   });
 

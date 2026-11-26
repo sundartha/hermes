@@ -34,7 +34,7 @@ export function requestNumberForPaidTenant(
     return fehler("already_provisioned");
   const tenantCountry: string | null | undefined = tenantGeo(state, tenantId).country;
   const language: string = languageForCountry(tenantCountry);
-  const anfrage = requestNumber(state, {
+  return requestNumber(state, {
     tenantId,
     provider: PROVIDER.TELNYX,
     country: kauflandFuer(tenantCountry),
@@ -42,7 +42,6 @@ export function requestNumberForPaidTenant(
     maxNumbers,
     maxNumbersPerTenant,
   });
-  return anfrage.ok ? ok({ number: anfrage.number }) : fehler(anfrage.reason);
 }
 
 export function resolveProvisionRetry(

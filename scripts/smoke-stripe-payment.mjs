@@ -81,13 +81,13 @@ async function main() {
     maxNumbers: SMOKE_MAX_NUMBERS,
     maxNumbersPerTenant: SMOKE_MAX_NUMBERS,
   });
-  if (!requested.ok) report(false, [`requestNumber fehlgeschlagen: ${requested.reason}`]);
+  if (!requested.ok) report(false, [`requestNumber fehlgeschlagen: ${requested.fehler}`]);
 
   const result = await provisionNumber(
     state,
     { provisioner: fakeProvisioner(), billing: stripeBilling },
     {
-      numberId: requested.number.id,
+      numberId: requested.wert.number.id,
       countryCode: kauflandFuer(config.provisioning.provisioningCountry),
       connectionId: SMOKE_CONNECTION_ID,
       holdAmountCents: SMOKE_AMOUNT_CENTS,
