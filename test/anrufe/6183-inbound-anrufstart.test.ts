@@ -1,7 +1,6 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-
-import { quelltexteUnter } from "../helpers.js";
 
 const DE = { language: "de", providerLanguage: "de", disclosureLanguage: "de", voiceId: "voice-1" };
 const FREMD = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel.";
@@ -33,9 +32,9 @@ describe("anrufStart fuer eingehende Anrufe", () => {
 
 describe("Huellen entfernt", () => {
   it("kein Treffer fuer die Huellen callLocaleOf und inboundElLocaleOf in outbound.js und inbound-initiation.js", () => {
-    const huellen = (quelltexteUnter("src/elevenlabs") as [string, string][])
-      .filter(([datei]) => datei.endsWith("/outbound.js") || datei.endsWith("/inbound-initiation.js"))
-      .filter(([, inhalt]) => /export function (callLocaleOf|inboundElLocaleOf)\b/.test(inhalt));
+    const huellen = ["outbound.js", "inbound-initiation.js"]
+      .map((datei) => readFileSync(new URL(`../../src/elevenlabs/${datei}`, import.meta.url), "utf8"))
+      .filter((inhalt) => /export function (callLocaleOf|inboundElLocaleOf)\b/.test(inhalt));
     assert.deepEqual(huellen, []);
   });
 });
