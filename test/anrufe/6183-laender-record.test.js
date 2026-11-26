@@ -68,6 +68,9 @@ describe("LANGUAGE_FOR_COUNTRY: ein Eintrag je ISO-3166-Alpha-2-Land", () => {
     assert.equal(languageForCountry("BR"), "en");
     assert.equal(languageForCountry("fr"), "fr");
     assert.equal(languageForCountry(undefined), "en");
+    assert.equal(languageForCountry(null), "en");
+    assert.equal(languageForCountry("de"), "de");
+    assert.equal(languageForCountry(" "), "en");
   });
 });
 
@@ -80,18 +83,27 @@ describe("Offenlegung en fuer Ziele ohne eigenen Text, ueber POST /api/calls", (
     });
   });
 
-  it("ohne Startsprache und Ziel +55: Offenlegung en, Gespraech in der Sprache des Auftraggebers", async () => {
+  it("ohne Startsprache und Ziel +55: Offenlegung und Gespraech in der Sprache des Auftraggebers", async () => {
     await mitServer(async (srv) => {
       const inhalt = await anrufInhalt(srv, BRASILIEN);
       assert.equal(inhalt.conversation_config_override.agent.language, "de");
-      assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")));
+      assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.includes("KI-Assistent von Jonas Beispiel"));
     });
   });
 
-  it("Ziel +1 und +81 ohne Startsprache: Offenlegung en", async () => {
+  it("Ziel +1 und +81 ohne Startsprache: Offenlegung in der Sprache des Auftraggebers", async () => {
     await mitServer(async (srv) => {
       for (const ziel of [USA, JAPAN]) {
         const inhalt = await anrufInhalt(srv, ziel);
+        assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.includes("KI-Assistent von Jonas Beispiel"), ziel);
+      }
+    });
+  });
+
+  it("Startsprache pt und Ziel +1 oder +81: Offenlegung en", async () => {
+    await mitServer(async (srv) => {
+      for (const ziel of [USA, JAPAN]) {
+        const inhalt = await anrufInhalt(srv, ziel, "pt");
         assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")), ziel);
       }
     });

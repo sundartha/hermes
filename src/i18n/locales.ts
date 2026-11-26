@@ -402,7 +402,7 @@ export function disclosurePrefixFor(language: string): string {
 
 export { afterGreeting };
 
-const EIGENE_SPRACHE_JE_LAND: Readonly<Record<string, Sprache>> = Object.freeze({
+export const EIGENE_SPRACHE_JE_LAND: Readonly<Record<string, Sprache>> = Object.freeze({
   DE: "de",
   AT: "de",
   CH: "de",
@@ -417,7 +417,7 @@ export const LANGUAGE_FOR_COUNTRY: Readonly<Record<Land, Sprache>> = Object.free
 });
 
 export function languageForCountry(country: string | number | boolean | null | undefined): string {
-  return EIGENE_SPRACHE_JE_LAND[String(country ?? "").toUpperCase()] ?? DEFAULT_LANGUAGE;
+  return EIGENE_SPRACHE_JE_LAND[String(country).toUpperCase()] ?? DEFAULT_LANGUAGE;
 }
 
 const LOCALE_BY_LANGUAGE = new Map<string | undefined, (typeof LOCALES)[Sprache]>(Object.entries(LOCALES));
