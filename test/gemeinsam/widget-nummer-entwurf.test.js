@@ -9,7 +9,7 @@ const WIDGETS = await ausgelieferteWidgets();
 const NUMMER = WIDGETS["my-number"];
 const SATZ = "At this number, Hermes takes calls for you and places calls on your behalf.";
 const KURVE = "cubic-bezier(.22,1,.36,1)";
-const LETZTE_VERSION_VORHER = { "agent-status": 34, "my-number": 35, calls: 35, call: 51 };
+const LETZTE_VERSION_VORHER = { "agent-status": 35, "my-number": 36, calls: 36, call: 52 };
 
 function erstesKind(h) {
   return h.kinder[0];

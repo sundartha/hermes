@@ -35,6 +35,9 @@
   .ph-live .pill::before,.ph-done .pill::before{opacity:0}
   .ph-done .pill{background:#f2ece3;color:#15130f}
   .zeile[data-row="summary"]{box-sizing:border-box;max-height:120px;overflow-y:auto}
+  .zeile>.zustand{justify-self:start;box-sizing:border-box;padding:2px 10px;border:1px solid var(--line2);border-radius:14px}
+  .zeile>.zustand[data-state="done_confirmed"]{border-color:var(--fg);background:var(--fg);color:var(--bg)}
+  .zeile>.zustand[data-state="unconfirmed"]{border-style:dashed}
   .ph-fail .pill,.ph-cancel .pill{background:transparent;box-shadow:none}
   .ph-fail .pill::before,.ph-cancel .pill::before{border-color:var(--line2);box-shadow:none}
   .ph-dial .ga{opacity:.5}.ph-live .ga{opacity:1}.ph-done .ga{opacity:.8}
@@ -96,6 +99,9 @@
       </div>
       <div class="zeile rise" data-row="failure" style="display:none">
         <span data-i18n="Reason">Reason</span><span data-failure-display>—</span>
+      </div>
+      <div class="zeile rise" data-row="state" style="display:none">
+        <span data-i18n="Status">Status</span><span class="zustand" data-state-display></span>
       </div>
       <div class="zeile rise" data-row="summary" style="display:none">
         <span data-i18n="Result">Result</span><span data-mcp="result_summary">—</span>
@@ -189,6 +195,19 @@
       "at-capacity": "At capacity",
       "max-duration-cap": "Duration limit",
       "budget-exhausted": "Budget used up",
+    };
+
+    var STATE_LABELS = {
+      "done_confirmed": "Done, confirmed by the other side",
+      "unconfirmed": "Unconfirmed: nothing was confirmed",
+      "not_done": "Not done",
+    };
+
+    var NOT_DONE_LABELS = {
+      "menu-only": "Not done: only an automated menu was reached",
+      "mailbox": "Not done: only a voicemail box was reached",
+      "no-answer": "Not done: nobody answered",
+      "declined": "Not done: the other side declined",
     };
 
     var WING_STATUS_IDLE = "idle";
@@ -661,6 +680,23 @@
       setRowVisible("summary", currentStatus === "completed");
     }
 
+    function stateLabelKey(data) {
+      var coveredByFailureRow = currentStatus === "failed" && data.result_reason === "no-answer";
+      var reasonKey = data.result_state === "not_done" && !coveredByFailureRow ? NOT_DONE_LABELS[data.result_reason] : null;
+      return reasonKey || STATE_LABELS[data.result_state];
+    }
+
+    function applyStateRow(data, awaiting) {
+      if (!("result_state" in data)) return;
+      var key = stateLabelKey(data);
+      var visible = Boolean(key) && !(awaiting && data.result_state === "unconfirmed");
+      setRowVisible("state", visible);
+      if (!visible) return;
+      var el = doc.querySelector("[data-state-display]");
+      el.setAttribute("data-state", data.result_state);
+      setKeyedText(el, key);
+    }
+
     function showUpdatesStopped() {
       if (isTerminalStatus(currentStatus)) return;
       setKeyedText(slot("result_summary"), "No longer updating");
@@ -673,6 +709,7 @@
       if (data.call_id) setSlotText("call_id", data.call_id);
       var awaiting = isAwaitPlaceholder(data);
       applySummaryRow(data, awaiting);
+      applyStateRow(data, awaiting);
       if (awaiting) scheduleResultRetry();
       applyResultRow("next_step", data.next_step, true);
       applyNextSteps(data);

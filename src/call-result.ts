@@ -18,10 +18,16 @@ export interface NaechsterSchritt {
 const ZEITPUNKT_FORM =
   /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/;
 
+export interface TerminBeleg {
+  at: string | null;
+  confirmedBy: string | null;
+}
+
 export interface GegenseitenUrteil {
   confirmed: boolean;
   declined: boolean;
   mailbox?: boolean;
+  appointment?: TerminBeleg;
 }
 
 export interface ErgebnisKarte {
@@ -77,7 +83,7 @@ function clampedList(value: unknown, maxItems: number, maxChars: number): string
   return cleaned;
 }
 
-function gueltigerZeitpunkt(value: unknown): string | null {
+export function gueltigerZeitpunkt(value: unknown): string | null {
   const text = clampedText(value, RESULT_TEXT_MAX_CHARS);
   const treffer = text ? ZEITPUNKT_FORM.exec(text) : null;
   if (!text || !treffer) return null;
@@ -140,7 +146,9 @@ export function normalizeCallResult(
   { evidenceAllowed, counterparty }: { evidenceAllowed: boolean; counterparty?: GegenseitenUrteil },
 ): ErgebnisKarte | null {
   const card = karteAus(parsed);
-  if (counterparty && (counterparty.confirmed || counterparty.declined || counterparty.mailbox)) card.counterparty = counterparty;
+  if (counterparty && (counterparty.confirmed || counterparty.declined || counterparty.mailbox || counterparty.appointment)) {
+    card.counterparty = counterparty;
+  }
   if (evidenceAllowed) {
     card.evidence = clampedList(parsed?.evidence, RESULT_EVIDENCE_MAX_ITEMS, RESULT_EVIDENCE_MAX_CHARS);
   }

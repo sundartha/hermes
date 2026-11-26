@@ -664,6 +664,12 @@ des Auftraggebers (Feld `owner`):
 Werkzeugtext (get_agent_status): "the status of the phone agent with these fields: number"
 `get_agent_number` liefert genau die Nummer, die die Beschreibung nennt:
 Werkzeugtext (get_agent_number): "Returns the phone number of the phone agent."
+Bei einem ausgehenden Terminauftrag endet die Zusammenfassung (`result_summary`) mit Datum,
+Uhrzeit und der bestaetigenden Person, sonst mit dem Hinweis, dass nichts bestaetigt wurde, und
+dem naechsten Schritt (`src/telephony/ergebnis-zustand.ts#terminLage`,
+`src/i18n/ergebnis-zustand-texte.ts#terminSatz`). Den Namen der Person uebernimmt der Server nur,
+wenn er in einer Zeile der Gegenseite steht. Das Anruf-Widget zeigt `result_state` und
+`result_reason` als eigene Zeile (`src/ui/widgets/call.html#stateLabelKey`).
 
 ### Beruehrung besonderer Kategorien (Art. 9 DSGVO)
 

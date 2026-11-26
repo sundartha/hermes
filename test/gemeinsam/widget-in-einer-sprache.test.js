@@ -441,6 +441,7 @@ const IN_NUTZERSPRACHE = Object.freeze({
   result_summary: "Ergebnis-Text, Sprache ueber hermes/content_locale geprueft",
   next_step: "Ergebnis-Karte, Sprache ueber hermes/content_locale geprueft",
   "data-failure-display": "Beschriftung mit Schluessel",
+  "data-state-display": "Beschriftung mit Schluessel",
   "data-assignment-display": "Auftragssatz, Sprache ueber hermes/content_locale geprueft",
   "data-hud-phase": "Beschriftung mit Schluessel",
 });
