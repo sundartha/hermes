@@ -13,7 +13,7 @@ const GESPRAECH = Object.freeze([
 ]);
 
 const ZEILEN_SQL = "SELECT count(*)::int AS anzahl FROM transcript_segment WHERE call_id = $1";
-const ENDE_ABGESCHLOSSEN = "mail_summary_skipped";
+const BENACHRICHTIGUNG_SQL = "SELECT count(*)::int AS anzahl FROM notification WHERE call_id = $1";
 
 const vorspannGesprochen = (sql, callId) =>
   zeilenBis(
@@ -21,7 +21,11 @@ const vorspannGesprochen = (sql, callId) =>
     (anzahl) => anzahl >= 1,
   );
 
-const endeVerarbeitet = (instanz) => zeilenBis(async () => instanz.stdout, (text) => text.includes(ENDE_ABGESCHLOSSEN));
+const endeVerarbeitet = (sql, callId) =>
+  zeilenBis(
+    async () => (await sql(BENACHRICHTIGUNG_SQL, [callId])).rows[0].anzahl,
+    (anzahl) => anzahl >= 1,
+  );
 
 async function zeile(sql, callId) {
   return (await sql(STATUS_SQL, [callId])).rows[0];
@@ -39,7 +43,7 @@ test("T9 Abbruch auf B, danach Ende auf A: der Anruf bleibt abgebrochen und A ue
     assert.equal(nachAbbruch.status, "cancelled");
     beendeGespraech(`conv_${callId}`, GESPRAECH);
     await sendeEnde(a, callId);
-    await endeVerarbeitet(a);
+    await endeVerarbeitet(sql, callId);
     assert.deepEqual(await zeile(sql, callId), nachAbbruch);
   });
 });
@@ -51,7 +55,7 @@ test("T9 Ende auf A, danach Abbruch auf B: der beendete Anruf bleibt beendet und
     await vorspannGesprochen(sql, callId);
     beendeGespraech(`conv_${callId}`, GESPRAECH);
     await sendeEnde(a, callId);
-    await endeVerarbeitet(a);
+    await endeVerarbeitet(sql, callId);
     const nachEnde = await zeile(sql, callId);
     assert.notEqual(nachEnde.status, "active");
     const abbruch = await brecheAb(b, callId);
