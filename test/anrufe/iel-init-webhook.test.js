@@ -63,7 +63,7 @@ const KEINE_KOPFZEILEN_FORM = Number.MAX_SAFE_INTEGER;
 const FALSCHES_BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
 const FAKE_START_MS = Date.parse("2026-09-15T10:00:00.000Z");
 const FRISCH_BEANTWORTET_S = 2;
-const ERWARTETE_VARIABLEN = 17;
+const ERWARTETE_VARIABLEN = 18;
 const GATE_UNAVAILABLE = "unavailable";
 const VORLAGE_DE = LOCALES.de;
 const VORLAGE_EN = LOCALES.en;
@@ -266,7 +266,7 @@ test("IEL-B6-6a: Treffer -> 200, Variablenmenge = Vorlage, Inbound-Leerwerte, ke
   assert.equal(antwort.type, INITIATION_RESPONSE_TYPE);
   assert.equal(Object.keys(variablen).length, ERWARTETE_VARIABLEN);
   assert.deepEqual(Object.keys(variablen).sort(), [...templatePlaceholderNames(), "opening_line"].sort());
-  for (const leer of ["tenant_token", "voicemail_line", "callee", "objective", "opening_line", "eroeffnung"])
+  for (const leer of ["tenant_token", "voicemail_line", "callee", "objective", "opening_line", "eroeffnung", "call_limit_s"])
     assert.equal(variablen[leer], "", leer);
   assert.equal(variablen.consult_available, GATE_UNAVAILABLE);
   assert.equal(variablen.lookup_available, GATE_UNAVAILABLE);

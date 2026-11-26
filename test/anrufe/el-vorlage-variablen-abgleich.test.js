@@ -8,7 +8,7 @@ import { consultAllowedForCall } from "../../src/consult/gate.ts";
 import { sendeAnrufstart } from "../helpers/elevenlabs-anrufstart-attrappe.mjs";
 import { templatePlaceholderNames } from "../helpers/el-vorlage-variablen.mjs";
 
-const EXPECTED_VARIABLE_COUNT = 16;
+const EXPECTED_VARIABLE_COUNT = 17;
 const UEBERGANG_VARIABLEN = ["opening_line"];
 
 const sentDynamicVariables = () => sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall });
@@ -19,7 +19,7 @@ function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   return { fehlend, ueberzaehlig };
 }
 
-test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic_variables sind deckungsgleich (sechzehn Namen)", async () => {
+test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic_variables sind deckungsgleich (siebzehn Namen)", async () => {
   const seiteA = templatePlaceholderNames();
   const gesendet = await sentDynamicVariables();
   const seiteB = new Set(Object.keys(gesendet));
