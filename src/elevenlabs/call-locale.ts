@@ -77,6 +77,7 @@ export interface LocaleAnruf {
   from?: string | undefined;
   to: string;
   language?: string | null | undefined;
+  languageExplicit?: boolean | undefined;
 }
 
 export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher; call: LocaleAnruf; ownerName: string | null }): AnrufSprache {
@@ -86,7 +87,7 @@ export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher
     ownerName,
     to: call.to,
     callLanguage: call.language ?? STARTSPRACHE,
-    ausdruecklich: Boolean(call.language),
+    ausdruecklich: call.languageExplicit,
   });
 }
 

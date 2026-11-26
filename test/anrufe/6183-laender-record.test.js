@@ -109,11 +109,11 @@ describe("Offenlegung en fuer Ziele ohne eigenen Text, ueber POST /api/calls", (
     });
   });
 
-  it("Ziel in DE mit Startsprache pt: Offenlegung in der Sprache des Angerufenen", async () => {
+  it("Ziel in DE mit Startsprache pt: Offenlegung en, nie die Sprache der Nummer", async () => {
     await mitServer(async (srv) => {
       const inhalt = await anrufInhalt(srv, DEUTSCHLAND, "pt");
       assert.equal(inhalt.conversation_config_override.agent.language, "pt");
-      assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("de")));
+      assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")));
     });
   });
 
