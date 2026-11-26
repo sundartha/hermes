@@ -481,7 +481,7 @@ test("Onboarding: ohne Geo-Treffer legt POST /api/onboard Tenant und Nummer an u
 test("Onboarding: scheitert die Warteschlange, antwortet POST /api/onboard mit 503 und startet keinen Kauf", async () => {
   const drains = [];
   const provisioning = {
-    queueProvisioning: async () => ({ ok: false }),
+    queueProvisioning: async () => ({ ok: false, fehler: "persist_error" }),
     runProvisioningDrainExclusive: async () => drains.push("drain"),
   };
   const { router, auditZeilen } = onboardRouten({ provisioning, kaufAn: true });
@@ -500,7 +500,7 @@ test("Onboarding: scheitert die Warteschlange, antwortet POST /api/onboard mit 5
 
 test("Onboarding: steht der Kauf in der Warteschlange, protokolliert POST /api/onboard Tenant, Nummer und Auftrag", async () => {
   const provisioning = {
-    queueProvisioning: async () => ({ ok: true, jobId: "job_fehlerantwort" }),
+    queueProvisioning: async () => ({ ok: true, wert: { jobId: "job_fehlerantwort" } }),
     runProvisioningDrainExclusive: async () => {},
   };
   const { router, auditZeilen } = onboardRouten({ provisioning, kaufAn: true });
@@ -566,7 +566,7 @@ test("[NIE2] eine tenantId mit Leerzeichen gibt 400 mit dem bisherigen Text und 
   const provisioning = {
     queueProvisioning: async (...auftrag) => {
       kaeufe.push(auftrag);
-      return { ok: true, jobId: "job_nie2" };
+      return { ok: true, wert: { jobId: "job_nie2" } };
     },
     runProvisioningDrainExclusive: async () => {},
   };
@@ -613,7 +613,7 @@ test("[NIE3] die Statuscodes der Abrechnungs-, Posteingangs- und Webhook-Routen 
 
 test("[NIE3] die Statuscodes der Onboarding-Routen kommen unveraendert an", async () => {
   const persistenzKaputt = {
-    queueProvisioning: async () => ({ ok: false }),
+    queueProvisioning: async () => ({ ok: false, fehler: "persist_error" }),
     runProvisioningDrainExclusive: async () => {},
   };
   const faelle = [

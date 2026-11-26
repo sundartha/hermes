@@ -485,7 +485,7 @@ test("K1-25: scheitert das Einreihen eines neuen Nummernauftrags, meldet queuePr
 
   const res = await orchestrator.queueProvisioning("num1", "t1");
 
-  assert.deepEqual(res, { ok: false });
+  assert.deepEqual(res, { ok: false, fehler: "persist_error" });
   assert.deepEqual(loggedErrors(errors), [
     "[provision] Job-Spur fehlgeschlagen: Warteschlange nicht erreichbar",
   ]);

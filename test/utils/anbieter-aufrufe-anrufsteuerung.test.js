@@ -176,7 +176,7 @@ function einrichtungOhneHold(speicher) {
     lauf.fertig = resolve;
   });
   const provisioning = {
-    queueProvisioning: async () => ({ ok: true, jobId: "job_steuerung" }),
+    queueProvisioning: async () => ({ ok: true, wert: { jobId: "job_steuerung" } }),
     runProvisioningDrainExclusive: async () => {
       const state = speicher.load();
       const nummer = state.numbers.find((n) => n.status === "requested");
