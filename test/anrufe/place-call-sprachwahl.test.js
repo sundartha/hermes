@@ -354,8 +354,8 @@ describe("Nullish-Vorbereitung: Offenlegungs- und Gespraechssprache", () => {
     { name: "Angerufener in Deutschland", to: "+4915123456789", erwartet: "de" },
     { name: "Angerufener in Frankreich", to: FR_TARGET, erwartet: "fr" },
     { name: "Angerufener in Grossbritannien", to: "+447911123456", erwartet: "en" },
-    { name: "Land ohne Sprachtabelle faellt auf den Auftraggeber", to: "+819012345678", erwartet: "fr" },
-    { name: "+1 faellt auf den Auftraggeber", to: "+15125550143", erwartet: "fr" },
+    { name: "Land ohne Sprachtabelle faellt auf den Auftraggeber", to: "+819012345678", erwartet: "en" },
+    { name: "+1 faellt auf den Auftraggeber", to: "+15125550143", erwartet: "en" },
     { name: "keine Nummer faellt auf den Auftraggeber", to: null, erwartet: "fr" },
     { name: "unbrauchbare Nummer faellt auf den Auftraggeber", to: "keine", erwartet: "fr" },
   ];

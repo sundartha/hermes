@@ -1,5 +1,5 @@
 import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
-import { countryForE164 } from "../begriffe/rufnummern.js";
+import { E164, countryForE164 } from "../begriffe/rufnummern.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
 
@@ -31,6 +31,8 @@ const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = LANGUAGE_FOR_COUNTRY;
 
+const OFFENLEGUNG_OHNE_LANDESTEXT = "en";
+
 const AN_ANBIETER_DURCHGEREICHTE_SPRACHEN = Object.freeze(["pt", "es", "fr", "de", "en", "it", "nl"]);
 
 function primaererSprachcode(code: string): string {
@@ -45,7 +47,8 @@ function providerSpracheVon(textSprache: string, callLanguage: string | null | u
 
 function calleeLanguage(to: string | null): string | null {
   const land = countryForE164(to);
-  return (land && SPRACHE_JE_LAND[land]) ?? null;
+  if (land) return SPRACHE_JE_LAND[land] ?? OFFENLEGUNG_OHNE_LANDESTEXT;
+  return to !== null && E164.test(to) ? OFFENLEGUNG_OHNE_LANDESTEXT : null;
 }
 
 function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord, callLanguage }: Zugriff & { callLanguage?: string | undefined }): string {
@@ -53,14 +56,12 @@ function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord,
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
-const OHNE_EIGENE_TEXTE_OFFENLEGUNG = "en";
-
 function disclosureLanguageOf(
   state: MandantZustand,
   { tenantId, numberRecord, to, callLanguage }: Zugriff & { to: string | null; callLanguage?: string | undefined },
 ): string {
   const fremdeStartsprache = callLanguage !== undefined && !SUPPORTED_LANGUAGES.includes(callLanguage);
-  if (fremdeStartsprache) return calleeLanguage(to) ?? OHNE_EIGENE_TEXTE_OFFENLEGUNG;
+  if (fremdeStartsprache) return calleeLanguage(to) ?? OFFENLEGUNG_OHNE_LANDESTEXT;
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
