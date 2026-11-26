@@ -45,7 +45,7 @@ function resolveOptionalEnumOverride(
 function neueSprache(value: unknown): Neuer | null {
   if (value === null || value === "") return { value: null };
   const code = sprachcodeOf(value);
-  return code === null ? null : { value: code };
+  return code.ok ? { value: code.wert } : null;
 }
 
 const OPTIONAL_ENUM_FIELDS: Readonly<Record<string, readonly string[]>> = Object.freeze({

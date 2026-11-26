@@ -40,6 +40,7 @@ import { beginneAnrufstartMessung } from "../elevenlabs/anrufstart-messung.ts";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor } from "../i18n/locales.ts";
 import { sprachcodeOf } from "../i18n/sprachcode.ts";
+import { sprachwahlOf } from "../i18n/sprachwahl.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.ts";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
@@ -859,8 +860,9 @@ export function makeCallRoutes({
     if (!to || !objective) return res.status(HTTP_BAD_REQUEST).json({ error: "to und objective sind Pflicht" });
     if (isTrunkZeroFormatError(to)) return res.status(HTTP_BAD_REQUEST).json({ error: E164_FORMAT_ERROR });
 
-    const requestedLanguage = b.language ? sprachcodeOf(b.language) : null;
-    if (b.language && !requestedLanguage) return res.status(HTTP_BAD_REQUEST).json(invalidLanguageBody());
+    const gewaehlt = b.language ? sprachcodeOf(b.language) : null;
+    if (gewaehlt && !gewaehlt.ok) return res.status(HTTP_BAD_REQUEST).json(invalidLanguageBody());
+    const requestedLanguage = gewaehlt?.wert;
 
     const callId = newId("call");
     const ctx: Kontext = { req, to, objective, b, callId };
@@ -879,6 +881,9 @@ export function makeCallRoutes({
       wartet = vorab?.wartet === true;
       await store.einstellungenNachladen?.(ctx.tenantId);
       const language = requestedLanguage ?? STARTSPRACHE;
+      const wahl = sprachwahlOf(language);
+      const { code, texte } = wahl.ok ? wahl.wert : wahl.fehler;
+      console.log(`[startsprache] startsprache=${code} texte=${texte}`);
       const { diagnostic, calleeIsOwnerOfThisCall } = await resolveCallPrivacyFlags({
         bereiche,
         audit,
