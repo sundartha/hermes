@@ -1,4 +1,4 @@
-import { ANRUF_SPERRE_FRIST_MS, ANRUF_SPERRE_NAMENSRAUM } from "../begriffe/speicher.js";
+import { ANRUF_SPERRE_FRIST_MS, ANRUF_SPERRE_NAMENSRAUM } from "../begriffe/speicher.ts";
 
 const FRIST_SQL = `SELECT set_config('lock_timeout', $1, true)`;
 const SPERRE_NEHMEN_SQL = `SELECT pg_advisory_lock($1, hashtext($2))`;

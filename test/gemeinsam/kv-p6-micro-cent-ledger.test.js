@@ -14,7 +14,7 @@ import {
   actualCostMicroCentsForMonth,
 } from "../../src/store/state-ops.js";
 import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "../_prices.js";
 
 const TENANT = "kvp6_kern";

@@ -42,10 +42,10 @@ import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.ts";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.ts";
 import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.ts";
-import { normNum } from "./begriffe/rufnummern.js";
-import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
+import { normNum } from "./begriffe/rufnummern.ts";
+import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.ts";
 import { BOOTSTRAP_NUMBER_HOLD_PURPOSE } from "./begriffe/bootstrap-halt.ts";
-import { START_ROUTINE } from "./begriffe/speicher.js";
+import { START_ROUTINE } from "./begriffe/speicher.ts";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.ts";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,

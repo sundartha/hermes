@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import pg from "pg";
 
-import { ANRUF_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.js";
+import { ANRUF_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.ts";
 import { echtWarten } from "../echt-warten.js";
 import { fristAblaufMeldung } from "../gemeinsam/instanz-ausgabe.js";
 import { OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, startServer } from "../helpers.js";

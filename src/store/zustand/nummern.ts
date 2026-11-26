@@ -9,12 +9,12 @@ import {
   NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
   NUMBER_HOLD_REASON,
-} from "../../begriffe/nummern-vergabe.js";
+} from "../../begriffe/nummern-vergabe.ts";
 import { DEFAULT_COUNTRY } from "../../begriffe/sprache-zeit.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.ts";
 import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.ts";
-import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.js";
+import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.ts";
 import { languageForCountry } from "../../i18n/locales.ts";
 import { resolvePeriodStartIso } from "../../billing/period.ts";
 import { newId, tenantsOf } from "./grundlagen.js";

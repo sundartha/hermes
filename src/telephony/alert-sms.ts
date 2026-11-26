@@ -4,7 +4,7 @@ import { anfrage } from "../utils/anfrage.js";
 import { findActiveNumber } from "../store/views.ts";
 import type { Zustand } from "../store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.ts";
-import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../begriffe/nummern-vergabe.ts";
 import { openPlatformBindingByPurpose } from "../store/state-ops.js";
 
 interface StoreMitZustand {

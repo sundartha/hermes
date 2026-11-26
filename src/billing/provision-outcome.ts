@@ -1,7 +1,7 @@
 import {
   NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
-} from "../begriffe/nummern-vergabe.js";
+} from "../begriffe/nummern-vergabe.ts";
 
 export const PROVISION_REASON = Object.freeze({
   QUEUED: "queued",

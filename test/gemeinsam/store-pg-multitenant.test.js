@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import { defaultSettings, demoCalendar } from "../../src/store.js";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
 import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";

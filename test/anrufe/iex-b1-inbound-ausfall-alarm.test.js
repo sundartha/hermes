@@ -14,7 +14,7 @@ import { reportSystematicOutage, runOutageRecoverySweep } from "../../src/teleph
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { INBOUND_EL_GRUND } from "../../src/elevenlabs/inbound-uebergabe-gescheitert.ts";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 import { BASE_ENV, seedCall } from "../helpers.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
 

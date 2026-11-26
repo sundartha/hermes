@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { E164, hasTrunkZeroAfterCountryCode } from "../../src/begriffe/rufnummern.js";
+import { E164, hasTrunkZeroAfterCountryCode } from "../../src/begriffe/rufnummern.ts";
 import { isTrunkZeroFormatError } from "../../src/telephony/outbound-gates.js";
 import { startServer, placeCall } from "../helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";

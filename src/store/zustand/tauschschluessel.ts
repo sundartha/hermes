@@ -1,4 +1,4 @@
-import { NUMBER_SWAP_JOB } from "../../begriffe/nummern-vergabe.js";
+import { NUMBER_SWAP_JOB } from "../../begriffe/nummern-vergabe.ts";
 
 interface TauschJob {
   kind: string;

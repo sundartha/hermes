@@ -7,7 +7,7 @@ import {
 } from "../../src/billing/contract-end-cleanup.ts";
 import { makeWorkosManagement } from "../../src/workos-management.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { fakeProvisioner } from "../helpers.js";
 import { antwortetNie, mitKurzerFrist } from "../gemeinsam/kurze-antwortfrist.mjs";
 import { pruefeNaht } from "../gemeinsam/naht-frist.mjs";

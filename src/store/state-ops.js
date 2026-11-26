@@ -7,9 +7,9 @@ import {
   emptyCostCrossCheck,
 } from "./leerzustaende.js";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.ts";
-import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.js";
-import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
-import { E164 } from "../begriffe/rufnummern.js";
+import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.ts";
+import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.ts";
+import { E164 } from "../begriffe/rufnummern.ts";
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.ts";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.ts";
 import { isBookableCents } from "../begriffe/abrechnung.ts";

@@ -2,7 +2,7 @@
 import { anfrage } from "../src/utils/anfrage.js";
 import { config } from "../src/config.ts";
 import { NUMBER_STATUS } from "../src/begriffe/nummern.ts";
-import { PROVIDER } from "../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../src/begriffe/nummern-vergabe.ts";
 import {
   REGISTRIERUNG_KLASSE,
   fehlendeZugangsdaten,

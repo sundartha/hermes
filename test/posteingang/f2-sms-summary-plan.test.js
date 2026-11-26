@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSummarySms } from "../../src/sms-summary.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 

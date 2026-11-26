@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { BOOTSTRAP_TENANT_ID, makePgStore, nutzungAuffrischenVon, pgliteAlsRolleOhneSuperuser } from "../pg-helpers.js";
 import { nutzungAuffrischen } from "../../src/store.js";
-import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../../src/begriffe/speicher.js";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../../src/begriffe/speicher.ts";
 
 const FRIST_MS = NUTZUNG_AUFFRISCHEN_FRIST_MS;
 const LESEN = "FROM usage";

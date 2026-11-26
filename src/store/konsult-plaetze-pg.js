@@ -1,4 +1,4 @@
-import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.js";
+import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.ts";
 import { konsultPlatzFrei } from "../utils/konsult-plaetze.js";
 
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;

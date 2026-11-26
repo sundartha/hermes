@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { classifyNumbersForRelease, numberReleaseVerdict } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { TENANT_STATUS } from "../../src/begriffe/mandant.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;

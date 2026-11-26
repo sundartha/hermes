@@ -1,9 +1,9 @@
 export const PROVIDER = Object.freeze({ TELNYX: "telnyx" });
 export const DEFAULT_PROVIDER = PROVIDER.TELNYX;
 
-export function resolveSeedProvider(providerRaw) {
+export function resolveSeedProvider(providerRaw: string | null | undefined): string | null {
   if (!providerRaw) return DEFAULT_PROVIDER;
-  return Object.values(PROVIDER).includes(providerRaw) ? providerRaw : null;
+  return Object.values<string>(PROVIDER).includes(providerRaw) ? providerRaw : null;
 }
 
 export const PLATFORM_NUMBER_PURPOSE = Object.freeze({
@@ -28,7 +28,7 @@ export const REQUEST_NUMBER_REASON = Object.freeze({
 
 export const SKIP_VERMERK_SCHLUESSEL = Object.freeze(["numberProvisionSkipReason", "numberProvisionSkipAt"]);
 
-export function shouldPersistProvisionResult(provisionResult) {
+export function shouldPersistProvisionResult(provisionResult: { ok: boolean; reason?: string | undefined }): boolean {
   return provisionResult.ok || provisionResult.reason === GLOBAL_CAP_REASON;
 }
 
@@ -49,7 +49,8 @@ export const TAUSCH_ERGEBNIS = Object.freeze({
 });
 
 export class NummerGekauftIdOffen extends Error {
-  constructor(e164, ursache) {
+  declare e164: string;
+  constructor(e164: string, ursache: Error) {
     super(`Telnyx orderNumber: Nummer gekauft, Nummern-ID offen (${ursache.message})`, { cause: ursache });
     this.name = "NummerGekauftIdOffen";
     this.e164 = e164;

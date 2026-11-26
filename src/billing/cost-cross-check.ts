@@ -1,4 +1,4 @@
-import { PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../begriffe/nummern-vergabe.ts";
 import { speicherBereiche } from "../store.js";
 import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { providerMicroCentsToBucketCents } from "./cost-calibration.ts";

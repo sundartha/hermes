@@ -5,9 +5,9 @@ import {
   redriveAgeHoldReason,
 } from "../store/state-ops.js";
 import { languageForCountry } from "../i18n/locales.ts";
-import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.js";
+import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
-import { kauflandFuer } from "../begriffe/rufnummern.js";
+import { kauflandFuer } from "../begriffe/rufnummern.ts";
 import { ok, fehler, type Ergebnis } from "../utils/ergebnis.ts";
 
 type Zustand = Parameters<typeof tenantGeo>[0] & {

@@ -7,7 +7,7 @@ import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt,
 import { AUSFALL_KLASSE, INBOUND_EL_OUTAGE_CODE, OUTBOUND_EL_OUTAGE_CODE } from "./outage-classes.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { sendeVorfall } from "./alert-sms.ts";
-import { NUMBER_HOLD_REASON } from "../begriffe/nummern-vergabe.js";
+import { NUMBER_HOLD_REASON } from "../begriffe/nummern-vergabe.ts";
 
 async function bereicheVon(store) {
   const { speicherBereiche } = await import("../store.js");

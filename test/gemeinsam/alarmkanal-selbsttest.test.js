@@ -1,7 +1,7 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { runAlertChannelSelfTest, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 
 const CONFIG = Object.freeze({
   billing: {

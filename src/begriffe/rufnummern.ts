@@ -1,4 +1,4 @@
-export function normNum(rawNumber) {
+export function normNum(rawNumber: unknown): string {
   return typeof rawNumber === "string" ? rawNumber.replace(/[\s\-()]/g, "") : "";
 }
 
@@ -9,17 +9,17 @@ const NANP_ISO_COUNTRIES = Object.freeze([
   "KY", "LC", "MP", "MS", "PR", "SX", "TC", "TT", "VC", "VG", "VI",
 ]);
 
-export function isNanpCountry(countryIso) {
+export function isNanpCountry(countryIso: unknown): boolean {
   return typeof countryIso === "string" && NANP_ISO_COUNTRIES.includes(countryIso.toUpperCase());
 }
 
-export const KAUFBARE_LAENDER = Object.freeze(["US"]);
+export const KAUFBARE_LAENDER: readonly [string] = Object.freeze(["US"]);
 
-function landText(land) {
+function landText(land: unknown): string {
   return typeof land === "string" ? land : "";
 }
 
-export function kauflandFuer(land) {
+export function kauflandFuer(land: unknown): string {
   const key = landText(land).toUpperCase();
   return KAUFBARE_LAENDER.includes(key) ? key : KAUFBARE_LAENDER[0];
 }
@@ -37,14 +37,17 @@ const NANP_NSN_PATTERN = /^[2-9]\d{2}[2-9]\d{6}$/;
 
 const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
 
-const NO_NATIONAL_ELEVEN_RANGE_COUNTRIES = ["+49", "+33"];
+const NO_NATIONAL_ELEVEN_RANGE_COUNTRIES: readonly unknown[] = ["+49", "+33"];
 
-export function hasTrunkZeroAfterCountryCode(e164) {
+export function hasTrunkZeroAfterCountryCode(e164: unknown): boolean {
   if (typeof e164 !== "string" || !e164) return false;
   return TRUNK_ZERO_COUNTRY_CODES.some((code) => e164.startsWith(code + NATIONAL_TRUNK_PREFIX));
 }
 
-export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
+export function homeCountryCode(
+  candidateNumbers: Iterable<unknown>,
+  tenantCountryIso: unknown = null,
+): string | null {
   for (const num of candidateNumbers) {
     if (typeof num !== "string") continue;
     const code = DIALING_HOME_COUNTRY_CODES.find((dialingCode) => num.startsWith(dialingCode));
@@ -57,7 +60,7 @@ export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
 
 const INTERNATIONAL_CALL_PREFIX = "00";
 
-function normalizeNanpTarget(raw) {
+function normalizeNanpTarget(raw: unknown) {
   const num = normNum(raw);
   if (num.startsWith("+")) return num;
   if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
@@ -74,7 +77,7 @@ function normalizeNanpTarget(raw) {
   return num;
 }
 
-function normalizeTrunkZeroTarget(num, homeCountry) {
+function normalizeTrunkZeroTarget(num: string, homeCountry: string | null | undefined) {
   if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
     return "+" + num.slice(INTERNATIONAL_CALL_PREFIX.length);
   if (
@@ -87,7 +90,10 @@ function normalizeTrunkZeroTarget(num, homeCountry) {
   return num;
 }
 
-export function normalizeDialTarget(num, homeCountry) {
+export function normalizeDialTarget(
+  num: unknown,
+  homeCountry: string | null | undefined,
+): string {
   if (typeof num !== "string") return "";
   if (homeCountry === NANP_COUNTRY_CODE) return normalizeNanpTarget(num);
   return normalizeTrunkZeroTarget(num, homeCountry);
@@ -95,11 +101,11 @@ export function normalizeDialTarget(num, homeCountry) {
 
 const DEFAULT_PRIVATE_NUMBER_CODES = Object.freeze(["+49"]);
 
-const CALLING_CODE_FOR_COUNTRY = Object.freeze({
+const CALLING_CODE_FOR_COUNTRY: Readonly<Record<string, string>> = Object.freeze({
   DE: "+49", AT: "+43", CH: "+41", FR: "+33", GB: "+44", IE: "+353",
 });
 
-export function allowedPrivateNumberCodes(countryIso) {
+export function allowedPrivateNumberCodes(countryIso: unknown): readonly string[] {
   const cc = landText(countryIso).toUpperCase();
   if (isNanpCountry(cc)) return [NANP_COUNTRY_CODE];
   const code = CALLING_CODE_FOR_COUNTRY[cc];
@@ -113,33 +119,36 @@ const COUNTRY_FOR_CALLING_CODE = Object.freeze(
   Object.fromEntries(Object.entries(CALLING_CODE_FOR_COUNTRY).map(([iso, code]) => [code, iso])),
 );
 
-export function countryForE164(e164) {
+export function countryForE164(e164: unknown): string | null | undefined {
   if (typeof e164 !== "string" || !E164.test(e164)) return null;
   const code = CALLING_CODES_LONGEST_FIRST.find((callingCode) => e164.startsWith(callingCode));
   return code ? COUNTRY_FOR_CALLING_CODE[code] : null;
 }
 
-export function countryAllowed(e164, allowedCodes = DEFAULT_PRIVATE_NUMBER_CODES) {
+export function countryAllowed(
+  e164: unknown,
+  allowedCodes: readonly string[] = DEFAULT_PRIVATE_NUMBER_CODES,
+): boolean {
   if (typeof e164 !== "string" || !e164) return false;
   return allowedCodes.includes("*") || allowedCodes.some((prefix) => e164.startsWith(prefix));
 }
 
-const KAUFBARE_VORWAHLEN = Object.freeze({ US: NANP_COUNTRY_CODE });
+const KAUFBARE_VORWAHLEN: Readonly<Record<string, string | undefined>> = Object.freeze({ US: NANP_COUNTRY_CODE });
 const UNBEKANNTES_LAND = "unbekannt";
 
-function nichtKaufbar(wo, land) {
+function nichtKaufbar(wo: string, land: string): Error {
   return new Error(
     `${wo}: Land ${land} ist nicht kaufbar (kaufbar: ${KAUFBARE_LAENDER.join(", ")})`,
   );
 }
 
-export function assertKaufbaresLand(land, wo) {
+export function assertKaufbaresLand(land: unknown, wo: string): void {
   const text = landText(land);
   const key = text.toUpperCase();
   if (!KAUFBARE_LAENDER.includes(key)) throw nichtKaufbar(wo, text || UNBEKANNTES_LAND);
 }
 
-export function hatKaufbareVorwahl(e164) {
+export function hatKaufbareVorwahl(e164: unknown): boolean {
   if (typeof e164 !== "string") return false;
   return KAUFBARE_LAENDER.some((land) => {
     const vorwahl = KAUFBARE_VORWAHLEN[land];
@@ -147,6 +156,6 @@ export function hatKaufbareVorwahl(e164) {
   });
 }
 
-export function assertKaufbareRufnummer(e164, wo) {
+export function assertKaufbareRufnummer(e164: unknown, wo: string): void {
   if (!hatKaufbareVorwahl(e164)) throw nichtKaufbar(wo, countryForE164(e164) ?? UNBEKANNTES_LAND);
 }

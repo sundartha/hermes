@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeDefaultState, seedBootstrapNumber, findTenantByNumber } from "../../src/store/state-ops.js";
 import { findActiveNumber } from "../../src/store/views.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { makePgStore } from "../../src/store/pg.js";
 import { makePgTestStore } from ".././pg-helpers.js";
 import { neuePglite } from ".././pglite-helfer.js";

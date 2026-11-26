@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as store from "../src/store.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.ts";
-import { PROVIDER } from "../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../src/begriffe/nummern-vergabe.ts";
 
 const e164 = process.argv[2];
 const provider = process.argv[3];
