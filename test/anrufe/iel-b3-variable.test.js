@@ -28,6 +28,7 @@ const BESTANDS_SCHLUESSEL = Object.freeze([
   "today",
   "callee_relation",
   "voicemail_line",
+  "call_limit_s",
   "tenant_token",
 ]);
 const BESTANDS_ANKER = "not a human.{{callee_relation}}\n\nSITUATION AND TASK:";

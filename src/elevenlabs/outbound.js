@@ -319,6 +319,7 @@ export function dynamicVariables({
   lookupAllowed,
   tenantToken,
   eroeffnungGesagt = "",
+  callLimitS = "",
 }) {
   return {
     ...(eroeffnungGesagt ? { eroeffnung_gesagt: eroeffnungGesagt } : {}),
@@ -337,6 +338,7 @@ export function dynamicVariables({
     today: alsText(time.today),
     callee_relation: calleeRelationText({ call, owner, offenlegung }),
     voicemail_line: voicemailText({ owner, offenlegung, openingLine: voicemailOpening }),
+    call_limit_s: callLimitS,
     inbound_situation: "",
     tenant_token: tenantToken,
   };
@@ -509,6 +511,7 @@ export function initiationContent({
       lookupAllowed,
       tenantToken,
       eroeffnungGesagt,
+      callLimitS: String(callUnderProviderCap(call).maxDurationS),
     }),
     conversation_config_override: start.override,
     ...(environment === "production" ? {} : { environment }),

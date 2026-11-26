@@ -2,11 +2,13 @@ import { readFileSync } from "node:fs";
 
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 
+const SYSTEM_VARIABLE_PREFIX = "system__";
+
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
 function placeholderNamesIn(text) {
   const gefunden = new Set();
-  for (const treffer of text.matchAll(PLACEHOLDER_PATTERN)) gefunden.add(treffer[1]);
+  for (const treffer of text.matchAll(PLACEHOLDER_PATTERN)) if (!treffer[1].startsWith(SYSTEM_VARIABLE_PREFIX)) gefunden.add(treffer[1]);
   return gefunden;
 }
 
@@ -15,8 +17,6 @@ function voicemailMessageOf(agent) {
   const detection = builtInTools.voicemail_detection;
   return detection.params.voicemail_message;
 }
-
-const SYSTEM_VARIABLE_PREFIX = "system__";
 
 function verbrauchteVariableVon(eigenschaft) {
   const name = eigenschaft.dynamic_variable;
