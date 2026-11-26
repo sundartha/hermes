@@ -17,10 +17,10 @@ const mindestBytes = (zeichen) => Buffer.alloc(VORSPANN_MIN_BYTES_JE_ZEICHEN * z
 
 const bereitesAudio = () => ({ complete: true, bytes: mindestBytes(EROEFFNUNG.text.length) });
 const synthese = (ergebnis) => mock.fn(async () => ergebnis);
-const lieferAudio = (audio = bereitesAudio()) => ({ ok: true, contentType: CONTENT_TYPE, audio: Promise.resolve(audio) });
+const lieferAudio = (audio = bereitesAudio()) => ({ ok: true, wert: { contentType: CONTENT_TYPE, audio: Promise.resolve(audio) } });
 
 const ERZEUGEN_TABELLE = [
-  ["Synthese scheitert", { ok: false, reason: "http_503" }, "tts_fehler"],
+  ["Synthese scheitert", { ok: false, fehler: "http_503" }, "tts_fehler"],
   ["Synthese scheitert trotz vorhandenem Audio", { ...lieferAudio(), ok: false }, "tts_fehler"],
   ["Quote erschoepft", { quotaErschoepft: true }, "tts_quote"],
   ["Audio unvollstaendig", lieferAudio({ complete: false, bytes: mindestBytes(EROEFFNUNG.text.length) }), "tts_unvollstaendig"],
@@ -40,7 +40,7 @@ test("3365-K5: Vorspann erzeugen - Synthese wirft -> tts_fehler", async () => {
 });
 
 test("3365-K5: Vorspann erzeugen - Audio-Strom bricht ab -> tts_fehler", async () => {
-  const brichtAb = { ok: true, audio: Promise.reject(new Error("Strom abgebrochen")) };
+  const brichtAb = { ok: true, wert: { audio: Promise.reject(new Error("Strom abgebrochen")) } };
   assert.deepEqual(await erzeugeVorspann({ eroeffnung: EROEFFNUNG, synthese: synthese(brichtAb) }), {
     rueckfall: "tts_fehler",
   });

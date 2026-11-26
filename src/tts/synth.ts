@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 
 const TTS_PATH = "/v1/text-to-speech/";
 const TTS_STREAM_SUFFIX = "/stream";
@@ -49,13 +50,14 @@ interface AudioErgebnis {
   complete: boolean;
 }
 
-type StreamGeoeffnet =
-  | { ok: false; reason: string; detail?: string }
-  | { ok: true; reader: SynthLeser; contentType: string };
+type SynthFehler = string | { reason: string; detail: string };
 
-export type SynthErgebnis =
-  | { ok: false; reason: string; detail?: string }
-  | { ok: true; contentType: string; firstChunkMs: number; audio: Promise<AudioErgebnis> };
+type StreamGeoeffnet = Ergebnis<{ reader: SynthLeser; contentType: string }, SynthFehler>;
+
+export type SynthErgebnis = Ergebnis<
+  { contentType: string; firstChunkMs: number; audio: Promise<AudioErgebnis> },
+  SynthFehler
+>;
 
 function makeDeadline(controller: AbortController): Frist {
   let timer: NodeJS.Timeout | undefined;
@@ -125,10 +127,10 @@ async function openAudioStream(text: string, opts: SynthOptionen, signal: AbortS
     signal,
     fristMs: opts.totalTimeoutMs,
   });
-  if (!res.ok) return { ok: false, reason: `http_${String(res.status)}`, detail: await errorDetail(res) };
+  if (!res.ok) return fehler({ reason: `http_${String(res.status)}`, detail: await errorDetail(res) });
   const reader = res.body?.getReader?.();
-  if (!reader) return { ok: false, reason: "no_stream" };
-  return { ok: true, reader, contentType: contentTypeOderVorgabe(res.headers.get("content-type")) };
+  if (!reader) return fehler("no_stream");
+  return ok({ reader, contentType: contentTypeOderVorgabe(res.headers.get("content-type")) });
 }
 
 export async function synthesizeSpeechStream(text: string, opts: SynthOptionen): Promise<SynthErgebnis> {
@@ -142,18 +144,18 @@ export async function synthesizeSpeechStream(text: string, opts: SynthOptionen):
       deadline.clear();
       return stream;
     }
-    const first = await stream.reader.read();
+    const { reader, contentType } = stream.wert;
+    const first = await reader.read();
     deadline.clear();
-    if (first.done || !first.value?.length) return { ok: false, reason: "empty_stream" };
+    if (first.done || !first.value?.length) return fehler("empty_stream");
     deadline.arm(Math.max(0, opts.totalTimeoutMs - (Date.now() - startedAt)));
-    return {
-      ok: true,
-      contentType: stream.contentType,
+    return ok({
+      contentType,
       firstChunkMs: Date.now() - startedAt,
-      audio: drainRest({ reader: stream.reader, firstChunk: first.value, startedAt, deadline }),
-    };
+      audio: drainRest({ reader, firstChunk: first.value, startedAt, deadline }),
+    });
   } catch (err) {
     deadline.clear();
-    return { ok: false, reason: FEHLERNAME.safeParse(err).data?.name === "AbortError" ? "timeout" : "error" };
+    return fehler(FEHLERNAME.safeParse(err).data?.name === "AbortError" ? "timeout" : "error");
   }
 }

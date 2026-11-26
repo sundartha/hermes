@@ -64,8 +64,9 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     const chars = text.length;
     const result = await synthesizeSpeechStream(text, synthOptionen(cfg));
     if (!result.ok) {
-      const detail = result.detail ? `: ${result.detail}` : "";
-      console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}${detail}) -> Azure-Fallback`);
+      const { reason = result.fehler, detail } = result.fehler;
+      const zusatz = detail ? `: ${detail}` : "";
+      console.warn(`[play-tts] Synth fehlgeschlagen (${reason}${zusatz}) -> Azure-Fallback`);
       return null;
     }
     const warning = await store.recordTtsCharacters(chars, nowIso);
@@ -74,7 +75,7 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       return null;
     }
     if (warning) onQuotaWarning(warning);
-    return ablage(result);
+    return ablage(result.wert);
   }
 
   async function synthesizeVorspann(text, voiceId) {

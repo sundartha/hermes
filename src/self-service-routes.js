@@ -341,12 +341,12 @@ export function makeSelfServiceRoutes({
     }
     const plan = planAddNewsletterRecipient({ store, tenantId: tenant, rawEmail, accountEmail });
     if (!plan.ok) {
-      audit("self_service_newsletter_recipient_add", req, `outcome=rejected reason=${plan.reason}`);
-      return res.status(HTTP_BAD_REQUEST).json({ error: plan.reason });
+      audit("self_service_newsletter_recipient_add", req, `outcome=rejected reason=${plan.fehler}`);
+      return res.status(HTTP_BAD_REQUEST).json({ error: plan.fehler });
     }
     const tokens = newNewsletterTokens();
     store.addNewsletterRecipient(tenant, {
-      email: plan.email,
+      email: plan.wert.email,
       tokenHash: tokens.tokenHash,
       tokenExpiresAt: tokens.tokenExpiresAt,
       unsubToken: tokens.unsubToken,
@@ -358,7 +358,7 @@ export function makeSelfServiceRoutes({
         const t = localeFor(language).newsletter;
         const confirmUrl = newsletterConfirmUrl(config.server.publicUrl, tokens.confirmToken);
         await mailer.sendMail({
-          to: plan.email,
+          to: plan.wert.email,
           subject: t.confirmMailSubject,
           text: t.confirmMailText(ownerName, confirmUrl),
         });
@@ -371,7 +371,7 @@ export function makeSelfServiceRoutes({
         actorSub: req.tenant.sub,
         tenantId: tenant,
         action: "self_service_newsletter_recipient_added",
-        detail: `email_fp=${hashEmail(plan.email)}`,
+        detail: `email_fp=${hashEmail(plan.wert.email)}`,
       });
     } catch (err) {
       console.error(`self-service newsletter-recipients audit write failed: ${err.message}`);

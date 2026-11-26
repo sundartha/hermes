@@ -60,10 +60,10 @@ async function synthetisiere({ synthese, text, voiceId }) {
   const result = await synthese(text, voiceId);
   if (result.quotaErschoepft) return rueckfall(VORSPANN_RUECKFALL.TTS_QUOTE);
   if (!result.ok) return rueckfall(VORSPANN_RUECKFALL.TTS_FEHLER);
-  const audio = await result.audio;
+  const audio = await result.wert.audio;
   const grund = audioRueckfall({ audio, zeichen: text.length });
   if (grund) return rueckfall(grund);
-  return { text, audio: { bytes: audio.bytes, contentType: result.contentType } };
+  return { text, audio: { bytes: audio.bytes, contentType: result.wert.contentType } };
 }
 
 export async function erzeugeVorspann({ eroeffnung, synthese, fristMs = VORSPANN_TTS_FRIST_MS }) {

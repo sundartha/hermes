@@ -65,7 +65,7 @@ test("planAddNewsletterRecipient: gueltige, neue Adresse -> ok, normalisierte E-
     rawEmail: "  Freund@Example.TEST  ",
     accountEmail: "kunde@example.test",
   });
-  assert.deepEqual(plan, { ok: true, email: "freund@example.test" });
+  assert.deepEqual(plan, { ok: true, wert: { email: "freund@example.test" } });
 });
 
 test("planAddNewsletterRecipient: ungueltiges Format -> reason=invalid_format", () => {
@@ -77,14 +77,14 @@ test("planAddNewsletterRecipient: ungueltiges Format -> reason=invalid_format", 
     accountEmail: null,
   });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "invalid_format");
+  assert.equal(plan.fehler, "invalid_format");
 });
 
 test("planAddNewsletterRecipient: leere Adresse -> reason=invalid_format", () => {
   const s = freshTenantState();
   const plan = planAddNewsletterRecipient({ store: fakeStoreFrom(s), tenantId: TENANT, rawEmail: "   " });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "invalid_format");
+  assert.equal(plan.fehler, "invalid_format");
 });
 
 test("planAddNewsletterRecipient: identisch zur Konto-Adresse (normalisiert) -> reason=duplicate", () => {
@@ -96,7 +96,7 @@ test("planAddNewsletterRecipient: identisch zur Konto-Adresse (normalisiert) -> 
     accountEmail: "kunde@example.test",
   });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "duplicate");
+  assert.equal(plan.fehler, "duplicate");
 });
 
 test("planAddNewsletterRecipient: bereits in der Liste -> reason=duplicate", () => {
@@ -109,7 +109,7 @@ test("planAddNewsletterRecipient: bereits in der Liste -> reason=duplicate", () 
     accountEmail: null,
   });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "duplicate");
+  assert.equal(plan.fehler, "duplicate");
 });
 
 test(`planAddNewsletterRecipient: Cap erreicht (${MAX_NEWSLETTER_RECIPIENTS}) -> reason=cap_reached`, () => {
@@ -129,7 +129,7 @@ test(`planAddNewsletterRecipient: Cap erreicht (${MAX_NEWSLETTER_RECIPIENTS}) ->
     accountEmail: null,
   });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "cap_reached");
+  assert.equal(plan.fehler, "cap_reached");
 });
 
 test(`planAddNewsletterRecipient: Tageslimit erreicht (${NEWSLETTER_CONFIRM_MAIL_DAILY_CAP}) -> reason=daily_limit, fail-closed`, () => {
@@ -153,7 +153,7 @@ test(`planAddNewsletterRecipient: Tageslimit erreicht (${NEWSLETTER_CONFIRM_MAIL
     now,
   });
   assert.equal(plan.ok, false);
-  assert.equal(plan.reason, "daily_limit");
+  assert.equal(plan.fehler, "daily_limit");
 });
 
 test("planAddNewsletterRecipient: Tageslimit ausserhalb des 24h-Fensters (>24h alt) zaehlt NICHT mehr", () => {
@@ -247,7 +247,7 @@ test("[NIE2] die Tageskappe der Bestaetigungsmails zaehlt genau das letzte 24-St
       rawEmail: "neu@example.test",
       accountEmail: null,
       now: new Date(sentAt + ms),
-    }).reason;
+    }).fehler;
   const DAY = 86_400_000;
   assert.deepEqual(
     [reasonAfter(60_000), reasonAfter(DAY / 2), reasonAfter(DAY), reasonAfter(DAY + 1)],

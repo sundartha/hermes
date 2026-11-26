@@ -176,6 +176,28 @@ test(`(e) Cap (${MAX_NEWSLETTER_RECIPIENTS}) erreicht -> 400 error=cap_reached`,
   }
 });
 
+test("(q) Audit: Zusage traegt den Adress-Fingerabdruck, Ablehnung nennt den Grund in Spur und Antwort", async () => {
+  const s = await setup();
+  try {
+    await addRecipient(s, "freund@example.test");
+    const abgelehnt = await addRecipient(s, "freund@example.test");
+    await removeRecipient(s, "freund@example.test");
+
+    assert.deepEqual(JSON.parse(abgelehnt.body), { error: "duplicate" });
+    const { calls } = s.audit;
+    assert.deepEqual(
+      calls.filter((c) => c.action === "self_service_newsletter_recipient_add").map((c) => c.details),
+      ["outcome=pending", "outcome=rejected reason=duplicate"],
+    );
+    const [zugefuegt] = await auditRows(s, "self_service_newsletter_recipient_added");
+    const [entfernt] = await auditRows(s, "self_service_newsletter_recipient_removed");
+    assert.match(zugefuegt.detail, /^email_fp=[0-9a-f]+$/);
+    assert.equal(entfernt.detail, `${zugefuegt.detail} changed=true`);
+  } finally {
+    await s.close();
+  }
+});
+
 test("(f) kein Session-Cookie -> 401, kein Write", async () => {
   const s = await setup();
   try {

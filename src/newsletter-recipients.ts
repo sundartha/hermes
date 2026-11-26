@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { MS_PER_DAY, MS_PER_HOUR } from "./utils/timer.ts";
+import { fehler, ok, type Ergebnis } from "./utils/ergebnis.ts";
 
 export const MAX_NEWSLETTER_RECIPIENTS = 5;
 
@@ -59,17 +60,17 @@ export function planAddNewsletterRecipient({
   rawEmail: string | number | null | undefined;
   accountEmail?: string | null | undefined;
   now?: Date;
-}): { ok: false; reason: string } | { ok: true; email: string } {
+}): Ergebnis<{ email: string }> {
   const email = normalizeEmail(rawEmail);
-  if (!email || !isValidEmailFormat(email)) return { ok: false, reason: "invalid_format" };
-  if (accountEmail && normalizeEmail(accountEmail) === email) return { ok: false, reason: "duplicate" };
+  if (!email || !isValidEmailFormat(email)) return fehler("invalid_format");
+  if (accountEmail && normalizeEmail(accountEmail) === email) return fehler("duplicate");
   const existing = store.tenantNewsletterRecipients(tenantId);
-  if (existing.some((r) => r.email === email)) return { ok: false, reason: "duplicate" };
-  if (existing.length >= MAX_NEWSLETTER_RECIPIENTS) return { ok: false, reason: "cap_reached" };
+  if (existing.some((r) => r.email === email)) return fehler("duplicate");
+  if (existing.length >= MAX_NEWSLETTER_RECIPIENTS) return fehler("cap_reached");
   const sinceIso = new Date(now.getTime() - MS_PER_DAY).toISOString();
   if (store.dailyNewsletterConfirmMailCount(tenantId, sinceIso) >= NEWSLETTER_CONFIRM_MAIL_DAILY_CAP)
-    return { ok: false, reason: "daily_limit" };
-  return { ok: true, email };
+    return fehler("daily_limit");
+  return ok({ email });
 }
 
 interface Recipient {
