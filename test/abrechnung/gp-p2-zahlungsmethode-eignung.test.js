@@ -369,7 +369,7 @@ function tenantMitZahlungsmethode(zustand, { id, paymentMethodType, abo = {} }) 
     paymentMethodType,
   });
   if (Object.keys(abo).length) setTenantSubscription(zustand, id, abo);
-  return requestNumber(zustand, { tenantId: id, ...CAPS }).number;
+  return requestNumber(zustand, { tenantId: id, ...CAPS }).wert.number;
 }
 
 async function provisioniere({ zustand, number, billing, prov }) {
@@ -479,7 +479,7 @@ test("GP-P2: fehlende Referenz behaelt ihre eigene Bestandsmeldung (zwei Gruende
   const zustand = makeDefaultState();
   registerTenant(zustand, "t_ohne");
   setTenantStripe(zustand, "t_ohne", { customerId: "cus_ohne", paymentMethodId: null });
-  const number = requestNumber(zustand, { tenantId: "t_ohne", ...CAPS }).number;
+  const number = requestNumber(zustand, { tenantId: "t_ohne", ...CAPS }).wert.number;
   await assert.rejects(
     () => provisioniere({ zustand, number, billing: fakeBilling(), prov: fakeProvisioner() }),
     (err) => {

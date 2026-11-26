@@ -49,7 +49,7 @@ function baueState({ paymentMethodType = null, anzahlFailed = 1, mitZahlungsmitt
       tenantId: TENANT,
       maxNumbers: HIGH_CAP,
       maxNumbersPerTenant: HIGH_CAP,
-    });
+    }).wert;
     ops.failNumber(state, number.id);
   }
   return state;

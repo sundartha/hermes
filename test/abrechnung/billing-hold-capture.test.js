@@ -23,7 +23,7 @@ function seedRequested({ cardless = false } = {}) {
       paymentMethodId: "pm_1",
       paymentMethodType: "card",
     });
-  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS }).wert;
   return { s, numberId: number.id };
 }
 

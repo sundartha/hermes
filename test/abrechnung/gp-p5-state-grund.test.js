@@ -48,7 +48,7 @@ async function setup({ paymentMethodType, anzahlFailed, maxAttempts = DEFAULT_MA
       tenantId: TENANT,
       maxNumbers: HIGH_CAP,
       maxNumbersPerTenant: HIGH_CAP,
-    });
+    }).wert;
     ops.failNumber(state, number.id);
   }
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "p5@kunde.de" });
