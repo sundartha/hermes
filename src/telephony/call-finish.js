@@ -1,19 +1,13 @@
-import { USAGE_EVENT_KIND } from "../begriffe/abrechnung.ts";
 import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
 import { localeFor } from "../i18n/locales.ts";
-import { planSummaryMail } from "../mail-summary.ts";
-import { planNotPlacedMail } from "../mail-not-placed.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.ts";
 import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
-import { newsletterUnsubscribeUrl } from "../begriffe/newsletter-links.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { anrufZustandVon } from "../begriffe/anruf-zustand.ts";
-
-const SMS_BODY_MAX_CHARS = 1500;
 
 const finishedCalls = new WeakSet();
 
@@ -92,105 +86,9 @@ async function storedActionItemTexts(store, callId) {
   return (await store.callActionItems(callId)).map((item) => item.text);
 }
 
-const SECONDS_PER_MINUTE = 60;
-
-function formatCallDuration(call) {
-  const startMs = Date.parse(call.answeredAt || "");
-  const endMs = Date.parse(call.endedAt || "");
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return "";
-  const totalSeconds = Math.max(0, Math.round((endMs - startMs) / MS_PER_SECOND));
-  const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
-  const seconds = String(totalSeconds % SECONDS_PER_MINUTE).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-function mailTimestampLabel(call) {
-  const anchorMs = Date.parse(call.answeredAt || call.startedAt);
-  if (Number.isNaN(anchorMs)) return "";
-  return new Intl.DateTimeFormat(localeFor(call.language).dateLocale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(anchorMs));
-}
-
-function buildMailBody({ call, texts, who, result, aiCount }) {
-  const when = mailTimestampLabel(call);
-  const durationLabel = formatCallDuration(call);
-  return (
-    `${who}\n\n` +
-    (when ? `${texts.mailTimeLabel} ${when}\n` : "") +
-    (durationLabel ? `${texts.mailDurationLabel} ${durationLabel}\n` : "") +
-    `\n${result.summary}` +
-    (aiCount
-      ? `\n\n${texts.actionItemsHeading}\n` + result.actionItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
-      : "")
-  );
-}
-
-async function sendMailToTargets({ config, mailer, targets, mailBody, subject, texts }) {
-  let sentCount = 0;
-  for (const target of targets) {
-    const mailText = target.unsubToken
-      ? `${mailBody}\n\n${texts.unsubscribeLinkLabel} ` +
-        newsletterUnsubscribeUrl(config.server.publicUrl, target.unsubToken)
-      : mailBody;
-    try {
-      await mailer.sendMail({ to: target.email, subject, text: mailText });
-      sentCount += 1;
-    } catch (e) {
-      console.error("[mail]", e.message);
-    }
-  }
-  return sentCount;
-}
-
-async function sendSummaryMails({ store, config, call, mailer, accounts, audit, texts, who, result, aiCount }) {
-  const mailPlan = await planSummaryMail({ store, call, mailer, accounts });
-  if (!mailPlan.send) {
-    if (mailPlan.reason) {
-      audit("mail_summary_skipped", null, `call=${call.id} reason=${mailPlan.reason}`);
-    }
-    return;
-  }
-  const mailBody = buildMailBody({ call, texts, who, result, aiCount });
-  const sentCount = await sendMailToTargets({
-    config,
-    mailer,
-    targets: mailPlan.targets,
-    mailBody,
-    subject: texts.summaryTitle,
-    texts,
-  });
-  if (sentCount > 0) await store.markSummaryMailSent(call.id);
-}
-
-async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts }) {
-  const plan = await planNotPlacedMail({ store, call, mailer, accounts: accountsRef.current });
-  if (!plan.send) {
-    if (plan.reason) audit("not_placed_mail_skipped", null, `call=${call.id} reason=${plan.reason}`);
-    return;
-  }
-  const mailBody =
-    `${texts.statusBody(call.to, call.status, call.failureReason)}\n\n${texts.notPlacedMailHint}`;
-  const sentCount = await sendMailToTargets({
-    config,
-    mailer,
-    targets: plan.targets,
-    mailBody,
-    subject: texts.failedTitle,
-    texts,
-  });
-  if (sentCount > 0) await store.markNotPlacedMailSent(call.id);
-}
-
-async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
+async function reportFailedCall({ store, config, call, mailer, audit, messaging, metrics }) {
   const detail = capacityDetail(call.failureReason);
   if (detail) metrics.logCallCapacity({ detail });
-  try {
-    await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts });
-  } catch (err) {
-    console.error("[mail] not-placed:", err.message);
-  }
   await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
 }
 
@@ -224,7 +122,7 @@ async function notifySafely(store, eintrag) {
   }
 }
 
-async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics }) {
+async function reportUnfinishedCall({ store, config, call, mailer, audit, messaging, texts, metrics }) {
   if (call.transcript.length && !keepsTranscriptForDiagnosis(call, config.privacy)) {
     await store.purgeTranscript(call.id);
   }
@@ -234,43 +132,7 @@ async function reportUnfinishedCall({ store, config, call, mailer, accountsRef, 
     body: texts.statusBody(target, call.status, call.failureReason),
     callId: call.id,
   });
-  await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
-}
-
-function buildSummarySms({ store, call, texts, who, result, aiCount }) {
-  const resultLine = call.result?.outcome || result.summary;
-  return (
-    `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${resultLine}` +
-    (aiCount
-      ? `\n\n${texts.actionItemsHeading}\n` + result.actionItems.map((item, i) => `${i + 1}. ${item}`).join("\n")
-      : "")
-  );
-}
-
-async function sendSummarySms({ store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount }) {
-  const plan = planSummarySms(store, config, call);
-  if (!plan.send) {
-    if (plan.reason) audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
-    return;
-  }
-  const sms = buildSummarySms({ store, call, texts, who, result, aiCount });
-  try {
-    await messaging(call.provider).sendSms({
-      from: plan.smsFrom.e164,
-      to: plan.to,
-      body: sms.slice(0, SMS_BODY_MAX_CHARS),
-    });
-    store.recordUsageEvent({
-      tenantId: call.tenantId,
-      callId: call.id,
-      kind: USAGE_EVENT_KIND.SMS,
-      quantity: 1,
-      costCents: config.billing.smsCostCents,
-    });
-    await store.markSummarySmsSent(call.id);
-  } catch (err) {
-    console.error("[sms]", err.message);
-  }
+  await reportFailedCall({ store, config, call, mailer, audit, messaging, metrics });
 }
 
 export function makeCallFinish({
@@ -279,10 +141,8 @@ export function makeCallFinish({
   metering,
   messaging,
   summarizeCall,
-  planSummarySms,
   audit,
   mailer = null,
-  accountsRef = { current: null },
   qualifiesAsInboxEntry = () => false,
   metrics,
   leitungsplaetze,
@@ -309,15 +169,8 @@ export function makeCallFinish({
       keepsTranscriptForDiagnosis(call, config.privacy) || keepsForCustomer({ store, config, call, summaryCreated: Boolean(result) });
     if (!kept) await store.purgeTranscript(call.id);
     if (!result) return;
-    const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
     await notifySafely(store, { title: texts.summaryTitle, body: `${who}: ${result.summary}`, callId: call.id });
-    await sendSummarySms({
-      store, config, call, messaging, audit, planSummarySms, texts, who, result, aiCount,
-    });
-    await sendSummaryMails({
-      store, config, call, mailer, accounts: accountsRef.current, audit, texts, who, result, aiCount,
-    });
   }
 
   async function finishCompletedCall(call, texts) {
@@ -352,7 +205,7 @@ export function makeCallFinish({
     }
 
     if (call.status !== "completed" || !call.transcript.length) {
-      await reportUnfinishedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts, metrics });
+      await reportUnfinishedCall({ store, config, call, mailer, audit, messaging, texts, metrics });
       return;
     }
 
