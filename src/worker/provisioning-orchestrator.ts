@@ -14,7 +14,7 @@ import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provi
 import { auftragHaltGrund, speicherBereiche } from "../store.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
-import { fehler as ablehnung, type Ergebnis } from "../utils/ergebnis.ts";
+import { fehler as ablehnung, ok, type Ergebnis } from "../utils/ergebnis.ts";
 
 const TAKT_INTERVALL_MS = 30_000;
 const ANRUFSTART_TAKT_MS = 2000;
@@ -97,7 +97,7 @@ type Wiederaufnahme = Ergebnis<
   | { reason?: undefined; number: Nummer }
 >;
 
-type JobSpur = { ok: true; jobId: string } | { ok: false };
+type JobSpur = Ergebnis<{ jobId: string }>;
 
 interface Triggerergebnis {
   ok: boolean;
@@ -283,7 +283,7 @@ export function makeProvisioningOrchestrator({
         const zustand = store.load();
         const job = await jobAnlegen(zustand, { numberId, tenantId, idempotencyKey });
         store.save();
-        return { ok: true, jobId: job.id };
+        return ok({ jobId: job.id });
       })
       .then(async (res) => {
         await einreihen({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
@@ -291,7 +291,7 @@ export function makeProvisioningOrchestrator({
       })
       .catch((fehler: unknown): JobSpur => {
         console.error("[provision] Job-Spur fehlgeschlagen:", Reflect.get(Object(fehler), "message"));
-        return { ok: false };
+        return ablehnung(PROVISION_REASON.PERSIST_ERROR);
       });
   }
 
@@ -341,7 +341,7 @@ export function makeProvisioningOrchestrator({
     runProvisioningDrainExclusive().catch((fehler: unknown) => {
       console.error("[provision-drain]", Reflect.get(Object(fehler), "message"));
     });
-    return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.jobId };
+    return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.wert.jobId };
   }
 
   async function runQueuedJob(state: Zustand, queuedJob: WarteschlangenJob, deps: LaufDeps) {

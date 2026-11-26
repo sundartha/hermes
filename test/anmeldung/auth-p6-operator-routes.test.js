@@ -112,7 +112,7 @@ async function setup() {
     log: [],
     queueProvisioning: async (numberId, tenantId) => {
       provisioningDouble.log.push(["queueProvisioning", numberId, tenantId]);
-      return { ok: true, jobId: "job_p6" };
+      return { ok: true, wert: { jobId: "job_p6" } };
     },
     runProvisioningDrainExclusive: async () => {
       provisioningDouble.log.push(["drain"]);

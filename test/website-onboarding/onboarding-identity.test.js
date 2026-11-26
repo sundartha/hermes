@@ -167,7 +167,7 @@ test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Mari
         num.e164 = ACTIVE_E164;
         num.status = "active";
         num.providerNumberId = "num_ext_1";
-        return { ok: true, jobId: "job_identity1" };
+        return { ok: true, wert: { jobId: "job_identity1" } };
       },
       runProvisioningDrainExclusive: async () => {},
     },

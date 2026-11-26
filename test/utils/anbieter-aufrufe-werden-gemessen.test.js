@@ -101,7 +101,7 @@ function einrichtungOhneHold(store) {
     lauf.fertig = resolve;
   });
   const provisioning = {
-    queueProvisioning: async () => ({ ok: true, jobId: "job_messung" }),
+    queueProvisioning: async () => ({ ok: true, wert: { jobId: "job_messung" } }),
     runProvisioningDrainExclusive: async () => {
       const state = store.load();
       const nummer = state.numbers.find((n) => n.status === "requested");

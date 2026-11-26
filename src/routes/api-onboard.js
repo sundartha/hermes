@@ -111,7 +111,8 @@ async function nummerBereitstellen({ config, audit, provisioning }, { req, res }
 
   const jobRes = await provisioning.queueProvisioning(numberId, tenantId);
   if (!jobRes.ok) return antworteFehler(res, HTTP_SERVICE_UNAVAILABLE, "Persistenz fehlgeschlagen");
-  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.jobId}`);
+  const { jobId } = jobRes.wert;
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobId}`);
   res.json({
     tenantId,
     numberId,
@@ -119,7 +120,7 @@ async function nummerBereitstellen({ config, audit, provisioning }, { req, res }
     country,
     language,
     provisioning: "queued",
-    jobId: jobRes.jobId,
+    jobId,
   });
 
   void provisioning.runProvisioningDrainExclusive();

@@ -28,7 +28,7 @@ before(async () => {
       operatorAuth: operatorAuthPassThrough(),
       store,
       provisioning: {
-        queueProvisioning: async () => ({ ok: true, jobId: "job_test1" }),
+        queueProvisioning: async () => ({ ok: true, wert: { jobId: "job_test1" } }),
         runProvisioningDrainExclusive: async () => {},
       },
       audit: () => {},
