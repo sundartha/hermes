@@ -105,6 +105,26 @@ async function ersterSperrGrund<A>(sperren: Sperren<A>, call: A): Promise<string
   return null;
 }
 
+async function leseMitWiederholung<A extends Anruf>(
+  { store, platz }: Pick<Abhaengigkeiten<A>, "store" | "platz">,
+  callId: string,
+  versuch = 1,
+): Promise<A | null> {
+  const call = await store.leseCall(callId);
+  if (call || versuch >= LESE_VERSUCHE || !platz) return call ?? null;
+  await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
+  return leseMitWiederholung({ store, platz }, callId, versuch + 1);
+}
+
+async function leseOderBeende<A extends Anruf>(
+  abhaengig: Pick<Abhaengigkeiten<A>, "store" | "platz" | "beendeOhneWahl">,
+  callId: string,
+): Promise<A | null> {
+  const call = await leseMitWiederholung(abhaengig, callId);
+  if (!call) await abhaengig.beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch(() => undefined);
+  return call;
+}
+
 const variablenVon = (gespraech: Gespraech | null) => gespraech?.conversation_initiation_client_data?.dynamic_variables;
 
 export function makeAnrufstartAuftrag<A extends Anruf>({
@@ -201,24 +221,10 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
     return wartePlatz(neu, fristEnde);
   }
 
-  async function leseAnrufMitWiederholung(callId: string, versuch = 1): Promise<A | null> {
-    const call = await store.leseCall(callId);
-    if (call || versuch >= LESE_VERSUCHE || !platz) return call ?? null;
-    await platz.warte(ANRUFSTART_WARTE_TAKT_MS);
-    return leseAnrufMitWiederholung(callId, versuch + 1);
-  }
-
-  async function beendeUnlesbaren(callId: string): Promise<void> {
-    await beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch(() => undefined);
-  }
-
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
     const gelesen = AUFTRAG.safeParse(auftrag?.payload);
-    const call = gelesen.success ? await leseAnrufMitWiederholung(gelesen.data.callId) : null;
-    if (!call) {
-      if (gelesen.success) await beendeUnlesbaren(gelesen.data.callId);
-      throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
-    }
+    const call = gelesen.success ? await leseOderBeende({ store, platz, beendeOhneWahl }, gelesen.data.callId) : null;
+    if (!call) throw new Error("[anrufstart] Auftrag ohne bekannten Anruf");
     if (call.elevenlabsConversationId) return ANRUFSTART_AUSGANG.GESTARTET;
     const versuchtIso = await store.anrufstartMarker.lies(call.id);
     if (versuchtIso) return gleicheMitAnbieterAb(call, versuchtIso);
