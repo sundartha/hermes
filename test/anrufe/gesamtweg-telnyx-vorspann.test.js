@@ -160,7 +160,7 @@ test("Gesamtweg Telnyx-Vorspann: place_call, Annahme, Init-Bindung, Gespraech un
     assert.equal(init.status, HTTP_OK);
     const { conversation_config_override: override, dynamic_variables: variablen } = init.json;
     assert.equal(override.agent.language, "de");
-    assert.equal(override.agent.first_message, "");
+    assert.equal(override.agent.first_message, `${AUFTRAG} Bitte sprechen Sie.`);
     assert.equal(variablen.objective, AUFTRAG);
     assert.ok(variablen.eroeffnung_gesagt.includes("KI"), variablen.eroeffnung_gesagt);
     await waitForStoreState(srv, () => anruf().elevenlabsConversationId === CONV_ID, WARTE_FRIST_MS);
