@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lastDayOfMonth } from "./utils/month.js";
+import { lastDayOfMonth } from "./utils/month.ts";
 
 export const RESULT_LIST_MAX_ITEMS = 3;
 export const RESULT_TEXT_MAX_CHARS = 200;

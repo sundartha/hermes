@@ -1,4 +1,4 @@
-import { anfrage } from "./utils/anfrage.js";
+import { anfrage } from "./utils/anfrage.ts";
 import { HTTP_NOT_FOUND } from "./utils/http.ts";
 const NUTZER_LOESCHEN_FRIST_MS = 15_000;
 const NUTZER_PRUEFEN_FRIST_MS = 10_000;

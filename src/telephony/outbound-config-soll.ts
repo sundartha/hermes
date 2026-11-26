@@ -1,4 +1,4 @@
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { elevenlabsConvai, type ConvaiKonto } from "../elevenlabs/registry.ts";
 
 export function makeElConfigRead(config: { voice: { elevenLabsOutbound: ConvaiKonto } }): {

@@ -694,7 +694,7 @@ const monatsrechnungAusMonth = {
 };
 
 const EINGABE_MELDUNG =
-  "Eingabe von außen (req.body, req.query, req.params) nicht mit typeof von Hand prüfen: mit einem zod-Schema über pruefeKoerper oder pruefeAbfrage aus src/utils/eingabe-pruefen.js prüfen; Schemas für Routen stehen in src/routes/_validation oder neben der Route.";
+  "Eingabe von außen (req.body, req.query, req.params) nicht mit typeof von Hand prüfen: mit einem zod-Schema über pruefeKoerper oder pruefeAbfrage aus src/utils/eingabe-pruefen.ts prüfen; Schemas für Routen stehen in src/routes/_validation oder neben der Route.";
 const EINGABE_ANFRAGEN = new Set(["req", "request"]);
 const EINGABE_TEILE = new Set(["body", "query", "params"]);
 const EINGABE_TIEFE = 4;

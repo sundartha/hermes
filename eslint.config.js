@@ -263,7 +263,7 @@ const KONFIG_SKRIPTE_MIT_BLATT = [
 const KONFIG_TABELLE = { datei: "src/config.ts", tabelle: "CONFIG_NAMESPACES" };
 const STATUS_MODUL = "src/utils/http.ts";
 const ZEIT_MODUL = "src/utils/timer.ts";
-const MONAT_MODUL = "src/utils/month.js";
+const MONAT_MODUL = "src/utils/month.ts";
 const SPEICHER_FASSADE = {
   fassade: "src/store.js",
   speicher: [{ datei: "src/store/pg.js", fabrik: "makePgStore" }, { datei: "src/store/json.js" }],

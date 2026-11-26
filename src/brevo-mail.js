@@ -1,4 +1,4 @@
-import { anfrage } from "./utils/anfrage.js";
+import { anfrage } from "./utils/anfrage.ts";
 const BREVO_API_BASE = "https://api.brevo.com/v3";
 const MAIL_SENDEN_FRIST_MS = 10_000;
 const KONTO_PRUEFEN_FRIST_MS = 5_000;

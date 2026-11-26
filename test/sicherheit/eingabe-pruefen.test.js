@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { pruefeAbfrage, pruefeKoerper } from "../../src/utils/eingabe-pruefen.js";
+import { pruefeAbfrage, pruefeKoerper } from "../../src/utils/eingabe-pruefen.ts";
 
 const HTTP_BAD_REQUEST = 400;
 const SCHEMA = z.object({ session_id: z.string().min(1) });

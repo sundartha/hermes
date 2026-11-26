@@ -1,4 +1,4 @@
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { elevenlabsNummernKonto } from "./nummern-konto-port.ts";
 import { e164Endung, istNichtLeererString, zugangsFingerabdruck } from "./inbound-path-decision.ts";
 import { leseTrunkBeleg, trunkSweepHindernis } from "./inbound-trunk-beleg.ts";

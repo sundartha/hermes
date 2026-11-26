@@ -3,7 +3,7 @@ import { z } from "zod";
 import { audit } from "../util.ts";
 import { deployTokenAbgewiesen } from "./intern-anrufe-laufend.js";
 import { anrufpauseGilt } from "../utils/anrufpause.ts";
-import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import { HTTP_SERVICE_UNAVAILABLE, antworteFehler } from "../utils/http.ts";
 
 export const ANRUFPAUSE_PATH = "/intern/anrufpause";

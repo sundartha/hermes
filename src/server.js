@@ -59,7 +59,7 @@ import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { makeAbschaltweiche } from "./abschaltweiche.js";
 import { bootServer } from "./boot.js";
-import { anfrage } from "./utils/anfrage.js";
+import { anfrage } from "./utils/anfrage.ts";
 import { setzeKennungInLogzeilen } from "./utils/anfrage-kennung.ts";
 import { starteTelemetrie } from "./utils/telemetrie.js";
 

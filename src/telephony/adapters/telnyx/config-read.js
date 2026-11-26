@@ -1,6 +1,6 @@
 import { assertTelnyxOk } from "./errors.ts";
 import { telnyxAuthHeaders as authHeaders, telnyxUrl as url, telnyxJson } from "./http.ts";
-import { anfrage } from "../../../utils/anfrage.js";
+import { anfrage } from "../../../utils/anfrage.ts";
 
 const NUMBERS_PATH = "/v2/phone_numbers";
 const TELNYX_LESEFRIST_MS = 4000;

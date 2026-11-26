@@ -4,13 +4,13 @@ import { alleKnoten, nachAnfang, schluesselName, zugriffsName } from "./knoten.j
 const MELDUNG =
   "Anfrage ohne Antwortfrist: nutze abrufMitFrist oder mitAntwortfrist aus test/gemeinsam/antwortfrist.mjs oder anfrageMitFrist aus test/gemeinsam/anfrage-mit-frist.mjs, sonst hängt der Test bei einem Mutanten bis zum Zeitlimit.";
 const MELDUNG_PRODUKT =
-  "Anfrage nach außen nur über `anfrage(url, { fristMs })` aus src/utils/anfrage.js: kein eigenes `fetch` und kein `http(s).request`, damit jede Anfrage eine benannte Antwortfrist hat.";
+  "Anfrage nach außen nur über `anfrage(url, { fristMs })` aus src/utils/anfrage.ts: kein eigenes `fetch` und kein `http(s).request`, damit jede Anfrage eine benannte Antwortfrist hat.";
 const MELDUNG_OHNE_FRIST_OPTION =
-  "Aufruf von `anfrage` ohne `fristMs`: das zweite Argument ist ein Objekt-Literal mit `fristMs`, siehe src/utils/anfrage.js; sonst wirft `AbortSignal.timeout(undefined)` erst im Betrieb.";
-const ANFRAGE_DATEI = "src/utils/anfrage.js";
+  "Aufruf von `anfrage` ohne `fristMs`: das zweite Argument ist ein Objekt-Literal mit `fristMs`, siehe src/utils/anfrage.ts; sonst wirft `AbortSignal.timeout(undefined)` erst im Betrieb.";
+const ANFRAGE_DATEI = "src/utils/anfrage.ts";
 const ANFRAGE = "anfrage";
 const FRIST_OPTION = "fristMs";
-const ANFRAGE_MODUL = /(^|\/)anfrage\.js$/;
+const ANFRAGE_MODUL = /(^|\/)anfrage\.ts$/;
 const FETCH = "fetch";
 const TEST_ORDNER = "test/";
 const HTTP_MODULE = new Set(["http", "node:http", "https", "node:https"]);

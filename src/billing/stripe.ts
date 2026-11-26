@@ -3,7 +3,7 @@ import { config } from "../config.ts";
 import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.ts";
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.ts";
 import { declineOf, declineDetail, attachProviderDecline } from "./decline.ts";
-import { anfrage as anfrageJs } from "../utils/anfrage.js";
+import { anfrage as anfrageJs } from "../utils/anfrage.ts";
 import { umhuelleAnbieter } from "../utils/anbieter-messung.js";
 
 const paymentMethodIdVon: (paymentMethod: unknown) => string | null = paymentMethodIdOf;

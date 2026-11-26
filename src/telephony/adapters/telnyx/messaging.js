@@ -1,6 +1,6 @@
 import { config } from "../../../config.ts";
 import { assertTelnyxOk } from "./errors.ts";
-import { anfrage } from "../../../utils/anfrage.js";
+import { anfrage } from "../../../utils/anfrage.ts";
 
 const MESSAGES_PATH = "/v2/messages";
 const SMS_SENDEN_FRIST_MS = 10_000;

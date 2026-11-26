@@ -1,4 +1,4 @@
-import { lastDayOfMonth } from "../utils/month.js";
+import { lastDayOfMonth } from "../utils/month.ts";
 
 export const USAGE_EVENT_KIND = Object.freeze({
   VOICE_MINUTE: "voice_minute",

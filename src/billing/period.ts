@@ -1,4 +1,4 @@
-import { oneMonthBack } from "../utils/month.js";
+import { oneMonthBack } from "../utils/month.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 export { MS_PER_SECOND } from "../utils/timer.ts";

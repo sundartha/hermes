@@ -1,5 +1,5 @@
 import { AGENT_STIMME } from "../conversation/elevenlabs-agent-config.ts";
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { synthesizeSpeechStream } from "./synth.ts";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.ts";

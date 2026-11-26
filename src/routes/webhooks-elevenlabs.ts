@@ -24,7 +24,7 @@ import {
   HTTP_SERVER_ERROR,
   antworteFehler,
 } from "../utils/http.ts";
-import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import type { TranscriptLine } from "../utils/text.ts";
 
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";

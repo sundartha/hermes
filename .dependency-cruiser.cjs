@@ -67,7 +67,7 @@ module.exports = {
       name: "anrufe-fachlogik-ohne-aussenwelt",
       severity: "error",
       comment:
-        "Fachlogik des Anrufbereichs (Liste fachlogik im Bereich anrufe in tools/bereiche.json) rechnet nur und importiert keine Datenbank, kein Netz und keinen Adapter: nicht src/store.js, src/store/, src/db/, src/utils/anfrage.js, nicht src/utils/uhr-warten.ts und nicht src/telephony/adapters/. Was Datenbank, Netz oder Uhr braucht, gehört in eine Datei außerhalb der Liste, die das Ergebnis an die Fachlogik übergibt.",
+        "Fachlogik des Anrufbereichs (Liste fachlogik im Bereich anrufe in tools/bereiche.json) rechnet nur und importiert keine Datenbank, kein Netz und keinen Adapter: nicht src/store.js, src/store/, src/db/, src/utils/anfrage.ts, nicht src/utils/uhr-warten.ts und nicht src/telephony/adapters/. Was Datenbank, Netz oder Uhr braucht, gehört in eine Datei außerhalb der Liste, die das Ergebnis an die Fachlogik übergibt.",
       from: { path: ANRUFE_FACHLOGIK },
       to: { path: "^src/(store\\.[jt]s$|store/|db/|utils/anfrage\\.[jt]s$|utils/uhr-warten\\.[jt]s$|telephony/adapters/)" },
     },

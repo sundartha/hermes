@@ -13,7 +13,7 @@ import { anschlussSatz } from "./vorspann-anschluss.ts";
 import { tenantToolToken } from "./tenant-tool-token.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
-import { anfrage as anfrageNachAussen } from "../utils/anfrage.js";
+import { anfrage as anfrageNachAussen } from "../utils/anfrage.ts";
 import { callLocaleOf, providerVoicemailMessage } from "./call-locale.ts";
 import { REQUEST_TIMEOUT_MS, assertEroeffnungGeprueft, endConversation, fetchConversation, listConversations } from "./convai.ts";
 import { makeAnrufstartAuftrag } from "./anrufstart-auftrag.ts";

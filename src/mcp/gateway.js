@@ -4,7 +4,7 @@ import { placeCallHopFristMs } from "../telephony/anruf-fristen.ts";
 import { MCP_ERROR_CODE } from "../i18n/mcp-texts.ts";
 import { ToolError } from "./fehler.js";
 import { CALL_ARGS_EXEMPT_KEYS, rejectRestrictedData } from "./eingabe.js";
-import { anfrage } from "../utils/anfrage.js";
+import { anfrage } from "../utils/anfrage.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 
 const BAD_REQUEST_STATUS = 400;

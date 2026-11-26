@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { pruefeKoerper } from "../utils/eingabe-pruefen.js";
+import { pruefeKoerper } from "../utils/eingabe-pruefen.ts";
 import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.ts";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.ts";
