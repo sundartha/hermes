@@ -380,3 +380,34 @@ test("(p) Remove: email als Zahl oder Objekt entfernt niemanden, Antwort 200 rem
     await s.close();
   }
 });
+
+test("(r) Audit-Schreibfehler: die Zusage bleibt 200, das Log nennt nur die Fehlerart", async (t) => {
+  const s = await setup();
+  try {
+    const fehlschlaege = [new TypeError("geheimer-fehlertext"), "geheimer-rohtext"];
+    const abfrage = Object.getPrototypeOf(s.db).query;
+    t.mock.method(s.db, "query", function (sql, parameter) {
+      return parameter?.[2] === "self_service_newsletter_recipient_added"
+        ? Promise.reject(fehlschlaege.shift())
+        : abfrage.call(this, sql, parameter);
+    });
+    const zeilen = [];
+    t.mock.method(console, "error", (...teile) => zeilen.push(teile.join(" ")));
+
+    for (const email of ["freund@example.test", "freundin@example.test"]) {
+      const res = await addRecipient(s, email);
+      assert.equal(res.status, 200);
+      assert.deepEqual(JSON.parse(res.body), { ok: true, status: "pending" });
+    }
+
+    assert.deepEqual(
+      zeilen.filter((zeile) => zeile.includes("newsletter-recipients audit")),
+      [
+        "self-service newsletter-recipients audit write failed: art=TypeError",
+        "self-service newsletter-recipients audit write failed: art=string",
+      ],
+    );
+  } finally {
+    await s.close();
+  }
+});
