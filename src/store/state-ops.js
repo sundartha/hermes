@@ -10,6 +10,7 @@ import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.ts";
 import { WEBHOOK_ANCHOR_HISTORY } from "../begriffe/speicher.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.ts";
 import { E164 } from "../begriffe/rufnummern.ts";
+import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.ts";
 import { CONSULT_STATUS, CONSULT_ANSWER, CONSULT_WAIT } from "../begriffe/rueckfrage.ts";
 import { isBookableCents } from "../begriffe/abrechnung.ts";
@@ -275,6 +276,7 @@ export function createCall(
     context,
     mandate,
     language,
+    languageExplicit,
     maxDurationS,
     requestedBy,
     tenantId,
@@ -301,7 +303,8 @@ export function createCall(
     context: context || null,
     mandate: mandate || null,
     callerName: null,
-    language: language || "",
+    language: language || STARTSPRACHE,
+    languageExplicit: languageExplicit === true,
     maxDurationS: maxDurationS || null,
     requestedBy: requestedBy || null,
     tenantId: requireTenantId(tenantId),

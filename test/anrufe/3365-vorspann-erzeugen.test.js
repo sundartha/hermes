@@ -40,8 +40,8 @@ const AUDIO_BYTES_ZU_KURZ = 10;
 const UEBER_TELNYX = KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI;
 const EN_STIMME = "cqPdIo76zSHFDcSZpFov";
 const OWNER_NAME_IM_STORE = "Jonas Beispiel";
-const dritteroeffnung = (auftraggeber, openingLine) =>
-  `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${auftraggeber}. Das Gespräch wird für meinen Auftraggeber zusammengefasst. ${openingLine}`;
+const dritteroeffnung = (auftraggeber) =>
+  `Hello, here's what I'm calling about: ${OBJECTIVE} – I am Hermes, the AI assistant of ${auftraggeber}, and I will summarise this conversation for ${OWNER_TEST_FIRST_NAME}.`;
 const LEERER_NAME = " ";
 
 const TTS_MODUS = Object.freeze({
@@ -195,7 +195,7 @@ test("3365-K3: Vorspann-Text und Stimme stammen aus der Init-Eroeffnung -> TTS 1
     assert.equal(call.language, "en");
     assert.equal(new URL(tts[0].path, attrappe.url).pathname, `${TTS_PFAD}${EN_STIMME}/stream`);
     const text = JSON.parse(tts[0].roh).text;
-    assert.equal(text, dritteroeffnung(OWNER_NAME_IM_STORE, call.openingLine));
+    assert.equal(text, dritteroeffnung(OWNER_NAME_IM_STORE));
     assert.equal(nach(attrappe, TEXML_ANRUF_PFAD).length, 0);
     assert.equal(nach(attrappe, CALL_CONTROL_PFAD).length, EINMAL);
     assert.equal(call.callControlId, CALL_CONTROL_ID);
@@ -235,7 +235,7 @@ test("3365-K3: leerer Auftraggebername -> Offenlegung mit Ersatzname, nie leer",
     const { callId } = await (await anrufStarten(srv)).json();
     const call = anrufIn(srv, callId);
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
-    assert.equal(text, dritteroeffnung("meinem Auftraggeber", call.openingLine));
+    assert.equal(text, dritteroeffnung("its owner"));
   });
 });
 
@@ -250,7 +250,7 @@ test("3365-K3: Anruf an die eigene Nummer -> Vorspann ist die Owner-Eroeffnung, 
     const call = anrufIn(srv, callId);
     assert.equal(call.calleeIsOwner, true);
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
-    assert.equal(text, `Hey, hier ist Hermes, dein KI-Assistent. Es geht um Folgendes: ${OBJECTIVE}.`);
+    assert.equal(text, `Hey, it's Hermes, your AI assistant. Here's what I'm calling about: ${OBJECTIVE}.`);
     assert.ok(!text.includes("?"), text);
   });
 });

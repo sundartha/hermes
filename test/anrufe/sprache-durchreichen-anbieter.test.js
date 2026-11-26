@@ -54,8 +54,8 @@ describe("agent.language im Override reicht die angefragte Startsprache durch", 
     assert.equal(await anbieterSpracheFuer("de"), "de");
   });
 
-  it("DA-5: language 'zh' (formgueltig, nicht in der Durchreich-Liste) faellt weiter auf en zurueck", async () => {
-    assert.equal(await anbieterSpracheFuer("zh"), "en");
+  it("DA-5: language 'zh' (formgueltig) kommt unveraendert beim Anbieter an", async () => {
+    assert.equal(await anbieterSpracheFuer("zh"), "zh");
   });
 
   it("DA-6 (Verhaltensaenderung gegenueber SF-4): language 'es' wird jetzt durchgereicht statt auf en zu fallen", async () => {

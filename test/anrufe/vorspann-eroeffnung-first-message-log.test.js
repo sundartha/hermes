@@ -13,6 +13,7 @@ const AGENT_ID = "agent_6125";
 const INSTANZ = "inst-6125-fm";
 const ABSENDER = "+15005550006";
 const ANGERUFENER = "+491737250000";
+const FR_ZIEL = "+33612345678";
 const ANFANG_LAENGE = 40;
 const BINDUNG = "6125".padStart(32, "0");
 const CALL_ID = "call_6125_fm";
@@ -24,12 +25,11 @@ test("6125-A5: ohne gesagten Vorspann loggt der Init Laenge und maskierten Anfan
     id: CALL_ID,
     direction: "outbound",
     from: ABSENDER,
-    to: ANGERUFENER,
+    to: FR_ZIEL,
     goal: "Tisch 4711 reservieren",
     answeredAt: ANGENOMMEN_UM,
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
     streamToken: BINDUNG,
-    language: "en",
   });
   const srv = await startServer({
     env: { ...elInboundInitSpawnEnv(AGENT_ID), RENDER_INSTANCE_ID: INSTANZ },

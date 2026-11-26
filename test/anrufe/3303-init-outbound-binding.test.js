@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
+import { disclosurePrefixFor } from "../../src/i18n/locales.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../../src/elevenlabs/inbound-sip-uri.ts";
 import { ELEVENLABS_INIT_PATH, INIT_ANTWORT, INIT_TOKEN_HEADER } from "../../src/routes/webhooks-elevenlabs-init.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, seedCall, startServer } from "../helpers.js";
@@ -22,7 +23,7 @@ const OBJECTIVE = "Termin vereinbaren";
 const PLATZHALTER_ZEILE = "Ich rufe an wegen {{x}}.";
 const PLATZHALTER_HASH = createHash("sha256").update(PLATZHALTER_ZEILE, "utf8").digest("hex");
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
-const DISCLOSURE_DE = `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${OWNER_NAME}.`;
+const FR_ZIEL = "+33612345678";
 const OWNER_OPENING_DE = "Hey, hier ist Hermes, dein KI-Assistent.";
 const TOKEN_BREITE = 32;
 const DYNAMIC_VARIABLES_KEYS = "background call_limit_s callee callee_relation callee_timezone constraints consult_available eroeffnung inbound_situation lookup_available mandate objective opening_line owner_name owner_timezone tenant_token today voicemail_line".split(" ");
@@ -69,14 +70,14 @@ const eroeffnungVon = ({ json }) => json.conversation_config_override.agent.firs
 
 const CALLS = {
   gleicheSprache: ausgehenderAnruf(1),
-  andereSprache: ausgehenderAnruf(2, { language: "en" }),
+  andereSprache: ausgehenderAnruf(2, { to: FR_ZIEL }),
   eigenerAnruf: ausgehenderAnruf(3, { calleeIsOwner: true }),
-  verletzend: ausgehenderAnruf(4, { language: "en", openingLine: PLATZHALTER_ZEILE, openingLineSha256: PLATZHALTER_HASH }),
+  verletzend: ausgehenderAnruf(4, { to: FR_ZIEL, openingLine: PLATZHALTER_ZEILE, openingLineSha256: PLATZHALTER_HASH }),
   ohneNummer: ausgehenderAnruf(5),
   zielnummer: ausgehenderAnruf(6),
   fremdeNummer: ausgehenderAnruf(7),
   formatiert: ausgehenderAnruf(8),
-  konformerZwilling: ausgehenderAnruf(9, { language: "en" }),
+  konformerZwilling: ausgehenderAnruf(9, { to: FR_ZIEL }),
   consult: ausgehenderAnruf(10),
 };
 
@@ -103,7 +104,7 @@ test("3303-Init-Outbound-Binding am echten Server", async (ctx) => {
     await ctx.test("K2c(ii): andere Sprache -> first_message beginnt mit dem Pflichtsatz der Offenlegungssprache", async () => {
       const antwort = await init(srv, CALLS.andereSprache);
       assert.equal(antwort.status, HTTP_OK, antwort.text);
-      assert.ok(eroeffnungVon(antwort).startsWith(DISCLOSURE_DE), eroeffnungVon(antwort));
+      assert.ok(eroeffnungVon(antwort).startsWith(disclosurePrefixFor("fr")), eroeffnungVon(antwort));
     });
     await ctx.test("K2c(iii): calleeIsOwner -> Owner-Eroeffnung", async () => {
       const antwort = await init(srv, CALLS.eigenerAnruf);
@@ -117,7 +118,7 @@ test("3303-Init-Outbound-Binding am echten Server", async (ctx) => {
       assert.ok(!srv.stdout.includes(`gebunden call=${CALLS.verletzend.id}`));
       const zwilling = await init(srv, CALLS.konformerZwilling);
       assert.equal(zwilling.status, HTTP_OK, zwilling.text);
-      assert.ok(eroeffnungVon(zwilling).startsWith(DISCLOSURE_DE));
+      assert.ok(eroeffnungVon(zwilling).startsWith(disclosurePrefixFor("fr")));
     });
     await ctx.test("K8: Outbound nur mit called_number = call.from; Inbound unveraendert", async () => {
       for (const [call, extra] of [

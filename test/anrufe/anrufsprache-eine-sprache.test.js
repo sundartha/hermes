@@ -91,4 +91,10 @@ describe("eine Sprache je Anruf: Offenlegung und Gespraech folgen der Anrufsprac
     assert.ok(gesagt(inhalt).startsWith(disclosurePrefixFor("fr")));
     assert.equal(inhalt.conversation_config_override.agent.language, "de");
   });
+
+  it("ohne Anrufsprache bei Mandantensprache en an eine +49-Nummer: Pflichtsatz und agent.language in derselben Sprache de", async () => {
+    const inhalt = await startInhalt({ to: TELNYX_TEST_PEER_NUMBER, mandantSprache: "en" });
+    assert.equal(inhalt.conversation_config_override.agent.language, "de");
+    assert.match(gesagt(inhalt), KI_HINWEIS.de, JSON.stringify(gesagt(inhalt)));
+  });
 });

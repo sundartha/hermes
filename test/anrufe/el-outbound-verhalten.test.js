@@ -169,7 +169,7 @@ test("3395-R5: Sprachwunsch und Mandantensprache bestimmen Gespraechssprache und
   assert.equal(ueberVon(mandant.start).agent.language, "fr");
   assert.equal(ueberVon(wunsch.start).agent.language, "en");
   assert.equal(ueberVon(mandant.start).agent.first_message, "Voici l'objet de mon appel : Réserver une table. Je vous écoute.");
-  assert.ok(variablenVon(mandant.start).eroeffnung_gesagt.startsWith("Guten Tag"));
+  assert.ok(variablenVon(mandant.start).eroeffnung_gesagt.startsWith("Bonjour"));
   assert.equal(ueberVon(mandant.start).tts.voice_id, ueberVon(wunsch.start).tts.voice_id);
   assert.equal(variablenVon(mandant.start).opening_line, "voici l'objet de mon appel : Réserver une table.");
   assert.equal(variablenVon(wunsch.start).opening_line, "here's what I'm calling about: Book a table.");

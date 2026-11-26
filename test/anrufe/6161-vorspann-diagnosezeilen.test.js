@@ -255,7 +255,7 @@ const initUeber = (srv, call, konversation) =>
 
 test("6161-K1b: Init ohne Vorspann meldet first_message_ergebnis mit Laenge der Eroeffnung, oder nein ohne Override", async () => {
   const gleicheSprache = ohneVorspann(1);
-  const andereSprache = ohneVorspann(2, { language: "en" });
+  const andereSprache = ohneVorspann(2, { to: "+33612345678" });
   const inbound = spawnSeedWartenderElCall({ callId: "call_6161_inbound", bindungsToken: bindungsToken(0), answeredVorS: 2 });
   const srv = await startServer({ env: elInboundInitSpawnEnv(AGENT_ID), seed: { ...inbound, calls: [...inbound.calls, gleicheSprache, andereSprache] } });
   try {

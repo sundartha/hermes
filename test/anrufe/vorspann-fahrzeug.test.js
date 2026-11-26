@@ -20,7 +20,7 @@ const SCHALTER_AN = {
   ELEVENLABS_OUTBOUND_UEBER_TELNYX: "true",
   ELEVENLABS_OUTBOUND_VORSPANN: "true",
 };
-const OFFENLEGUNG = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
+const OFFENLEGUNG = "Hello, here's what I'm calling about: Termin vereinbaren – I am Hermes, the AI assistant of Jonas Beispiel, and I will summarise this conversation for Jonas.";
 const WEG_SPUR = "/v2/calls";
 const SPRACHSYNTHESE_SPUR = "/v1/text-to-speech/";
 
@@ -125,7 +125,7 @@ test("Fahrzeug Init: initInhaltFuer liefert fuer einen Vorspann-Anruf first_mess
     const { callId } = await antwort.json();
     const inhalt = await initInhaltFuer(srv, { callId });
     assert.equal(inhalt.conversation_config_override.agent.first_message, "Here's what I'm calling about: Termin vereinbaren. Please go ahead.");
-    assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(OFFENLEGUNG), inhalt.dynamic_variables.eroeffnung_gesagt);
+    assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt === OFFENLEGUNG, inhalt.dynamic_variables.eroeffnung_gesagt);
   } finally {
     await srv.stop();
   }

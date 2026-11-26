@@ -42,9 +42,9 @@ async function eroeffnungFuer({ to, language, env = {} }) {
 }
 
 describe("Offenlegung bei Startsprache ohne eigene Texte", () => {
-  it("SO-1: Startsprache es, DE-Nummer -> Offenlegungssatz deutsch am Anfang", async () => {
+  it("SO-1: Startsprache es, DE-Nummer -> Offenlegungssatz englisch am Anfang", async () => {
     const eroeffnung = await eroeffnungFuer({ to: TELNYX_TEST_PEER_NUMBER, language: "es" });
-    assert.ok(eroeffnung.startsWith(disclosurePrefixFor("de")), JSON.stringify(eroeffnung));
+    assert.ok(eroeffnung.startsWith(disclosurePrefixFor("en")), JSON.stringify(eroeffnung));
   });
 
   it("SO-2: Startsprache es, Land ohne Eintrag (ES) -> Offenlegungssatz englisch am Anfang", async () => {
@@ -53,9 +53,9 @@ describe("Offenlegung bei Startsprache ohne eigene Texte", () => {
     assert.ok(!eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
   });
 
-  it("SO-3: Startsprache es, FR-Nummer -> Offenlegungssatz franzoesisch", async () => {
+  it("SO-3: Startsprache es, FR-Nummer -> Offenlegungssatz englisch am Anfang", async () => {
     const eroeffnung = await eroeffnungFuer({ to: FR_NUMMER, language: "es" });
-    assert.ok(eroeffnung.startsWith(disclosurePrefixFor("fr")), JSON.stringify(eroeffnung));
+    assert.ok(eroeffnung.startsWith(disclosurePrefixFor("en")), JSON.stringify(eroeffnung));
   });
 
   it("SO-4: Startsprache de, Land ohne Eintrag (ES) -> Offenlegung bleibt beim Auftraggeber deutsch", async () => {
