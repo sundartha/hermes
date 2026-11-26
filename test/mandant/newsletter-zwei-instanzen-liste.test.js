@@ -243,3 +243,34 @@ test("JSON-Speicher über die Fassade: unbekannter Token und unbekannte Adresse 
   assert.equal(await newsletter.unsubscribeNewsletterRecipientByToken("unbekannt"), null);
   assert.equal(await newsletter.removeNewsletterRecipient(BOOTSTRAP_TENANT_ID, "niemand@example.com"), false);
 });
+
+test("ein gelungenes Schreiben der Liste bleibt ohne Fehler im Log", async (t) => {
+  const { b, tenant } = await zweiInstanzen();
+  const fehlerausgabe = t.mock.method(console, "error", () => {});
+
+  await eintragen(b, tenant, { email: "y@example.com" });
+
+  assert.equal(fehlerausgabe.mock.calls.length, 0);
+  assert.equal(await b.newsletterAbgleichen(), undefined);
+  assert.deepEqual(b.tenantNewsletterRecipients(tenant).map((eintrag) => eintrag.email), ["y@example.com"]);
+});
+
+test("der Abgleich wartet, bis ein laufendes Schreiben der Liste fertig ist, und liest erst danach", async () => {
+  laufendeNummer += 1;
+  const tenant = `t_liste_${laufendeNummer}`;
+  await gemeinsam.query("INSERT INTO tenant (id, status, country) VALUES ($1, 'active', 'DE')", [tenant]);
+  let schreibenBegonnen = false;
+  let beimLesenBegonnen = null;
+  const b = await instanz(gemeinsam, async (text) => {
+    if (/^UPDATE tenant SET newsletter_recipients = /.test(text)) {
+      for (let runde = 0; runde < 200; runde += 1) await Promise.resolve();
+      schreibenBegonnen = true;
+    }
+    if (/^SELECT id, newsletter_recipients/.test(text)) beimLesenBegonnen = schreibenBegonnen;
+  });
+
+  b.addNewsletterRecipient(tenant, empfaenger("y@example.com", tenant));
+  await b.newsletterAbgleichen();
+
+  assert.equal(beimLesenBegonnen, true);
+});
