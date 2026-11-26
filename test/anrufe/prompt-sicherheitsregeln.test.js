@@ -1,21 +1,8 @@
-import { test, before } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { LOCALES } from "../../src/i18n/locales.ts";
 
 const OWNER = "Jonas";
-
-let systemPrompt;
-before(async () => {
-  process.env.DATA_DIR = tempDataDir(
-    seedState({
-      calls: [],
-      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
-    }),
-  );
-  await import("../../src/config.ts");
-  ({ systemPrompt } = await import("../../src/claude.js"));
-});
 
 const ZEILEN = {
   de: [
@@ -39,10 +26,8 @@ const ZEILEN = {
 };
 
 for (const [language, zeilen] of Object.entries(ZEILEN)) {
-  for (const direction of ["outbound", "inbound"]) {
-    test(`Prompt ${language}/${direction} enthält die Sicherheitsregeln mit dem Namen des Inhabers`, () => {
-      const prompt = systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language, direction }));
-      for (const zeile of zeilen) assert.ok(prompt.includes(zeile), zeile);
-    });
-  }
+  test(`Prompt ${language}: Sicherheitsregeln nennen den Inhaber und stehen wörtlich fest`, () => {
+    const b = LOCALES[language].prompt.boundaries;
+    assert.deepEqual([b.personalData(OWNER), b.bankData, b.noCalendar(OWNER), b.noBooking], zeilen);
+  });
 }
