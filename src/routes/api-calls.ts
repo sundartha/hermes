@@ -716,13 +716,17 @@ export function makeCallRoutes({
   }
 
   async function beendeOhneAnbieter(callId: string, reason: string) {
+    const haltGrundUndEnde = persistEndWithReason({
+      store,
+      callId,
+      reason,
+      endCall: () => store.endCallRecord(callId, "failed"),
+    });
     return terminateAndBillCall({
-      persistEnd: persistEndWithReason({
-        store,
-        callId,
-        reason,
-        endCall: () => store.endCallRecord(callId, "failed"),
-      }),
+      persistEnd: async () => {
+        await leseAnruf(store, callId);
+        await haltGrundUndEnde();
+      },
       hangUp: null,
       bill: billThunk(finishCall, store, callId),
       callId,
