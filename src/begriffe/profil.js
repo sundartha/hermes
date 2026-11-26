@@ -31,7 +31,7 @@ function cleanValue(key, type, value) {
 
 export function sanitizeProfile(patch) {
   const clean = {};
-  for (const [key, value] of Object.entries(patch || {})) {
+  for (const [key, value] of Object.entries(patch ?? {})) {
     const type = PROFILE_FIELDS[key];
     if (!type) continue;
     const cleaned = cleanValue(key, type, value);

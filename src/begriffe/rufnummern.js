@@ -15,8 +15,12 @@ export function isNanpCountry(countryIso) {
 
 export const KAUFBARE_LAENDER = Object.freeze(["US"]);
 
+function landText(land) {
+  return typeof land === "string" ? land : "";
+}
+
 export function kauflandFuer(land) {
-  const key = String(land || "").toUpperCase();
+  const key = landText(land).toUpperCase();
   return KAUFBARE_LAENDER.includes(key) ? key : KAUFBARE_LAENDER[0];
 }
 
@@ -96,7 +100,7 @@ const CALLING_CODE_FOR_COUNTRY = Object.freeze({
 });
 
 export function allowedPrivateNumberCodes(countryIso) {
-  const cc = String(countryIso || "").toUpperCase();
+  const cc = landText(countryIso).toUpperCase();
   if (isNanpCountry(cc)) return [NANP_COUNTRY_CODE];
   const code = CALLING_CODE_FOR_COUNTRY[cc];
   return code ? [code] : DEFAULT_PRIVATE_NUMBER_CODES;
@@ -130,8 +134,9 @@ function nichtKaufbar(wo, land) {
 }
 
 export function assertKaufbaresLand(land, wo) {
-  const key = String(land || "").toUpperCase();
-  if (!KAUFBARE_LAENDER.includes(key)) throw nichtKaufbar(wo, land || UNBEKANNTES_LAND);
+  const text = landText(land);
+  const key = text.toUpperCase();
+  if (!KAUFBARE_LAENDER.includes(key)) throw nichtKaufbar(wo, text || UNBEKANNTES_LAND);
 }
 
 export function hatKaufbareVorwahl(e164) {
