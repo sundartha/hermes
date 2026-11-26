@@ -443,11 +443,10 @@ describe("3488-H2: Anlass vor KI-Satz im selben ersten Redebeitrag", () => {
     }
   });
 
-  it("G3: weichen Anlass- und Offenlegungssprache ab, steht der KI-Satz der Offenlegungssprache zuerst, ohne Schlussfrage", () => {
-    const call = anrufIn3488("en", { to: ZIEL_JE_SPRACHE.de });
-    const { text, pflichtsatz } = vorspann3488(call);
-    assert.equal(pflichtsatz, LOCALES.de.disclosure(OWNER_NAME));
-    assert.equal(text, `${pflichtsatz} ${AUFTRAG_3488.en}.`);
+  it("G3: eine ausdrückliche Anrufsprache gilt auch für den KI-Satz, nicht das Land der Nummer", () => {
+    const { text, pflichtsatz } = vorspann3488(anrufIn3488("en", { to: ZIEL_JE_SPRACHE.de }));
+    assert.equal(text, vorspann3488(anrufIn3488("en")).text);
+    assert.ok(text.startsWith(pflichtsatz) && pflichtsatz.includes(KI_HINWEIS_3488.en), text);
   });
 
   it("E7 G4: Anruf an die eigene Nummer bleibt byte-gleich mit Schlussfrage, auch die Voicemail eines Dritt-Anrufs", async () => {
