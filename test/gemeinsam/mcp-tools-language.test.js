@@ -474,3 +474,54 @@ test("get_agent_status: fehlt agent, usage oder settings in der Gateway-Antwort,
     });
   }
 });
+
+const WORTLAUT_JE_SPRACHE = {
+  de: {
+    hinweis: "Hinweis: Die Rueckfrage an den Auftraggeber ist fuer diesen Anruf NICHT freigegeben (geschlossen: [a], [b]). Hermes kann bei einem Problem im Anruf nicht rueckfragen.",
+    angaben: ["1 Angabe an den Anruf uebergeben.", "2 Angaben an den Anruf uebergeben."],
+    darf: ["Darf x weitergeben", "Darf x, y und z weitergeben"],
+    nutzung: "Monatsnutzung: 42 % des Minuten-Kontingents",
+    zusammenfassung: ["Der Anruf ist nicht zustande gekommen. Grund: die Leitung war besetzt", "Der Anruf ist nicht zustande gekommen."],
+    karte: "Nicht gesendet: das Feld F enthaelt offenbar eine Zahlungskartennummer. Hermes nimmt keine Zahlungskartendaten entgegen - bitte entfernen und erneut versuchen.",
+    ausweis: "Nicht gesendet: das Feld F enthaelt offenbar eine behoerdliche Kennnummer (z.B. Sozialversicherungs-, Steuer- oder Ausweisnummer). Hermes nimmt solche Nummern nicht entgegen - bitte entfernen und erneut versuchen.",
+    zugang: "Nicht gesendet: das Feld F enthaelt offenbar Zugangsdaten (Passwort, PIN, Einmalcode, Schluessel oder Token). Hermes nimmt keine Zugangsdaten entgegen - bitte entfernen und erneut versuchen.",
+  },
+  en: {
+    hinweis: "Note: the consult question to the principal is NOT released for this call (closed: [a], [b]). Hermes cannot ask the principal if a problem comes up during the call.",
+    angaben: ["1 detail passed on to the call.", "2 details passed on to the call."],
+    darf: ["May share x", "May share x, y and z"],
+    nutzung: "Monthly usage: 42% of your included minutes",
+    zusammenfassung: ["The call did not go through. reason: the line was busy", "The call did not go through."],
+    karte: "Not sent: the field F contains what looks like a payment card number. Hermes does not accept payment card data - remove it and try again.",
+    ausweis: "Not sent: the field F contains what looks like a government identifier (such as a social security, tax, or passport number). Hermes does not accept such numbers - remove it and try again.",
+    zugang: "Not sent: the field F contains what looks like a credential (password, PIN, one-time code, key, or token). Hermes does not accept credentials - remove it and try again.",
+  },
+  fr: {
+    hinweis: "Remarque : la question au mandant n'est PAS autorisée pour cet appel (fermé : [a], [b]). Hermes ne peut pas interroger le mandant en cas de problème pendant l'appel.",
+    angaben: ["1 information transmise à l'appel.", "2 informations transmises à l'appel."],
+    darf: ["Peut partager x", "Peut partager x, y et z"],
+    nutzung: "Utilisation mensuelle : 42 % des minutes incluses",
+    zusammenfassung: ["L'appel n'a pas abouti. motif : la ligne était occupée", "L'appel n'a pas abouti."],
+    karte: "Non envoyé : le champ F semble contenir un numéro de carte de paiement. Hermes n'accepte pas les données de carte de paiement - veuillez le supprimer et réessayer.",
+    ausweis: "Non envoyé : le champ F semble contenir un identifiant officiel (par exemple un numéro de sécurité sociale, fiscal ou de passeport). Hermes n'accepte pas ces numéros - veuillez le supprimer et réessayer.",
+    zugang: "Non envoyé : le champ F semble contenir des identifiants de connexion (mot de passe, code PIN, code à usage unique, clé ou jeton). Hermes n'accepte pas ces identifiants - veuillez les supprimer et réessayer.",
+  },
+};
+
+for (const sprache of ["de", "en", "fr"]) {
+  test(`MCP-Texte ${sprache}: Hinweise, Zählformen, Berechtigungen und Sperrtexte stehen wörtlich fest`, () => {
+    const t = MCP_TEXTS[sprache];
+    const soll = WORTLAUT_JE_SPRACHE[sprache];
+    assert.equal(t.consultNotReleasedHint(["a", "b"]), soll.hinweis);
+    assert.deepEqual([t.consultAnswerAccepted(1), t.consultAnswerAccepted(2)], soll.angaben);
+    assert.deepEqual([t.agentStatus.permissionsAllowed(["x"]), t.agentStatus.permissionsAllowed(["x", "y", "z"])], soll.darf);
+    assert.equal(t.agentStatus.planUsage(42), soll.nutzung);
+    assert.deepEqual([t.callFailedSummary("busy"), t.callFailedSummary("weird")], soll.zusammenfassung);
+    assert.equal(t.callFailedSummary(null), null);
+    const fehler = t.errors;
+    assert.deepEqual(
+      [MCP_ERROR_CODE.RESTRICTED_PAYMENT_CARD, MCP_ERROR_CODE.RESTRICTED_GOVERNMENT_ID, MCP_ERROR_CODE.RESTRICTED_CREDENTIAL].map((code) => fehler[code]("F")),
+      [soll.karte, soll.ausweis, soll.zugang],
+    );
+  });
+}
