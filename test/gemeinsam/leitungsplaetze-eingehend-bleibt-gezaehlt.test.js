@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.js";
+import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.ts";
 import { makePostgresLeitungsplaetze } from "../../src/store.js";
 
 const CALL_ID = "call_eingehend_bleibt";

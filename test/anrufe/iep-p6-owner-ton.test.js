@@ -10,7 +10,7 @@ import { EROEFFNUNG_DEFEKT, EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from
 import { LOCALES } from "../../src/i18n/locales.ts";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
-import { normNum } from "../../src/begriffe/rufnummern.js";
+import { normNum } from "../../src/begriffe/rufnummern.ts";
 import {
   postTelnyxIncoming,
   seedCall,

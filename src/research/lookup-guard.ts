@@ -1,5 +1,5 @@
 import { KEY_FACTS_LIMITS } from "../begriffe/anrufe.ts";
-import { normNum } from "../begriffe/rufnummern.js";
+import { normNum } from "../begriffe/rufnummern.ts";
 import { clampAtWordBoundary, containsVerbatimQuote, stripQuotedSpans } from "../utils/text.ts";
 import type { TranscriptLine } from "../utils/text.ts";
 

@@ -1,5 +1,5 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.ts";
-import { GLOBAL_CAP_REASON } from "../begriffe/nummern-vergabe.js";
+import { GLOBAL_CAP_REASON } from "../begriffe/nummern-vergabe.ts";
 import { findTenant, resolveCallLanguage, ersatzZuAlterNummer } from "./state-ops.js";
 import { omitKeys } from "../utils/object.ts";
 import type { MandantZustand } from "./zustand/mandant.ts";

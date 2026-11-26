@@ -1,7 +1,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
-import { resolveProfileFrom, sanitizeProfile } from "../../src/begriffe/profil.js";
+import { resolveProfileFrom, sanitizeProfile } from "../../src/begriffe/profil.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { planProfileFor } from "../../src/plans.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

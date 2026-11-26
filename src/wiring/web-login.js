@@ -18,7 +18,7 @@ import { createGeteilterRateLimiter, createRateLimiter } from "../middleware.ts"
 import { speicherBereiche } from "../store.js";
 import { runReleaseReconcile } from "../release-reconcile.ts";
 import { numberProvisioning } from "../telephony/registry.js";
-import { PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../begriffe/nummern-vergabe.ts";
 import { elevenlabsNummern } from "../elevenlabs/nummern-port.ts";
 import { HTTP_SERVER_ERROR } from "../utils/http.ts";
 import { MS_PER_HOUR } from "../utils/timer.ts";

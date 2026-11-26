@@ -15,7 +15,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { EL_INBOUND_ACCESS_BOOT_ENV, OWNER_TEST_FIRST_NAME, OWNER_TEST_LAST_NAME, nowSeconds } from "../helpers.js";
 import { mitDatenbankVorDemStart, mitInstanzHinterRelais, zeilenBis } from "../anrufe/zwei-instanzen-postgres.js";
-import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../../src/begriffe/speicher.js";
+import { EINSTELLUNGEN_NACHLADEN_FRIST_MS } from "../../src/begriffe/speicher.ts";
 import { mitHermesAufPostgres, neueAnrufe } from "../anrufe/hermes-mit-postgres.js";
 
 const GEPINNTER_TENANT = { ELEVENLABS_INBOUND_SCOPE: "allowlist", ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID };

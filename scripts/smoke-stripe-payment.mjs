@@ -10,7 +10,7 @@ import {
   setTenantStripe,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/begriffe/nummern.ts";
-import { kauflandFuer } from "../src/begriffe/rufnummern.js";
+import { kauflandFuer } from "../src/begriffe/rufnummern.ts";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.ts";
 import { fakeProvisioner } from "../test/helpers.js";
 

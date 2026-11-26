@@ -6,7 +6,7 @@ import { EINGANG_URL, fangeVorfaelle } from "../gemeinsam/vorfall-fang.js";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../../src/boot-guard.ts";
 import { makeDefaultState, openOutageAlert } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 import { makeStubStore, fakeConfig, fakeSpies, makeDueOutboundCall } from "../cost-truing-harness.js";
 
 const SENDER_E164 = "+15005550006";

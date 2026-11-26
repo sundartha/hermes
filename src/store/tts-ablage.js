@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { TTS_ABLAGE_DB_FRIST_MS, TTS_ABLAGE_TAKT_MS } from "../begriffe/speicher.js";
+import { TTS_ABLAGE_DB_FRIST_MS, TTS_ABLAGE_TAKT_MS } from "../begriffe/speicher.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 import { sleep } from "../utils/uhr-warten.ts";
 

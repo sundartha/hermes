@@ -7,7 +7,7 @@ import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.ts";
 import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.ts";
 import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
-import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
+import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.ts";
 import { migrate } from "../db/migrate.js";
 import {
   hydratedCostCents,

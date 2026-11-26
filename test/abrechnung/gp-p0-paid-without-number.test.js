@@ -8,7 +8,7 @@ import {
 } from "../../src/billing/paid-without-number-watch.ts";
 import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const NOW_MS = Date.parse("2026-09-11T12:00:00.000Z");

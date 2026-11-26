@@ -1,7 +1,7 @@
 import { BOOTSTRAP_TENANT_ID } from "./mandant.ts";
-import { normNum } from "./rufnummern.js";
+import { normNum } from "./rufnummern.ts";
 
-export const PROFILE_FIELDS = {
+export const PROFILE_FIELDS: Record<string, string> = {
   allowedNumbers: "string[]",
   allowedCountryCodes: "string[]",
   unrestricted: "boolean",
@@ -12,9 +12,20 @@ export const PROFILE_FIELDS = {
   maxCallsPerHour: "number?",
 };
 
+interface Profile {
+  allowedNumbers: string[];
+  allowedCountryCodes: string[];
+  unrestricted: boolean;
+  allowCalendar: boolean;
+  allowConsult: boolean;
+  allowLookup: boolean;
+  allowBooking: boolean;
+  maxCallsPerHour: number | null;
+}
+
 const REJECTED = Symbol("rejected");
 
-function cleanStringList(key, value) {
+function cleanStringList(key: string, value: unknown): string[] | typeof REJECTED {
   if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
     return REJECTED;
   }
@@ -23,14 +34,14 @@ function cleanStringList(key, value) {
     : value.map((code) => code.trim()).filter(Boolean);
 }
 
-function cleanValue(key, type, value) {
+function cleanValue(key: string, type: string, value: unknown): unknown {
   if (type === "string[]") return cleanStringList(key, value);
   if (type === "number?") return value === null || typeof value === "number" ? value : REJECTED;
   return typeof value === type ? value : REJECTED;
 }
 
-export function sanitizeProfile(patch) {
-  const clean = {};
+export function sanitizeProfile(patch: unknown): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch ?? {})) {
     const type = PROFILE_FIELDS[key];
     if (!type) continue;
@@ -64,7 +75,10 @@ const DEFAULT_PROFILE = {
   maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
 };
 
-export function resolveProfileFrom(tenantId, storedProfile) {
+export function resolveProfileFrom(
+  tenantId: unknown,
+  storedProfile: Partial<Profile> | null | undefined,
+): Profile {
   if (tenantId === BOOTSTRAP_TENANT_ID) return { ...OWNER_PROFILE };
   return storedProfile ? { ...DEFAULT_PROFILE, ...storedProfile } : { ...DEFAULT_PROFILE };
 }

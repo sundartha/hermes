@@ -7,7 +7,7 @@ import {
   PROVISION_NUMBER_JOB,
   SKIP_VERMERK_SCHLUESSEL,
   shouldPersistProvisionResult,
-} from "../begriffe/nummern-vergabe.js";
+} from "../begriffe/nummern-vergabe.ts";
 import { ANRUFSTART_JOB } from "../begriffe/anrufe.ts";
 import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.ts";

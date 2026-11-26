@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
-import { sanitizeProfile } from "../begriffe/profil.js";
+import { sanitizeProfile } from "../begriffe/profil.ts";
 import { speicherBereiche } from "../store.js";
 import { PROFILE_SKIP, resolveTierForTenant } from "./plan-profile-resolver.ts";
 

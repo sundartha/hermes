@@ -1,6 +1,6 @@
-import { MAX_NOTIFICATIONS } from "../../begriffe/speicher.js";
+import { MAX_NOTIFICATIONS } from "../../begriffe/speicher.ts";
 import { defaultSettings } from "../leerzustaende.js";
-import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.js";
+import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.ts";
 import { PERSONA_STYLE_IDS } from "../../i18n/locales.ts";
 import { sprachcodeOf } from "../../i18n/sprachcode.ts";
 import { hasInboundNotice } from "../../i18n/inbound-notice.ts";

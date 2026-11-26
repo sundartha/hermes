@@ -1,5 +1,5 @@
 import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
-import { countryForE164 } from "../begriffe/rufnummern.js";
+import { countryForE164 } from "../begriffe/rufnummern.ts";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
 

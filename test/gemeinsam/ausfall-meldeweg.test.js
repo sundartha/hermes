@@ -1,7 +1,7 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { meldeBetreiberAlarm, meldeVollBefund, reportSystematicOutage, runOutageRecoverySweep } from "../../src/telephony/outage-report.js";
-import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../../src/begriffe/nummern-vergabe.ts";
 
 const FENSTER_MS = 3600000;
 const EINGANG_URL = "https://eingang.example.test/geheimer-eingang-q7x9";

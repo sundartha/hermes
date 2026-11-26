@@ -1,4 +1,4 @@
-import { E164 } from "../begriffe/rufnummern.js";
+import { E164 } from "../begriffe/rufnummern.ts";
 
 const EL_SIP_HOST = "sip.rtc.elevenlabs.io";
 const EL_SIP_PORT = "5060";

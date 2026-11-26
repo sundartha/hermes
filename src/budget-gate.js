@@ -1,5 +1,5 @@
 import { liveVoiceSpendCents } from "./billing/metering.js";
-import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "./begriffe/speicher.js";
+import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "./begriffe/speicher.ts";
 
 export const BUDGET_AXIS = Object.freeze({
   TENANT: "budget_tenant",

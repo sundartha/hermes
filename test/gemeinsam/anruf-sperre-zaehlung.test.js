@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ANRUF_SPERRE_NAMENSRAUM, START_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.js";
+import { ANRUF_SPERRE_NAMENSRAUM, START_SPERRE_NAMENSRAUM } from "../../src/begriffe/speicher.ts";
 import { ANRUF_SPERREN_SQL } from "../anrufe/hermes-mit-postgres.js";
 import { echteDatenbank } from "./echtes-postgres.js";
 

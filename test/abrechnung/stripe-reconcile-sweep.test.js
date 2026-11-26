@@ -7,7 +7,7 @@ import {
 import { tenantsForStripeReconcile } from "../../src/store/state-ops.js";
 import { SUBSCRIPTION_EVENT } from "../../src/billing/webhook.ts";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { fakeProvisioner } from "../helpers.js";
 
 const NOW_MS = 1765000000000;

@@ -9,7 +9,7 @@ import {
   setSuspendedAtIfAbsent,
 } from "../../src/store/state-ops.js";
 import { TENANT_STATUS } from "../../src/begriffe/mandant.ts";
-import { REQUEST_NUMBER_REASON } from "../../src/begriffe/nummern-vergabe.js";
+import { REQUEST_NUMBER_REASON } from "../../src/begriffe/nummern-vergabe.ts";
 
 const CAPS = { maxNumbers: 10, maxNumbersPerTenant: 10 };
 

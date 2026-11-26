@@ -5,8 +5,8 @@ import {
   allowedPrivateNumberCodes,
   assertKaufbaresLand,
   kauflandFuer,
-} from "../../src/begriffe/rufnummern.js";
-import { sanitizeProfile } from "../../src/begriffe/profil.js";
+} from "../../src/begriffe/rufnummern.ts";
+import { sanitizeProfile } from "../../src/begriffe/profil.ts";
 
 const KAUFLAND_TABELLE = [
   ["us", "US"],

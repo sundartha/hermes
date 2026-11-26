@@ -263,7 +263,7 @@ nie gemessen.
     (`src/research/in-call.js#lookupProviderFor`, Sprach-Agenten-Weg `src/research/registry.js#elevenLabsLookupProviderFor`); auf dem
     Budget-/Telnyx-Weg zusaetzlich der Assistenten-Kontext (`src/research/in-call.js#lookupProviderFor`).
     Das Profil der bezahlten Tarife traegt das Recht im Code nicht (`src/plans.ts#PAID_PLAN_PROFILE.allowLookup`), das
-    Profil des Betreiber-Mandanten schon (`src/begriffe/profil.js#OWNER_PROFILE.allowLookup`); welche gespeicherten
+    Profil des Betreiber-Mandanten schon (`src/begriffe/profil.ts#OWNER_PROFILE.allowLookup`); welche gespeicherten
     Profile es in Produktion tragen, ist hier nicht gemessen. Anbieter ist Exa
     (`src/research/registry.js#IN_CALL_PROVIDER`), hoechstens zwei Suchen je Anruf
     (`src/research/registry.js#LOOKUP_MAX_PER_CALL`).
@@ -990,7 +990,7 @@ src/research/in-call.js#lookupProviderFor | if (call.direction !== "outbound") r
 src/research/registry.js#elevenLabsLookupProviderFor | if (call?.direction !== "outbound") return null;
 src/research/in-call.js#lookupProviderFor | assistantContextEnabled !== true
 src/plans.ts#PAID_PLAN_PROFILE.allowLookup | allowLookup: false,
-src/begriffe/profil.js#OWNER_PROFILE.allowLookup | allowLookup: true
+src/begriffe/profil.ts#OWNER_PROFILE.allowLookup | allowLookup: true
 src/research/registry.js#IN_CALL_PROVIDER | IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH
 src/research/registry.js#LOOKUP_MAX_PER_CALL | export const LOOKUP_MAX_PER_CALL = 2;
 src/research/lookup-guard.ts#sanitizeLookupQuery | export function sanitizeLookupQuery(

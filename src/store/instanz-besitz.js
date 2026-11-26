@@ -5,7 +5,7 @@ import {
   LEBENSZEICHEN_FRIST_S,
   LEBENSZEICHEN_LOESCHALTER_MIN,
   LEBENSZEICHEN_TAKT_MS,
-} from "../begriffe/speicher.js";
+} from "../begriffe/speicher.ts";
 
 export const EIGENE_KENNUNG = `${config.telemetry.telemetryInstanceId}:${randomUUID()}`;
 

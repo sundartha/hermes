@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { providerFromHeaders } from "../../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
-import { PROVIDER, DEFAULT_PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
+import { PROVIDER, DEFAULT_PROVIDER } from "../../src/begriffe/nummern-vergabe.ts";
 import { startServer, postElRueckfall } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 

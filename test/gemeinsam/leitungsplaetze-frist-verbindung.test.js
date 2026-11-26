@@ -3,7 +3,7 @@ import net from "node:net";
 import { spawn } from "node:child_process";
 import test from "node:test";
 
-import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.js";
+import { LEITUNGSPLATZ_DB_FRIST_MS } from "../../src/begriffe/speicher.ts";
 import { mitGestartetemHermes, pgStartUmgebung } from "./pg-start-umgebung.js";
 import { echteDatenbankMitRolle } from "./test-rolle.js";
 import { postgresVorhanden } from "../anrufe/hermes-mit-postgres.js";

@@ -5,7 +5,7 @@ import { applyStripeWebhook, verifyStripeSignature, SUBSCRIPTION_EVENT } from ".
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { makeDefaultState, registerTenant, setTenantGeo, findTenant } from "../../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
-import { GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.js";
+import { GLOBAL_CAP_REASON } from "../../src/begriffe/nummern-vergabe.ts";
 
 const HIGH = 100;
 const SECRET = "whsec_bk3_test";
