@@ -1,7 +1,10 @@
 import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { LOCALES } from "./locales.ts";
 
-export type Sprachwahl = { code: string; texte: string };
+export interface Sprachwahl {
+  code: string;
+  texte: string;
+}
 
 const TEXTE_FALLBACK = "en";
 
