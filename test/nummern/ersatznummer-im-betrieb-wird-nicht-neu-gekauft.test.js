@@ -24,8 +24,8 @@ async function mitAngefragterErsatznummer(tenantId, endung) {
   });
   const nummern = speicherBereiche(store).nummern;
   const erster = await nummern.ersatzNummerAnfordern({ oldNumberId: altId, maxNumbers: DECKE });
-  assert.equal(erster.purchase, true);
-  return { nummern, altId, ersatz: erster.number };
+  assert.equal(erster.wert.purchase, true);
+  return { nummern, altId, ersatz: erster.wert.number };
 }
 
 test("ersatzNummerAnfordern: eine schon aktive Ersatznummer wird nicht noch einmal gekauft", async () => {
@@ -35,7 +35,7 @@ test("ersatzNummerAnfordern: eine schon aktive Ersatznummer wird nicht noch einm
   const zweiter = await nummern.ersatzNummerAnfordern({ oldNumberId: altId, maxNumbers: DECKE });
 
   assert.equal(zweiter.ok, true);
-  assert.equal(zweiter.purchase, false);
+  assert.equal(zweiter.wert.purchase, false);
   assert.equal(ersatz.status, "active");
 });
 
@@ -46,6 +46,6 @@ test("ersatzNummerAnfordern: eine gesperrte Ersatznummer wird nicht noch einmal 
   const zweiter = await nummern.ersatzNummerAnfordern({ oldNumberId: altId, maxNumbers: DECKE });
 
   assert.equal(zweiter.ok, true);
-  assert.equal(zweiter.purchase, false);
+  assert.equal(zweiter.wert.purchase, false);
   assert.equal(ersatz.status, "suspended");
 });

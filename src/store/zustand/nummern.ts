@@ -17,6 +17,7 @@ import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.ts";
 import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.ts";
 import { languageForCountry } from "../../i18n/locales.ts";
 import { resolvePeriodStartIso } from "../../billing/period.ts";
+import { ok, fehler, type Ergebnis } from "../../utils/ergebnis.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 import { swapKey, ersatzZuAlterNummer } from "./tauschschluessel.ts";
 export { swapKey, ersatzZuAlterNummer } from "./tauschschluessel.ts";
@@ -121,7 +122,7 @@ export type NummernZustand = MandantUndNummern &
 
 type Kennung = string | null | undefined;
 interface Tauschergebnis {
-  ergebnis: { ok: false; grund: string } | { ok: true; number: Nummernsatz; purchase: boolean };
+  ergebnis: Ergebnis<{ number: Nummernsatz; purchase: boolean }>;
   geaendert?: boolean;
 }
 
@@ -244,7 +245,7 @@ function capReached(state: MitNummern, maxNumbers: number, ownNumber: Nummernsat
 }
 
 function openReplacement(state: MitNummern & MitJobs, old: Nummernsatz, maxNumbers: number): Tauschergebnis {
-  if (capReached(state, maxNumbers)) return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.PLATTFORMDECKE } };
+  if (capReached(state, maxNumbers)) return { ergebnis: fehler(TAUSCH_ERGEBNIS.PLATTFORMDECKE) };
   const number: Nummernsatz = {
     id: newId("num"),
     e164: null,
@@ -268,7 +269,7 @@ function openReplacement(state: MitNummern & MitJobs, old: Nummernsatz, maxNumbe
     lastError: null,
     createdAt: new Date().toISOString(),
   });
-  return { ergebnis: { ok: true, number, purchase: true }, geaendert: true };
+  return { ergebnis: ok({ number, purchase: true }), geaendert: true };
 }
 
 function kaufBestaetigt(number: Nummernsatz): boolean {
@@ -281,14 +282,14 @@ function resumeReplacement(
   maxNumbers: number,
 ): Tauschergebnis {
   const number = findNumber(state, trace.numberId);
-  if (number && IN_SERVICE.has(number.status)) return { ergebnis: { ok: true, number, purchase: false } };
+  if (number && IN_SERVICE.has(number.status)) return { ergebnis: ok({ number, purchase: false }) };
   if (!number || number.status === NUMBER_STATUS.RELEASED || trace.attempts >= SWAP_ATTEMPTS_MAX || kaufBestaetigt(number))
-    return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.MANUELL } };
+    return { ergebnis: fehler(TAUSCH_ERGEBNIS.MANUELL) };
   if (capReached(state, maxNumbers, number))
-    return { ergebnis: { ok: false, grund: TAUSCH_ERGEBNIS.PLATTFORMDECKE } };
+    return { ergebnis: fehler(TAUSCH_ERGEBNIS.PLATTFORMDECKE) };
   number.status = NUMBER_STATUS.REQUESTED;
   Object.assign(trace, { attempts: trace.attempts + 1 });
-  return { ergebnis: { ok: true, number, purchase: true }, geaendert: true };
+  return { ergebnis: ok({ number, purchase: true }), geaendert: true };
 }
 
 export function ersatzNummerAnfordern(

@@ -47,7 +47,7 @@ test("nummernbestand: an der Plattformdecke liefert die Anfrage global_cap mit V
 });
 
 test("nummernbestand: an der Mandantendecke liefert die Anfrage tenant_cap ohne Vermerk", () => {
-  pruefeAbsage(MANDANT, [5, 0], { grund: "tenant_cap", vermerk: null });
+  pruefeAbsage(MANDANT, [5, 0], { grund: "tenant_cap", vermerk: undefined });
 });
 
 async function tauschbestand() {
@@ -87,6 +87,19 @@ test("ersatzanspruch: ein aktiver Ersatz liefert ok ohne Kaufauftrag", async () 
   ersatz().status = "active";
 
   assert.deepEqual(await anspruch(), { ok: true, wert: { number: ersatz(), purchase: false } });
+});
+
+test("ersatzanspruch: gespeichert wird nur ein Anspruch mit Kaufauftrag", async (t) => {
+  const { store, anspruch, ersatz } = await tauschbestand();
+  const gespeichert = t.mock.method(store, "save");
+
+  await anspruch();
+  assert.equal(gespeichert.mock.callCount(), 1);
+  await anspruch();
+  assert.equal(gespeichert.mock.callCount(), 2);
+  ersatz().status = "active";
+  await anspruch();
+  assert.equal(gespeichert.mock.callCount(), 2);
 });
 
 test("ersatzanspruch: eine volle Plattform liefert beim ersten und beim wiederholten Anspruch plattformdecke", async () => {

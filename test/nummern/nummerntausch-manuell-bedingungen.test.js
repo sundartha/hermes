@@ -78,7 +78,7 @@ test("Spur ohne Ersatznummer im Bestand -> manuell statt Absturz", async () => {
 
   const anspruch = await speicherBereiche(store).nummern.ersatzNummerAnfordern({ oldNumberId: ALT, maxNumbers: 50 });
 
-  assert.deepEqual(anspruch, { ok: false, grund: "manuell" });
+  assert.deepEqual(anspruch, { ok: false, fehler: "manuell" });
 });
 
 test("Ersatznummer requested und nicht released -> wird erneut gekauft", async () => {
