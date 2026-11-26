@@ -1,0 +1,62 @@
+[
+  {
+    "uid": "heartbeat-fehlt",
+    "title": "Heartbeat fehlt: keine Messwerte von Hermes",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"count(hermes_eventloop_delay_p99) or vector(0)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"lt","params":[1]}}]}}
+    ],
+    "soll": {"vergleich":"lt","wert":1,"dauer":"5m","ohneDaten":"Alerting"},
+    "noDataState": "Alerting",
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Heartbeat fehlt: keine Messwerte von Hermes","runbook_url":"docs/betrieb/alarme/heartbeat-fehlt.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "warteschlange-alter",
+    "title": "Warteschlange: ältester Auftrag wartet zu lange",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"max by (art) (hermes_queue_oldest_age)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[900]}}]}}
+    ],
+    "soll": {"vergleich":"gt","wert":900,"dauer":"5m","ohneDaten":"OK"},
+    "noDataState": "OK",
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Warteschlange: ältester Auftrag wartet zu lange","runbook_url":"docs/betrieb/alarme/warteschlange-alter.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "kapazitaet-leitungen",
+    "title": "Leitungsplätze eines Anbieters werden knapp",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"max by (anbieter) (hermes_lines_occupied) / max by (anbieter) (hermes_lines_capacity)"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[0.6]}}]}}
+    ],
+    "soll": {"vergleich":"gt","wert":0.6,"dauer":"5m","ohneDaten":"OK"},
+    "noDataState": "OK",
+    "for": "5m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Leitungsplätze eines Anbieters werden knapp","runbook_url":"docs/betrieb/alarme/kapazitaet-leitungen.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  },
+  {
+    "uid": "datenbank-speichern-fehlt",
+    "title": "Datenbank: Speichern scheitert",
+    "condition": "C",
+    "data": [
+      {"refId":"A","relativeTimeRange":{"from":600,"to":0},"datasourceUid":"prometheus","model":{"refId":"A","expr":"sum(increase(hermes_store_save_failed_total[5m]))"}},
+      {"refId":"C","datasourceUid":"__expr__","model":{"refId":"C","type":"threshold","expression":"A","conditions":[{"evaluator":{"type":"gt","params":[0]}}]}}
+    ],
+    "soll": {"vergleich":"gt","wert":0,"dauer":"2m","ohneDaten":"OK"},
+    "noDataState": "OK",
+    "for": "2m",
+    "labels": {"bereich":"betrieb"},
+    "annotations": {"summary":"Datenbank: Speichern scheitert","runbook_url":"docs/betrieb/alarme/datenbank-speichern-fehlt.md"},
+    "notification_settings": {"receiver":"bereitschaft"}
+  }
+]
