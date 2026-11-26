@@ -1,5 +1,5 @@
 import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
-import { ISO_LAENDER, type Land } from "./laender.ts";
+import { WELTSPRACHE_JE_LAND, type Land } from "./laender.ts";
 import { INBOUND_NOTICES, withInboundNotice } from "./inbound-notice.ts";
 import { PROMPT_DE } from "./prompts/de.js";
 import { PROMPT_FR } from "./prompts/fr.js";
@@ -402,7 +402,7 @@ export function disclosurePrefixFor(language: string): string {
 
 export { afterGreeting };
 
-const EIGENE_SPRACHE_JE_LAND: Readonly<Partial<Record<Land, Sprache>>> = Object.freeze({
+const EIGENE_SPRACHE_JE_LAND: Readonly<Record<string, Sprache>> = Object.freeze({
   DE: "de",
   AT: "de",
   CH: "de",
@@ -411,13 +411,13 @@ const EIGENE_SPRACHE_JE_LAND: Readonly<Partial<Record<Land, Sprache>>> = Object.
   IE: "en",
 });
 
-export const LANGUAGE_FOR_COUNTRY: Readonly<Record<Land, Sprache | "en">> = Object.freeze(
-  Object.fromEntries(ISO_LAENDER.map((land) => [land, EIGENE_SPRACHE_JE_LAND[land] ?? "en"])) as Record<Land, Sprache | "en">,
-);
+export const LANGUAGE_FOR_COUNTRY: Readonly<Record<Land, Sprache>> = Object.freeze({
+  ...WELTSPRACHE_JE_LAND,
+  ...EIGENE_SPRACHE_JE_LAND,
+});
 
 export function languageForCountry(country: string | number | boolean | null | undefined): string {
-  const land = String(country ?? "").toUpperCase() as Land;
-  return EIGENE_SPRACHE_JE_LAND[land] ?? DEFAULT_LANGUAGE;
+  return EIGENE_SPRACHE_JE_LAND[String(country ?? "").toUpperCase()] ?? DEFAULT_LANGUAGE;
 }
 
 const LOCALE_BY_LANGUAGE = new Map<string | undefined, (typeof LOCALES)[Sprache]>(Object.entries(LOCALES));
