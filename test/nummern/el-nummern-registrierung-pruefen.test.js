@@ -26,9 +26,9 @@ async function seedZweiAktiveDids() {
   const state = makeDefaultState();
   registerTenant(state, "t_a");
   registerTenant(state, "t_b");
-  const { number: numberA } = requestNumber(state, { tenantId: "t_a", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number: numberA } = requestNumber(state, { tenantId: "t_a", maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   await provisionNumber(state, { provisioner: provisionerMit("+12025550101") }, { numberId: numberA.id, ...ARGS });
-  const { number: numberB } = requestNumber(state, { tenantId: "t_b", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number: numberB } = requestNumber(state, { tenantId: "t_b", maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   await provisionNumber(state, { provisioner: provisionerMit("+12025550102") }, { numberId: numberB.id, ...ARGS });
   attachNumberRegistration(state, numberA.id, "phnum_a");
   return { state, numberA, numberB };

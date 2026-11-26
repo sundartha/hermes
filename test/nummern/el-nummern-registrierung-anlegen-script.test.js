@@ -13,7 +13,7 @@ const ARGS = { countryCode: "US", connectionId: "conn_1" };
 async function seedActiveTelnyxNummer(tenantId) {
   const state = makeDefaultState();
   registerTenant(state, tenantId);
-  const { number } = requestNumber(state, { tenantId, maxNumbers: 5, maxNumbersPerTenant: 1 });
+  const { number } = requestNumber(state, { tenantId, maxNumbers: 5, maxNumbersPerTenant: 1 }).wert;
   await provisionNumber(state, { provisioner: fakeProvisioner() }, { numberId: number.id, ...ARGS });
   return { state, numberId: number.id };
 }

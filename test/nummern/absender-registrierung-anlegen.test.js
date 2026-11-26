@@ -19,7 +19,7 @@ const TEST_DID = "+18643028341";
 function seedRequested() {
   const state = makeDefaultState();
   registerTenant(state, "t_user1");
-  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
+  const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS }).wert;
   return { state, numberId: number.id };
 }
 

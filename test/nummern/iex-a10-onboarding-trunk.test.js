@@ -253,7 +253,7 @@ test("IEX-A10-3: Produktionspfad - runProvisioningDrain injiziert den Schreiber 
 async function onboarde({ el, inboundTrunkSchreiber, logger = fakeLogger() }) {
   const state = makeDefaultState();
   registerTenant(state, TENANT);
-  const { number } = requestNumber(state, { tenantId: TENANT, ...CAPS });
+  const { number } = requestNumber(state, { tenantId: TENANT, ...CAPS }).wert;
   const sipRegistrar = makeElSipRegistrar({ el: EL_OUTBOUND, sipUser: "trunk_user", sipPasswort: "trunk_pw", fetchImpl: el.fetchImpl });
   const deps = { provisioner: fakeProvisioner(), sipRegistrar, inboundTrunkSchreiber, logger };
   const aktiviert = await provisionNumber(state, deps, { numberId: number.id, ...ONBOARDING_ARGS });
