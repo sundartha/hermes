@@ -1,6 +1,8 @@
 import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { keepsTranscriptForCustomer, keepsTranscriptForDiagnosis } from "../diagnostic-retention.ts";
+import { ergebnisGrundSatz } from "../i18n/ergebnis-zustand-texte.ts";
 import { localeFor } from "../i18n/locales.ts";
+import { ergebnisZustand } from "./ergebnis-zustand.ts";
 import { reportSystematicOutage } from "./outage-report.js";
 import { AT_CAPACITY, FAILURE_REASON_BASE_TOKENS, RESULT_UNKNOWN, failureReasonBase } from "./failure-reason.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.ts";
@@ -114,6 +116,20 @@ async function summaryOf({ store, config, summarizeCall, call }) {
   }
 }
 
+function grundSatzZu(call) {
+  if (call.direction !== "outbound") return null;
+  return ergebnisGrundSatz(localeFor(call.language).language, ergebnisZustand(call).result_reason);
+}
+
+const mitGrundSatz = (text, grundSatz) => [text, grundSatz].filter(Boolean).join(" ");
+
+async function zusammenfassungMitGrund({ store, call, summary, grundSatz }) {
+  if (!grundSatz) return summary;
+  const ergaenzt = mitGrundSatz(summary, grundSatz);
+  await store.recordProviderCallResult(call.id, { summary: ergaenzt, objectiveAchieved: call.objectiveAchieved });
+  return ergaenzt;
+}
+
 async function notifySafely(store, eintrag) {
   try {
     await store.addNotification(eintrag.title, eintrag.body, eintrag.callId);
@@ -123,13 +139,14 @@ async function notifySafely(store, eintrag) {
 }
 
 async function reportUnfinishedCall({ store, config, call, mailer, audit, messaging, texts, metrics }) {
+  const grundSatz = grundSatzZu(call);
   if (call.transcript.length && !keepsTranscriptForDiagnosis(call, config.privacy)) {
     await store.purgeTranscript(call.id);
   }
   const target = call.direction === "outbound" ? call.to : call.from;
   await notifySafely(store, {
     title: call.status === "cancelled" ? texts.cancelledTitle : texts.failedTitle,
-    body: texts.statusBody(target, call.status, call.failureReason),
+    body: mitGrundSatz(texts.statusBody(target, call.status, call.failureReason), grundSatz),
     callId: call.id,
   });
   await reportFailedCall({ store, config, call, mailer, audit, messaging, metrics });
@@ -165,12 +182,14 @@ export function makeCallFinish({
 
   async function deliverSummary(call, texts) {
     const result = await summaryOf({ store, config, summarizeCall, call });
+    const grundSatz = grundSatzZu(call);
     const kept =
       keepsTranscriptForDiagnosis(call, config.privacy) || keepsForCustomer({ store, config, call, summaryCreated: Boolean(result) });
     if (!kept) await store.purgeTranscript(call.id);
     if (!result) return;
     const who = call.direction === "outbound" ? texts.subjectOutbound(call.to) : texts.subjectInbound(call.from);
-    await notifySafely(store, { title: texts.summaryTitle, body: `${who}: ${result.summary}`, callId: call.id });
+    const summary = await zusammenfassungMitGrund({ store, call, summary: result.summary, grundSatz });
+    await notifySafely(store, { title: texts.summaryTitle, body: `${who}: ${summary}`, callId: call.id });
   }
 
   async function finishCompletedCall(call, texts) {
