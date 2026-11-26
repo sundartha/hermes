@@ -82,7 +82,7 @@ pruefe "Entscheidungs-Sitzung sucht offene PRs des Issues an Kopf und Text" "$(g
 PFL=$(grep -E '^pflicht_ausser_urteil\(\) \{' $S | sed 's/   # freigabe-am-pr.*//')
 [ -n "$PFL" ] || { echo "ROT  pflicht_ausser_urteil nicht in paket.sh gefunden"; exit 1; }; eval "$PFL"
 TAB=$(printf '\t')
-gh() { case "$1 $2" in "pr checks") [ -n "${CHECKS-x}" ] && printf '%b' "$CHECKS" ;; "run view") printf '%s' "$LOGTEXT" ;; esac; }
+gh() { case "$1 $2" in "pr checks") [ -n "${CHECKS-x}" ] && printf '%b' "$CHECKS" ;; "run view") echo x >> $T/rvn.count; [ "$(wc -l < $T/rvn.count)" -gt ${LEER_BIS:-0} ] && printf '%s' "$LOGTEXT" ;; "run rerun") echo "$3" >> $T/rerun.ids ;; esac; }
 PASSALLE="CI${TAB}pass${TAB}1m${TAB}https://x/runs/1/job/2\nTestschutz${TAB}pass${TAB}1s${TAB}https://x/runs/3/job/4\n"
 FREI_ROT="Freigabe-Prüfung${TAB}fail${TAB}5s${TAB}https://x/runs/77/job/8\n"
 CHECKS="$PASSALLE$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve von Antonio20045 oder jonas986 auf dem Stand abc1234."
@@ -98,6 +98,18 @@ pflicht_ausser_urteil 5; pruefe "andere offene Prüfung bleibt ein Halt" "$?" "1
 CHECKS="${PASSALLE}Freigabe-Prüfung${TAB}pass${TAB}5s${TAB}https://x/runs/77/job/8\n"
 pflicht_ausser_urteil 5; pruefe "alles grün: kein Halt" "$?" "0"
 CHECKS=""; pflicht_ausser_urteil 5; pruefe "keine Auskunft von GitHub ist kein Freibrief" "$?" "1"
+# A-DXDZU8 26.11.: Ein abgelaufenes oder leeres Log ($G leer, z. B. nach Ablauf) gab bisher sofort "fail" zurück und hielt die Kette im Deadlock ("PASS, aber Checks weiter rot"), obwohl die Freigabe-Prüfung erst durch das von PASS ausgelöste Approve grün werden kann. Jetzt wird der Lauf einmal je Kopf (Lauf-ID) neu gestartet und auf ein lesbares Log gewartet, erst dann wie bisher entschieden.
+PAKET_URTEIL_WARTE=0; LOG=$T/urteil; mkdir -p $LOG
+rerunids() { tr '\n' ' ' < $T/rerun.ids 2>/dev/null; }
+CHECKS="$PASSALLE$FREI_ROT"
+rm -f $T/rvn.count $T/rerun.ids; LEER_BIS=1; LOGTEXT="Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "leeres Log: einmal neu gestartet, danach wie gewohnt kein Halt" "$?|$(rerunids)" "0|77 "
+rm -f $T/rvn.count $T/rerun.ids $LOG/neulog.txt; LEER_BIS=1; LOGTEXT="x.js: Prüfregel auf Branch paket/a. Es fehlt das KI-Urteil."
+pflicht_ausser_urteil 5; pruefe "leeres Log, nach dem Neustart ein Prüfregel-Befund: Halt bleibt" "$?" "1"
+rm -f $T/rvn.count $T/rerun.ids $LOG/neulog.txt; LEER_BIS=99; LOGTEXT="Es fehlt das KI-Urteil: ein Approve."
+pflicht_ausser_urteil 5; pruefe "Log bleibt leer: Halt, kein Deadlock-Freibrief" "$?" "1"
+rm -f $T/rvn.count $T/rerun.ids; LEER_BIS=99
+pflicht_ausser_urteil 5; pruefe "derselbe Kopf wird nicht zweimal neu gestartet" "$?|$(rerunids)" "1|"
 unset -f gh
 pruefe "umzug (Prüfregel-PR) kommt vor der Ausnahme für das KI-Urteil" "$(grep -c 'cwarten \$PR > /dev/null 2>&1 || umzug \$PR \$MIG || pflicht_ausser_urteil \$PR ||' $S)" "1"
 pruefe "freigeben wartet nach dem Approve auf die grüne Freigabe-Prüfung" "$(grep -E '^freigeben\(\)' $S | grep -c 'eingereiht \$1 || { urteil_gruen \$1;')" "1"
