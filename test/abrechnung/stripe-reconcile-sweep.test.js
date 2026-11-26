@@ -107,7 +107,7 @@ function makeDeps(s, { billingStatus, retrieveError } = {}) {
         sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
         audit: () => {},
         req: null,
-        provision: async () => ({ ok: true, reason: "queued" }),
+        provision: async () => ({ ok: true, wert: { reason: "queued" } }),
         billing: {},
         numberProvisioner: prov,
         workos: null,

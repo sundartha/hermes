@@ -197,7 +197,7 @@ test("Grenze 2: gleichzeitiges Ausloesen auf zwei Instanzen ergibt eine Nummer, 
   const [a, b] = [await umgebung.instanz(undefined, ZWEI), await umgebung.instanz(undefined, ZWEI)];
   const ergebnisse = await Promise.all([ausloesenUndAbarbeiten(a), ausloesenUndAbarbeiten(b)]);
   assert.deepEqual(ergebnisse.map((e) => e.ok).sort(), [false, true]);
-  assert.deepEqual(ergebnisse.find((e) => !e.ok), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(ergebnisse.find((e) => !e.ok), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
   assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
   assert.equal(anzahlImSpeicher(a) + anzahlImSpeicher(b), 1);
@@ -209,7 +209,7 @@ for (const status of LEBENDE_STATUS) {
     if (!umgebung) return;
     const a = await umgebung.instanz(undefined, ZWEI);
     await umgebung.sql(ALTE_NUMMER, ["num_alt", MANDANT, status]);
-    assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+    assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
     assert.deepEqual(umgebung.attrappe.bestellungen, []);
     assert.equal((await umgebung.zaehlen()).nummern, 1);
   });
@@ -230,6 +230,6 @@ test("Grenze 0 sperrt den Kauf weiterhin", { timeout: ZEITGRENZE_MS }, async (t)
   const umgebung = await aufbau(t);
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 0 }));
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });

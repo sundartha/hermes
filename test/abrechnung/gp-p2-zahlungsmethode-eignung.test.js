@@ -209,7 +209,7 @@ function runActivateFromCheckout(store) {
     store,
     billing: { getSubscriptionCheckoutResult: async () => ({ ...CHECKOUT_OUTCOME }) },
     accounts: { setStatus: async () => {} },
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     tenant: TENANT,
     sessionId: "cs_sub_1",
     expectedPlanSlug: "starter",
@@ -273,7 +273,7 @@ function webhookDeps({ stripeOnFile, retrieve }) {
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
       billing: {
         retrievePaymentMethodType: async (id) => {
           calls.retrieve.push(id);

@@ -528,7 +528,7 @@ test("Ist die Warteschlange beim Abarbeiten nach dem Einreihen nicht erreichbar,
   await abwarten();
 
   assert.equal(res.ok, true);
-  assert.equal(res.reason, "queued");
+  assert.equal(res.wert.reason, "queued");
   assert.deepEqual(loggedErrors(errors), ["[provision-drain] Warteschlange nicht erreichbar"]);
   assert.equal(jobOf(s, "num1").status, PROVISIONING_JOB_STATUS.QUEUED);
 });

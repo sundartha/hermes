@@ -72,7 +72,7 @@ test("(a) active subscriber ohne Nummer -> 200 dry_run + numberId", async () => 
   const state = { ...makeDefaultState(), tenants: [subscriberTenant("t_retry", "sub-r")] };
   const app = await startRetryApp({
     state,
-    provisioning: fixedResultProvisioning({ ok: true, numberId: "num_dryrun1", reason: "dry_run" }),
+    provisioning: fixedResultProvisioning({ ok: true, wert: { numberId: "num_dryrun1", reason: "dry_run" } }),
   });
   try {
     const res = await retryInProcess(app, { tenantId: "t_retry" });
@@ -95,7 +95,7 @@ test("(b) Tenant mit lebender Nummer -> 409 already_provisioned", async () => {
   };
   const app = await startRetryApp({
     state,
-    provisioning: fixedResultProvisioning({ ok: false, reason: "already_provisioned" }),
+    provisioning: fixedResultProvisioning({ ok: false, fehler: "already_provisioned" }),
   });
   try {
     const res = await retryInProcess(app, { tenantId: "t_live" });

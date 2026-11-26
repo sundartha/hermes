@@ -194,7 +194,7 @@ test("Gleichzeitiges Ausloesen auf zwei Instanzen ergibt eine Nummer, einen Auft
   const ergebnisse = await Promise.all([ausloesenUndAbarbeiten(a), ausloesenUndAbarbeiten(b)]);
   assert.deepEqual(ergebnisse.map((e) => e.ok).sort(), [false, true]);
   const abgelehnt = ergebnisse.find((e) => !e.ok);
-  assert.deepEqual(abgelehnt, { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(abgelehnt, { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
   assert.deepEqual(umgebung.attrappe.bestellungen, [E164]);
   assert.equal(anzahlImSpeicher(a) + anzahlImSpeicher(b), 1);
@@ -216,18 +216,18 @@ test("Zweites Anlegen mit demselben Schluessel auf einer anderen Instanz liefert
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ provisioningEnabled: false }));
   const angelegt = await a.orchestrator.triggerTenantProvisioning(MANDANT);
-  assert.deepEqual(angelegt, { ok: true, reason: "dry_run", numberId: angelegt.numberId });
+  assert.deepEqual(angelegt, { ok: true, wert: { reason: "dry_run", numberId: angelegt.wert.numberId } });
   const b = await umgebung.instanz();
-  const erster = await a.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
-  const zweiter = await b.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
+  const erster = await a.orchestrator.queueProvisioning(angelegt.wert.numberId, MANDANT);
+  const zweiter = await b.orchestrator.queueProvisioning(angelegt.wert.numberId, MANDANT);
   assert.equal(erster.ok, true);
-  assert.equal(erster.wert.jobId, `job_${angelegt.numberId}`);
+  assert.equal(erster.wert.jobId, `job_${angelegt.wert.numberId}`);
   assert.deepEqual(zweiter, { ok: true, wert: { jobId: erster.wert.jobId } });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
   assert.deepEqual(await umgebung.sql(NUMMERN_ZEILEN, [MANDANT]), [
     { provider: "telnyx", status: "requested", country: "US", language: "en" },
   ]);
-  const erneut = await a.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
+  const erneut = await a.orchestrator.queueProvisioning(angelegt.wert.numberId, MANDANT);
   assert.deepEqual(erneut, { ok: true, wert: { jobId: erster.wert.jobId } });
   const { provisioningJobs } = a.store.load();
   assert.deepEqual(provisioningJobs.map((job) => job.id), [erster.wert.jobId]);
@@ -235,10 +235,10 @@ test("Zweites Anlegen mit demselben Schluessel auf einer anderen Instanz liefert
   assert.deepEqual({ ...uebernommen, createdAt: typeof uebernommen.createdAt }, {
     id: erster.wert.jobId,
     tenantId: MANDANT,
-    numberId: angelegt.numberId,
+    numberId: angelegt.wert.numberId,
     kind: "provision_number",
     status: "queued",
-    idempotencyKey: `provision_${angelegt.numberId}`,
+    idempotencyKey: `provision_${angelegt.wert.numberId}`,
     attempts: 0,
     lastError: null,
     createdAt: "string",
@@ -258,7 +258,7 @@ test("Lesefehler beim Pruefen der Nummern: kein Kauf, keine Nummer, keine Bestel
   });
   ausfall = true;
   const ergebnis = await ausloesenUndAbarbeiten(a);
-  assert.deepEqual(ergebnis, { ok: false, reason: "persist_error" });
+  assert.deepEqual(ergebnis, { ok: false, fehler: "persist_error" });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 0, auftraege: 0 });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
   const { numbers } = a.store.load();
@@ -275,11 +275,11 @@ test("Ein haengender Auftrag desselben Mandanten wird neu eingereiht statt eine 
   if (!umgebung) return;
   const erste = await umgebung.instanz(undefined, konfig({ provisioningEnabled: false }));
   const angelegt = await erste.orchestrator.triggerTenantProvisioning(MANDANT);
-  await erste.orchestrator.queueProvisioning(angelegt.numberId, MANDANT);
+  await erste.orchestrator.queueProvisioning(angelegt.wert.numberId, MANDANT);
   const zweite = await umgebung.instanz();
   const ergebnis = await zweite.orchestrator.triggerTenantProvisioning(MANDANT);
-  assert.equal(ergebnis.reason, "redrive");
-  assert.equal(ergebnis.numberId, angelegt.numberId);
+  assert.equal(ergebnis.wert.reason, "redrive");
+  assert.equal(ergebnis.wert.numberId, angelegt.wert.numberId);
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 1, auftraege: 1 });
 });
 
@@ -287,7 +287,7 @@ test("Ein gesperrter Mandant bekommt keine Nummer", { timeout: ZEITGRENZE_MS }, 
   const umgebung = await aufbau(t, { status: "closed" });
   if (!umgebung) return;
   const a = await umgebung.instanz();
-  assert.deepEqual(await a.orchestrator.triggerTenantProvisioning(MANDANT), { ok: false, reason: "tenant_inactive" });
+  assert.deepEqual(await a.orchestrator.triggerTenantProvisioning(MANDANT), { ok: false, fehler: "tenant_inactive" });
   assert.deepEqual(await umgebung.zaehlen(), { nummern: 0, auftraege: 0 });
 });
 
@@ -308,7 +308,7 @@ test("Eine bestehende Nummer einer anderen Instanz sperrt den Kauf in jedem lebe
   if (!umgebung) return;
   const a = await umgebung.instanz();
   await umgebung.sql(ALTE_NUMMER, ["num_alt_aktiv", MANDANT, "suspended"]);
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
   assert.equal((await umgebung.zaehlen()).nummern, 1);
 });
@@ -318,7 +318,7 @@ test("Fehlt der Mandant in der Datenbank, wird nichts gekauft", { timeout: ZEITG
   if (!umgebung) return;
   const a = await umgebung.instanz();
   await umgebung.sql(SPERRE_ZEILE, [MANDANT]);
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "persist_error" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "persist_error" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });
 
@@ -327,7 +327,7 @@ test("Die Grenze je Mandant gilt genau: eine lebende Nummer bei Grenze 2 sperrt 
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 2 }));
   await umgebung.sql(ALTE_NUMMER, ["num_alt_eins", MANDANT, "active"]);
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });
 
@@ -337,6 +337,6 @@ test("Die Grenze je Mandant gilt genau: zwei lebende Nummern bei Grenze 2 sperre
   const a = await umgebung.instanz(undefined, konfig({ maxNumbersPerTenant: 2 }));
   await umgebung.sql(ALTE_NUMMER, ["num_alt_eins", MANDANT, "active"]);
   await umgebung.sql(ALTE_NUMMER, ["num_alt_zwei", MANDANT, "requested"]);
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
 });

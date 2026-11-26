@@ -99,12 +99,7 @@ type Wiederaufnahme = Ergebnis<
 
 type JobSpur = Ergebnis<{ jobId: string }>;
 
-interface Triggerergebnis {
-  ok: boolean;
-  reason: string;
-  numberId?: string;
-  jobId?: string;
-}
+type Triggerergebnis = Ergebnis<{ reason: string; numberId: string; jobId?: string }>;
 
 interface NummernkaufBereich {
   ensureTenant: (tenantId: string) => Promise<unknown>;
@@ -295,7 +290,7 @@ export function makeProvisioningOrchestrator({
       });
   }
 
-  async function triggerTenantProvisioning(tenantId: string) {
+  async function triggerTenantProvisioning(tenantId: string): Promise<Triggerergebnis> {
     await bereiche.nummernkauf.ensureTenant(tenantId);
     await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
@@ -327,21 +322,21 @@ export function makeProvisioningOrchestrator({
     if (!numberResult.ok) {
       if (numberResult.fehler !== PROVISION_REASON.ALREADY_PROVISIONED)
         audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${numberResult.fehler}`);
-      return { ok: false, reason: numberResult.fehler };
+      return ablehnung(numberResult.fehler);
     }
     const vergabe = numberResult.wert;
     const numberId = vergabe.reason === PROVISION_REASON.REDRIVE ? vergabe.numberId : vergabe.number.id;
-    if (!config.provisioning.provisioningEnabled) return { ok: true, reason: PROVISION_REASON.DRY_RUN, numberId };
+    if (!config.provisioning.provisioningEnabled) return ok({ reason: PROVISION_REASON.DRY_RUN, numberId });
     if (vergabe.reason === PROVISION_REASON.REDRIVE) {
       redriveProvisioningJobs([vergabe.job]);
-      return { ok: true, reason: PROVISION_REASON.REDRIVE, numberId, jobId: vergabe.jobId };
+      return ok({ reason: PROVISION_REASON.REDRIVE, numberId, jobId: vergabe.jobId });
     }
     const jobRes = await queueProvisioning(numberId, tenantId);
-    if (!jobRes.ok) return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
+    if (!jobRes.ok) return ablehnung(PROVISION_REASON.PERSIST_ERROR);
     runProvisioningDrainExclusive().catch((fehler: unknown) => {
       console.error("[provision-drain]", Reflect.get(Object(fehler), "message"));
     });
-    return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.wert.jobId };
+    return ok({ reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.wert.jobId });
   }
 
   async function runQueuedJob(state: Zustand, queuedJob: WarteschlangenJob, deps: LaufDeps) {

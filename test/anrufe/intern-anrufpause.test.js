@@ -554,7 +554,7 @@ test("[NIE1] eine abgelehnte Wiederholung behaelt 409, 429, 503 und 400 je Grund
   const tenantId = "t_fehlerantwort_nie1_wiederholung";
   legeTenantAn({ id: tenantId, status: "active", kycLevel: "card" });
   for (const [grund, erwartet] of WIEDERHOLUNG_ABLEHNUNGEN) {
-    const provisioning = { triggerTenantProvisioning: async () => ({ ok: false, reason: grund }) };
+    const provisioning = { triggerTenantProvisioning: async () => ({ ok: false, fehler: grund }) };
     const { router } = onboardRouten({ provisioning });
     const { status } = await onboardAntwort(router, "/api/onboard/retry", { tenantId });
     assert.equal(status, erwartet, grund);

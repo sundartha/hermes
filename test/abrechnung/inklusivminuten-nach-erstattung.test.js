@@ -21,8 +21,8 @@ const PLAN = "starter";
 const VOLLE_MINUTEN = findPlan(PLAN).includedMinutes;
 const PERIODE_1 = Object.freeze({ start: 1_890_864_000, ende: 1_893_456_000 });
 const PERIODE_2 = Object.freeze({ start: 1_893_456_000, ende: 1_896_134_400 });
-const BEREITGESTELLT = Object.freeze({ ok: true, reason: "queued" });
-const ZURUECKGEHALTEN = Object.freeze({ ok: false, reason: "tenant_cap" });
+const BEREITGESTELLT = Object.freeze({ ok: true, wert: { reason: "queued" } });
+const ZURUECKGEHALTEN = Object.freeze({ ok: false, fehler: "tenant_cap" });
 
 let laufendeNummer = 0;
 

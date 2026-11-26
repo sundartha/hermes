@@ -68,7 +68,7 @@ function noopAccounts() {
   return { setStatus: async () => {} };
 }
 function noopProvision() {
-  return async () => ({ ok: true, reason: "queued" });
+  return async () => ({ ok: true, wert: { reason: "queued" } });
 }
 
 test("(a) planCapCents direkt: starter=300, business=900 (Bruch, keine Rundung)", () => {

@@ -218,7 +218,7 @@ test(
     const ergebnisse = await Promise.all([ausloesenUndAbarbeiten(a), ausloesenUndAbarbeiten(b)]);
     assert.deepEqual(await umgebung.sql(ZAEHLEN), [{ nummern: 1, auftraege: 1 }]);
     assert.equal(umgebung.attrappe.bestellungen.length, 1);
-    assert.equal(ergebnisse.filter((ergebnis) => ergebnis.reason === "queued").length, 1, JSON.stringify(ergebnisse));
-    assert.equal(ergebnisse.filter((ergebnis) => ergebnis.reason === "already_provisioned").length, 1, JSON.stringify(ergebnisse));
+    assert.equal(ergebnisse.filter((ergebnis) => ergebnis.wert?.reason === "queued").length, 1, JSON.stringify(ergebnisse));
+    assert.equal(ergebnisse.filter((ergebnis) => ergebnis.fehler === "already_provisioned").length, 1, JSON.stringify(ergebnisse));
   },
 );

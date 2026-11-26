@@ -64,7 +64,7 @@ function provisionSeam(store, spy, { throws = false } = {}) {
       maxNumbersPerTenant: HIGH_CAP,
     });
     store.save();
-    return ergebnis.ok ? { ok: true, reason: "queued" } : ergebnis;
+    return ergebnis.ok ? { ok: true, wert: { reason: "queued" } } : ergebnis;
   };
 }
 

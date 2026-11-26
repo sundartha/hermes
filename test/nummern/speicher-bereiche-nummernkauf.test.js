@@ -195,6 +195,6 @@ test("Aufrufer: triggerTenantProvisioning legt den Mandanten ueber den Speicher-
   });
   const ergebnis = await orchestrator.triggerTenantProvisioning(TENANT);
   assert.deepEqual(angelegt, [TENANT]);
-  assert.deepEqual(ergebnis, { ok: false, reason: "grund_nk" });
+  assert.deepEqual(ergebnis, { ok: false, fehler: "grund_nk" });
   assert.deepEqual(audit, [["webhook_provision_skipped", `tenant=${TENANT} grund=grund_nk`]]);
 });

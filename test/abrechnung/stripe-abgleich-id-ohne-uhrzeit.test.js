@@ -92,7 +92,7 @@ function lauf(store, beobachtung, { mandant, werfen = false }) {
         if (aktion === SPERR_AKTION) beobachtung.sperrzeilen.push(detail);
       },
       req: null,
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
       billing: {},
       numberProvisioner: beobachtung.prov,
       workos: null,

@@ -146,7 +146,7 @@ test("Gibt eine Instanz ihre eigene unbezahlte Nummer zurueck, ist sie auch in d
   await kaufenAufA(db);
   const { orchestrator, bestellungen } = orchestratorFuer(b);
   const abgelehnt = await orchestrator.triggerTenantProvisioning(MANDANT);
-  assert.deepEqual(abgelehnt, { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(abgelehnt, { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(bestellungen, []);
   assert.equal(b.load().numbers.length, 0);
   assert.equal(gesehen.length, 1);
@@ -195,7 +195,7 @@ test("Scheitert das Pruefen der Nummern und das Zurueckgeben, nennt der Fehler d
   const { orchestrator, bestellungen } = orchestratorFuer(b);
   const fehlerzeilen = [];
   t.mock.method(console, "error", (...zeile) => fehlerzeilen.push(zeile.join(" ")));
-  assert.deepEqual(await orchestrator.triggerTenantProvisioning(MANDANT), { ok: false, reason: "persist_error" });
+  assert.deepEqual(await orchestrator.triggerTenantProvisioning(MANDANT), { ok: false, fehler: "persist_error" });
   assert.ok(fehlerzeilen.includes("[webhook-provision] Persistenz fehlgeschlagen: Leseausfall"), fehlerzeilen.join("|"));
   assert.deepEqual(b.load().numbers, []);
   assert.deepEqual(bestellungen, []);

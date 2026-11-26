@@ -271,7 +271,7 @@ test("tenant-prolif-b: abgelehnter Retry ohne eigene Meldung -> 409 mit Grund im
   store.setKycLevel(BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN);
   const onboarding = await onboardingStarten({
     store,
-    retryErgebnis: { ok: false, reason: "already_provisioned" },
+    retryErgebnis: { ok: false, fehler: "already_provisioned" },
   });
   try {
     const antwort = await onboarding.senden("/api/onboard/retry", { tenantId: BOOTSTRAP_TENANT_ID });

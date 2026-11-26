@@ -70,7 +70,7 @@ async function setup({ card = true, configOverride = {} } = {}) {
       accounts,
       provision: async (t) => {
         provisionSpy.push(t);
-        return { ok: true, reason: "queued" };
+        return { ok: true, wert: { reason: "queued" } };
       },
     }),
   );

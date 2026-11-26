@@ -170,7 +170,7 @@ test("nummernauftrag: der Anstoss nach der Zahlung nennt die Auftragskennung des
 
   const { jobId } = angelegt(umgebung);
   assert.equal(typeof jobId, "string");
-  assert.deepEqual(ergebnis, { ok: true, reason: "queued", numberId: NUMMER, jobId });
+  assert.deepEqual(ergebnis, { ok: true, wert: { reason: "queued", numberId: NUMMER, jobId } });
 });
 
 test("nummernauftrag: scheitert die Auftragsspur beim Anstoss nach der Zahlung, bleibt es bei persist_error", async (t) => {
@@ -179,5 +179,5 @@ test("nummernauftrag: scheitert die Auftragsspur beim Anstoss nach der Zahlung, 
 
   const ergebnis = await umgebung.orchestrator.triggerTenantProvisioning(MANDANT);
 
-  assert.deepEqual(ergebnis, { ok: false, reason: "persist_error" });
+  assert.deepEqual(ergebnis, { ok: false, fehler: "persist_error" });
 });

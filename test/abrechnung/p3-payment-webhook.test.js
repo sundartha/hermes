@@ -69,7 +69,7 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
     req: {},
     provision: async (tenant) => {
       calls.provision.push(tenant);
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
   };
 }
