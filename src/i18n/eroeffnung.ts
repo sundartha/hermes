@@ -75,11 +75,11 @@ export function besitzerFrage(language: string): string {
   return texteFor(language).besitzerFrage;
 }
 
-export function drittEroeffnung({ language, ownerName, firstName, reason }: { language: string; ownerName: string; firstName?: string | null; reason: string }): { text: string; pflichtsatz: string } {
+export function drittEroeffnung({ language, ownerName, firstName, reason }: { language: string; ownerName: string; firstName: string; reason: string }): { text: string; pflichtsatz: string } {
   const texte = texteFor(language);
   const anlass = afterGreeting(reason).replace(/[.!]+$/, "");
   const kopf = `${texte.gruss} ${anlass} ${GEDANKENSTRICH} `;
   const pflichtsatz = `${kopf}${kiHinweisFor(language, ownerName)}`;
-  const fuer = (firstName ?? "") || texte.auftraggeber;
+  const fuer = firstName || texte.auftraggeber;
   return { text: `${pflichtsatz}, ${texte.verbinder} ${texte.zusammenfassung(fuer)}.`, pflichtsatz };
 }
