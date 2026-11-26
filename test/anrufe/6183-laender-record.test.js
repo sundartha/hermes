@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, disclosurePrefixFor, languageForCountry } from "../../src/i18n/locales.ts";
-import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -25,9 +24,9 @@ const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
-async function mitServer(lauf) {
+async function mitServer(lauf, zusatzEnv = {}) {
   const srv = await startServer({
-    env: { ...VORSPANN_ENV },
+    env: { ...VORSPANN_ENV, ...zusatzEnv },
     seed: seedState({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
@@ -119,15 +118,10 @@ describe("Offenlegung en fuer Ziele ohne eigenen Text, ueber POST /api/calls", (
   });
 
   it("Startsprache pt, Ziel +55 und Weltstandard de: Offenlegung bleibt en", async () => {
-    setWorldDefaultLanguageEnabled(false);
-    try {
-      await mitServer(async (srv) => {
-        const inhalt = await anrufInhalt(srv, BRASILIEN, "pt");
-        assert.equal(inhalt.conversation_config_override.agent.language, "pt");
-        assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")));
-      });
-    } finally {
-      setWorldDefaultLanguageEnabled(true);
-    }
+    await mitServer(async (srv) => {
+      const inhalt = await anrufInhalt(srv, BRASILIEN, "pt");
+      assert.equal(inhalt.conversation_config_override.agent.language, "pt");
+      assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")));
+    }, { WORLD_DEFAULT_LANGUAGE_ENABLED: "false" });
   });
 });
