@@ -52,11 +52,11 @@ function disclosureLanguageOf(
 
 export function callLocaleFor(
   state: MandantZustand,
-  { tenantId, numberRecord, ownerName, to, callLanguage, ausdruecklich }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined; ausdruecklich?: boolean | undefined },
+  { tenantId, numberRecord, ownerName, to, callLanguage, ausdruecklich, anbieterSpracheDurchreichen }: Zugriff & { ownerName: string | null; to: string | null; callLanguage?: string | undefined; ausdruecklich?: boolean | undefined; anbieterSpracheDurchreichen?: boolean | undefined },
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
   const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage, ausdruecklich }));
-  const providerLanguage = callLanguage ? primaererSprachcode(callLanguage) : gespraech.language;
+  const providerLanguage = callLanguage && anbieterSpracheDurchreichen ? primaererSprachcode(callLanguage) : gespraech.language;
   return {
     language: gespraech.language,
     providerLanguage,
@@ -88,6 +88,7 @@ export function callLocaleOf({ store, call, ownerName }: { store: LocaleSpeicher
     to: call.to,
     callLanguage: call.language ?? STARTSPRACHE,
     ausdruecklich: call.languageExplicit,
+    anbieterSpracheDurchreichen: true,
   });
 }
 
@@ -98,5 +99,6 @@ export function inboundElLocaleOf({ store, call }: { store: LocaleSpeicher; call
     ownerName: null,
     to: null,
     callLanguage: call.language ?? undefined,
+    anbieterSpracheDurchreichen: false,
   });
 }
