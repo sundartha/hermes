@@ -359,7 +359,7 @@ async function reopen(runner) {
 
 function aktiveNummerIn(state, { tenantId, e164 }) {
   ops.registerTenant(state, tenantId);
-  const { number } = ops.requestNumber(state, { tenantId, maxNumbers: 10, maxNumbersPerTenant: 5 });
+  const { number } = ops.requestNumber(state, { tenantId, maxNumbers: 10, maxNumbersPerTenant: 5 }).wert;
   ops.beginProvisioning(state, number.id);
   ops.activateNumber(state, number.id, { e164, providerNumberId: `ext_${tenantId}` });
   return number.id;

@@ -199,16 +199,16 @@ test("requestNumber: Default-Geo = DE/de", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, ...CAPS });
   assert.equal(res.ok, true);
-  assert.equal(res.number.country, DEFAULT_COUNTRY);
-  assert.equal(res.number.language, "de");
+  assert.equal(res.wert.number.country, DEFAULT_COUNTRY);
+  assert.equal(res.wert.number.language, "de");
 });
 
 test("requestNumber: country=FR ohne language -> 'fr'", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, country: "FR", ...CAPS });
   assert.equal(res.ok, true);
-  assert.equal(res.number.country, "FR");
-  assert.equal(res.number.language, "fr");
+  assert.equal(res.wert.number.country, "FR");
+  assert.equal(res.wert.number.language, "fr");
 });
 
 test("requestNumber: explizites country/language (FR) landet auf der angefragten Nummer", () => {
@@ -220,9 +220,9 @@ test("requestNumber: explizites country/language (FR) landet auf der angefragten
     ...CAPS,
   });
   assert.equal(res.ok, true);
-  assert.equal(res.number.country, "FR");
-  assert.equal(res.number.language, "fr");
-  assert.equal(res.number.e164, null, "requested ohne Kauf -> e164 null (Geo aendert das nicht)");
+  assert.equal(res.wert.number.country, "FR");
+  assert.equal(res.wert.number.language, "fr");
+  assert.equal(res.wert.number.e164, null, "requested ohne Kauf -> e164 null (Geo aendert das nicht)");
 });
 
 test("setTenantGeo: selektiver Patch - country setzen laesst defaultLanguage unberuehrt; spaeterer Patch setzt nur language", () => {

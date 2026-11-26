@@ -411,7 +411,7 @@ test("numberProvisionSkipReason/-At ueberleben store.save() + Re-Hydrierung (Fix
     maxNumbers: 0,
     maxNumbersPerTenant: 1,
   });
-  assert.equal(r.reason, GLOBAL_CAP_REASON);
+  assert.equal(r.fehler, GLOBAL_CAP_REASON);
   await store.save();
 
   const store2 = makePgStore(runner);
