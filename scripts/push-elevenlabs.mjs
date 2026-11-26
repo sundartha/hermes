@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./lib/schluesselbund-env.mjs";
 import { anfrage } from "../src/utils/anfrage.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

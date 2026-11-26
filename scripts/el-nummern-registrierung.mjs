@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./lib/schluesselbund-env.mjs";
 import { anfrage } from "../src/utils/anfrage.js";
 import { config } from "../src/config.ts";
 import { NUMBER_STATUS } from "../src/begriffe/nummern.js";
@@ -14,6 +15,7 @@ import {
 } from "../src/elevenlabs/nummern-registrierung.ts";
 import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.ts";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
+import { SCHLUESSELBUND_HINWEIS } from "./lib/schluesselbund-env.mjs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,7 +23,7 @@ const LOG_PREFIX = "[elevenlabs-nummern]";
 const CLI_ARGS_OFFSET = 2;
 
 function schluesselFehlt() {
-  if (!config.voice.elevenLabsOutbound.apiKey) return "ELEVENLABS_API_KEY fehlt.";
+  if (!config.voice.elevenLabsOutbound.apiKey) return `ELEVENLABS_API_KEY fehlt. ${SCHLUESSELBUND_HINWEIS}`;
   return null;
 }
 

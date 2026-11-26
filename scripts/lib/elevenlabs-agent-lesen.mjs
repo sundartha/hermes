@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { config } from "../../src/config.ts";
 
+import { SCHLUESSELBUND_HINWEIS } from "./schluesselbund-env.mjs";
 import { VORLAGE_REL } from "./elevenlabs-besitz.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -29,7 +30,7 @@ export function ohneSchluessel(text) {
 
 export function schluesselFehlt() {
   if (apiKey) return null;
-  return "ELEVENLABS_API_KEY ist leer - ohne Schluessel ist der Live-Agent nicht lesbar.";
+  return `ELEVENLABS_API_KEY ist leer - ohne Schluessel ist der Live-Agent nicht lesbar. ${SCHLUESSELBUND_HINWEIS}`;
 }
 
 async function holeVomAnbieter(pfad) {
