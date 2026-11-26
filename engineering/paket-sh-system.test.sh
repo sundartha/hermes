@@ -93,8 +93,10 @@ LOGTEXT="Code unter src/ kommt nur vom Bau-Agenten (x); Es fehlt das KI-Urteil: 
 pflicht_ausser_urteil 5; pruefe "src/ von anderem Autor bleibt ein Halt" "$?" "1"
 CHECKS="${PASSALLE}Tests 1/3${TAB}fail${TAB}1m${TAB}https://x/runs/9/job/1\n$FREI_ROT"; LOGTEXT="Es fehlt das KI-Urteil: ein Approve."
 pflicht_ausser_urteil 5; pruefe "andere rote Prüfung bleibt ein Halt" "$?" "1"
+pruefe "andere rote Prüfung: PAU_GRUND nennt den Checknamen (rot, nicht pending)" "$PAU_GRUND" "ROT:Tests 1/3"
 CHECKS="${PASSALLE}Tests 1/3${TAB}pending${TAB}0${TAB}https://x/runs/9/job/1\n$FREI_ROT"
 pflicht_ausser_urteil 5; pruefe "andere offene Prüfung bleibt ein Halt" "$?" "1"
+pruefe "andere offene (pending) Prüfung: PAU_GRUND ist PENDING, nicht ROT" "$PAU_GRUND" "PENDING"
 CHECKS="${PASSALLE}Freigabe-Prüfung${TAB}pass${TAB}5s${TAB}https://x/runs/77/job/8\n"
 pflicht_ausser_urteil 5; pruefe "alles grün: kein Halt" "$?" "0"
 CHECKS=""; pflicht_ausser_urteil 5; pruefe "keine Auskunft von GitHub ist kein Freibrief" "$?" "1"
@@ -125,6 +127,8 @@ pflicht_ausser_urteil() { PFLAUFGERUFEN=1; return 0; }
 cwarten 6365 > /dev/null 2>&1 || umzug 6365 MIGX || pflicht_ausser_urteil 6365
 pruefe "Freigabe rot, Rest grün: Aufrufkette laeuft weiter zu pflicht_ausser_urteil" "$PFLAUFGERUFEN" "1"
 unset -f phase umzug cwarten; eval "$PFL"
+CHECKS=""; pflicht_ausser_urteil 5
+pruefe "leere gh-Antwort: PAU_GRUND ist FEHLER, nicht ROT oder PENDING (A-TGA9A5-Nachbesserung 26.11.)" "$PAU_GRUND" "FEHLER"
 # A-DXDZU8 26.11.: Ein abgelaufenes oder leeres Log ($G leer, z. B. nach Ablauf) gab bisher sofort "fail" zurück und hielt die Kette im Deadlock ("PASS, aber Checks weiter rot"), obwohl die Freigabe-Prüfung erst durch das von PASS ausgelöste Approve grün werden kann. Jetzt wird der Lauf einmal je Kopf (Lauf-ID) neu gestartet und auf ein lesbares Log gewartet, erst dann wie bisher entschieden.
 PAKET_URTEIL_WARTE=0; LOG=$T/urteil; mkdir -p $LOG
 rerunids() { tr '\n' ' ' < $T/rerun.ids 2>/dev/null; }
@@ -145,27 +149,48 @@ pruefe "Merge-Warten zählt keine Runden mehr (seq 1 60)" "$(grep -c 'for _ in \
 pruefe "Merge-Warten läuft per Wanduhr (SECONDS) mit der zugesagten 60-Minuten-Frist" "$(grep -c 'phase merge "PR \$PR" 3600; MWT=\$SECONDS; MWLETZT=\$SECONDS; while (( SECONDS - MWT < 3600 ))' $S)" "1"
 pruefe "etwa alle 5 Min. (300 s), nicht jede Runde, wird der Kopf geprüft" "$(grep -c 'SECONDS - MWLETZT >= 300' $S)" "1"
 MENT=$(sed -n '/^merge_entscheidung() {/,/^}$/p' $S); [ -n "$MENT" ] || { echo "ROT  merge_entscheidung nicht in paket.sh gefunden"; exit 1; }; eval "$MENT"
-pruefe "Approve da, nichts rot: weiter warten" "$(merge_entscheidung 1 0 0)" "WEITER"
-pruefe "Approve da, nichts rot, PASS da: weiter warten (schon freigegeben, nicht nochmal)" "$(merge_entscheidung 1 0 1)" "WEITER"
-pruefe "kein Approve, kein PASS: Halt mit Grund" "$(merge_entscheidung 0 0 0)" "HALT:kein Approve auf dem aktuellen Kopf"
-pruefe "kein Approve, aber gültiges PASS: freigeben statt warten" "$(merge_entscheidung 0 0 1)" "FREIGEBEN"
-pruefe "Pflicht-Check außer Freigabe-Prüfung rot, kein Approve: Halt mit eigenem Grund" "$(merge_entscheidung 0 1 0)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
-pruefe "Pflicht-Check rot, auch mit PASS aber ohne Approve: trotzdem Halt (nicht freigeben)" "$(merge_entscheidung 0 1 1)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
-pruefe "Freigabe-Prüfung rot, Approve vorhanden: rote_neu statt Halt" "$(merge_entscheidung 1 1 0)" "ROTE_NEU"
-pruefe "Freigabe-Prüfung rot, Approve und PASS vorhanden: trotzdem rote_neu statt Halt" "$(merge_entscheidung 1 1 1)" "ROTE_NEU"
+pruefe "Approve da, nichts rot: weiter warten" "$(merge_entscheidung 1 "" 0)" "WEITER"
+pruefe "Approve da, nichts rot, PASS da: weiter warten (schon freigegeben, nicht nochmal)" "$(merge_entscheidung 1 "" 1)" "WEITER"
+pruefe "kein Approve, kein PASS: Halt mit Grund" "$(merge_entscheidung 0 "" 0)" "HALT:kein Approve auf dem aktuellen Kopf"
+pruefe "kein Approve, aber gültiges PASS: freigeben statt warten" "$(merge_entscheidung 0 "" 1)" "FREIGEBEN"
+pruefe "Freigabe-Prüfung rot, kein Approve: Halt mit eigenem Grund" "$(merge_entscheidung 0 "ROT:Freigabe-Prüfung" 0)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
+pruefe "Freigabe-Prüfung rot, auch mit PASS aber ohne Approve: trotzdem Halt (nicht freigeben)" "$(merge_entscheidung 0 "ROT:Freigabe-Prüfung" 1)" "HALT:Pflicht-Check außer Freigabe-Prüfung rot"
+pruefe "Freigabe-Prüfung rot, Approve vorhanden: rote_neu statt Halt" "$(merge_entscheidung 1 "ROT:Freigabe-Prüfung" 0)" "ROTE_NEU"
+pruefe "Freigabe-Prüfung rot, Approve und PASS vorhanden: trotzdem rote_neu statt Halt" "$(merge_entscheidung 1 "ROT:Freigabe-Prüfung" 1)" "ROTE_NEU"
+pruefe "CI rot, Approve vorhanden: wie Freigabe-Prüfung rote_neu statt Halt" "$(merge_entscheidung 1 "ROT:CI" 0)" "ROTE_NEU"
+# Nachbesserung A-TGA9A5 26.11. (Prüferurteil FAIL zu PR 6388): ein echter anderer Pflicht-Check (nicht Freigabe-Prüfung/CI, nicht pending) bleibt auch mit Approve ein Halt, statt für immer rote_neu zu bleiben (Befund 2 des Urteils); pending zählt dabei nie als rot (Befund 3); eine leere/fehlgeschlagene gh-Antwort (FEHLER) löst in merge_entscheidung selbst nie einen eigenen Halt-Grund aus, das Zweimal-Messen dafür sitzt an der Aufrufstelle (Befund 1).
+pruefe "echter anderer Pflicht-Check rot, Approve vorhanden: trotzdem Halt, nicht rote_neu" "$(merge_entscheidung 1 "ROT:Tests" 0)" "HALT:Pflicht-Check rot (Tests)"
+pruefe "echter anderer Pflicht-Check rot, kein Approve: Halt nennt den Checknamen" "$(merge_entscheidung 0 "ROT:Tests" 0)" "HALT:Pflicht-Check rot (Tests)"
+pruefe "pending (kein Approve): kein Halt wegen 'rot', nur der normale kein-Approve-Halt" "$(merge_entscheidung 0 "PENDING" 0)" "HALT:kein Approve auf dem aktuellen Kopf"
+pruefe "pending, Approve vorhanden: weiter warten, kein Neustart, kein Halt" "$(merge_entscheidung 1 "PENDING" 0)" "WEITER"
+pruefe "leere/fehlgeschlagene gh-Antwort (FEHLER), Approve vorhanden: weiter warten" "$(merge_entscheidung 1 "FEHLER" 0)" "WEITER"
+pruefe "leere/fehlgeschlagene gh-Antwort (FEHLER), kein Approve, aber PASS: trotzdem freigeben" "$(merge_entscheidung 0 "FEHLER" 1)" "FREIGEBEN"
 # Verhaltenstest der eingebauten 5-Minuten-Prüfung selbst (Mocks für approve, pflicht_ausser_urteil, pass_auf_kopf, rote_neu, freigeben): die Stelle wird aus paket.sh gelesen, nicht nachgebaut.
 PRUEF=$(sed -n '/^    if \[ "\$S" = OPEN \] && (( SECONDS - MWLETZT >= 300 )); then/,/^    fi$/p' $S); [ -n "$PRUEF" ] || { echo "ROT  5-Minuten-Prüfstelle nicht in paket.sh gefunden"; exit 1; }
-pruefstelle() {   # $1 Approve 1/0, $2 pflicht_ausser_urteil-Rückgabe (0 = fein, 1 = Befund), $3 PASS 1/0, $4 Sekunden seit letzter Prüfung
-  local D=$(mktemp -d) FA=$1 FR=$2 FP=$3; LOG=$D; PR=9; PRK=kopfabc; S=OPEN; MWLETZT=$(( SECONDS - $4 ))
-  approve() { return $(( FA == 1 ? 0 : 1 )); }; pflicht_ausser_urteil() { return $FR; }; pass_auf_kopf() { return $(( FP == 1 ? 0 : 1 )); }
+pruefstelle() {   # $1 Approve 1/0, $2 pflicht_ausser_urteil-Rückgabe (0 fein, 1 Befund), $3 PASS 1/0, $4 Sekunden seit letzter Prüfung, $5 PAU_GRUND bei Befund (ROT:<Name>, PENDING oder FEHLER), $6 Ordner für mehrere Messungen hintereinander (leer = neue, isolierte erste Messung mit frischem Zähler)
+  local D=${6:-$(mktemp -d)} FA=$1 FR=$2 FP=$3 FG=$5; LOG=$D; PR=9; PRK=kopfabc; S=OPEN; MWLETZT=$(( SECONDS - $4 ))
+  rm -f $D/halt.txt $D/aufrufe.txt
+  MWHALT=""; MWHALTN=0; [ -f $D/zaehler.txt ] && { MWHALT=$(sed -n 1p $D/zaehler.txt); MWHALTN=$(sed -n 2p $D/zaehler.txt); }
+  approve() { return $(( FA == 1 ? 0 : 1 )); }; pflicht_ausser_urteil() { PAU_GRUND=$FG; return $FR; }; pass_auf_kopf() { return $(( FP == 1 ? 0 : 1 )); }
   rote_neu() { echo "rote_neu $1" >> $D/aufrufe.txt; }; freigeben() { echo "freigeben $1" >> $D/aufrufe.txt; }
-  ( eval "$PRUEF" ) 2>/dev/null
+  ( eval "$PRUEF"; print -r -- "$MWHALT"$'\n'"$MWHALTN" > $D/zaehler.txt ) 2>/dev/null
   if [ -s $D/halt.txt ]; then echo "halt: $(cat $D/halt.txt)"; elif [ -s $D/aufrufe.txt ]; then cat $D/aufrufe.txt; else echo "weiter"; fi
 }
-pruefe "Frist (5 Min.) noch nicht erreicht: keine Prüfung, einfach weiter" "$(pruefstelle 0 1 0 60)" "weiter"
-pruefe "Frist erreicht, kein Approve, kein PASS: Halt mit Grund" "$(pruefstelle 0 1 0 300)" "halt: PR 9: Pflicht-Check außer Freigabe-Prüfung rot (Kopf kopfabc)"
-pruefe "Frist erreicht, kein Approve, kein Pflicht-Befund, kein PASS: Halt kein Approve" "$(pruefstelle 0 0 0 300)" "halt: PR 9: kein Approve auf dem aktuellen Kopf (Kopf kopfabc)"
+pruefe "Frist (5 Min.) noch nicht erreicht: keine Prüfung, einfach weiter" "$(pruefstelle 0 1 0 60 "ROT:Tests")" "weiter"
 pruefe "Frist erreicht, kein Approve, aber PASS: freigeben statt warten" "$(pruefstelle 0 0 1 300)" "freigeben 9"
-pruefe "Frist erreicht, Approve da, Pflicht-Befund (Freigabe-Prüfung rot): rote_neu statt Halt" "$(pruefstelle 1 1 0 300)" "rote_neu 9"
+pruefe "Frist erreicht, Approve da, Freigabe-Prüfung-Befund: rote_neu statt Halt" "$(pruefstelle 1 1 0 300 "ROT:Freigabe-Prüfung")" "rote_neu 9"
 pruefe "Frist erreicht, Approve da, alles grün: einfach weiter" "$(pruefstelle 1 0 0 300)" "weiter"
+pruefe "Frist erreicht, Approve da, nur pending: weiter, kein Neustart, kein Halt" "$(pruefstelle 1 1 0 300 PENDING)" "weiter"
+# Befund 1 des Urteils zu PR 6388: eine einzelne leere/fehlgeschlagene gh-Antwort (FEHLER) darf nie allein halten, auch wenn kein Approve da ist und sie damit wie ein Halt-Kandidat aussieht.
+D1=$(mktemp -d)
+pruefe "eine einzelne leere gh-Antwort ohne Approve hält NICHT (erste Messung, Zähler 1)" "$(pruefstelle 0 1 0 300 FEHLER $D1)" "weiter"
+pruefe "danach wieder alles in Ordnung: kein Halt, Zähler wurde nicht fälschlich fortgeschrieben" "$(pruefstelle 1 0 0 300 "" $D1)" "weiter"
+# Befund 2+3: ein echter anderer Pflicht-Check (nicht pending, nicht Freigabe-Prüfung/CI) hält mit Approve erst nach der zweiten übereinstimmenden Messung, mit Grund, der den Checknamen oder "Pflicht-Check rot" nennt.
+D2=$(mktemp -d)
+pruefe "Approve da, echter anderer Pflicht-Check rot: erste Messung hält noch nicht" "$(pruefstelle 1 1 0 300 "ROT:Tests" $D2)" "weiter"
+pruefe "Approve da, derselbe rote Check ein zweites Mal (5 Min. später): jetzt Halt mit Checknamen" "$(pruefstelle 1 1 0 300 "ROT:Tests" $D2)" "halt: PR 9: Pflicht-Check rot (Tests) (Kopf kopfabc)"
+# pending darf nie als "rot" zählen, auch nicht ohne Approve; es bleibt höchstens der normale kein-Approve-Halt (nach zwei Messungen), nie ein Halt-Text mit "rot".
+D3=$(mktemp -d)
+pruefe "kein Approve, nur pending: erste Messung hält noch nicht" "$(pruefstelle 0 1 0 300 PENDING $D3)" "weiter"
+pruefe "kein Approve, pending bleibt: zweite Messung hält wegen fehlendem Approve, nicht wegen 'rot'" "$(pruefstelle 0 1 0 300 PENDING $D3)" "halt: PR 9: kein Approve auf dem aktuellen Kopf (Kopf kopfabc)"
 exit $fehler
