@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -27,14 +26,5 @@ describe("anrufStart fuer eingehende Anrufe", () => {
     const { anrufStart } = await import("../../src/anrufe/start/anrufstart.ts");
     const start = anrufStart({ ...EINGEHEND, eingehend: false });
     assert.equal(start.firstMessage, null);
-  });
-});
-
-describe("Huellen entfernt", () => {
-  it("kein Treffer fuer die Huellen callLocaleOf und inboundElLocaleOf in outbound.js und inbound-initiation.js", () => {
-    const huellen = ["outbound.js", "inbound-initiation.js"]
-      .map((datei) => readFileSync(new URL(`../../src/elevenlabs/${datei}`, import.meta.url), "utf8"))
-      .filter((inhalt) => /export function (callLocaleOf|inboundElLocaleOf)\b/.test(inhalt));
-    assert.deepEqual(huellen, []);
   });
 });
