@@ -67,3 +67,13 @@ test("Platzkennungen zaehlen aufwaerts ab 1", async () => {
   assert.equal(await plaetze.belegen(ANRUF("c1")), 1);
   assert.equal(await plaetze.belegen(ANRUF("c1")), 2);
 });
+
+test("offenJeAnruf zaehlt nur die Plaetze des gefragten Anrufs", async () => {
+  const { plaetze } = mitUhr();
+  await plaetze.belegen(ANRUF("c1"));
+  await plaetze.belegen(ANRUF("c2"));
+  await plaetze.belegen(ANRUF("c2"));
+  assert.equal(plaetze.offenJeAnruf("c1"), 1);
+  assert.equal(plaetze.offenJeAnruf("c2"), 2);
+  assert.equal(plaetze.offenJeAnruf("c3"), 0);
+});
