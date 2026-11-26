@@ -243,7 +243,7 @@ test("GW0-KOSTENDECKE im Gespraech: die Geld-Wache beendet einen laufenden EL-An
 });
 
 test("GW0-KOSTENDECKE im Gespraech Kontrolle: unter der Decke beendet die Geld-Wache den EL-Anruf nicht", async () => {
-  await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40" }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv }) => {
+  await aufDemElWeg({ env: { ...WACHE_ENV, FRISTEN_TAKT_MS: "40", ANRUF_HOECHSTDAUER_S: "2" }, seed: laufenderAnrufSeed(KOSTENDECKE_CENT - RESTBUDGET_UEBER_DEN_LAUFENDEN_KOSTEN_CENT) }, async ({ srv }) => {
     assert.equal((await rufeAn(srv, { max_duration_s: 2 })).status, HTTP_OK);
     assert.equal((await endeDesAuftragsAnrufs(srv)).failureReason, "max-duration-cap");
   });

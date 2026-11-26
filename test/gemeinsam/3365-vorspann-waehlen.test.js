@@ -186,10 +186,17 @@ test("3365-B2: Schalter an, Vorspann bereit -> genau ein POST /v2/calls mit alle
 test("3365-B2: Max-Dauer-Timer des Anrufs legt das Call-Control-Bein auf und beendet den Anruf", async () => {
   const { attrappe } = umgebung;
   const to = naechsteNummer();
-  const { callId } = await (await anrufStarten(to, { max_duration_s: KURZE_MAX_DAUER_S })).json();
-  assert.equal(koerper(wahlen(attrappe, callId)[0]).time_limit_secs, KURZE_MAX_DAUER_S);
-  await warteAuf(() => aufleger(attrappe, callId).length === EINMAL);
-  await warteAuf(() => anrufIn(callId).status === "completed");
+  const haupt = umgebung.srv;
+  umgebung.srv = await startServer(serverEinstellungen(attrappe, { ANRUF_HOECHSTDAUER_S: String(KURZE_MAX_DAUER_S) }));
+  try {
+    const { callId } = await (await anrufStarten(to, { max_duration_s: KURZE_MAX_DAUER_S })).json();
+    assert.equal(koerper(wahlen(attrappe, callId)[0]).time_limit_secs, KURZE_MAX_DAUER_S);
+    await warteAuf(() => aufleger(attrappe, callId).length === EINMAL);
+    await warteAuf(() => anrufIn(callId).status === "completed");
+  } finally {
+    await umgebung.srv.stop();
+    umgebung.srv = haupt;
+  }
 });
 
 test("3365-B3: Wahl scheitert (HTTP 422) -> kein TeXML-Versuch, Anruf failed, Fehlerdetail des Anbieters nicht im Log", async () => {

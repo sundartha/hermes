@@ -175,7 +175,7 @@ test("frist-alarm-annahme-abschluss: scheitert die Wahl des EL-Beins, zaehlt das
 });
 
 test("frist-alarm-annahme-abschluss: nur der angenommene Anruf ohne Abschluss bis zur Hoechstdauer zaehlt", async () => {
-  await mitDienst({ fristMs: LANGE_FRIST_MS }, async (dienst) => {
+  await mitDienst({ fristMs: LANGE_FRIST_MS, umgebung: { ANRUF_HOECHSTDAUER_S: String(HOECHSTDAUER_S) } }, async (dienst) => {
     const kurz = { max_duration_s: HOECHSTDAUER_S };
     const rechtzeitig = await ruf(dienst, kurz);
     await hebeAb(dienst, rechtzeitig);

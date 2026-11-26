@@ -317,9 +317,11 @@ test("3365-D3: cancel_call waehrend der EL-Wahl -> EL-Bein wird nach dem Anlegen
 
 test("3365-D3: Max-Dauer legt beide Beine auf", async () => {
   const { attrappe } = umgebung;
-  const callId = await neuerAnruf({ max_duration_s: MAX_DAUER_S });
-  await hebeAb(callId);
-  await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
+  await mitEigenemServer({ env: { ANRUF_HOECHSTDAUER_S: String(MAX_DAUER_S) }, seed: mandant() }, async () => {
+    const callId = await neuerAnruf({ max_duration_s: MAX_DAUER_S });
+    await hebeAb(callId);
+    await warteAuf(() => aufleger(attrappe, callId).join() === "1,1");
+  });
 });
 
 test("3365-D4: Passwort und Bindungs-Token stehen nur im Dial-Koerper, nie in Pfad, webhook_url, to oder Log", async () => {

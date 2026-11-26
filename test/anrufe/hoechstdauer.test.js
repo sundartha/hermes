@@ -27,7 +27,7 @@ const DOMESTIC_TO = "+4915112345678";
 
 async function placeCappedCall() {
   const srv = await startServer({
-    env: { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), FRISTEN_TAKT_MS: "40" },
+    env: { ...vorspannMandantenUmgebung([BOOTSTRAP_TENANT_ID]), FRISTEN_TAKT_MS: "40", ANRUF_HOECHSTDAUER_S: String(MAX_DURATION_S) },
   });
   const res = await abrufMitFrist(`${srv.localUrl}/api/calls`, {
     method: "POST",
