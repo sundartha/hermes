@@ -200,7 +200,7 @@ async function hauptprogramm() {
     ende("probe_anrufer_fehlt");
   }
   await zielGeprueft(modul.anrufer);
-  if (!(await tagesStandOk(modul.anrufer))) return zeile("probe_tageslimit_erreicht");
+  if (!(await tagesStandOk(modul.anrufer))) ende("probe_tageslimit_erreicht");
   const uhr = modul.uhr ?? ECHTE_UHR;
   await ausgangMelden(await probeLaufen({ messen: messenAufruf(modul.anrufer), uhr }));
 }

@@ -57,7 +57,7 @@ async function laufen({ fall = {}, umgebung = {}, mitOutput = true } = {}) {
 
 test("Tageslimit erreicht: kein gewaehlt=true, Ausgabe und Exit 0 bleiben", async () => {
   const { code, ausgabe, inhalt } = await laufen({ fall: { stand: { erstversuche: 5, anrufe: 5 } } });
-  assert.equal(code, 0);
+  assert.equal(code, 1);
   assert.match(ausgabe, /probe_tageslimit_erreicht/);
   assert.doesNotMatch(inhalt, /gewaehlt=true/);
 });

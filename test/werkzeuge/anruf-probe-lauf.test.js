@@ -201,7 +201,7 @@ test("Ziel: abweichende Nummer, fremde STAGING_URL oder Live-Adresse brechen vor
 test("Tageslimit: bei 5 Erstversuchen oder mehr als 8 Anrufen wird nicht gewählt, bei 4 und 8 schon", async () => {
   for (const stand of [{ erstversuche: 5, anrufe: 5 }, { erstversuche: 1, anrufe: 9 }]) {
     const { sichtbar, code } = await aufrufen({ fall: { stand } });
-    assert.equal(code, 0);
+    assert.equal(code, 1);
     assert.equal(anrufe(sichtbar), 0);
     assert.match(sichtbar, /probe_tageslimit_erreicht/);
   }
