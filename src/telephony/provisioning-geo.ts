@@ -45,7 +45,7 @@ export function searchParamsForCountry(
   country: string | null | undefined,
 ): { countryCode: string | undefined; connectionId: string; type: string } {
   const countryCode = kauflandVon(country);
-  const entry = COUNTRY_SEARCH_PARAMS[countryCode ?? ""];
+  const entry = COUNTRY_SEARCH_PARAMS[countryCode];
   return {
     countryCode,
     connectionId: entry?.connectionId ?? geoKonfig().telephony.telnyxConnectionId,
