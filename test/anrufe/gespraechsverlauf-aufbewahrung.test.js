@@ -6,15 +6,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import request from "../gemeinsam/testserver-anfrage.mjs";
-import { BOOTSTRAP_TENANT_ID, makePgTestStore } from "../pg-helpers.js";
+import { makePgTestStore } from "../pg-helpers.js";
 import { WEB_SITZUNGS_GEHEIMNIS } from "../gemeinsam/erfundene-geheimnisse.js";
 import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../../src/self-service-routes.js";
 import { keepsTranscriptForCustomer } from "../../src/diagnostic-retention.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { registerTools } from "../../src/mcp-tools.js";
-import { starteMailAttrappe } from "./mail-attrappe.js";
-import { starteAttrappe } from "./attrappen-server.js";
 import { KOSTENPROFIL } from "../../src/billing/kostenarten.ts";
 import { seedCall, seedState, startServer, waitForStoreState, waitUntil } from "../helpers.js";
 import { CONV_ID, isoVor, starteAnbieterAttrappe } from "../_iel-inbound-harness.js";
@@ -397,72 +395,6 @@ for (const [name, abweichung, erwartet] of ABWEICHUNGEN) {
   });
 }
 
-
-const MAIL_EMPFAENGER = "freund@kunde.example.test";
-const EIGENE_NUMMER = "+4915199998888";
-const SMS_ABSENDER = "+4930111222333";
-const SMS_PFAD = "/v2/messages";
-const HTTP_CREATED = 201;
-
-const mandantMitMailUndSms = () => ({
-  tenants: [
-    {
-      id: BOOTSTRAP_TENANT_ID,
-      status: "active",
-      ownerName: "Jonas",
-      privateNumber: EIGENE_NUMMER,
-      newsletterRecipients: [{ email: MAIL_EMPFAENGER, status: "confirmed", unsubToken: "abmelde-4284" }],
-    },
-  ],
-  numbers: [
-    { id: "num_sms_4284", e164: SMS_ABSENDER, tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx", status: "active", providerNumberId: null },
-  ],
-});
-
-function starteSmsAttrappe() {
-  const gesendet = [];
-  return starteAttrappe((req, res) => {
-    let roh = "";
-    req.on("data", (stueck) => (roh += stueck));
-    req.on("end", () => {
-      if (req.method === "POST" && req.url === SMS_PFAD) gesendet.push(JSON.parse(roh));
-      res.writeHead(HTTP_CREATED, { "content-type": "application/json" });
-      res.end("{}");
-    });
-  }).then((attrappe) => ({ ...attrappe, gesendet }));
-}
-
-test("Kriterium 5: Mail und SMS der Zusammenfassung enthalten den Gesprächsinhalt eines behaltenen Transkripts nicht", async () => {
-  const mail = await starteMailAttrappe();
-  const sms = await starteSmsAttrappe();
-  const { NODE_OPTIONS: umleitung, ...mailUmgebung } = mail.umgebung;
-  const nodeOptionen = [process.env.NODE_OPTIONS, umleitung].filter(Boolean);
-  const env = {
-    ...mailUmgebung,
-    NODE_OPTIONS: nodeOptionen.join(" "),
-    TELNYX_API_BASE: sms.url,
-    TELNYX_API_KEY: "KEYtest-4284",
-    SEND_SMS_SUMMARY: "true",
-  };
-  try {
-    await mitServer({ env, zustand: mandantMitMailUndSms() }, async ({ srv, el }) => {
-      el.setzeAntwort(gespraech("done", SERVER_ZEILEN));
-      const stand = await waitForStoreState(srv, hatBenachrichtigung, FRIST_MS);
-      await waitUntil(() => mail.an(MAIL_EMPFAENGER).length > 0 && sms.gesendet.length > 0, { timeoutMs: FRIST_MS });
-      assert.deepEqual(texteIn(stand), SERVER_ZEILEN.map((zeile) => zeile.text));
-      assert.equal(mail.an(MAIL_EMPFAENGER).length, 1);
-      assert.equal(sms.gesendet.length, 1);
-      assert.equal(sms.gesendet[0].to, EIGENE_NUMMER);
-      assert.match(mail.an(MAIL_EMPFAENGER)[0].text, /Termin vereinbart\./);
-      assert.match(sms.gesendet[0].text, /Termin vereinbart\./);
-      assert.doesNotMatch(mail.an(MAIL_EMPFAENGER)[0].text, new RegExp(MARKER));
-      assert.doesNotMatch(sms.gesendet[0].text, new RegExp(MARKER));
-    });
-  } finally {
-    await mail.schliessen();
-    await sms.close();
-  }
-});
 
 test("Kriterium 5: nur get_call_result trägt im _meta höchstens die Felder transcript und hermes/content_locale, der Gesprächsinhalt steht nur dort; kein anderes Werkzeug trägt ihn irgendwo im Ergebnis", async () => {
   const gateway = http.createServer((req, res) => {

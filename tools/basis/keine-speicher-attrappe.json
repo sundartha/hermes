@@ -15,7 +15,6 @@
     "test/gemeinsam/e2e-06-en-purity-aggregate.test.js|2aeec76ad93fe643",
     "test/nummern/e5-01-sipregistrar-produktionspfad.test.js|2aeec76ad93fe643",
     "test/website-onboarding/f1-geo-onboard.test.js|dd923882a8c32c86",
-    "test/posteingang/f2-mail-summary-finish-call.test.js|2aeec76ad93fe643",
     "test/website-onboarding/fmt-11-onboard-privatenumber-country-gate.test.js|dd923882a8c32c86",
     "test/gemeinsam/gap-35-metrics-country.test.js|2aeec76ad93fe643",
     "test/gemeinsam/alarmkanal-selbsttest.test.js|dd923882a8c32c86",

@@ -67,7 +67,7 @@ test("Inbound-Greeting auf der resultierenden US-DID ist englisch (ex E2E-04)", 
   }
 });
 
-test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", async () => {
+test("Zusammenfassung fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", async () => {
   const s = makeDefaultState();
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
   const r = requestNumberForPaidTenant(s, {
@@ -77,15 +77,15 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
   });
 
   const smsCapture = [];
+  const notifyCapture = [];
   const store = {
     withStoreLock: (fn) => fn(),
     releaseOutboundReserve: async () => {},
     save: () => {},
-    addNotification: () => {},
+    addNotification: (title, body) => notifyCapture.push({ title, body }),
     purgeTranscript: () => {},
     tenantContext: () => ({ settings: { agentName: "Hermes" } }),
     recordUsageEvent: () => {},
-    markSummarySmsSent: () => {},
     markBilled: () => {},
     markInboxEntry: () => {},
   };
@@ -95,7 +95,6 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
     metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async ({ body }) => smsCapture.push(body) }),
     summarizeCall: async () => ({ summary: "Call summary", actionItems: [] }),
-    planSummarySms: () => ({ send: true, to: "+12025550199", smsFrom: { e164: "+12025550188" }, reason: null }),
     audit: () => {},
   });
 
@@ -109,10 +108,11 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
   });
   await callFinish.finishCall(call);
 
-  assert.equal(smsCapture.length, 1);
+  assert.equal(smsCapture.length, 0);
+  assert.equal(notifyCapture.length, 1);
   assert.doesNotMatch(
-    smsCapture[0],
+    notifyCapture[0].body,
     /Anruf/,
-    `SOLL: Summary-SMS eines US-DID-Tenants darf kein 'Anruf' enthalten (war "${smsCapture[0]}")`,
+    `SOLL: Benachrichtigung eines US-DID-Tenants darf kein 'Anruf' enthalten (war "${notifyCapture[0].body}")`,
   );
 });

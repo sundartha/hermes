@@ -58,7 +58,7 @@ test("abgebrochener EN-Call -> Notification enthaelt kein 'Anruf' (ex WEB-14)", 
   );
 });
 
-test("abgeschlossener EN-Call -> Summary-SMS-Body enthaelt kein 'Anruf' (ex WEB-14)", async () => {
+test("abgeschlossener EN-Call -> Notification-Text enthaelt kein 'Anruf' (ex WEB-14)", async () => {
   const smsCapture = [];
   const notifyCapture = [];
   const call = seedCall({
@@ -81,10 +81,10 @@ test("abgeschlossener EN-Call -> Summary-SMS-Body enthaelt kein 'Anruf' (ex WEB-
     notifyCapture,
   });
   await callFinish.finishCall(call);
-  assert.equal(smsCapture.length, 1, "SMS muss versendet worden sein");
+  assert.equal(smsCapture.length, 0, "es wird keine SMS versendet");
   assert.doesNotMatch(
-    smsCapture[0],
+    notifyCapture[0].body,
     /Anruf/,
-    `SOLL: SMS-Body fuer language=en darf kein "Anruf" enthalten (war "${smsCapture[0]}")`,
+    `SOLL: Notification-Text fuer language=en darf kein "Anruf" enthalten (war "${notifyCapture[0].body}")`,
   );
 });

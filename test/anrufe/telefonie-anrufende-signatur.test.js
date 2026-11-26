@@ -104,30 +104,16 @@ async function mitAnruf({ calls, actionItems = [] }, pruefe) {
   }
 }
 
-test("3974-1: signierte Endemeldung eines gefuehrten Anrufs liefert 200, Hinweis, genau eine SMS und eine Buchung", FRIST, async () => {
-  const punkte = ["Erster Punkt", "Zweiter Punkt"].map((text, i) => ({
-    id: `ai_${i}`,
-    callId: "sig_ok",
-    text,
-    done: false,
-    createdAt: ANGENOMMEN_UM,
-  }));
-  await mitAnruf({ calls: [beendeterAnruf("sig_ok", { summary: "Termin steht." })], actionItems: punkte }, async (srv, telnyx) => {
+test("3974-1: signierte Endemeldung eines gefuehrten Anrufs liefert 200, Hinweis, keine SMS und eine Buchung", FRIST, async () => {
+  await mitAnruf({ calls: [beendeterAnruf("sig_ok", { summary: "Termin steht." })] }, async (srv, telnyx) => {
     assert.equal((await meldeStatus(srv, "sig_ok", "completed")).status, HTTP_OK);
-    await warteAufEreignis([srv.ereignisse, telnyx.ereignisse], () => telnyx.anfragen.length === 1, { timeoutMs: WARTEZEIT_MS });
-    assert.equal(telnyx.anfragen[0].pfad, "/v2/messages");
-    assert.deepEqual(telnyx.anfragen[0].koerper, {
-      from: DOMESTIC_TEST_NUMBER.e164,
-      to: EIGENE_NUMMER,
-      text: `[Hermes] Anruf bei ${ZIEL}\n\nTermin steht.\n\nAction Items:\n1. Zweiter Punkt\n2. Erster Punkt`,
-    });
-    await warteAufEreignis([srv.ereignisse], () => anrufVon(srv, "sig_ok").summarySmsSentAt, { timeoutMs: WARTEZEIT_MS });
+    await warteAufEreignis([srv.ereignisse], () => hinweiseVon(srv).length > 0, { timeoutMs: WARTEZEIT_MS });
     const hinweis = hinweiseVon(srv).find((n) => n.title === "Neue Call Summary");
     assert.equal(hinweis.body, `Anruf bei ${ZIEL}: Termin steht.`);
     assert.equal(hinweis.callId, "sig_ok");
     assert.ok(anrufVon(srv, "sig_ok").billedAt);
     assert.equal((await meldeStatus(srv, "sig_ok", "completed")).status, HTTP_OK);
-    assert.equal(telnyx.anfragen.length, 1);
+    assert.equal(telnyx.anfragen.length, 0);
     assert.equal(hinweiseVon(srv).filter((n) => n.title === "Neue Call Summary").length, 1);
   });
 });
