@@ -232,8 +232,7 @@ async function initAntwort(srv, call) {
 
 test("3365-K3: leerer Auftraggebername -> Offenlegung mit Ersatzname, nie leer", async () => {
   await mitServer({ env: VORSPANN_AN, seed: mitEigentuemer({ ownerName: LEERER_NAME }) }, async ({ srv, attrappe }) => {
-    const { callId } = await (await anrufStarten(srv)).json();
-    const call = anrufIn(srv, callId);
+    await (await anrufStarten(srv)).json();
     const text = JSON.parse(nach(attrappe, TTS_PFAD)[0].roh).text;
     assert.equal(text, dritteroeffnung("its owner"));
   });
