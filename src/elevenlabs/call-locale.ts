@@ -1,6 +1,7 @@
 import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
 import { countryForE164 } from "../begriffe/rufnummern.ts";
 import { resolveCallLanguage } from "../store/state-ops.js";
+import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
 import { ersteAeusserung, type Sprachwahl } from "../anrufe/start/anrufstart.ts";
 
@@ -26,16 +27,8 @@ const SPRACHE_JE_LAND: Readonly<Record<string, string>> = EIGENE_SPRACHE_JE_LAND
 
 const OFFENLEGUNG_OHNE_LANDESTEXT = "en";
 
-const AN_ANBIETER_DURCHGEREICHTE_SPRACHEN = Object.freeze(["pt", "es", "fr", "de", "en", "it", "nl"]);
-
 function primaererSprachcode(code: string): string {
   return code.split("-")[0] ?? code;
-}
-
-function providerSpracheVon(textSprache: string, callLanguage: string | null | undefined): string {
-  if (!callLanguage) return textSprache;
-  const basis = primaererSprachcode(callLanguage);
-  return AN_ANBIETER_DURCHGEREICHTE_SPRACHEN.includes(basis) ? basis : textSprache;
 }
 
 function calleeLanguage(to: string | null): string | null {
@@ -44,7 +37,7 @@ function calleeLanguage(to: string | null): string | null {
 }
 
 function conversationLanguageOf(state: MandantZustand, { tenantId, numberRecord, callLanguage }: Zugriff & { callLanguage?: string | undefined }): string {
-  if (callLanguage) return callLanguage;
+  if (callLanguage) return primaererSprachcode(callLanguage);
   return aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -52,8 +45,8 @@ function disclosureLanguageOf(
   state: MandantZustand,
   { tenantId, numberRecord, to, callLanguage }: Zugriff & { to: string | null; callLanguage?: string | undefined },
 ): string {
-  const fremdeStartsprache = callLanguage !== undefined && !SUPPORTED_LANGUAGES.includes(callLanguage);
-  if (fremdeStartsprache) return calleeLanguage(to) ?? OFFENLEGUNG_OHNE_LANDESTEXT;
+  const startsprache = callLanguage ? primaererSprachcode(callLanguage) : STARTSPRACHE;
+  if (startsprache !== STARTSPRACHE) return SUPPORTED_LANGUAGES.includes(startsprache) ? startsprache : OFFENLEGUNG_OHNE_LANDESTEXT;
   return calleeLanguage(to) ?? aufgeloesteSprache(state, { tenantId, numberRecord });
 }
 
@@ -63,7 +56,7 @@ export function callLocaleFor(
 ): AnrufSprache {
   const gespraech = sprachwahlFuer(conversationLanguageOf(state, { tenantId, numberRecord, callLanguage }));
   const offenlegung = sprachwahlFuer(disclosureLanguageOf(state, { tenantId, numberRecord, to, callLanguage }));
-  const providerLanguage = providerSpracheVon(gespraech.language, callLanguage);
+  const providerLanguage = callLanguage ? primaererSprachcode(callLanguage) : gespraech.language;
   return {
     language: gespraech.language,
     providerLanguage,
