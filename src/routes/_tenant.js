@@ -1,4 +1,4 @@
-import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.ts";
 import { HTTP_FORBIDDEN, antworteFehler } from "../utils/http.ts";
 import { isLocalSocket, isTrustedLocalCaller } from "../utils/vertrauter-aufruf.ts";
 

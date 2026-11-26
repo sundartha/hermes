@@ -5,7 +5,7 @@ import { messeSpeichern } from "../utils/betriebsmessung.js";
 import * as ops from "./state-ops.js";
 import { EIGENE_KENNUNG } from "./instanz-besitz.js";
 import { tenantLanguage as tenantLanguageOf } from "./views.ts";
-import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../begriffe/mandant.ts";
 import { ANRUF_ZUSTAENDE, anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 import { DEFAULT_PROVIDER } from "../begriffe/nummern-vergabe.js";
 import { migrate } from "../db/migrate.js";

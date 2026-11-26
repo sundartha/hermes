@@ -1,6 +1,6 @@
 import { findNumber } from "../store/state-ops.js";
 import { provisionNumber } from "../onboarding.ts";
-import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.ts";
 
 type ProvisionArgs = Parameters<typeof provisionNumber>;
 type ProvisionState = ProvisionArgs[0];

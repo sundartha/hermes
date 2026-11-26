@@ -1,4 +1,4 @@
-import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.js";
+import { MANDATE_OUT_OF_SCOPE } from "../../begriffe/anrufe.ts";
 import { MENUE_REGEL } from "../menue-regel.ts";
 
 export interface PromptEinstellungen {

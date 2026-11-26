@@ -1,5 +1,5 @@
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.ts";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import type { AnrufZustand } from "../begriffe/anruf-zustand.ts";
 import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.ts";
 import { carrierEndMsOf } from "../store/state-ops.js";

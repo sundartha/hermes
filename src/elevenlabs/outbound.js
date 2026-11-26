@@ -3,7 +3,7 @@ import { anrufStart } from "../anrufe/start/anrufstart.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.ts";
 import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";
 import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.ts";
 import { BUSY_INVITE_REASON, POLL_TIMEOUT_REASON, START_UNKLAR_REASON, pollProviderErrorReason, providerErrorReason, reasonWithoutCarrier } from "../telephony/failure-reason.ts";

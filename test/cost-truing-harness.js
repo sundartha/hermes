@@ -3,7 +3,7 @@ import {
   markCrossCheckAttempted, recordCallCostEvidence, callCostEvidence,
   schliesseKostenAbgleich, oeffneKostenAbgleichErneut,
 } from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.ts";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { config as prodDefaults } from "../src/config.ts";
 

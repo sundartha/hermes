@@ -1,4 +1,4 @@
-import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../begriffe/anrufe.js";
+import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../begriffe/anrufe.ts";
 import { TEXT_LIMITS, type TextName } from "../begriffe/anruf-pruefung.ts";
 
 interface Grenzen {

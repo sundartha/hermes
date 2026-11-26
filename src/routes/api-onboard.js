@@ -6,7 +6,7 @@ import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.ts";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.ts";
 import { PROVIDER, SKIP_VERMERK_SCHLUESSEL, shouldPersistProvisionResult } from "../begriffe/nummern-vergabe.js";
-import { KYC_OUTBOUND_MIN, tenantIdForSubject } from "../begriffe/mandant.js";
+import { KYC_OUTBOUND_MIN, tenantIdForSubject } from "../begriffe/mandant.ts";
 import { kauflandFuer } from "../begriffe/rufnummern.js";
 import {
   registerTenant,

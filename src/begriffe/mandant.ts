@@ -7,7 +7,7 @@ export const TENANT_STATUS = Object.freeze({
 });
 
 const TENANT_ID_PREFIX = "t_";
-export const tenantIdForSubject = (sub) => `${TENANT_ID_PREFIX}${sub}`;
+export const tenantIdForSubject = (sub: string): string => `${TENANT_ID_PREFIX}${sub}`;
 
 export const KYC_LEVEL = Object.freeze({
   NONE: "none",

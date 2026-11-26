@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startServer, seedState } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { starteAbbrechendeAttrappe, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const TO = "+4915112345678";
 const OWNER_NUMBER = "+15005550006";

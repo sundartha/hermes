@@ -1,6 +1,6 @@
 import { speicherBereiche } from "../store.js";
 import { meldeBetreiberNotiz } from "../telephony/outage-report.js";
-import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
+import { KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
 import { schliesseMarker as schliesseMarkerUntypisiert } from "./price-drift-watch.ts";
 
 interface Store {

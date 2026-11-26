@@ -1,5 +1,5 @@
 import type { Clock, ConstructorOptions, Job, PgBoss } from "pg-boss";
-import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.js";
+import { ANRUFSTART_JOB } from "../../../begriffe/anrufe.ts";
 import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../../../utils/timer.ts";
 import { requireIdempotencyKey } from "../../idempotency-key.ts";
 import { herzschlagUeberfaellig } from "../../zeitplan-frist.ts";

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { speicherBereiche } from "../../src/store.js";
-import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 
 const JETZT_MS = Date.parse("2026-09-11T12:00:00.000Z");
 const FRIST_MS = 3600000;

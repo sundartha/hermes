@@ -2,7 +2,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { importNachUmgebung } from "../gemeinsam/umgebung-import.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const TENANT_B = "B";
 const B_OWNER = "Maria";

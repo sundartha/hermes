@@ -41,10 +41,10 @@ import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.ts";
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.ts";
 import { USAGE_EVENT_KIND } from "./begriffe/abrechnung.ts";
-import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "./begriffe/mandant.ts";
 import { normNum } from "./begriffe/rufnummern.js";
 import { PLATFORM_NUMBER_PURPOSE, DEFAULT_PROVIDER } from "./begriffe/nummern-vergabe.js";
-import { BOOTSTRAP_NUMBER_HOLD_PURPOSE } from "./begriffe/bootstrap-halt.js";
+import { BOOTSTRAP_NUMBER_HOLD_PURPOSE } from "./begriffe/bootstrap-halt.ts";
 import { START_ROUTINE } from "./begriffe/speicher.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.ts";
 import {

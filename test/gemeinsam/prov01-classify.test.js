@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyQueuedProvisioningJobs } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVISION_NUMBER_JOB, PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { TENANT_STATUS, KYC_LEVEL, KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.js";
+import { TENANT_STATUS, KYC_LEVEL, KYC_OUTBOUND_MIN } from "../../src/begriffe/mandant.ts";
 
 const NOW = Date.parse("2026-07-03T12:00:00.000Z");
 const HOUR = 3600000;

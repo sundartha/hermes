@@ -8,7 +8,7 @@ import { makeBillingRoutes } from "../../src/routes/api-billing.ts";
 import { seedState } from "../helpers.js";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 async function startFakeStripe() {

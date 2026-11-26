@@ -1,6 +1,6 @@
 import { makePgStore } from "../../src/store/pg.js";
 import { migrate } from "../../src/db/migrate.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const SCHEMA_COLUMNS_SQL =
   "SELECT table_name, column_name FROM information_schema.columns " +

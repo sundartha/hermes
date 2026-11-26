@@ -1,4 +1,4 @@
-import { NUMBER_STATUS } from "../begriffe/nummern.js";
+import { NUMBER_STATUS } from "../begriffe/nummern.ts";
 import { SKIP_VERMERK_SCHLUESSEL } from "../begriffe/nummern-vergabe.js";
 import * as ausfall from "./zustand/ausfall.js";
 import { expireOrphanedConsults } from "./state-ops.js";

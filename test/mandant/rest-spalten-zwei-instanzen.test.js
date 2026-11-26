@@ -5,7 +5,7 @@ import express from "express";
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { speicherBereiche } from "../../src/store.js";
 import { makeProvisioningOrchestrator } from "../../src/worker/provisioning-orchestrator.ts";
-import { tenantIdForSubject } from "../../src/begriffe/mandant.js";
+import { tenantIdForSubject } from "../../src/begriffe/mandant.ts";
 import { operatorAuthPassThrough } from "../operator-route-app.js";
 import { OHNE_EL_ZUGANG, withConfigNamespaces } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";

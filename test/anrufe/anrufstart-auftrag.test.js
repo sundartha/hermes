@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ANRUFSTART_JOB } from "../../src/begriffe/anrufe.js";
+import { ANRUFSTART_JOB } from "../../src/begriffe/anrufe.ts";
 import { makeAnrufstartAuftrag } from "../../src/elevenlabs/anrufstart-auftrag.ts";
 import { createQueue } from "../../src/queue/registry.ts";
 import * as speicher from "../../src/store.js";

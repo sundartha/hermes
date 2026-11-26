@@ -15,7 +15,7 @@ import {
   stampBudgetPeriod,
   usageFor,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { emptyUsage } from "../../src/store.js";
 import { USAGE_CORRUPT_REASON } from "../../src/begriffe/abrechnung.ts";
 import { callTariffCentsPerMin, makeMetering } from "../../src/billing/metering.js";

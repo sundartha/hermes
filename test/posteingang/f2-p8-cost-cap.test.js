@@ -9,7 +9,7 @@ import {
 } from "../../src/store/state-ops.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { planSummarySms } from "../../src/sms-summary.ts";
 import { makePgTestStore } from "../pg-helpers.js";

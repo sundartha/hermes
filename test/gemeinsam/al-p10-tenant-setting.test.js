@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makePgTestStore } from "../pg-helpers.js";
 import { makePgStore } from "../../src/store/pg.js";
 import { defaultSettings } from "../../src/store.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { selfServicePatch } from "../../src/self-service.js";
 
 test("AL-P10-13 defaultSettings().allowResearch === false", () => {

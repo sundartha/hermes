@@ -1,4 +1,4 @@
-import { ANRUFSTART_WARTEFRIST_MAX_MS, NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.js";
+import { ANRUFSTART_WARTEFRIST_MAX_MS, NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.ts";
 import { MS_PER_MINUTE } from "../utils/timer.ts";
 import type { umgebungMit } from "./umgebung.ts";
 

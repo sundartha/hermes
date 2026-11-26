@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const QUESTION = "Darf ich den Termin auch auf Freitag legen?";
 function message(content, stopReason) {
@@ -52,7 +52,7 @@ before(async () => {
   );
   ({ config } = await import("../../src/config.ts"));
   store = await import("../../src/store.js");
-  defaults = await import("../../src/begriffe/rueckfrage.js");
+  defaults = await import("../../src/begriffe/rueckfrage.ts");
   claude = await import("../../src/claude.js");
   inCall = await import("../../src/consult/in-call.js");
   delivery = await import("../../src/consult/delivery.ts");

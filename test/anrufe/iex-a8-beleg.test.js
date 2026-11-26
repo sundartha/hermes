@@ -28,8 +28,8 @@ before(async () => {
   ops = await import("../../src/store/state-ops.js");
   jsonStore = await import("../../src/store/json.js");
   ({ makePgStore } = await import("../../src/store/pg.js"));
-  ({ NUMBER_STATUS } = await import("../../src/begriffe/nummern.js"));
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ NUMBER_STATUS } = await import("../../src/begriffe/nummern.ts"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.ts"));
 });
 
 const SIP_USER = "iex-a8-sip-benutzer";

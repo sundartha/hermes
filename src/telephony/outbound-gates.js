@@ -1,5 +1,5 @@
 import { config as defaultConfig } from "../config.ts";
-import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN } from "../begriffe/mandant.ts";
 import {
   countryForE164,
   hatKaufbareVorwahl,

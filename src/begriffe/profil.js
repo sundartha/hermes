@@ -1,4 +1,4 @@
-import { BOOTSTRAP_TENANT_ID } from "./mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "./mandant.ts";
 import { normNum } from "./rufnummern.js";
 
 export const PROFILE_FIELDS = {

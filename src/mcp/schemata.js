@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.js";
+import { RECIPIENT_NAME_MAX_LENGTH } from "../begriffe/anrufe.ts";
 
 const CALL_SUBJECT_OUTPUT = {
   to: z.string().nullable().optional(),

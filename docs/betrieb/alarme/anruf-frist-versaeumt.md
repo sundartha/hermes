@@ -5,7 +5,7 @@ Regel: `docs/betrieb/grafana/alarmregeln.json`, Eintrag `anruf-frist-versaeumt` 
 ## Symptom
 
 - `frist="el_angenommen"`: Der Angerufene hat abgehoben, ElevenLabs hat das zweite Bein aber nicht angenommen. Gezählt wird, wenn die Frist abläuft (`bridgeStartDeadlineMs` in `src/config.ts`, Env `EL_BRIDGE_START_DEADLINE_MS`), wenn die Wahl des Beins scheitert oder wenn es vor der Annahme auflegt. Legt der Angerufene vorher selbst auf, zählt nichts.
-- `frist="abschluss"`: Ein verbundener Anruf war beim Ablauf seiner Höchstdauer noch offen und musste vom Fristenlauf beendet werden (`terminateExpiredCall` in `src/telephony/call-lifecycle.ts`; Höchstdauer je Anruf `maxDurationS`, Obergrenze `MAX_CALL_DURATION_CAP_S` in `src/begriffe/anrufe.js`). Auch ein echtes Gespräch, das die Höchstdauer erreicht, zählt hier.
+- `frist="abschluss"`: Ein verbundener Anruf war beim Ablauf seiner Höchstdauer noch offen und musste vom Fristenlauf beendet werden (`terminateExpiredCall` in `src/telephony/call-lifecycle.ts`; Höchstdauer je Anruf `maxDurationS`, Obergrenze `MAX_CALL_DURATION_CAP_S` in `src/begriffe/anrufe.ts`). Auch ein echtes Gespräch, das die Höchstdauer erreicht, zählt hier.
 
 ## Prüfen
 

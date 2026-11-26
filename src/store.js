@@ -556,10 +556,10 @@ export { arbeitGehoertLebenderFremder, auftragHaltGrund } from "./store/zustand/
 export { zustandsFunktionen };
 export { ersatzNummerEintragen, ersatzSpurEntfernen } from "./store/ersatz-spur.js";
 export { speicherBereiche } from "./store/bereiche.js";
-export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.js";
+export { MAX_CALL_DURATION_CAP_S } from "./begriffe/anrufe.ts";
 export { assertKaufbareRufnummer, assertKaufbaresLand, kauflandFuer } from "./begriffe/rufnummern.js";
 export { TAUSCH_ERGEBNIS } from "./begriffe/nummern-vergabe.js";
-export { NUMBER_STATUS } from "./begriffe/nummern.js";
+export { NUMBER_STATUS } from "./begriffe/nummern.ts";
 export { DEFAULT_GREETING, calendarMap, defaultSettings, defaultSettingsMap, demoCalendar, emptyPlatformTtsUsage, emptyUsage, emptyUsageMap } from "./store/leerzustaende.js";
 
 export const withStoreLock = macheSpeicherSperre();

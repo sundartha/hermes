@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { neuePglite } from "../pglite-helfer.js";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../../src/store/pg.js";
 import * as ops from "../../src/store/state-ops.js";
-import { KYC_LEVEL } from "../../src/begriffe/mandant.js";
+import { KYC_LEVEL } from "../../src/begriffe/mandant.ts";
 
 const runnerFor = (db) => ({
   withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import crypto from "node:crypto";
 import { tempDataDir, seedState } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const OWNER = "Antonio Fotiadis";
 const TIMEOUT_MS = 2000;

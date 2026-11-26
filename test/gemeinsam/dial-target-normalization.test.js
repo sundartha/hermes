@@ -1,7 +1,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { homeCountryCode, normalizeDialTarget, normNum, E164 } from "../../src/begriffe/rufnummern.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { startServer, seedState, OWNER_TEST_NUMBER, placeCall } from "../helpers.js";
 import { starteAbbrechendeAttrappe } from "./vorspann-fahrzeug.js";
 

@@ -1,5 +1,5 @@
 import { KOSTENPROFIL, kostenprofilFuerAnruf } from "../billing/kostenarten.ts";
-import { NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.js";
+import { NICHT_ERREICHT_FRIST_MS } from "../begriffe/anrufe.ts";
 
 export { NICHT_ERREICHT_FRIST_MS };
 export const NICHT_ANGENOMMEN_GRUND = "no-answer";

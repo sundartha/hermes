@@ -7,8 +7,8 @@ import {
 } from "../../src/billing/cost-truing.ts";
 import { makeDefaultState, createCall } from "../../src/store/state-ops.js";
 import { COST_TRUING_SOURCE } from "../../src/begriffe/abrechnung.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { starteBetterStackAttrappe } from "../gemeinsam/better-stack-attrappe.mjs";
 import { makeStubStore, fakeConfig, isoMinutesAgo, makeDueOutboundCall, fakeVoiceControl } from "../cost-truing-harness.js";
 

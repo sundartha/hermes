@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { voiceMinutesOf } from "../../src/billing/metering.js";
 import { answeredAnchorOutcome } from "../../src/elevenlabs/outbound.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   createCall,
   isInCallConsult,

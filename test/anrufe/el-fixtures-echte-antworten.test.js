@@ -9,7 +9,7 @@ import {
   callCostEvidence,
   recordElDetectorCounts,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { REIFE } from "../../src/begriffe/abrechnung.ts";
 import { KOSTENART } from "../../src/billing/kostenarten.ts";
 import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";

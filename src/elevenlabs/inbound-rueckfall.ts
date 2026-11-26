@@ -3,7 +3,7 @@ import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.ts";
 import { elSipUri } from "./inbound-sip-uri.ts";
 import { dialSip, hangup, redirect, sayWithVoiceId } from "../telephony/directives.ts";
 import { callMaxDurationMs } from "../call-duration.ts";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
 interface Anruf {

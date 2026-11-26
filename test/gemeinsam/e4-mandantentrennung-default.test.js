@@ -11,7 +11,7 @@ import {
   readToolResult,
   assertReauthChallenge,
 } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannMandantenUmgebung, vorspannSeedNummer } from "./vorspann-fahrzeug.js";
 

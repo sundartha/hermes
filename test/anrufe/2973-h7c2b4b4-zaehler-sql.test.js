@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ANRUFE_LAUFEND_PATH, makeInternAnrufeLaufendRoutes } from "../../src/routes/intern-anrufe-laufend.js";
-import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../../src/begriffe/anrufe.ts";
 import { classifyCallTime } from "../../src/store.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { H7C2B4B4_DEPLOY_TOKEN } from "../gemeinsam/erfundene-geheimnisse.js";

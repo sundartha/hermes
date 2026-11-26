@@ -11,9 +11,9 @@ import {
   NUMBER_HOLD_REASON,
 } from "../../begriffe/nummern-vergabe.js";
 import { DEFAULT_COUNTRY } from "../../begriffe/sprache-zeit.ts";
-import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.js";
+import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.ts";
 import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.ts";
 import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.js";
 import { languageForCountry } from "../../i18n/locales.ts";
 import { resolvePeriodStartIso } from "../../billing/period.ts";

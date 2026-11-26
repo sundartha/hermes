@@ -5,7 +5,7 @@ import { KOSTENPROFIL } from "../src/billing/kostenarten.ts";
 import { EL_CALL_BINDING_SIP_HEADER } from "../src/elevenlabs/inbound-sip-uri.ts";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import * as ops from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/begriffe/mandant.ts";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.ts";
 import { MS_PER_SECOND } from "../src/utils/timer.ts";

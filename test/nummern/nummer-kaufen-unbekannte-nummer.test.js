@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { handleProvisionJob } from "../../src/worker/provisioning.ts";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { NummerGekauftIdOffen } from "../../src/begriffe/nummern-vergabe.js";
 
 const E164 = "+12025550101";

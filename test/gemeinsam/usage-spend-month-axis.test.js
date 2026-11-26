@@ -13,7 +13,7 @@ import {
   tryReserveOutboundBudget,
 } from "../../src/store/state-ops.js";
 import { emptyUsage } from "../../src/store.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { MICRO_CENTS_PER_CENT } from "../../src/begriffe/abrechnung.ts";
 import { makePgStore } from "../../src/store/pg.js";
 import { applySchema } from "../../src/db/migrate.js";

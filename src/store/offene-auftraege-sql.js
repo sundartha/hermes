@@ -1,4 +1,4 @@
-import { PROVISIONING_JOB_STATUS } from "../begriffe/nummern.js";
+import { PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 
 export const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, true)`;
 export const AUFTRAG_SPALTEN = "id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz";

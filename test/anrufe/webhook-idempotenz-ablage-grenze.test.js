@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { startServer, makeTelnyxSigner, nowSeconds, OWNER_TEST_NUMBER } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 
 const CACHE_GROESSE = 200;

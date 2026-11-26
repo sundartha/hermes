@@ -6,8 +6,8 @@ import {
   makePaidWithoutNumberWatch,
   paidWithoutNumberBucket,
 } from "../../src/billing/paid-without-number-watch.ts";
-import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { TENANT_STATUS, KYC_LEVEL } from "../../src/begriffe/mandant.ts";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 

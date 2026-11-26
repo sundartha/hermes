@@ -6,7 +6,7 @@ import { HERMES_SERVER_INFO, MCP_BASE_INSTRUCTIONS } from "../mcp-server-info.js
 import { applyToolSecuritySchemes } from "../mcp-security-schemes.js";
 import { AUTH_FAILED_GRUND } from "../util.ts";
 import { createRateLimiter } from "../middleware.ts";
-import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../begriffe/mandant.ts";
 import { speicherBereiche } from "../store.js";
 
 export const PROBE_MCP_PATH = "/intern/probe/mcp";

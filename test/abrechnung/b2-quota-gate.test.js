@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { USAGE_EVENT_KIND } from "../../src/begriffe/abrechnung.ts";
 import { findPlan } from "../../src/plans.ts";
 import { resolvePeriodStartIso, periodStartFromEnd } from "../../src/billing/period.ts";

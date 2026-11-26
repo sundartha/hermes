@@ -14,7 +14,7 @@ import {
   resolveCallLanguage,
   updateSettings,
 } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.ts";
 import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.ts";
 import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { applySchema, migrate } from "../../src/db/migrate.js";

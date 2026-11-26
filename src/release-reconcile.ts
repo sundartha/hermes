@@ -9,7 +9,7 @@ import {
   tenantNumbersForErase,
   RELEASE_VERDICT,
 } from "./store/state-ops.js";
-import { NUMBER_STATUS } from "./begriffe/nummern.js";
+import { NUMBER_STATUS } from "./begriffe/nummern.ts";
 import { fehlerText } from "./utils/fehler-text.ts";
 
 type ReleaseNumber = Parameters<typeof numberBusyReason>[1];

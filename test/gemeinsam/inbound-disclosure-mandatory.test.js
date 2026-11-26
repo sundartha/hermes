@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, settingsFor, updateSettings } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { INBOUND_NOTICES } from "../../src/i18n/inbound-notice.ts";
 
 test("Inbound-Pflichtsatz: updateSettings verwirft NUR das Greeting ohne Marker, der Rest des Patches laeuft durch (ex GAP-14 b)", () => {

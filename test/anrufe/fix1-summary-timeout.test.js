@@ -4,7 +4,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { tempDataDir, seedState, seedCall } from "../helpers.js";
 import { gebauteKonfiguration } from "../gemeinsam/gebaute-konfiguration.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const OWNER = "Jonas Beispiel";
 const CALL_ID = "call_fix1";

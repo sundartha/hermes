@@ -7,7 +7,7 @@ import { createMetrics } from "../../src/metrics.ts";
 import { makeOutboundGates } from "../../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { startServer, seedState, placeCall, waitForLog } from "../helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const RENDER_YAML = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");

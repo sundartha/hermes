@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { makePgTestStore } from "../pg-helpers.js";
 
 const WRITE_ERROR = "Posteingang nicht beschreibbar";

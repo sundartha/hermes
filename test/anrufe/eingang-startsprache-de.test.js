@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedWithTelnyxNumber, postTelnyxIncoming } from "../helpers.js";
 import { LOCALES } from "../../src/i18n/locales.ts";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { vorspannSeedNummer } from "../gemeinsam/vorspann-fahrzeug.js";
 

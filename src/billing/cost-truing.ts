@@ -5,7 +5,7 @@ import {
   isProviderMicroCents,
   istBeweisendeHerkunft,
 } from "../begriffe/abrechnung.ts";
-import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";

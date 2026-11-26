@@ -7,7 +7,7 @@ import {
   reviewerSeedEndedAtIso,
   zaehleSeedAnrufeImFenster,
 } from "./lib/reviewer-demo-seed.mjs";
-import { KYC_OUTBOUND_MIN } from "../src/begriffe/mandant.js";
+import { KYC_OUTBOUND_MIN } from "../src/begriffe/mandant.ts";
 
 const EXIT_ABORT = 1;
 const PG_BACKEND = "pg";

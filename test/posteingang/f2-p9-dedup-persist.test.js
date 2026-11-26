@@ -5,9 +5,9 @@ import { makePgStore } from "../../src/store/pg.js";
 import { planSummarySms } from "../../src/sms-summary.ts";
 import { publicCall } from "../../src/store/views.ts";
 import { makeDefaultState, createCall, markSummarySmsSent } from "../../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../../src/begriffe/nummern.js";
+import { NUMBER_STATUS } from "../../src/begriffe/nummern.ts";
 import { PROVIDER } from "../../src/begriffe/nummern-vergabe.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 
 const PROV = PROVIDER.TELNYX;

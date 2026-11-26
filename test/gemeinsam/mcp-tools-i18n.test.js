@@ -4,7 +4,7 @@ import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
 import { startServer, startIdp, mcpPost, toolCall, readToolResult } from "../helpers.js";
 import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const HTTP_OK = 200;
 

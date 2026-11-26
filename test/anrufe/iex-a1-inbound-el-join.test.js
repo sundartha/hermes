@@ -44,7 +44,7 @@ before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-iex-a1-"));
   await import("../../src/config.ts");
   jsonStore = await import("../../src/store/json.js");
-  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.js"));
+  ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../../src/begriffe/mandant.ts"));
   ({ REIFE } = await import("../../src/begriffe/abrechnung.ts"));
 });
 

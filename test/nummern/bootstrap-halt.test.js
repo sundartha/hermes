@@ -12,7 +12,7 @@ import { fakeProvisioner, seedState, startServer } from "../helpers.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { makePgTestStore } from "../pg-helpers.js";
 import { makeStripeWebhookRoute } from "../../src/routes/stripe-webhook.ts";
-import { BOOTSTRAP_TENANT_ID as BOOTSTRAP_MANDANT } from "../../src/begriffe/mandant.js";
+import { BOOTSTRAP_TENANT_ID as BOOTSTRAP_MANDANT } from "../../src/begriffe/mandant.ts";
 
 const BOOTSTRAP_NUMMER = "+15005550006";
 const ANDERE_NUMMER = "+15005550007";

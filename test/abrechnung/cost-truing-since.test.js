@@ -9,7 +9,7 @@ const { telnyxVoice, ASSIGNABLE_COST_RECORD_TYPES } = await import("../../src/te
 const { makeCostTruing, SWEEP_TRIGGER } = await import("../../src/billing/cost-truing.ts");
 const { makeDefaultState, usageFor } = await import("../../src/store/state-ops.js");
 const { COST_TRUING_SOURCE } = await import("../../src/begriffe/abrechnung.ts");
-const { BOOTSTRAP_TENANT_ID } = await import("../../src/begriffe/mandant.js");
+const { BOOTSTRAP_TENANT_ID } = await import("../../src/begriffe/mandant.ts");
 const { emptyUsage } = await import("../../src/store.js");
 const {
   makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl,
@@ -20,7 +20,7 @@ const {
 const P5_NOW = "2026-07-21T18:00:00.000Z";
 const OLDEST_ENDED_MINUTES_AGO = 600;
 const EXPECTED_SINCE = "2026-07-21T02:00:00.000Z";
-const { MAX_CALL_DURATION_CAP_S } = await import("../../src/begriffe/anrufe.js");
+const { MAX_CALL_DURATION_CAP_S } = await import("../../src/begriffe/anrufe.ts");
 const POOL_SINCE_MARGIN_FACTOR = 12;
 
 function paramRecordingAdapter(poolParams) {
