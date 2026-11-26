@@ -565,7 +565,9 @@ export function makeOutboundGates({
       run(ctx) {
         const tariffCents = tariffCentsPerMin(ctx.to, ctx.fromNumber);
         ctx.reserveCents = outboundReserveCents(tariffCents);
-        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, brakeSecondsFor(ctx.tenantId, tariffCents));
+        const bremse = brakeSecondsFor(ctx.tenantId, tariffCents);
+        const betreiberGrenze = defaultConfig.safety.anrufHoechstdauerS ?? Infinity;
+        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, Math.min(bremse, betreiberGrenze));
         return null;
       },
     },

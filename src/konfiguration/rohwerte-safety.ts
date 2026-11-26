@@ -1,3 +1,4 @@
+import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { MS_PER_DAY, MS_PER_MINUTE } from "../utils/timer.ts";
 import { umgebungMit } from "./umgebung.ts";
 
@@ -46,6 +47,7 @@ export function rohwerteSafety(
     PER_TARGET_CALL_CAP?: string | undefined;
     PER_TARGET_WINDOW_MS?: string | undefined;
     CAP_FAREWELL_LEAD_MS?: string | undefined;
+    ANRUF_HOECHSTDAUER_S?: string | undefined;
     RESERVE_RELEASE_GRACE_MS?: string | undefined;
     BUDGET_WATCHDOG_INTERVAL_MS?: string | undefined;
     RATE_LIMIT_PER_MIN?: string | undefined;
@@ -64,6 +66,7 @@ export function rohwerteSafety(
   perTargetCallCap: number;
   perTargetWindowMs: number;
   capFarewellLeadMs: number;
+  anrufHoechstdauerS: number | undefined;
   reserveReleaseGraceMs: number;
   budgetWatchdogIntervalMs: number;
   rateLimitPerMin: number;
@@ -93,6 +96,11 @@ export function rohwerteSafety(
       fallback: 20000,
       min: 0,
       max: MS_PER_MINUTE,
+    }),
+    anrufHoechstdauerS: numEnv("ANRUF_HOECHSTDAUER_S", env.ANRUF_HOECHSTDAUER_S, {
+      min: 1,
+      max: MAX_CALL_DURATION_CAP_S,
+      maxIstFehler: true,
     }),
     reserveReleaseGraceMs: numEnv("RESERVE_RELEASE_GRACE_MS", env.RESERVE_RELEASE_GRACE_MS, {
       fallback: 15000,

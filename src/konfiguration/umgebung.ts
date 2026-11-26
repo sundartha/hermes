@@ -27,6 +27,7 @@ interface NumEnvOptionen {
   fallback?: number;
   min?: number;
   max?: number;
+  maxIstFehler?: boolean;
   integer?: boolean;
 }
 
@@ -53,7 +54,7 @@ function numEnvMit(fehlerliste: string[]) {
   function numEnv(
     name: string,
     raw: string | undefined,
-    { fallback, min, max, integer = true }: NumEnvOptionen = {},
+    { fallback, min, max, maxIstFehler = false, integer = true }: NumEnvOptionen = {},
   ): number | undefined {
     if (raw === undefined || raw === "") return fallback;
     const parsed = parseNumEnv(raw.trim(), integer);
@@ -67,7 +68,11 @@ function numEnvMit(fehlerliste: string[]) {
       fehlerliste.push(`${name}=${String(parsed)} unterschreitet das Minimum ${String(min)}.`);
       return fallback;
     }
-    if (max !== undefined && parsed > max) return max;
+    if (max !== undefined && parsed > max) {
+      if (!maxIstFehler) return max;
+      fehlerliste.push(`${name}=${String(parsed)} ueberschreitet das Maximum ${String(max)}.`);
+      return fallback;
+    }
     return parsed;
   }
   return numEnv;
