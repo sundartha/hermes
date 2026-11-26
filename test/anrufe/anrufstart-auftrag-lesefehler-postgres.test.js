@@ -4,7 +4,6 @@ import { before, test } from "node:test";
 
 import express from "express";
 import { makeAnrufstartAuftrag } from "../../src/elevenlabs/anrufstart-auftrag.ts";
-import { terminateAndBillCall } from "../../src/telephony/call-termination.ts";
 import { LEITUNGSPLATZ_ENTSCHEIDUNG, makePostgresAnrufstartMarker } from "../../src/store.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { EL_OUTBOUND_CONFIG } from "../helpers.js";
@@ -19,7 +18,8 @@ const HTTP_OK = 200;
 const LESE_VERSUCHE = 9;
 const WARTE_TAKT_MS = 1000;
 const WARTEFRIST_MS = 120 * 1000;
-const FRIST_NICHT_LESBAR_S = 10;
+const FRIST_NICHT_LESBAR_MS = 10 * 1000;
+const UHR_MS = Date.parse("2026-01-01T00:00:00.000Z");
 
 let makeCallRoutes;
 
@@ -80,7 +80,10 @@ function routen({ store, attrappe, plaetze, protokoll, anrufstart }) {
     callQuotaDenial: () => null,
     voiceControl: () => ({ originateCall: async () => ({ sid: "sid_6303" }), endCall: async () => {} }),
     originateElevenLabsCall: async () => {},
-    terminateAndBillCall,
+    terminateAndBillCall: async ({ persistEnd, bill }) => {
+      await persistEnd();
+      await bill();
+    },
     hangUpAction: () => null,
     billThunk: (_finish, _store, callId) => () => protokoll.abgerechnet.push(callId),
     finishCall: () => {},
@@ -141,7 +144,7 @@ async function zweiInstanzen(t) {
   await instanzB.init();
   const protokoll = { abgerechnet: [], gewartet: [], eingereiht: [], handler: null };
   const attrappeB = vorspannDiAttrappe();
-  const uhr = { jetztMs: Date.now, warte: async (ms) => protokoll.gewartet.push(ms) };
+  const uhr = { jetztMs: () => UHR_MS, warte: async (ms) => protokoll.gewartet.push(ms) };
   routen({
     store: instanzB,
     attrappe: attrappeB,
@@ -218,7 +221,7 @@ test("Anrufstart Queue-Pfad: bleibt das Lesen der Anrufzeile unmoeglich, endet d
   assert.deepEqual(await zeileLesen(runner, body.callId), { status: "failed", failure_reason: "not-placed:anruf-nicht-lesbar" });
   assert.deepEqual(protokoll.abgerechnet, [body.callId]);
   assert.deepEqual(protokoll.gewartet, Array(LESE_VERSUCHE - 1).fill(WARTE_TAKT_MS));
-  assert.ok((LESE_VERSUCHE - 1) * (WARTE_TAKT_MS / 1000) <= FRIST_NICHT_LESBAR_S);
+  assert.ok(protokoll.gewartet.reduce((summe, ms) => summe + ms, 0) <= FRIST_NICHT_LESBAR_MS);
 });
 
 test("Anrufstart Queue-Pfad: ein Auftrag mit unbekannter callId wirft, waehlt nicht und legt keine Zeile an", async (t) => {
