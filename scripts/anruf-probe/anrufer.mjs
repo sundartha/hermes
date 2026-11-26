@@ -88,7 +88,7 @@ const MASKE = "…";
 function auszugVon(wortlaut, token) {
   const ohneToken = token ? wortlaut.split(token).join(MASKE) : wortlaut;
   const einzeilig = ohneToken.replace(/\s+/g, " ").replace(/"/g, "'");
-  const maskiert = einzeilig.replace(LANGE_ZIFFERN, "#").replace(LANGES_WORT, MASKE);
+  const maskiert = einzeilig.replace(LANGES_WORT, MASKE).replace(LANGE_ZIFFERN, "#");
   return maskiert.trim().slice(0, AUSZUG_MAX);
 }
 
