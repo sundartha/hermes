@@ -10,6 +10,7 @@ import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
 const HTTP_OK = 200;
 const OBJECTIVE = "Termin vereinbaren (eine Sprache)";
 const FR_ZIEL = "+33612345678";
+const PT_ZIEL = "+351912345678";
 
 const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
@@ -18,10 +19,10 @@ const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
-async function startInhalt({ to, language }) {
+async function startInhalt({ to, language, mandantSprache = "de" }) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV },
-    seed: seedState({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+    seed: seedState({ settings: { language: mandantSprache }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
@@ -73,6 +74,17 @@ describe("eine Sprache je Anruf: Offenlegung und Gespraech folgen der Anrufsprac
     const inhalt = await startInhalt({ to: TELNYX_TEST_PEER_NUMBER, language: "pt-BR" });
     assert.equal(inhalt.conversation_config_override.agent.language, "pt");
   });
+
+  const AUSDRUECKLICH_DE = [
+    { name: "de an eine +351-Nummer bei Mandantensprache en", to: PT_ZIEL, mandantSprache: "en" },
+    { name: "de an eine +33-Nummer bei Mandantensprache en", to: FR_ZIEL, mandantSprache: "en" },
+  ];
+  for (const fall of AUSDRUECKLICH_DE)
+    it(`${fall.name}: Pflichtsatz und agent.language auf de`, async () => {
+      const inhalt = await startInhalt({ ...fall, language: "de" });
+      assert.equal(inhalt.conversation_config_override.agent.language, "de");
+      assert.match(gesagt(inhalt), KI_HINWEIS.de, JSON.stringify(gesagt(inhalt)));
+    });
 
   it("ohne Anrufsprache bleibt die Landessprache der Nummer fuer die Offenlegung", async () => {
     const inhalt = await startInhalt({ to: FR_ZIEL });
