@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { speicherBereiche } from "../store.js";
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 
 const kuendigungsSperre: <T>(key: string, fn: () => Promise<T>) => Promise<T> = makeKeyedChainMutex();
 
@@ -12,14 +13,11 @@ interface Subscription {
 
 interface Result { cancelAtPeriodEnd: boolean; currentPeriodEnd?: number | null }
 
-type Ergebnis =
-  | { ok: false; reason: string }
-  | {
-      ok: true;
-      cancelAtPeriodEnd: boolean | undefined;
-      currentPeriodEnd: number | null | undefined;
-      alreadyApplied: boolean;
-    };
+interface Kuendigungsstand {
+  cancelAtPeriodEnd: boolean | undefined;
+  currentPeriodEnd: number | null | undefined;
+  alreadyApplied: boolean;
+}
 
 interface Auftrag {
   store: {
@@ -43,17 +41,16 @@ function schluesselJeUebergang(cancel: boolean, subscriptionId: string) {
   return `${cancel ? "cancel_sched_" : "cancel_unsched_"}${subscriptionId}_${randomUUID()}`;
 }
 
-async function wendeKuendigungAn({ store, billing, tenant, cancel }: Auftrag): Promise<Ergebnis> {
+async function wendeKuendigungAn({ store, billing, tenant, cancel }: Auftrag): Promise<Ergebnis<Kuendigungsstand>> {
   const bereiche: Bereiche = speicherBereiche(store);
   const before = await bereiche.konto.tenantSubscription(tenant);
-  if (!before.subscriptionId) return { ok: false, reason: "no_subscription" };
+  if (!before.subscriptionId) return fehler("no_subscription");
   if (before.cancelAtPeriodEnd === cancel) {
-    return {
-      ok: true,
+    return ok({
       cancelAtPeriodEnd: before.cancelAtPeriodEnd,
       currentPeriodEnd: before.currentPeriodEnd,
       alreadyApplied: true,
-    };
+    });
   }
   const idempotencyKey = schluesselJeUebergang(cancel, before.subscriptionId);
   const op = cancel ? billing.scheduleCancellation : billing.unscheduleCancellation;
@@ -61,14 +58,13 @@ async function wendeKuendigungAn({ store, billing, tenant, cancel }: Auftrag): P
   const patch: Subscription = { cancelAtPeriodEnd: result.cancelAtPeriodEnd };
   if (result.currentPeriodEnd != null) patch.currentPeriodEnd = result.currentPeriodEnd;
   await bereiche.kuendigung.setTenantSubscription(tenant, patch);
-  return {
-    ok: true,
+  return ok({
     cancelAtPeriodEnd: result.cancelAtPeriodEnd,
     currentPeriodEnd: result.currentPeriodEnd ?? before.currentPeriodEnd,
     alreadyApplied: false,
-  };
+  });
 }
 
-export function setSubscriptionCancellation(auftrag: Auftrag): Promise<Ergebnis> {
+export function setSubscriptionCancellation(auftrag: Auftrag): Promise<Ergebnis<Kuendigungsstand>> {
   return kuendigungsSperre(auftrag.tenant, () => wendeKuendigungAn(auftrag));
 }

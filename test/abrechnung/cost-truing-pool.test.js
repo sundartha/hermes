@@ -337,3 +337,53 @@ test("(h8a) Kostenabweichung und Korrektur stehen mit Zahlen im Protokoll", asyn
     lines.join("\n"),
   );
 });
+
+const GRENZE_JETZT_MS = Date.parse("2026-08-15T12:00:00.000Z");
+const GRENZE_BELEG = Object.freeze({ recordType: "sip-trunking", costMicroCents: H8A_COST_MICRO_CENTS });
+
+async function grenzSweep(telnyx) {
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, { nowMs: GRENZE_JETZT_MS, legRef: { callControlId: "cc_grenze" } });
+  const { runCostTruingSweep } = makeCostTruing({
+    store: makeStubStore(state), config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx }),
+    audit: () => {}, now: () => GRENZE_JETZT_MS,
+  });
+  let res;
+  const lines = await captureConsole(async () => {
+    res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  });
+  return { stand: [res.unavailable, call.costTruedSource, call.actualCostMicroCents], protokoll: lines.join("\n") };
+}
+
+const GRENZE_UNBESTIMMT = [1, COST_TRUING_SOURCE.UNAVAILABLE, null];
+
+test("geworfener Pool-Abruf bleibt unbestimmt, wird nie zugeordnet und zaehlt keine Anfragen", async () => {
+  const trace = [];
+  const { stand, protokoll } = await grenzSweep({
+    async fetchCostRecordPool() {
+      throw new Error("abruf kaputt");
+    },
+    assignCostRecords: () => trace.push("assign"),
+  });
+  assert.deepEqual(stand, GRENZE_UNBESTIMMT);
+  assert.deepEqual(trace, []);
+  assert.match(protokoll, /anfragen=0 seiten=0 pool=0 vollstaendig=false/);
+});
+
+test("abgelehnte Zuordnung wird auch mit mitgelieferten Belegen nie gemessen", async () => {
+  const { stand } = await grenzSweep({
+    ...h8aPoolAdapter({ records: [] }),
+    assignCostRecords: () => ({ ok: false, reason: "pool_missing", records: [GRENZE_BELEG] }),
+  });
+  assert.deepEqual(stand, GRENZE_UNBESTIMMT);
+});
+
+test("geworfene Zuordnung bleibt unbestimmt und beendet den Sweep nicht", async () => {
+  const { stand } = await grenzSweep({
+    ...h8aPoolAdapter({ records: [] }),
+    assignCostRecords: () => {
+      throw new Error("zuordnung kaputt");
+    },
+  });
+  assert.deepEqual(stand, GRENZE_UNBESTIMMT);
+});

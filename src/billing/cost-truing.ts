@@ -7,6 +7,7 @@ import {
 } from "../begriffe/abrechnung.ts";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.js";
 import { fehlerText } from "../utils/fehler-text.ts";
+import { fehler, ok, type Ergebnis } from "../utils/ergebnis.ts";
 import { MS_PER_DAY, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.ts";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { speicherBereiche } from "../store.js";
@@ -75,9 +76,17 @@ interface Belegabruf {
   records?: Detailsatz[] | undefined;
 }
 
+type Belegergebnis = Ergebnis<Belegabruf, string | undefined>;
+
+interface Anrufbein {
+  legId: string | null;
+  startedAt: string;
+  endedAt: string;
+}
+
 interface Kostensteuerung {
   fetchCostRecordPool(auswahl: { since: string | undefined }): Promise<Belegabruf>;
-  assignCostRecords(pool: Belegabruf, bein: { legId: string | null; startedAt: string; endedAt: string }): Belegabruf;
+  assignCostRecords(pool: Belegabruf, bein: Anrufbein): Belegabruf;
 }
 
 interface TtsWarnung {
@@ -185,7 +194,7 @@ interface Abrufstatistik {
 
 interface Abrufergebnis {
   control: Kostensteuerung | null | undefined;
-  pool: Belegabruf;
+  pool: Belegergebnis;
   stats: Abrufstatistik;
 }
 
@@ -630,9 +639,14 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return controls;
   }
 
-  function bookablePool(pool: Belegabruf | null | undefined): Belegabruf {
-    if (!pool?.ok) return pool ?? { ok: false };
-    return pool.complete === false ? { ok: false, reason: POOL_INCOMPLETE_REASON } : pool;
+  function uebersetzterAbruf(antwort: Belegabruf | null | undefined): Belegergebnis {
+    const abruf: Belegabruf = antwort ?? {};
+    return abruf.ok ? ok(abruf) : fehler(abruf.reason);
+  }
+
+  function bookablePool(antwort: Belegabruf | null | undefined): Belegergebnis {
+    const abruf = uebersetzterAbruf(antwort);
+    return abruf.ok && abruf.wert.complete === false ? fehler(POOL_INCOMPLETE_REASON) : abruf;
   }
 
   async function fetchCostRecordPoolFor(control: Kostensteuerung | null | undefined, since: string | undefined): Promise<Abrufergebnis> {
@@ -640,7 +654,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       const answer = await control?.fetchCostRecordPool({ since });
       return { control, pool: bookablePool(answer), stats: poolFetchStats(answer) };
     } catch {
-      return { control, pool: { ok: false }, stats: poolFetchStats(null) };
+      return { control, pool: fehler(undefined), stats: poolFetchStats(null) };
     }
   }
 
@@ -657,26 +671,26 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return { pools, fetchTally };
   }
 
-  async function trueOneCall(call: KostenAnruf, { control, pool = { ok: false } }: Partial<Abrufergebnis> = {}, sammler: Sammler): Promise<keyof Zaehlwerk> {
-    const legId = providerLegIdOf(call);
-    let result: Belegabruf | undefined;
+  function zugeordneterAbruf({ control, pool }: Pick<Abrufergebnis, "control" | "pool">, bein: Anrufbein): Belegergebnis {
+    if (!pool.ok) return pool;
     try {
-      result = pool.ok
-        ? control?.assignCostRecords(pool, { legId, startedAt: call.startedAt, endedAt: call.endedAt })
-        : pool;
+      return uebersetzterAbruf(control?.assignCostRecords(pool.wert, bein));
     } catch {
-      result = { ok: false };
+      return fehler(undefined);
     }
+  }
 
-    const measured = result?.ok
-      ? classifyRecords(result.records, pflichttypenVon(call, config.billing))
-      : null;
+  async function trueOneCall(call: KostenAnruf, { control, pool = fehler(undefined) }: Partial<Abrufergebnis> = {}, sammler: Sammler): Promise<keyof Zaehlwerk> {
+    const bein = { legId: providerLegIdOf(call), startedAt: call.startedAt, endedAt: call.endedAt };
+    const zuordnung = zugeordneterAbruf({ control, pool }, bein);
+    const records = zuordnung.ok ? zuordnung.wert.records : undefined;
+    const measured = classifyRecords(records, pflichttypenVon(call, config.billing));
     const attempt = nextAttemptOf(call);
     const sweepTraegerErledigt = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
     const abschluss = abschlussNachMessung({
       call,
       measured,
-      records: result?.records,
+      records,
       sweepTraegerErledigt,
       sammler,
       store,
