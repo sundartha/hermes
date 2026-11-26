@@ -11,7 +11,9 @@ const ABGLEICH_SEITE = 50;
 
 export const ANRUFSTART_WARTE_TAKT_MS = MS_PER_SECOND;
 
-export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt", NICHT_LESBAR: "anruf-nicht-lesbar" });
+export const ANRUFSTART_GRUND = Object.freeze({ MARKER_FEHLT: "marker-nicht-gesetzt" });
+
+export const ANRUFSTART_GRUND_NICHT_LESBAR = "anruf-nicht-lesbar";
 
 const LESE_VERSUCHE = 5;
 
@@ -207,7 +209,7 @@ export function makeAnrufstartAuftrag<A extends Anruf>({
   }
 
   async function beendeUnlesbaren(callId: string): Promise<void> {
-    await beendeOhneWahl(callId, ANRUFSTART_GRUND.NICHT_LESBAR).catch(() => undefined);
+    await beendeOhneWahl(callId, ANRUFSTART_GRUND_NICHT_LESBAR).catch(() => undefined);
   }
 
   return async function fuehreAnrufstartAus(auftrag: { payload?: unknown } | null): Promise<AnrufstartAusgang> {
