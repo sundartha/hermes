@@ -74,5 +74,5 @@ test("requestNumber nutzt tenantMayRequestNumber: suspended+Marker -> ok, ohne M
   setStatus(s2, "t_req_plain", TENANT_STATUS.SUSPENDED);
   const denied = requestNumber(s2, { tenantId: "t_req_plain", ...CAPS });
   assert.equal(denied.ok, false);
-  assert.equal(denied.reason, REQUEST_NUMBER_REASON.TENANT_INACTIVE);
+  assert.equal(denied.fehler, REQUEST_NUMBER_REASON.TENANT_INACTIVE);
 });
