@@ -22,7 +22,22 @@ const BESTAETIGEN_SQL = `UPDATE tenant SET newsletter_recipients = ${neueListe(
   `CASE WHEN e->>'status' = 'pending' AND e->>'tokenHash' = $2::text AND e->>'tokenExpiresAt' > $3::text THEN e || jsonb_build_object('status', 'confirmed', 'confirmedAt', $3::text, 'tokenHash', NULL::text, 'tokenExpiresAt', NULL::text) ELSE e END`,
 )} WHERE id = $1 RETURNING ${LISTE_ZURUECK}`;
 
-export const NEWSLETTER_LISTEN_LESEN_SQL = `SELECT id, ${LISTE_ZURUECK} FROM tenant WHERE newsletter_recipients IS NOT NULL`;
+const LESEN_SQL = `SELECT id, ${LISTE_ZURUECK} FROM tenant WHERE`;
+const MIT_LISTE = "newsletter_recipients IS NOT NULL";
+const enthaelt = (schluessel: string): string => `newsletter_recipients @> jsonb_build_array(jsonb_build_object('${schluessel}', $1::text))`;
+
+export interface AbgleichFilter {
+  tenantId?: string;
+  tokenHash?: string;
+  unsubToken?: string;
+}
+
+export function listenLesen(filter: AbgleichFilter = {}): Anweisung {
+  if (filter.tenantId !== undefined) return { sql: `${LESEN_SQL} id = $1 AND ${MIT_LISTE}`, werte: [filter.tenantId] };
+  if (filter.tokenHash !== undefined) return { sql: `${LESEN_SQL} ${enthaelt("tokenHash")}`, werte: [filter.tokenHash] };
+  if (filter.unsubToken !== undefined) return { sql: `${LESEN_SQL} ${enthaelt("unsubToken")}`, werte: [filter.unsubToken] };
+  return { sql: `${LESEN_SQL} ${MIT_LISTE}`, werte: [] };
+}
 
 interface Anweisung {
   sql: string;

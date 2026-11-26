@@ -263,10 +263,10 @@ async function nummerSuchen(speicher, e164) {
   return speicher.numberRecordByE164(e164);
 }
 
-async function nachAbgleich(speicher, aufruf) {
+async function nachAbgleich(speicher, filter, aufruf) {
   const treffer = aufruf();
   if (treffer || !speicher.newsletterAbgleichen) return treffer;
-  await speicher.newsletterAbgleichen();
+  await speicher.newsletterAbgleichen(filter);
   return aufruf();
 }
 
@@ -285,9 +285,9 @@ export function speicherBereiche(speicher) {
         speicher.confirmedNewsletterRecipients(tenantId),
       setNewsletterConsent: async (tenantId, consent) =>
         speicher.setNewsletterConsent(tenantId, consent),
-      removeNewsletterRecipient: async (tenantId, email) => nachAbgleich(speicher, () => speicher.removeNewsletterRecipient(tenantId, email)),
-      confirmNewsletterRecipientByToken: async (tokenHash, nowIso) => nachAbgleich(speicher, () => speicher.confirmNewsletterRecipientByToken(tokenHash, nowIso)),
-      unsubscribeNewsletterRecipientByToken: async (token) => nachAbgleich(speicher, () => speicher.unsubscribeNewsletterRecipientByToken(token)),
+      removeNewsletterRecipient: async (tenantId, email) => nachAbgleich(speicher, { tenantId }, () => speicher.removeNewsletterRecipient(tenantId, email)),
+      confirmNewsletterRecipientByToken: async (tokenHash, nowIso) => nachAbgleich(speicher, { tokenHash }, () => speicher.confirmNewsletterRecipientByToken(tokenHash, nowIso)),
+      unsubscribeNewsletterRecipientByToken: async (token) => nachAbgleich(speicher, { unsubToken: token }, () => speicher.unsubscribeNewsletterRecipientByToken(token)),
     },
     rueckfrage: {
       ackConsult: async (callId, eingabe) => speicher.ackConsult(callId, eingabe),
