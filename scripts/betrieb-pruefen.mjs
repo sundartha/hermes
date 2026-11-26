@@ -7,6 +7,8 @@ const EXIT_ROT = 1;
 const ARGV_OFFSET = 2;
 const REGELN = "docs/betrieb/grafana/alarmregeln.json";
 const ANRUFREGELN = "docs/betrieb/grafana/anrufregeln.json";
+const BETRIEBSREGELN = "docs/betrieb/grafana/betriebsregeln.json";
+const BEZEICHNER = /[A-Za-z_:][A-Za-z0-9_:]*(?![A-Za-z0-9_:]|\s*\()/g;
 const NACHKOMMA = 6;
 const DASHBOARD = "docs/betrieb/grafana/dashboard.json";
 const QUELLEN = ["src/utils/telemetrie.js", "src/utils/betriebsmessung.js"];
@@ -34,9 +36,13 @@ function befundeFuer(wurzel, regel) {
 
 const GESTARTET = "hermes_call_started_total";
 
-function anrufRegeln(wurzel) {
-  const datei = path.join(wurzel, ANRUFREGELN);
+function optionaleRegeln(wurzel, name) {
+  const datei = path.join(wurzel, name);
   return fs.existsSync(datei) ? JSON.parse(fs.readFileSync(datei, "utf8")) : [];
+}
+
+function anrufRegeln(wurzel) {
+  return optionaleRegeln(wurzel, ANRUFREGELN);
 }
 
 function fehlerquote(burnrate, fenster) {
@@ -60,9 +66,12 @@ export function burnrateAusdruck(burnrate) {
   return paare.join(" or ");
 }
 
+function regelModell(regel, refId) {
+  return regel.data.find((zeile) => zeile.refId === refId).model;
+}
+
 function regelAusdruck(regel) {
-  const { model } = regel.data.find((zeile) => zeile.refId === "A");
-  return model.expr;
+  return regelModell(regel, "A").expr;
 }
 
 function ausdruckBefund(regel) {
@@ -74,12 +83,38 @@ function ausdruckBefund(regel) {
   return befunde;
 }
 
+function sollBefund(regel) {
+  const { evaluator } = regelModell(regel, "C").conditions[0];
+  const ist = [evaluator.type, evaluator.params[0], regel.for, regel.noDataState];
+  const soll = [regel.soll?.vergleich, regel.soll?.wert, regel.soll?.dauer, regel.soll?.ohneDaten];
+  const gleich = soll.every((wert, stelle) => wert !== undefined && wert === ist[stelle]);
+  return gleich ? [] : [`${regel.uid}: Schwelle, Dauer oder noDataState weicht von soll ab`];
+}
+
+function kennzahlBefunde(regel, namen) {
+  const woerter = regelAusdruck(regel).match(BEZEICHNER) ?? [];
+  const genannt = woerter.filter((wort) => wort.includes("_"));
+  if (genannt.length === 0) return [`${regel.uid}: expr nennt keine Kennzahl`];
+  return genannt
+    .filter((wort) => !namen.some((name) => deckt(wort, name)))
+    .map((wort) => `${regel.uid}: Kennzahl ${wort} gibt es nicht`);
+}
+
+function betriebBefunde(wurzel) {
+  return optionaleRegeln(wurzel, BETRIEBSREGELN).flatMap((regel) => [
+    ...befundeFuer(wurzel, regel),
+    ...sollBefund(regel),
+    ...kennzahlBefunde(regel, kennzahlNamen(wurzel)),
+  ]);
+}
+
 export function pruefeAlarme(wurzel) {
   const regeln = JSON.parse(fs.readFileSync(path.join(wurzel, REGELN), "utf8"));
   const anruf = anrufRegeln(wurzel);
   return [
     ...regeln.flatMap((regel) => befundeFuer(wurzel, regel)),
     ...anruf.flatMap((regel) => [...befundeFuer(wurzel, regel), ...ausdruckBefund(regel)]),
+    ...betriebBefunde(wurzel),
   ];
 }
 
