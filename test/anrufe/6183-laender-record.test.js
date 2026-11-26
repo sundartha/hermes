@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { LANGUAGE_FOR_COUNTRY, SUPPORTED_LANGUAGES, disclosurePrefixFor, languageForCountry } from "../../src/i18n/locales.ts";
+import { setWorldDefaultLanguageEnabled } from "../../src/konfiguration/standardsprache.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.js";
 import { TELNYX_TEST_OWNER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
@@ -115,5 +116,18 @@ describe("Offenlegung en fuer Ziele ohne eigenen Text, ueber POST /api/calls", (
       assert.equal(inhalt.conversation_config_override.agent.language, "pt");
       assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("de")));
     });
+  });
+
+  it("Startsprache pt, Ziel +55 und Weltstandard de: Offenlegung bleibt en", async () => {
+    setWorldDefaultLanguageEnabled(false);
+    try {
+      await mitServer(async (srv) => {
+        const inhalt = await anrufInhalt(srv, BRASILIEN, "pt");
+        assert.equal(inhalt.conversation_config_override.agent.language, "pt");
+        assert.ok(inhalt.dynamic_variables.eroeffnung_gesagt.startsWith(disclosurePrefixFor("en")));
+      });
+    } finally {
+      setWorldDefaultLanguageEnabled(true);
+    }
   });
 });
