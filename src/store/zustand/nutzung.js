@@ -13,7 +13,7 @@ import {
   isProviderMicroCents,
   COST_TRUING_SOURCE,
 } from "../../begriffe/abrechnung.ts";
-import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.js";
+import { yearMonthKey, previousMonthStart, oneMonthBack } from "../../utils/month.ts";
 import {
   assertCostEvidenceInput,
   buildCostEvidenceRow,

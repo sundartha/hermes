@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 
 const FEHLT = "Cannot find module";
 const ladeHelfer = () =>
-  import("../../src/utils/month.js").catch((fehler) => assert.fail(`${FEHLT}: ${fehler.message}`));
-const ladeHelferOderNull = () => import("../../src/utils/month.js").catch(() => null);
+  import("../../src/utils/month.ts").catch((fehler) => assert.fail(`${FEHLT}: ${fehler.message}`));
+const ladeHelferOderNull = () => import("../../src/utils/month.ts").catch(() => null);
 const iso = (wert) => wert.toISOString();
 
 const EINEN_MONAT_ZURUECK = [

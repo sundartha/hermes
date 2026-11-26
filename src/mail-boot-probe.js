@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { buildTransporter } from "./smtp-mail.js";
-import { anfrage } from "./utils/anfrage.js";
+import { anfrage } from "./utils/anfrage.ts";
 import { verifyBrevoAccount } from "./brevo-mail.js";
 
 export async function probeMailBoot(

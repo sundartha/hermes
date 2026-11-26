@@ -43,8 +43,8 @@ import { HTTP_FORBIDDEN, HTTP_NOT_FOUND, HTTP_OK, HTTP_SERVICE_UNAVAILABLE } fro
 import { sleep } from "../utils/uhr-warten.ts";
 import { ergebnisOderNull } from "../telephony/ergebnis-oder-null.ts";
 import { NUTZUNG_AUFFRISCHEN_FRIST_MS } from "../begriffe/speicher.ts";
-import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.js";
-import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.js";
+import { pruefeAbfrage, pruefeKoerper } from "../utils/eingabe-pruefen.ts";
+import { zaehleAbgewiesenenWebhook } from "../utils/webhook-abweisungen.ts";
 import { fehlerText } from "../utils/fehler-text.ts";
 import { ANBIETER, speicherBereiche } from "../store.js";
 

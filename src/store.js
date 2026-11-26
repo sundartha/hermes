@@ -6,7 +6,7 @@ import { zustandsFunktionen } from "./store/zustand/anbindung.js";
 import { sperreAusZustand } from "./store/mandant-sql.js";
 import { rueckfrageAusZustand, rueckfrageLeser, zustellzeitAusZustand } from "./store/rueckfrage-sql.js";
 import { leitungsplaetze as speicherLeitungsplaetze } from "./store/leitungsplaetze.js";
-import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.js";
+import { konsultPlaetze as speicherKonsultPlaetze } from "./utils/konsult-plaetze.ts";
 import { KEINE_DB_RESERVIERUNG } from "./store/budget-reserve.js";
 import { starteLauf } from "./store/kennzahlen.js";
 import { EIGENE_KENNUNG, besitzLage as besitzLageVon, makeInstanzTakt, uebernimmAnruf as uebernimmAnrufVon } from "./store/instanz-besitz.js";
@@ -551,7 +551,7 @@ export function setzeAnrufpause(an) {
 export { classifyCallTime, SUBSCRIPTION_PATCH_FIELDS } from "./store/state-ops.js";
 export { KEINE_DB_RESERVIERUNG, RESERVIERUNG_GRUND } from "./store/budget-reserve.js";
 export { ANBIETER, AUSGEHEND_JE_KUNDE, LEITUNGSPLATZ_ENTSCHEIDUNG, WARTENDE_GESAMT, WARTENDE_JE_KUNDE, makeLeitungsplaetze } from "./store/leitungsplaetze.js";
-export { makeKonsultPlaetze } from "./utils/konsult-plaetze.js";
+export { makeKonsultPlaetze } from "./utils/konsult-plaetze.ts";
 export { arbeitGehoertLebenderFremder, auftragHaltGrund } from "./store/zustand/besitz.js";
 export { zustandsFunktionen };
 export { ersatzNummerEintragen, ersatzSpurEntfernen } from "./store/ersatz-spur.js";

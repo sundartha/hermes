@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { anfrage } from "../src/utils/anfrage.js";
+import { anfrage } from "../src/utils/anfrage.ts";
 import { config } from "../src/config.ts";
 import { NUMBER_STATUS } from "../src/begriffe/nummern.ts";
 import { PROVIDER } from "../src/begriffe/nummern-vergabe.ts";

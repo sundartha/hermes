@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { anfrage } from "../src/utils/anfrage.js";
+import { anfrage } from "../src/utils/anfrage.ts";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";

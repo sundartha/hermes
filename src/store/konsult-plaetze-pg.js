@@ -1,5 +1,5 @@
 import { LEITUNGSPLATZ_DB_FRIST_MS } from "../begriffe/speicher.ts";
-import { konsultPlatzFrei } from "../utils/konsult-plaetze.js";
+import { konsultPlatzFrei } from "../utils/konsult-plaetze.ts";
 
 const FRIST_SQL = `SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $1, true)`;
 const SPERRE_SQL = `SELECT pg_advisory_xact_lock(2921, 1)`;

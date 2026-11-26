@@ -5,7 +5,7 @@ import type { AnrufSicht, Zustand } from "../store/views.ts";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 import { internalOnly } from "../utils/vertrauter-aufruf.ts";
 import { antworteFehler, HTTP_NOT_FOUND } from "../utils/http.ts";
-import { monthStart } from "../utils/month.js";
+import { monthStart } from "../utils/month.ts";
 import { speicherBereiche } from "../store.js";
 
 interface Speicher {

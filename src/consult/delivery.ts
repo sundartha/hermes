@@ -1,4 +1,4 @@
-import { makeKonsultPlaetze } from "../utils/konsult-plaetze.js";
+import { makeKonsultPlaetze } from "../utils/konsult-plaetze.ts";
 
 interface KonsultPlaetze {
   belegen(anfrage: {

@@ -165,7 +165,7 @@ async function semgrepVerstoesse(ziel) {
     const bekannt = new Set(davor.map(({ regel, text }) => `${regel}\n${text}`));
     return jetzt
       .filter(({ regel, text }) => !bekannt.has(`${regel}\n${text}`))
-      .map(({ regel, zeile, meldung }) => `${ziel.pfad}:${zeile}  semgrep  ${regel}: ${meldung.replace(LEERZEICHEN, " ").replace(SATZENDE, "")}. ${WEG} dem Hinweis der Regel folgen; Eingaben von außen nur über pruefeKoerper und pruefeAbfrage aus src/utils/eingabe-pruefen.js lesen, Programme nur mit execFile und festen Argumenten starten, nie nosemgrep ergänzen; hältst du den Fund für falsch, im Issue begründen.`);
+      .map(({ regel, zeile, meldung }) => `${ziel.pfad}:${zeile}  semgrep  ${regel}: ${meldung.replace(LEERZEICHEN, " ").replace(SATZENDE, "")}. ${WEG} dem Hinweis der Regel folgen; Eingaben von außen nur über pruefeKoerper und pruefeAbfrage aus src/utils/eingabe-pruefen.ts lesen, Programme nur mit execFile und festen Argumenten starten, nie nosemgrep ergänzen; hältst du den Fund für falsch, im Issue begründen.`);
   } finally {
     rmSync(ordner, { recursive: true, force: true });
   }
