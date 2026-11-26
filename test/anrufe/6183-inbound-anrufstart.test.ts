@@ -33,7 +33,7 @@ describe("anrufStart fuer eingehende Anrufe", () => {
 
 describe("Huellen entfernt", () => {
   it("kein Treffer fuer die Huellen callLocaleOf und inboundElLocaleOf in outbound.js und inbound-initiation.js", () => {
-    const huellen = quelltexteUnter("src/elevenlabs")
+    const huellen = (quelltexteUnter("src/elevenlabs") as [string, string][])
       .filter(([datei]) => datei.endsWith("/outbound.js") || datei.endsWith("/inbound-initiation.js"))
       .filter(([, inhalt]) => /export function (callLocaleOf|inboundElLocaleOf)\b/.test(inhalt));
     assert.deepEqual(huellen, []);
