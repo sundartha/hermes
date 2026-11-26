@@ -4,9 +4,7 @@ interface Platz {
   ablaufMs: number;
 }
 
-interface Grenzen {
-  callId: string;
-  tenantId: string;
+interface Grenzen extends Pick<Platz, "callId" | "tenantId"> {
   jeAnruf: number;
   jeMandant: number;
 }
@@ -15,29 +13,20 @@ interface Belegung extends Grenzen {
   haltefristMs: number;
 }
 
-interface PlatzZeile {
-  callId: string;
-  tenantId: string;
-}
-
 interface KonsultPlaetze {
   belegen(belegung: Belegung): Promise<number | null>;
   freigeben(platzId: number): Promise<void>;
   offenJeAnruf(callId: string): number;
 }
 
-interface Optionen {
-  jetztMs?: () => number;
-}
-
 export const konsultPlatzFrei = (
-  zeilen: readonly PlatzZeile[],
+  zeilen: readonly Pick<Platz, "callId" | "tenantId">[],
   { callId, tenantId, jeAnruf, jeMandant }: Grenzen,
 ): boolean =>
   zeilen.filter((zeile) => zeile.callId === callId).length < jeAnruf &&
   zeilen.filter((zeile) => zeile.tenantId === tenantId).length < jeMandant;
 
-export function makeKonsultPlaetze({ jetztMs = Date.now }: Optionen = {}): KonsultPlaetze {
+export function makeKonsultPlaetze({ jetztMs = Date.now }: { jetztMs?: () => number } = {}): KonsultPlaetze {
   const plaetze = new Map<number, Platz>();
   let zaehler = 0;
 

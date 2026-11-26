@@ -8,10 +8,8 @@ interface Pruefregel<T> {
   meldung?: string;
 }
 
-type Antwort = Parameters<typeof lehneEingabeAb>[0];
-
 export function pruefeKoerper<T>(
-  res: Antwort,
+  res: Parameters<typeof lehneEingabeAb>[0],
   { schema, meldung = UNGUELTIGE_EINGABE }: Pruefregel<T>,
   koerper: unknown,
 ): T | undefined {
@@ -20,6 +18,6 @@ export function pruefeKoerper<T>(
   return ergebnis.data;
 }
 
-export function pruefeAbfrage<T>(res: Antwort, regel: Pruefregel<T>, werte: unknown): T | undefined {
+export function pruefeAbfrage<T>(res: Parameters<typeof lehneEingabeAb>[0], regel: Pruefregel<T>, werte: unknown): T | undefined {
   return pruefeKoerper(res, regel, werte);
 }
