@@ -16,9 +16,9 @@ test("provisionAuditDetail: Tabelle aus Ergebnis und Audit-Zeile", () => {
     [null, "provision=none"],
     [undefined, "provision=none"],
     [{}, "provision=none"],
-    [{ reason: PROVISION_REASON.QUEUED }, "provision=queued"],
-    [{ reason: PROVISION_REASON.ALREADY_PROVISIONED }, "provision=already_provisioned"],
-    [{ reason: PROVISION_REASON.PERSIST_ERROR }, "provision=withheld:persist_error"],
+    [{ ok: true, wert: { reason: PROVISION_REASON.QUEUED } }, "provision=queued"],
+    [{ ok: false, fehler: PROVISION_REASON.ALREADY_PROVISIONED }, "provision=already_provisioned"],
+    [{ ok: false, fehler: PROVISION_REASON.PERSIST_ERROR }, "provision=withheld:persist_error"],
   ];
   for (const [ergebnis, erwartet] of faelle) assert.equal(provisionAuditDetail(ergebnis), erwartet);
 });

@@ -104,7 +104,7 @@ async function starteServer({ store, runner, config: konfiguration = KONFIGURATI
     config: konfiguration,
     store,
     audit: () => {},
-    provision: async () => ({ reason: "dry_run" }),
+    provision: async () => ({ ok: true, wert: { reason: "dry_run" } }),
     createPortalRunner: () => runner,
     stripeWebhookPath: "/webhooks/stripe",
     appPath: "/app",

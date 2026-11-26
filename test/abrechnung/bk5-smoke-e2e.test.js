@@ -97,8 +97,8 @@ function realProvision(store) {
       maxNumbersPerTenant: HIGH_CAP,
     });
     await store.save();
-    if (!result.ok) return { ok: false, reason: result.fehler };
-    return { ok: true, reason: PROVISION_REASON.DRY_RUN, numberId: result.wert.number.id };
+    if (!result.ok) return { ok: false, fehler: result.fehler };
+    return { ok: true, wert: { reason: PROVISION_REASON.DRY_RUN, numberId: result.wert.number.id } };
   };
 }
 

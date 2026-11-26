@@ -69,7 +69,7 @@ test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bl
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async (t) => { provisionCalls.push(t); return { ok: true, reason: "queued" }; },
+      provision: async (t) => { provisionCalls.push(t); return { ok: true, wert: { reason: "queued" } }; },
       billing: undefined,
     }),
   );
@@ -108,7 +108,7 @@ test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 90
       store,
       billing: { getSubscriptionCheckoutResult: async () => outcome },
       accounts: { setStatus: async () => {} },
-      provision: async (t) => { provisionCalls.push(t); return { ok: true, reason: "queued" }; },
+      provision: async (t) => { provisionCalls.push(t); return { ok: true, wert: { reason: "queued" } }; },
       tenant: tenantId,
       sessionId: "cs_j2b",
       expectedPlanSlug: "business",

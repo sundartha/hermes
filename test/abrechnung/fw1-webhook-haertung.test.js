@@ -101,7 +101,7 @@ test("FW1-A1: ACTIVATE mit unbekanntem tenant_ref wird ignoriert, kein Write", a
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   assert.equal(calls.writes.length, 0, "kein einziger Schreibzugriff");
@@ -121,7 +121,7 @@ test("FW1-A2: SUSPEND (deleted) mit unbekanntem tenant_ref wird ignoriert, kein 
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   assert.equal(accounts.calls.length, 0, "kein setStatus");
@@ -158,7 +158,7 @@ test("FW1-A4: ACTIVATE mit bekanntem tenant_ref aktiviert unveraendert", async (
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   assert.deepEqual(accounts.calls, [{ tenant: TENANT, status: "active" }]);
@@ -192,7 +192,7 @@ test("FW1-A6: no_tenant bleibt byte-identisch, kein tenantExists-Aufruf", async 
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   assert.deepEqual(auditCalls.map((entry) => entry.detail), ["action=suspend no_tenant"]);
@@ -247,7 +247,7 @@ test("FW1-B1: Checkout-Rueckkehr ok-Pfad hebt Beanstandung auf und stempelt dana
     store,
     billing: { getSubscriptionCheckoutResult: async () => CHECKOUT_OUTCOME },
     accounts: { setStatus: async () => {} },
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     tenant: TENANT,
     sessionId: "cs_fw1_ok",
     expectedPlanSlug: "starter",
@@ -266,7 +266,7 @@ test("FW1-B2: Checkout-Rueckkehr mit ungeklaertem Provisioning laesst die Beanst
     store,
     billing: { getSubscriptionCheckoutResult: async () => CHECKOUT_OUTCOME },
     accounts: { setStatus: async () => {} },
-    provision: async () => ({ ok: false, reason: "tenant_cap" }),
+    provision: async () => ({ ok: false, fehler: "tenant_cap" }),
     tenant: TENANT,
     sessionId: "cs_fw1_cap",
     expectedPlanSlug: "starter",
@@ -300,7 +300,7 @@ test("FW1-B3: Webhook-ACTIVATE raeumt einen aktiven Hold und stempelt (budget_pe
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   assert.equal(billingHoldActive(state, TENANT, NOW_ISO), null, "Hold geraeumt");
@@ -333,7 +333,7 @@ test("FW1-B4: Webhook-ACTIVATE ohne Hold stempelt einmal, kein Doppel-Baseline-R
     sessions: { invalidateByTenant: async () => {} },
     audit,
     req: {},
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     billing: undefined,
   });
   const bucket = usageFor(state, TENANT);

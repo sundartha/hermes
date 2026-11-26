@@ -191,7 +191,7 @@ test("Grenze 2: eine lebende Nummer im Zustand capturing sperrt den Kauf", { tim
   if (!umgebung) return;
   const a = await umgebung.instanz(undefined, ZWEI);
   await umgebung.sql(ALTE_NUMMER, ["num_alt", MANDANT, "capturing"]);
-  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a), { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
   assert.equal((await umgebung.zaehlen()).nummern, 1);
 });

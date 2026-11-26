@@ -73,7 +73,7 @@ async function hermesStarten({ store, runner, protokoll, messaging }) {
     config,
     store,
     audit: (action, _req, detail) => protokoll.push([action, detail]),
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     createPortalRunner: () => runner,
     stripeWebhookPath: WEBHOOK_PFAD,
     appPath: "/app",

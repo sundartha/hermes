@@ -48,7 +48,7 @@ async function runActivation(reason) {
   const r = await activatePaidTenant({
     store: storeOn(s, { ensureTenantCalls }),
     accounts,
-    provision: async () => ({ ok: reason != null, reason }),
+    provision: async () => (reason == null ? { ok: false, fehler: reason } : { ok: true, wert: { reason } }),
     billing: undefined,
     tenant: "t_order",
   });
@@ -56,7 +56,7 @@ async function runActivation(reason) {
 }
 
 for (const reason of Object.values(PROVISION_REASON)) {
-  const cleared = provisionCleared({ ok: true, reason });
+  const cleared = provisionCleared({ ok: true, wert: { reason } });
   test(`Grund '${reason}' -> ${cleared ? "aktiviert" : "aktiviert NICHT"}`, async () => {
     const { accounts, r } = await runActivation(reason);
     assert.equal(r.activated, cleared);
@@ -86,7 +86,7 @@ test("Marker gesetzt VOR provision(), geloescht NUR bei Erfolg", async () => {
     accounts: fakeAccounts(),
     provision: async () => {
       seenDuringProvision.push(tenantSubscription(s, "t_marker").activationPending);
-      return { ok: false, reason: PROVISION_REASON.GLOBAL_CAP };
+      return { ok: false, fehler: PROVISION_REASON.GLOBAL_CAP };
     },
     billing: undefined,
     tenant: "t_marker",
@@ -104,7 +104,7 @@ test("Marker gesetzt VOR provision(), geloescht NUR bei Erfolg", async () => {
   await activatePaidTenant({
     store: storeOn(s2),
     accounts: fakeAccounts(),
-    provision: async () => ({ ok: true, reason: PROVISION_REASON.QUEUED }),
+    provision: async () => ({ ok: true, wert: { reason: PROVISION_REASON.QUEUED } }),
     billing: undefined,
     tenant: "t_marker2",
   });
@@ -118,7 +118,7 @@ test("KYC wird in JEDEM Fall gesetzt (Erfolg und Fehlschlag)", async () => {
   await activatePaidTenant({
     store: storeOn(s),
     accounts: fakeAccounts(),
-    provision: async () => ({ ok: false, reason: PROVISION_REASON.PERSIST_ERROR }),
+    provision: async () => ({ ok: false, fehler: PROVISION_REASON.PERSIST_ERROR }),
     billing: undefined,
     tenant: "t_kyc_fail",
   });
@@ -148,7 +148,7 @@ async function exemptionSeenByProvision({ storedExempt, retrieveSubscription }) 
     accounts: fakeAccounts(),
     provision: async (tenant) => {
       seenDuringProvision.push(tenantSubscription(state, tenant).numberSetupFeeExempt);
-      return { ok: true, reason: PROVISION_REASON.QUEUED };
+      return { ok: true, wert: { reason: PROVISION_REASON.QUEUED } };
     },
     billing: {
       retrieveSubscription: async (id) => {

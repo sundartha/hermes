@@ -116,7 +116,7 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
 
   const provision = async (tenant) => {
     const r = requestNumberForPaidTenant(s, { tenantId: tenant, maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
-    return r.ok ? { ok: true, ...r.wert } : { ok: false, reason: r.fehler };
+    return r.ok ? { ok: true, wert: { ...r.wert } } : { ok: false, fehler: r.fehler };
   };
   const deps = {
     store: {

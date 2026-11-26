@@ -139,7 +139,7 @@ test("Aktivierung derselben Periode löst die Sperre und schreibt nichts am Entz
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
       billing: undefined,
     },
   );
@@ -191,7 +191,7 @@ async function zustellen(event) {
     ...baseDeps(echterSpeicher, () => {}),
     accounts: { setStatus: async () => {} },
     sessions: { invalidateByTenant: async () => {} },
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
   });
   await echterSpeicher.drainFlushes();
 }

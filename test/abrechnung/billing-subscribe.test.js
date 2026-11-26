@@ -200,7 +200,7 @@ function activationSpies() {
     accounts: { setStatus: async (tenant, status) => calls.status.push({ tenant, status }) },
     provision: async (tenant) => {
       calls.provisioned.push(tenant);
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
   };
 }

@@ -73,7 +73,7 @@ const provisionSeam = (store) => async (tenantId) => {
     maxNumbersPerTenant: HIGH_CAP,
   });
   store.save();
-  return r.ok ? { ok: true, reason: "queued" } : r;
+  return r.ok ? { ok: true, wert: { reason: "queued" } } : r;
 };
 
 async function setup() {

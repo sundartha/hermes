@@ -45,7 +45,7 @@ async function ausloesen(vergabe, { imSpeicher = null, inDatenbank = null, provi
 test("Lehnt die Vergabe wegen der Plattformgrenze ab, nennt die Antwort den Grund und der Vermerk wird gespeichert", async () => {
   const spur = await ausloesen(ablehnung("global_cap"), { imSpeicher: "global_cap", inDatenbank: null });
 
-  assert.deepEqual(spur.ergebnis, { ok: false, reason: "global_cap" });
+  assert.deepEqual(spur.ergebnis, { ok: false, fehler: "global_cap" });
   assert.equal(spur.vermerk, "global_cap");
   assert.deepEqual(spur.audit, [["webhook_provision_skipped", `tenant=${MANDANT} grund=global_cap`]]);
 });
@@ -53,7 +53,7 @@ test("Lehnt die Vergabe wegen der Plattformgrenze ab, nennt die Antwort den Grun
 test("Lehnt die Vergabe einen Mandanten ohne Abo ab, wird nichts gespeichert und nichts gekauft", async () => {
   const spur = await ausloesen(ablehnung("tenant_inactive"), { imSpeicher: "tenant_inactive", inDatenbank: null });
 
-  assert.deepEqual(spur.ergebnis, { ok: false, reason: "tenant_inactive" });
+  assert.deepEqual(spur.ergebnis, { ok: false, fehler: "tenant_inactive" });
   assert.equal(spur.vermerk, null);
   assert.deepEqual(spur.zustand.numbers, []);
   assert.deepEqual(spur.eingereiht, []);
@@ -62,7 +62,7 @@ test("Lehnt die Vergabe einen Mandanten ohne Abo ab, wird nichts gespeichert und
 test("Hat der Mandant schon eine Nummer, nennt die Antwort das ohne Pruefprotokoll-Zeile", async () => {
   const spur = await ausloesen(ablehnung("already_provisioned"));
 
-  assert.deepEqual(spur.ergebnis, { ok: false, reason: "already_provisioned" });
+  assert.deepEqual(spur.ergebnis, { ok: false, fehler: "already_provisioned" });
   assert.deepEqual(spur.audit, []);
 });
 
@@ -72,7 +72,7 @@ test("Ein haengender Auftrag wird mit seiner Nummer erneut eingereiht", async ()
 
   const spur = await ausloesen(() => ({ ok: true, wert }), { provisioningEnabled: true });
 
-  assert.deepEqual(spur.ergebnis, { ok: true, reason: "redrive", numberId: NUMMER, jobId: job.id });
+  assert.deepEqual(spur.ergebnis, { ok: true, wert: { reason: "redrive", numberId: NUMMER, jobId: job.id } });
   assert.deepEqual(spur.eingereiht, [{ kind: "provision_number", payload: { numberId: NUMMER }, idempotencyKey: job.idempotencyKey }]);
 });
 
@@ -85,7 +85,7 @@ test("Eine neue Anfrage ohne Kauffreigabe speichert den geraeumten Vermerk und w
 
   const spur = await ausloesen(vergabe, { imSpeicher: null, inDatenbank: "global_cap" });
 
-  assert.deepEqual(spur.ergebnis, { ok: true, reason: "dry_run", numberId: NUMMER });
+  assert.deepEqual(spur.ergebnis, { ok: true, wert: { reason: "dry_run", numberId: NUMMER } });
   assert.equal(spur.vermerk, null);
   assert.deepEqual(spur.zustand.numbers.map((nummer) => nummer.id), [NUMMER]);
 });

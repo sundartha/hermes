@@ -63,7 +63,7 @@ test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 8 
   const r = await activatePaidTenant({
     store: storeOn(s),
     accounts: acc,
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     tenant: "t_a",
   });
 
@@ -82,7 +82,7 @@ test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung fals
   await activatePaidTenant({
     store: storeOn(s),
     accounts: fakeAccounts(),
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     tenant: "t_a",
   });
   assert.equal(s.profiles["t_a"].unrestricted, false);
@@ -96,7 +96,7 @@ test("kein/unbekannter planSlug -> SKIP no_plan, kein undefined-Profil", async (
   const r = await activatePaidTenant({
     store: storeOn(s),
     accounts: fakeAccounts(),
-    provision: async () => ({ ok: true, reason: "queued" }),
+    provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     tenant: "t_a",
   });
   assert.equal(r.profile.reason, "no_plan");
@@ -124,7 +124,7 @@ test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)"
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     },
   );
   assert.deepEqual(s.profiles["t_a"], planProfileFor("business"));
@@ -147,7 +147,7 @@ test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status 
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     },
   );
   assert.equal(Object.keys(s.profiles).length, 0);
@@ -182,7 +182,7 @@ test("activatePaidTenant: billing.retrieveSubscription liefert exempt:true -> VO
         true,
         "Flag VOR provision() gesetzt",
       );
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
     tenant: "t_a",
   });
@@ -203,7 +203,7 @@ test("activatePaidTenant: billing.retrieveSubscription wirft -> Flag bleibt fals
     billing,
     provision: async (t) => {
       provisioned.push(t);
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
     tenant: "t_a",
   });
@@ -244,7 +244,7 @@ test("Webhook-ACTIVATE mit billing setzt numberSetupFeeExempt IDENTISCH zum dire
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     },
   );
   assert.equal(
@@ -270,7 +270,7 @@ for (const fall of BEFREIUNG_FEHLER) {
     const ergebnis = await activatePaidTenant({
       store: storeOn(s),
       accounts: fakeAccounts(),
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
       billing: { retrieveSubscription: async () => fall.wirf() },
       tenant: "t_befreiung",
     });

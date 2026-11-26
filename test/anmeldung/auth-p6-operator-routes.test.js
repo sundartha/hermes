@@ -119,7 +119,7 @@ async function setup() {
     },
     triggerTenantProvisioning: async (tenantId) => {
       provisioningDouble.log.push(["retry", tenantId]);
-      return { ok: true, numberId: "num_p6_retry", reason: "dry_run", jobId: "job_p6_retry" };
+      return { ok: true, wert: { numberId: "num_p6_retry", reason: "dry_run", jobId: "job_p6_retry" } };
     },
   };
 

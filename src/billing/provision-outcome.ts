@@ -2,6 +2,13 @@ import {
   NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
 } from "../begriffe/nummern-vergabe.ts";
+import type { Ergebnis } from "../utils/ergebnis.ts";
+
+interface Grund {
+  reason?: string;
+}
+
+export type Provisionsergebnis = Ergebnis<Grund, string | Grund>;
 
 export const PROVISION_REASON = Object.freeze({
   QUEUED: "queued",
@@ -23,11 +30,18 @@ const CLEARING_REASONS: ReadonlySet<string | undefined> = Object.freeze(
   ]),
 );
 
-export function provisionCleared(result: { reason?: string } | null | undefined): boolean {
-  return CLEARING_REASONS.has(result?.reason);
+export function provisionReason(result: Provisionsergebnis | null | undefined): string | undefined {
+  if (result?.ok) return result.wert.reason;
+  const grund = result?.fehler;
+  return typeof grund === "string" ? grund : grund?.reason;
 }
 
-export function provisionAuditDetail(result: { reason?: string } | null | undefined): string {
-  if (!result?.reason) return "provision=none";
-  return provisionCleared(result) ? `provision=${result.reason}` : `provision=withheld:${result.reason}`;
+export function provisionCleared(result: Provisionsergebnis | null | undefined): boolean {
+  return CLEARING_REASONS.has(provisionReason(result));
+}
+
+export function provisionAuditDetail(result: Provisionsergebnis | null | undefined): string {
+  const grund = provisionReason(result);
+  if (!grund) return "provision=none";
+  return provisionCleared(result) ? `provision=${grund}` : `provision=withheld:${grund}`;
 }

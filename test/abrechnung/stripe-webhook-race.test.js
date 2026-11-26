@@ -45,7 +45,7 @@ function fakeDeps({ delays = {}, executionOrder = null, tenant = TENANT } = {}) 
     req: {},
     provision: async (t) => {
       calls.provision.push(t);
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
   };
 }

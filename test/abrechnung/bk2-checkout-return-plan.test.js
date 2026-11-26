@@ -101,7 +101,7 @@ async function setup({
     billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
     provision: async (t) => {
       provisionSpy.push(t);
-      return { ok: true, reason: "queued" };
+      return { ok: true, wert: { reason: "queued" } };
     },
   });
   return { ...app, store, billingSpy, provisionSpy, auditCalls };

@@ -44,7 +44,7 @@ test("Ein fehlgeschlagenes Nummern-Provisioning (global_cap) aktiviert den Tenan
   await activatePaidTenant({
     store: storeOn(s),
     accounts,
-    provision: async () => ({ ok: false, reason: "global_cap" }),
+    provision: async () => ({ ok: false, fehler: "global_cap" }),
     billing: undefined,
     tenant: "t_gap04",
   });

@@ -151,7 +151,7 @@ async function ausloesenUndAbarbeiten(instanz, mandant) {
   return ergebnis;
 }
 
-const ABGELEHNT = { ok: false, reason: "already_provisioned" };
+const ABGELEHNT = { ok: false, fehler: "already_provisioned" };
 const WARTENDE_SPERREN = "SELECT count(*)::int AS anzahl FROM pg_locks WHERE NOT granted AND locktype = 'advisory' AND classid = 5787 AND objid = 1 AND database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 const SCHRANKE_VERSUCHE = 20_000;
 
@@ -255,7 +255,7 @@ test("Faellt die Plattformzaehlung aus, wird nichts gekauft und die Nummer im Sp
     if (ausfall && /nummern_lebend_gesamt|nummer_lebend_zahl/.test(text)) throw new Error("Zaehlerausfall");
   });
   ausfall = true;
-  assert.deepEqual(await ausloesenUndAbarbeiten(a, A), { ok: false, reason: "persist_error" });
+  assert.deepEqual(await ausloesenUndAbarbeiten(a, A), { ok: false, fehler: "persist_error" });
   assert.equal(await umgebung.gesamt(), 0);
   assert.deepEqual(umgebung.attrappe.bestellungen, []);
   assert.deepEqual(a.store.load().numbers, []);

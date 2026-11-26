@@ -7,6 +7,7 @@ import { geoLookupAdapter } from "../geo/registry.ts";
 import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.ts";
 import { PROVIDER, SKIP_VERMERK_SCHLUESSEL, shouldPersistProvisionResult } from "../begriffe/nummern-vergabe.ts";
 import { KYC_OUTBOUND_MIN, tenantIdForSubject } from "../begriffe/mandant.ts";
+import { provisionReason } from "../billing/provision-outcome.ts";
 import { kauflandFuer } from "../begriffe/rufnummern.ts";
 import {
   registerTenant,
@@ -215,14 +216,15 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
       );
     }
     const result = await provisioning.triggerTenantProvisioning(tenantId);
-    audit("onboard_retry", req, `tenant=${tenantId} ok=${result.ok} grund=${result.reason}`);
+    const grund = provisionReason(result);
+    audit("onboard_retry", req, `tenant=${tenantId} ok=${result.ok} grund=${grund}`);
     if (!result.ok)
       return res
-        .status(RETRY_REASON_STATUS[result.reason] || HTTP_BAD_REQUEST)
+        .status(RETRY_REASON_STATUS[grund] || HTTP_BAD_REQUEST)
         .json({
-          error: RETRY_REASON_MESSAGE[result.reason] || `Re-Provisioning abgelehnt (${result.reason})`,
+          error: RETRY_REASON_MESSAGE[grund] || `Re-Provisioning abgelehnt (${grund})`,
         });
-    res.json({ tenantId, numberId: result.numberId, reason: result.reason, jobId: result.jobId });
+    res.json({ tenantId, numberId: result.wert.numberId, reason: grund, jobId: result.wert.jobId });
   });
 
   return router;

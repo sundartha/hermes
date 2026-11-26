@@ -150,7 +150,7 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
       config: withConfigNamespaces(CONFIG),
       billing,
       accounts,
-      provision: async () => ({ ok: true, reason: "queued" }),
+      provision: async () => ({ ok: true, wert: { reason: "queued" } }),
     }),
   );
   const server = await new Promise((resolve) => {

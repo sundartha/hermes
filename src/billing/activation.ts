@@ -1,6 +1,6 @@
 import { KYC_LEVEL } from "../begriffe/mandant.ts";
 import { resolveTierForTenant } from "./plan-profile-resolver.ts";
-import { provisionCleared } from "./provision-outcome.ts";
+import { provisionCleared, type Provisionsergebnis } from "./provision-outcome.ts";
 import { resolvePeriodStartIso } from "./period.ts";
 
 interface Subscription {
@@ -30,7 +30,7 @@ interface Billing {
   retrieveSubscription?: (subscriptionId: string) => Promise<{ numberSetupFeeExempt: boolean }>;
 }
 
-type Provisioned = { reason?: string } | null | undefined;
+type Provisioned = Provisionsergebnis | null | undefined;
 
 type Provision = (tenant: string) => Promise<Provisioned>;
 
