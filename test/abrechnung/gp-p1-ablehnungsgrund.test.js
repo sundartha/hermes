@@ -206,7 +206,7 @@ test("GP-P1 (Frage 8): der Enum-Anhang landet in job.lastError", async () => {
     paymentMethodId: "pm_gpp1_8",
     paymentMethodType: "card",
   });
-  const number = requestNumber(state, { tenantId: "t_gpp1_8", country: "DE", ...CAPS }).number;
+  const number = requestNumber(state, { tenantId: "t_gpp1_8", country: "DE", ...CAPS }).wert.number;
 
   const store = makeFakeStore(state);
   const queue = makeMemoryQueue();

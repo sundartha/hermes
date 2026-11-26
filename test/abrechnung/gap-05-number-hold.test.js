@@ -26,7 +26,7 @@ test("Ein 100-%-Gutschein-Tenant bekommt die Nummer nur mit gestelltem Setup-Hol
     paymentMethodId: "pm_gap05",
     paymentMethodType: "card",
   });
-  const { number } = requestNumber(s, { tenantId: "t_gap05", ...CAPS });
+  const { number } = requestNumber(s, { tenantId: "t_gap05", ...CAPS }).wert;
 
   const prov = fakeProvisioner();
   const billing = fakeBilling();
