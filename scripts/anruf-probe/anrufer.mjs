@@ -80,13 +80,31 @@ function textTeil(ergebnis) {
   return teile.find((teil) => typeof teil?.text === "string");
 }
 
-function detailVon(ergebnis) {
+const AUSZUG_MAX = 120;
+const LANGE_ZIFFERN = /\d{4,}/g;
+const LANGES_WORT = /\S{20,}/g;
+const MASKE = "…";
+
+function auszugVon(wortlaut, token) {
+  const ohneToken = token ? wortlaut.split(token).join(MASKE) : wortlaut;
+  return ohneToken
+    .replace(/\s+/g, " ")
+    .replace(/"/g, "'")
+    .replace(LANGE_ZIFFERN, "#")
+    .replace(LANGES_WORT, MASKE)
+    .trim()
+    .slice(0, AUSZUG_MAX);
+}
+
+function detailVon(ergebnis, token) {
   const wortlaut = textTeil(ergebnis)?.text ?? "";
   const fest = FESTE_TEXTE.find(([, text]) => text === wortlaut);
-  if (fest !== undefined) return fest[0];
+  if (fest !== undefined) return { detail: fest[0] };
   const klein = wortlaut.toLowerCase();
   const treffer = FEHLERKLASSEN.find(([stichwort]) => klein.includes(stichwort));
-  return treffer === undefined ? UNKLARE_KLASSE : treffer[1];
+  const detail = treffer === undefined ? UNKLARE_KLASSE : treffer[1];
+  const text = auszugVon(wortlaut, token);
+  return text === "" ? { detail } : { detail, text };
 }
 
 async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur = false }) {
@@ -105,7 +123,7 @@ async function werkzeug({ abfrage, basis, token, name, argumente, ohneStruktur =
   const ergebnis = leseRpc(await antwort.text())?.result;
   if (!ergebnis || ergebnis.isError || (!ohneStruktur && !ergebnis.structuredContent)) {
     const fehler = new Error(`mcp_${name}_fehlgeschlagen`);
-    fehler.detail = detailVon(ergebnis);
+    Object.assign(fehler, detailVon(ergebnis, token));
     throw fehler;
   }
   return { ...ergebnis.structuredContent, _meta: ergebnis._meta };

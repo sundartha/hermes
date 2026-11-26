@@ -27,12 +27,14 @@ function bereinigt(fehler) {
   return `${meldung ?? code ?? "unbekannt"}${detailSuffix(fehler, meldung)}`.slice(0, GRUND_MAX);
 }
 
+const textAngabe = (fehler) => (typeof fehler?.text === "string" && fehler.text !== "" ? { text: fehler.text } : {});
+
 async function messenOderNichts(messen) {
   try {
     return urteilen(await messen());
   } catch (fehler) {
     const grund = bereinigt(fehler);
-    return grund === "" ? urteilen(null) : { ...urteilen(null), grund };
+    return grund === "" ? urteilen(null) : { ...urteilen(null), grund, ...textAngabe(fehler) };
   }
 }
 
