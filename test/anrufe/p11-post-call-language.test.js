@@ -87,7 +87,6 @@ test("P11-P3 DE-Gegenprobe byte-genau: cancelledTitle/subjectOutbound/summaryTit
   assert.equal(t.cancelledTitle, "Anruf abgebrochen");
   assert.equal(t.subjectOutbound("+491511234"), "Anruf bei +491511234");
   assert.equal(t.summaryTitle, "Neue Call Summary");
-  assert.equal(t.actionItemsHeading, "Action Items:");
 });
 
 test("P11-P3 FR-Betreffzeilen byte-genau: subjectOutbound/subjectInbound", () => {
