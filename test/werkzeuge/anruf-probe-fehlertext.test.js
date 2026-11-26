@@ -59,3 +59,8 @@ test("Klasse bleibt im Grund, der Auszug kommt zusätzlich", async () => {
   const { zeilen } = await probeMit("Tageslimit erreicht");
   assert.ok(zeilen.includes(`${ROT}limit_erreicht text="Tageslimit erreicht"`));
 });
+
+test("Auszug: ein Wort ab 20 Zeichen mit Ziffernfolgen wird ganz zu …", async () => {
+  const { zeilen } = await probeMit("Fehler geheim_ab12345cd67890efgh Ende");
+  assert.ok(zeilen.includes(`${ROT}unklar text="Fehler … Ende"`));
+});
