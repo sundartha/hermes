@@ -6,7 +6,7 @@ import {
   makeElevenLabsOutbound,
   mitAuftragsurteil,
 } from "./outbound.js";
-import { callLocaleOf } from "./call-locale.ts";
+import { callLocaleOf, inboundElLocaleOf } from "./call-locale.ts";
 import { makeVorspannErzeuger } from "./outbound-vorspann.js";
 
 export type { ConvaiKonto } from "./convai.ts";
@@ -21,6 +21,7 @@ interface AnrufstartPort {
   mitAuftragsurteil: typeof mitAuftragsurteil;
   makeVorspannErzeuger: typeof makeVorspannErzeuger;
   callLocaleOf: typeof callLocaleOf;
+  inboundElLocaleOf: typeof inboundElLocaleOf;
   endeSchreiberFuer: typeof endeSchreiberFuer;
   ELEVENLABS_PROVIDER_MAX_DURATION_S: typeof ELEVENLABS_PROVIDER_MAX_DURATION_S;
   ANSWERED_REASON_NOT_ANSWERED: typeof ANSWERED_REASON_NOT_ANSWERED;
@@ -33,6 +34,7 @@ const ADAPTER_OUTBOUND: AnrufstartPort = Object.freeze({
   mitAuftragsurteil,
   makeVorspannErzeuger,
   callLocaleOf,
+  inboundElLocaleOf,
   endeSchreiberFuer,
   ELEVENLABS_PROVIDER_MAX_DURATION_S,
   ANSWERED_REASON_NOT_ANSWERED,
