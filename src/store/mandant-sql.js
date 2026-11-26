@@ -77,8 +77,6 @@ const schreiberFuer = (spalten) => async (client, tenantId, werte) => {
 
 export const sperreSchreiben = schreiberFuer(SPALTE_JE_SCHLUESSEL);
 
-const LISTEN_SCHLUESSEL = ["newsletterRecipients", "newsletterConfirmMailLog"];
-
 async function listeSchreiben(client, tenantId, { sql, werte }) {
   const { rows } = await client.query(sql, [tenantId, ...werte]);
   if (rows.length === 0) throw new Error("Mandant nicht in der Datenbank");
@@ -132,7 +130,7 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
   }
 
   async function ablauf(tenantId, { schluessel, aktion, uebernahme }) {
-    const eintraege = schluessel.map((key) => eintrag(tenantId, key));
+    const eintraege = (schluessel ?? []).map((key) => eintrag(tenantId, key));
     let zeile;
     try {
       zeile = await einreihen(aktion);
@@ -167,7 +165,6 @@ export function macheMandantSql({ einreihen, runner, requireState, stammdatenSpa
   function listeAendern(tenantId, aenderung) {
     offen.set(tenantId, (offen.get(tenantId) ?? 0) + 1);
     const vorgang = ablauf(tenantId, {
-      schluessel: LISTEN_SCHLUESSEL,
       aktion: (client) => listeSchreiben(client, tenantId, aenderung),
       uebernahme: listenUebernehmen,
     });
