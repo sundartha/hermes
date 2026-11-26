@@ -93,9 +93,11 @@ function makeHarness({ summarizeCall, smsCapture, notifyCapture }) {
   });
 }
 
-test("Summary-SMS - Tenant B (EN) traegt kein 'Anruf' im SMS-Body (ex E2E-02)", async () => {
+test("Zusammenfassung - Tenant B (EN) traegt kein 'Anruf' in der Benachrichtigung (ex E2E-02)", async () => {
   const smsA = [];
   const smsB = [];
+  const notifyA = [];
+  const notifyB = [];
   const callA = seedCall({
     id: "call_a",
     tenantId: "t_a_de",
@@ -114,17 +116,19 @@ test("Summary-SMS - Tenant B (EN) traegt kein 'Anruf' im SMS-Body (ex E2E-02)", 
     to: "+12025550199",
     transcript: [{ role: "caller", text: "Hi", at: AT }],
   });
-  const finishA = makeHarness({ summarizeCall: async () => ({ summary: "Zusammenfassung", actionItems: [] }), smsCapture: smsA, notifyCapture: [] });
-  const finishB = makeHarness({ summarizeCall: async () => ({ summary: "Call summary", actionItems: [] }), smsCapture: smsB, notifyCapture: [] });
+  const finishA = makeHarness({ summarizeCall: async () => ({ summary: "Zusammenfassung", actionItems: [] }), smsCapture: smsA, notifyCapture: notifyA });
+  const finishB = makeHarness({ summarizeCall: async () => ({ summary: "Call summary", actionItems: [] }), smsCapture: smsB, notifyCapture: notifyB });
 
   await Promise.all([finishA.finishCall(callA), finishB.finishCall(callB)]);
 
-  assert.equal(smsA.length, 1);
-  assert.equal(smsB.length, 1);
-  assert.match(smsA[0], /Anruf/, "Tenant A (DE) darf weiterhin 'Anruf' tragen");
+  assert.equal(smsA.length, 0);
+  assert.equal(smsB.length, 0);
+  assert.equal(notifyA.length, 1);
+  assert.equal(notifyB.length, 1);
+  assert.match(notifyA[0].body, /Anruf/, "Tenant A (DE) darf weiterhin 'Anruf' tragen");
   assert.doesNotMatch(
-    smsB[0],
+    notifyB[0].body,
     /Anruf/,
-    `SOLL: Tenant B (language=en) darf kein 'Anruf' im SMS-Body tragen (war "${smsB[0]}")`,
+    `SOLL: Tenant B (language=en) darf kein 'Anruf' in der Benachrichtigung tragen (war "${notifyB[0].body}")`,
   );
 });

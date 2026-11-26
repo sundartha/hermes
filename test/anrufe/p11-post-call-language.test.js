@@ -52,7 +52,7 @@ for (const lang of SUPPORTED_LANGUAGES) {
     );
   });
 
-  test(`P11-P2 ${lang}: abgeschlossener Call -> Summary-SMS-Body aus LOCALES[lang].postCall`, async () => {
+  test(`P11-P2 ${lang}: abgeschlossener Call -> Benachrichtigung aus LOCALES[lang].postCall`, async () => {
     const smsCapture = [];
     const notifyCapture = [];
     const call = seedCall({
@@ -74,14 +74,10 @@ for (const lang of SUPPORTED_LANGUAGES) {
       notifyCapture,
     });
     await callFinish.finishCall(call);
-    assert.equal(smsCapture.length, 1);
+    assert.equal(smsCapture.length, 0);
     const t = LOCALES[lang].postCall;
     const who = t.subjectOutbound(call.to);
-    assert.ok(smsCapture[0].includes(who), `${lang}: SMS-Body traegt nicht das Betreff-Praefix`);
-    assert.ok(
-      smsCapture[0].includes(t.actionItemsHeading),
-      `${lang}: SMS-Body traegt nicht die Action-Items-Ueberschrift`,
-    );
+    assert.equal(notifyCapture[0].body, `${who}: Summary text`);
     assert.equal(notifyCapture[0].title, t.summaryTitle);
   });
 }

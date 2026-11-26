@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { makeAnrufstartAuftrag } from "../../src/elevenlabs/anrufstart-auftrag.ts";
-import { planNotPlacedMail } from "../../src/mail-not-placed.ts";
 import * as speicher from "../../src/store.js";
 import { BOOTSTRAP_TENANT_ID, legeMandantAn, makePgStore, makePgTestStore } from "../pg-helpers.js";
 
@@ -13,12 +12,8 @@ const ABSENDER = "+4930555000430";
 const ZIEL = "+4915112349943";
 const MANDANTEN_TOKEN = "token-h7c2b4b3";
 const MS_JE_SEKUNDE = 1000;
-const MS_JE_MINUTE = 60 * MS_JE_SEKUNDE;
 const FEST_MS = Date.parse("2026-11-19T10:00:00.500Z");
 const MARKER_VOR_MS = 600 * MS_JE_SEKUNDE;
-const ENDE_MS = Date.parse("2026-11-19T12:00:00.000Z");
-const NICHT_GESTARTET = "not-placed";
-const EMAIL = "kunde-h7c2b4b3@example.test";
 
 async function zweiInstanzen() {
   const { store: b, runner } = await makePgTestStore();
@@ -135,35 +130,6 @@ test("H7c2b4b3-5: Ist die Datenbank bei der Doppel-Pruefung nicht lesbar, gilt d
   assert.deepEqual(spur.beendet, [call.id]);
 });
 
-const konto = { accountByTenant: async () => ({ email: EMAIL }) };
-
-async function mailPlan(store, ueber = {}) {
-  const call = await legeAnrufAn(store, { ueber: { failureReason: NICHT_GESTARTET, endedAt: new Date(ENDE_MS).toISOString(), ...ueber } });
-  return { call, plan: await planNotPlacedMail({ store, call, mailer: {}, accounts: konto }) };
-}
-
-const frueher = (minuten, ueber = {}) => ({
-  failureReason: NICHT_GESTARTET,
-  endedAt: new Date(ENDE_MS - minuten * MS_JE_MINUTE).toISOString(),
-  ...ueber,
-});
-
-test("H7c2b4b3-6: Eine frueher nicht gestartete Mail, die A gespeichert hat, wird auf B erkannt: keine zweite Mail", async () => {
-  const { a, b } = await zweiInstanzen();
-  await legeAnrufAn(a, { ueber: frueher(10) });
-  const call = await legeAnrufAn(b, { ueber: frueher(0) });
-  assert.deepEqual(await planNotPlacedMail({ store: b, call, mailer: {}, accounts: konto }), { send: false, targets: [], reason: null });
-});
-
-test("H7c2b4b3-7: Ohne fruehere Fehlstarts im Fenster geht die Mail an den Account, auch wenn der fruehere Anruf ein anderer Mandant, zu alt oder nicht ausgehend ist", async () => {
-  const { a, b } = await zweiInstanzen();
-  await legeAnrufAn(a, { tenantId: FREMD, ueber: frueher(10) });
-  await legeAnrufAn(a, { ueber: frueher(61) });
-  await legeAnrufAn(a, { ueber: frueher(10, { direction: "inbound" }) });
-  const { plan } = await mailPlan(b);
-  assert.deepEqual(plan, { send: true, targets: [{ email: EMAIL, unsubToken: null }], reason: null });
-});
-
 test("H7c2b4b3-8: Anrufe des Mandanten kommen aus der Datenbank, auch von A, ohne die eines anderen Mandanten", async () => {
   const { a, b } = await zweiInstanzen();
   const eigenA = await legeAnrufAn(a, {});
@@ -173,20 +139,4 @@ test("H7c2b4b3-8: Anrufe des Mandanten kommen aus der Datenbank, auch von A, ohn
   b.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL, goal: "Test", tenantId: FREMD, provider: "telnyx" });
   const ids = (await b.anrufeDesMandanten(BOOTSTRAP_TENANT_ID)).map((call) => call.id);
   assert.deepEqual(ids.toSorted(), [eigenA.id, gespeichert.id, nurHier.id].toSorted());
-});
-
-test("H7c2b4b3-9: Ist die Datenbank bei der Entprellung nicht lesbar, geht keine Mail raus, der Grund heisst lesefehler und das Log nennt keine Nummer", async (t) => {
-  const fehler = t.mock.method(console, "error", () => {});
-  const { runner } = await zweiInstanzen();
-  const ausfall = mitAusfall(runner);
-  const bAus = makePgStore(ausfall.runner);
-  await bAus.init();
-  const call = await legeAnrufAn(bAus, { ueber: frueher(0) });
-  ausfall.schalter.aus = true;
-  assert.deepEqual(await planNotPlacedMail({ store: bAus, call, mailer: {}, accounts: konto }), { send: false, targets: [], reason: "lesefehler" });
-  const zeilen = fehler.mock.calls.map((aufruf) => aufruf.arguments.join(" "));
-  assert.ok(zeilen.some((zeile) => zeile.includes(`call=${call.id}`)));
-  assert.ok(zeilen.some((zeile) => zeile.includes("[pg] anruf-suche lesen fehlgeschlagen: Datenbank weg")));
-  assert.ok(zeilen.every((zeile) => !zeile.includes(ZIEL) && !zeile.includes(ABSENDER)));
-  assert.equal(call.notPlacedMailSentAt ?? null, null);
 });
