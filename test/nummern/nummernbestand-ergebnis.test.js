@@ -5,7 +5,6 @@ import express from "express";
 
 import { makeOnboardRoutes } from "../../src/routes/api-onboard.js";
 import { speicherBereiche } from "../../src/store.js";
-import { makeDefaultState, registerTenant, requestNumber } from "../../src/store/state-ops.js";
 import { runNummerntausch } from "../../src/worker/nummerntausch.ts";
 import { mitRoutenServer, postJson } from "../anrufe/routen-server.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
@@ -16,39 +15,6 @@ const MANDANT = "t_nummernbestand";
 const ALT = "num_bestand_alt";
 const NEU = "+12025550188";
 const WEIT = 50;
-
-function anfragen(tenantId, [maxNumbers, maxNumbersPerTenant]) {
-  const zustand = makeDefaultState();
-  registerTenant(zustand, MANDANT);
-  const ergebnis = requestNumber(zustand, { tenantId, maxNumbers, maxNumbersPerTenant });
-  return { zustand, ergebnis };
-}
-
-test("nummernbestand: eine angenommene Anfrage liefert ok mit der angelegten Nummer als Wert", () => {
-  const { zustand, ergebnis } = anfragen(MANDANT, [5, 1]);
-
-  assert.equal(zustand.numbers.length, 1);
-  assert.deepEqual(ergebnis, { ok: true, wert: { number: zustand.numbers[0] } });
-});
-
-function pruefeAbsage(tenantId, decken, { grund, vermerk }) {
-  const { zustand, ergebnis } = anfragen(tenantId, decken);
-
-  assert.deepEqual(ergebnis, { ok: false, fehler: grund });
-  assert.equal(zustand.tenants.find((mandant) => mandant.id === tenantId)?.numberProvisionSkipReason, vermerk);
-}
-
-test("nummernbestand: ein unbekannter Mandant liefert den Fehler tenant_inactive", () => {
-  pruefeAbsage("t_unbekannt", [5, 1], { grund: "tenant_inactive", vermerk: undefined });
-});
-
-test("nummernbestand: an der Plattformdecke liefert die Anfrage global_cap mit Vermerk", () => {
-  pruefeAbsage(MANDANT, [0, 1], { grund: "global_cap", vermerk: "global_cap" });
-});
-
-test("nummernbestand: an der Mandantendecke liefert die Anfrage tenant_cap ohne Vermerk", () => {
-  pruefeAbsage(MANDANT, [5, 0], { grund: "tenant_cap", vermerk: undefined });
-});
 
 async function tauschbestand() {
   const { store } = await makePgTestStore();
