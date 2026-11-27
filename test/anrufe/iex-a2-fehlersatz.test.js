@@ -476,3 +476,17 @@ test("IEX-A2-12: /voice/status completed/failed auf WARTET ohne Marker - keine B
     });
   }
 });
+
+test("IEX-A2-9e: Synthese wirft bei englischem Anruf -> Fehlersatz ohne Aufloesung in der Sprache des Anrufs", async () => {
+  const state = baueRouteState();
+  const call = Object.assign(seedWartend(state), { language: "en" });
+  const spione = neueSpione();
+  const ersetzt = { directiveSynth: { synthesizeDirectiveAudio: async () => Promise.reject(new Error("synthese kaputt")) } };
+  await mitKonsole(async () => {
+    await mitRoute(baueRouter({ store: baueRouteStore(state, spione), spione, ersetzt }), async (post) => {
+      const text = await postRueckfall(post, { callId: call.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
+      assert.equal(text, fehlersatzOhneAufloesungXml({ language: "en", ownerName: OWNER_NAME }));
+      assert.notEqual(text, fehlersatzOhneAufloesungXml({ language: "de", ownerName: OWNER_NAME }));
+    });
+  });
+});
