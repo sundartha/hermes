@@ -5,7 +5,6 @@ import { speicherBereiche } from "./store.js";
 import { MANDATE_OUT_OF_SCOPE_DEFAULT } from "./begriffe/anrufe.ts";
 import { resolveTimezone } from "./begriffe/sprache-zeit.ts";
 import { bookTokenUsage } from "./llm-usage.js";
-import { localeFor } from "./i18n/locales.ts";
 import { offenlegungssatz } from "./anrufe/start/anrufstart.ts";
 import { textePaketFuer } from "./i18n/texte-paket.ts";
 import { metrics } from "./metrics.ts";
@@ -222,7 +221,7 @@ export function isSideEffectOnlyTool(name) {
 }
 
 export function toolDefs(language) {
-  const t = localeFor(language).prompt.tools;
+  const t = textePaketFuer({ language }).prompt.tools;
   return [
     {
       name: END_CALL_TOOL_NAME,
@@ -245,8 +244,8 @@ export function toolDefs(language) {
   ];
 }
 
-function getConsultToolDef(language) {
-  const t = localeFor(language).prompt.tools;
+function getConsultToolDef(call) {
+  const t = textePaketFuer(call).prompt.tools;
   return {
     name: GET_CONSULT_TOOL_NAME,
     description: t.getConsultDescription,
@@ -260,13 +259,13 @@ function getConsultToolDef(language) {
 
 export function agentTools(call) {
   const tools = toolDefs(call.language);
-  if (consultAvailableFor(call)) tools.push(getConsultToolDef(call.language));
-  if (lookupAvailableFor(call)) tools.push(lookUpToolDef(call.language));
+  if (consultAvailableFor(call)) tools.push(getConsultToolDef(call));
+  if (lookupAvailableFor(call)) tools.push(lookUpToolDef(call));
   return tools;
 }
 
-function lookUpToolDef(language) {
-  const t = localeFor(language).prompt.tools;
+function lookUpToolDef(call) {
+  const t = textePaketFuer(call).prompt.tools;
   return {
     name: LOOK_UP_TOOL_NAME,
     description: t.lookUpDescription,

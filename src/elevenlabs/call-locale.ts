@@ -1,9 +1,10 @@
-import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES, localeFor } from "../i18n/locales.ts";
+import { EIGENE_SPRACHE_JE_LAND, SUPPORTED_LANGUAGES } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { countryForE164 } from "../begriffe/rufnummern.ts";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { STARTSPRACHE } from "../konfiguration/standardsprache.ts";
 import { EINE_STIMME_ID } from "./stimme-festlegen.ts";
-import { ersteAeusserung, type Sprachwahl } from "../anrufe/start/anrufstart.ts";
+import { ersteAeusserung } from "../anrufe/start/anrufstart.ts";
 
 interface AnrufSprache {
   language: string;
@@ -12,6 +13,8 @@ interface AnrufSprache {
   voiceId: string;
   firstMessage: string;
   disclosureOwnerFallback: string;
+  gespraechTexte: ReturnType<typeof textePaketFuer>;
+  offenlegungTexte: ReturnType<typeof textePaketFuer>;
 }
 
 interface Zugriff {
@@ -21,7 +24,7 @@ interface Zugriff {
 
 type MandantZustand = Parameters<typeof resolveCallLanguage>[0];
 const aufgeloesteSprache: (state: MandantZustand, zugriff: Zugriff) => string = resolveCallLanguage;
-const sprachwahlFuer: (language: string) => Sprachwahl = localeFor;
+const sprachwahlFuer = (language: string) => textePaketFuer({ language });
 
 const SPRACHE_JE_LAND: Readonly<Record<string, string>> = EIGENE_SPRACHE_JE_LAND;
 
@@ -64,6 +67,8 @@ export function callLocaleFor(
     voiceId: EINE_STIMME_ID,
     firstMessage: ersteAeusserung({ providerLanguage, offenlegung, ownerName }),
     disclosureOwnerFallback: offenlegung.disclosureOwnerFallback,
+    gespraechTexte: gespraech,
+    offenlegungTexte: offenlegung,
   };
 }
 
