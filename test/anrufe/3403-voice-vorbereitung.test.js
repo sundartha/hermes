@@ -23,9 +23,9 @@ function baueApp({ store, lifecycle, optionen = {} }) {
   app.use(
     makeVoiceRoutes({
       store,
-      config: withConfigNamespaces({ ...optionen.konfig, skipTwilioSignatureCheck: optionen.pruefeSignatur !== true, machineDetection: { enabled: false, timeoutS: 25 } }),
+      config: withConfigNamespaces({ skipTwilioSignatureCheck: optionen.pruefeSignatur !== true, machineDetection: { enabled: false, timeoutS: 25 } }),
       audit: optionen.audit ?? (() => {}),
-      voiceRender: { render: optionen.render ?? (() => "<Response/>"), turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
+      voiceRender: { render: () => "<Response/>", turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
       directiveSynth: { synthesizeDirectiveAudio: async (_call, direktiven) => direktiven },
       ttsStore: { takeOnce: optionen.entnimm ?? (async () => null) },
       lifecycle,
@@ -489,7 +489,27 @@ test("3403 Eingehender Anruf scheitert nach dem Anlegen: die Fehleransage sprich
   const fehler = mock.method(console, "error", () => {});
   let text;
   try {
-    await mitApp(baueApp({ store, lifecycle: {}, optionen: { render: (direktiven) => JSON.stringify(direktiven), konfig: OHNE_EL_ZUGANG } }), async (basis) => {
+    const app = express();
+    app.use(express.urlencoded({ extended: false }));
+    app.use(
+      makeVoiceRoutes({
+        store,
+        config: withConfigNamespaces({ ...OHNE_EL_ZUGANG, skipTwilioSignatureCheck: true }),
+        audit: () => {},
+        voiceRender: { render: (direktiven) => JSON.stringify(direktiven), turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
+        directiveSynth: { synthesizeDirectiveAudio: async (_call, direktiven) => direktiven },
+        ttsStore: { takeOnce: async () => null },
+        lifecycle: {},
+        finishCall: () => {},
+        webhookEvents,
+        providerFromHeaders: () => null,
+        inboundSignatureVerifier: () => ({ verifyInboundSignature: () => true }),
+        terminateAndBillCall: async () => {},
+        billThunk: () => () => {},
+        startInboundNachlauf: () => {},
+      }),
+    );
+    await mitApp(app, async (basis) => {
       text = await (await abrufMitFrist(`${basis}/voice/incoming`, { method: "POST", headers: FORMULAR, body: "From=%2B4915100000001&To=%2B4915100000002&CallSid=CA3403sprache" })).text();
     });
   } finally {
