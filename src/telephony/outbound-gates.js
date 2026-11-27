@@ -133,6 +133,8 @@ export async function runOutboundGates({ gates, ctx }) {
   return await fuehreToreAus(gates, ctx, torFehlerAblehnung);
 }
 
+export const gateTexteVon = (store, tenantId) => localeFor(store.tenantLanguage(tenantId)).gates;
+
 export function makeOutboundGates({
   store,
   config = defaultConfig,
@@ -175,7 +177,7 @@ export function makeOutboundGates({
     );
   }
 
-  const gateTexts = (tenantId) => localeFor(store.tenantLanguage(tenantId)).gates;
+  const gateTexts = (tenantId) => gateTexteVon(store, tenantId);
 
   const sperrenJeAnfrage = new WeakMap();
 

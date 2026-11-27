@@ -10,7 +10,7 @@ import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.ts";
 import type { VoiceProfile } from "../telephony/directives.ts";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.ts";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { callFailureReason } from "../telephony/failure-reason.ts";
 import { BUDGET_AXIS } from "../budget-gate.js";
 import { zaehleAnrufAbgelehnt, zaehleAnrufGestartet } from "../utils/betriebsmessung.js";
@@ -185,8 +185,6 @@ interface Sprachtexte {
   inboundFehlersatz: (ownerName: unknown) => string;
 }
 
-const sprachtexteFuer: (language: string | undefined) => Sprachtexte = localeFor;
-
 const minutenTarifFuer: (leg: InboundLeg) => number = callTariffCentsPerMin;
 
 interface Vermerkfall {
@@ -352,7 +350,7 @@ async function sendTechnischesEnde(
   { res, call, provider }: { res: Antwort; call: AnrufOderLeer; provider: string },
   { directiveSynth, render }: VoiceDeps,
 ): Promise<void> {
-  const locale = sprachtexteFuer(call?.language);
+  const locale = textePaketFuer({ language: call?.language });
   const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
   const outDirectives = call
     ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives, res.locals.eingangMs)
@@ -390,7 +388,7 @@ function sendAuflegen({ res, call }: { res: Antwort; call: AnrufOderLeer }, { re
 
 async function fehlersatzFuer({ call }: { call: Anruf }, { store, bereiche }: VoiceDeps) {
   const aufloesung = inboundElLocaleOf({ store, call });
-  const bundle = sprachtexteFuer(aufloesung.language);
+  const bundle = textePaketFuer({ language: aufloesung.language });
   return {
     text: bundle.inboundFehlersatz((await bereiche.mandant.tenantContext(call.tenantId)).ownerName),
     voiceProfile: bundle.voiceProfile,
@@ -448,7 +446,7 @@ function ownerNameBestEffort({ call }: { call: AnrufTeil | null | undefined }, {
 }
 
 function fehlersatzOhneAufloesungXml({ call }: { call: AnrufTeil | null | undefined }, deps: VoiceDeps): string {
-  const bundle = sprachtexteFuer(call?.language);
+  const bundle = textePaketFuer({ language: call?.language });
   const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
   return deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER);
 }
@@ -753,7 +751,7 @@ export function makeVoiceRoutes({
       const tenantId = numberRecord.tenantId;
       await store.einstellungenNachladen?.(tenantId);
       const language = STARTSPRACHE;
-      const locale = sprachtexteFuer(language);
+      const locale = textePaketFuer({ language });
 
       if (store.budgetExceeded(tenantId, config.billing)) {
         sendKostendeckeAbweisung({ res, provider, locale, to }, voiceDeps);

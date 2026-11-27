@@ -132,6 +132,20 @@ const WORT_NUR_IN_EINTRAEGE = [
       "Den Offenlegungssatz liest nur src/anrufe/start/anrufstart.ts oder src/i18n über LOCALES.<lang>.disclosure; andere Stellen beziehen ihn als Ausfuhr von dort (CLAUDE.md Regel 2: keine zweite Stelle).",
   },
   {
+    name: "anrufsprache",
+    nurIn: [
+      ...EROEFFNUNG_NUR_IN,
+      "src/mcp-no-tenant.js",
+      "src/mcp/anruf-ergebnis.js",
+      "src/mcp/kontext.js",
+      "src/self-service-routes.js",
+      "src/store/greeting-notice-migration.js",
+      "src/telephony/outbound-gates.js",
+    ],
+    meldung:
+      "Die Sprache eines Anrufs kommt nur aus src/anrufe/start/anrufstart.ts oder textePaketFuer(call); die Dateien dieser Liste lesen nur die Mandantensprache oder eine feste Sprache, die Liste schrumpft nur.",
+  },
+  {
     name: "telnyx-belegabruf",
     nurIn: ["src/billing/cost-truing.ts", "src/telephony/adapters/telnyx/voice.js"],
     meldung:

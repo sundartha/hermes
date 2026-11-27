@@ -6,7 +6,7 @@ import { consultAllowedForCall } from "../consult/gate.ts";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { TENANT_TOKEN_VERDICT, tenantTokenVerdict } from "../elevenlabs/tenant-tool-token.ts";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.ts";
 import {
@@ -138,8 +138,6 @@ interface Abgelehnt {
 }
 
 type Handler = (req: Request, res: Response) => unknown;
-
-const sprachtexteFuer: (language: string) => Sprachtexte = localeFor;
 
 function fehlerText(err: unknown): string {
   if (typeof err !== "object" || err === null) return "unbekannt";
@@ -388,7 +386,7 @@ async function handleLookup(
       logGrund: "keine_anfrage",
     });
 
-  const control = sprachtexteFuer(call.language).prompt.turnControl;
+  const control = textePaketFuer(call).prompt.turnControl;
   const preflight = preflightLookup({ call, query, control, res });
   if (preflight.done) return preflight.done;
 
@@ -502,7 +500,7 @@ export function makeElevenLabsWebhookRoutes({
     const outcome = held.value;
     console.log(`[${CONSULT_LOG_TAG}] call=${call.id} ergebnis=${outcome.kind}`);
     traceConsultAbort({ call, outcome, auditFor });
-    return res.json(consultResponseBody(outcome, sprachtexteFuer(call.language)));
+    return res.json(consultResponseBody(outcome, textePaketFuer(call)));
   }
 
   router.post(ELEVENLABS_CONSULT_PATH, (req: Request, res: Response, next: NextFunction): void => {
