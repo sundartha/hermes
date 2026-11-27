@@ -6,6 +6,8 @@ Commit an allen fuenf Stellen (Master-Prompt, soft_timeout-Override, speechRules
 — wer nur eine Stelle aendert, erzeugt Drift zwischen Vorlage und speechRules, den kein Detektor sieht.
 **Eroeffnungssaetze nur in `eroeffnung.js`:** der Wortlaut der Eroeffnung (Anruf an Dritte, Besitzer-Anruf) und der Name Hermes stehen nur dort. Vorlage (`first_message` = `{{eroeffnung}}`), Pruefkarte A6 und Docs verweisen darauf und schreiben keinen Satz ab; Tests halten die Ausgabe ueber den Anruf fest.
 
+**Anrufsprache nur ueber `textePaketFuer(call)`:** wer die Texte eines Anrufs braucht, nimmt `textePaketFuer(call)` (`texte-paket.ts`) oder das Ergebnis von `callLocaleOf` (`src/elevenlabs/call-locale.ts`) und `anrufStart` (`src/anrufe/start/anrufstart.ts`); `localeFor` ruft ausserhalb von `src/i18n/` nur auf, wer die Mandantensprache oder eine feste Sprache liest. Die geschlossene Liste steht in `eslint.config.js` (Eintrag `anrufsprache`) und schrumpft nur; ein Alias auf `localeFor` unter anderem Namen ist eine Umgehung.
+
 ## Baustein texte (erzeugt aus tools/bausteine.json mit npm run hinweise)
 - Zweck: Alle Texte und Sprachen.
 - Darf nutzen: basis, begriffe, konfiguration, mail, sperrdaten
