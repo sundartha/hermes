@@ -7,6 +7,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { OHNE_EL_ZUGANG } from "../config-namespaces-helper.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
+import { LOCALES } from "../../src/i18n/locales.ts";
 import { EL_INBOUND_ACCESS_BOOT_ENV, normalizeIncomingTexml, postTelnyxIncoming } from "../helpers.js";
 import { seedCall, seedWithTelnyxNumber, startServer, TELNYX_TEST_PEER_NUMBER, TELNYX_TEST_SIGNATURE_HEADERS, TELNYX_TEST_TENANT_NUMBER, waitForStoreState } from "../helpers.js";
 
@@ -22,9 +23,9 @@ function baueApp({ store, lifecycle, optionen = {} }) {
   app.use(
     makeVoiceRoutes({
       store,
-      config: withConfigNamespaces({ skipTwilioSignatureCheck: optionen.pruefeSignatur !== true, machineDetection: { enabled: false, timeoutS: 25 } }),
+      config: withConfigNamespaces({ ...optionen.konfig, skipTwilioSignatureCheck: optionen.pruefeSignatur !== true, machineDetection: { enabled: false, timeoutS: 25 } }),
       audit: optionen.audit ?? (() => {}),
-      voiceRender: { render: () => "<Response/>", turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
+      voiceRender: { render: optionen.render ?? (() => "<Response/>"), turnDirectives: () => [], sayInCallVoice: () => [], followupTurnDirectives: () => [] },
       directiveSynth: { synthesizeDirectiveAudio: async (_call, direktiven) => direktiven },
       ttsStore: { takeOnce: optionen.entnimm ?? (async () => null) },
       lifecycle,
@@ -473,6 +474,28 @@ test("3403 Eingehender Anruf ohne EL-Zugang: die Notbremse-Frist folgt dem Minut
   assert.deepEqual(fehler.mock.calls.map((a) => a.arguments.join(" ")), ["[incoming] Abbruch nach dem Anlegen"]);
   assert.equal(angelegt.length, 1);
   assert.equal(angelegt[0].maxDurationS, 660);
+});
+
+test("3403 Eingehender Anruf scheitert nach dem Anlegen: die Fehleransage spricht die Sprache des angelegten Anrufs", async () => {
+  const store = {
+    numberRecordByE164: async () => ({ tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" }),
+    resolveCallLanguage: async () => "de",
+    budgetExceeded: () => false,
+    tenantBudgetSnapshot: () => ({ remainingCents: 60 }),
+    createCall: () => ({ id: "call_3403_sprache", language: "en" }),
+    getCall: () => null,
+    tenantPrivateNumber: () => null,
+  };
+  const fehler = mock.method(console, "error", () => {});
+  let text;
+  try {
+    await mitApp(baueApp({ store, lifecycle: {}, optionen: { render: (direktiven) => JSON.stringify(direktiven), konfig: OHNE_EL_ZUGANG } }), async (basis) => {
+      text = await (await abrufMitFrist(`${basis}/voice/incoming`, { method: "POST", headers: FORMULAR, body: "From=%2B4915100000001&To=%2B4915100000002&CallSid=CA3403sprache" })).text();
+    });
+  } finally {
+    fehler.mock.restore();
+  }
+  assert.ok(text.includes(LOCALES.en.turnErrorSpeech), text);
 });
 
 test("3403 Eingehender Anruf scheitert vor dem Anlegen: die Fehlerantwort kommt trotzdem als 200 mit Ansage", async () => {
