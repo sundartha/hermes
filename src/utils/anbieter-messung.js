@@ -65,9 +65,7 @@ const ANBIETER = Object.freeze({
 });
 
 function beschreibungVon(anbieter) {
-  const beschreibung = ANBIETER[anbieter];
-  if (!beschreibung) throw new TypeError(anbieter);
-  return beschreibung;
+  return ANBIETER[anbieter];
 }
 
 function ergebnisVon(anbieter, fehler) {
@@ -90,7 +88,6 @@ function gemessen({ anbieter, vorgang }, objekt, original) {
     const dauerMs = () => Number(process.hrtime.bigint() - beginn) / NANOSEKUNDEN_JE_MS;
     let ergebnis;
     try {
-      if (typeof original !== "function") throw new TypeError(vorgang);
       ergebnis = await Reflect.apply(original, objekt, argumente);
     } catch (fehler) {
       erfasse({ anbieter, vorgang, ergebnis: ergebnisVon(anbieter, fehler), dauerMs: dauerMs() });
