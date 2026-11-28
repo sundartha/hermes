@@ -10,7 +10,7 @@ const EINDEUTIGE_ANRUFWERTE = {
   openingLine: "eroeffnung-eindeutig-06", openingLineSha256: "sha-eindeutig-07",
   briefing: "briefing-eindeutig-08", constraints: "grenzen-eindeutig-09",
   context: { schluessel: "kontext-eindeutig-10" }, mandate: { schluessel: "mandat-eindeutig-11" },
-  callerName: "anrufer-eindeutig-12", language: "fr", maxDurationS: 1301,
+  callerName: "anrufer-eindeutig-12", language: "fr", languageExplicit: true, maxDurationS: 1301,
   requestedBy: "auftraggeber-eindeutig-14", status: "failed", startedAt: "2026-03-01T08:15:16.000Z",
   answeredAt: "2026-03-01T08:15:27.000Z", answeredUnclearReason: "unklar-eindeutig-17",
   appointmentDate: "2026-04-18", appointmentTime: "16:45", amount: "betrag-eindeutig-20",
