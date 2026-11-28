@@ -27,6 +27,7 @@ import { withConfigNamespaces } from "../config-namespaces-helper.js";
 import { storeOpsFacade, waitUntil } from "../helpers.js";
 import { CONV_ID, INBOUND_FROM, INBOUND_TO, isoVor, seedInboundElCall, seedWartenderElCall } from "../_iel-inbound-harness.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
+import { OHNE_EL_ZUGANG } from "../config-namespaces-helper.js";
 
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const OWNER_NAME = "Jonas";
@@ -489,4 +490,30 @@ test("IEX-A2-9e: Synthese wirft bei englischem Anruf -> Fehlersatz ohne Aufloesu
       assert.notEqual(text, fehlersatzOhneAufloesungXml({ language: "de", ownerName: OWNER_NAME }));
     });
   });
+});
+
+test("IEX-A2-9f: /voice/incoming scheitert nach dem Anlegen eines englischen Anrufs -> technischer Abbruchsatz auf englisch", async () => {
+  const state = baueRouteState();
+  const spione = neueSpione();
+  const fassade = baueRouteStore(state, spione);
+  const store = {
+    ...fassade,
+    budgetExceeded: () => false,
+    tenantBudgetSnapshot: (tenantId, billing) => ops.tenantBudgetSnapshot(state, tenantId, billing),
+    leitungsplaetze: { belegenEingehend: () => {} },
+    tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(state, tenantId),
+    createCall: (leg) => ops.createCall(state, { ...leg, language: "en" }),
+    markAnswered: nieErwartet("markAnswered"),
+  };
+  const englisch = localeFor("en");
+  const deutsch = localeFor("de");
+  const config = withConfigNamespaces({ ...OHNE_EL_ZUGANG, skipTwilioSignatureCheck: true, publicUrl: PUBLIC_URL });
+  await mitKonsole(async () => {
+    await mitRoute(baueRouter({ store, spione, ersetzt: { config } }), async (post) => {
+      const text = await post("/voice/incoming", { CallSid: "CAiexa2f", From: INBOUND_FROM, To: INBOUND_TO });
+      assert.equal(text, renderDirectives([say(englisch.turnErrorSpeech, englisch.voiceProfile), hangup()]));
+      assert.notEqual(text, renderDirectives([say(deutsch.turnErrorSpeech, deutsch.voiceProfile), hangup()]));
+    });
+  });
+  assert.equal(spione.synthesen.length, EINMAL);
 });
