@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, postTelnyxIncoming, seedCall } from "../helpers.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { makeDefaultState, registerTenant, tenantGeo } from "../../src/store/state-ops.js";
+import { makeDefaultState, registerTenant } from "../../src/store/state-ops.js";
 import { requestNumberForPaidTenant } from "../../src/billing/provision-trigger.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
@@ -47,12 +47,6 @@ test("Inbound-Greeting auf der resultierenden US-DID ist englisch (ex E2E-04)", 
 test("Zusammenfassung fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", async () => {
   const s = makeDefaultState();
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
-  const r = requestNumberForPaidTenant(s, {
-    tenantId: TENANT_ID,
-    maxNumbers: HIGH,
-    maxNumbersPerTenant: HIGH,
-  });
-
   const smsCapture = [];
   const notifyCapture = [];
   const store = {

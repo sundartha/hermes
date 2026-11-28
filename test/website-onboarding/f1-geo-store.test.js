@@ -186,9 +186,6 @@ test("pg: Bestands-Nummer ohne country (pre-migration) hydriert zu null, nicht u
 });
 
 const LEGACY_TENANT = "t_legacy";
-const LEGACY_US_E164 = "+12025550123";
-const LEGACY_FR_E164 = "+33123456789";
-const LEGACY_AT_E164 = "+436601234567";
 const LEGACY_DE_E164 = "+4915112340001";
 
 async function seedAndMigrate(numbers) {

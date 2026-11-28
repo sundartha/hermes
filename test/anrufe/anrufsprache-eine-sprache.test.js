@@ -19,7 +19,7 @@ const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_RESULT_POLL_MS: "150",
 });
 
-async function startInhalt({ to, language, mandantSprache = "de" }) {
+async function startInhalt({ to, language }) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV },
     seed: seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),

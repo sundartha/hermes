@@ -26,7 +26,7 @@
   },
   "apps/web/src/lib/api.js": {
     "id-length": {
-      "count": 7
+      "count": 6
     }
   },
   "apps/web/src/lib/i18n.js": {
@@ -106,7 +106,7 @@
   },
   "apps/web/test/settings.test.js": {
     "id-length": {
-      "count": 11
+      "count": 7
     },
     "no-magic-numbers": {
       "count": 2
@@ -846,12 +846,7 @@
   },
   "test/website-onboarding/f1-geo-onboard.test.js": {
     "no-restricted-syntax": {
-      "count": 6
-    }
-  },
-  "test/website-onboarding/f1-geo-store.test.js": {
-    "no-restricted-syntax": {
-      "count": 3
+      "count": 4
     }
   },
   "test/nummern/f1-provisioning-geo.test.js": {
