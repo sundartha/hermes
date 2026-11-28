@@ -5,7 +5,9 @@ import { stdioSnapshot } from "../mcp-draht-pfade.js";
 
 async function sprachBeschreibung() {
   const { tools } = await stdioSnapshot({});
-  return tools.find((tool) => tool.name === "place_call").inputSchema.properties.language.description;
+  const platzieren = tools.find((tool) => tool.name === "place_call");
+  const felder = platzieren.inputSchema.properties;
+  return felder.language.description;
 }
 
 test("place_call language: die Beschreibung sagt, dass die gewählte Sprache auch die Offenlegung bestimmt, ohne eigenen Text Englisch", async () => {
