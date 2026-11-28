@@ -9,6 +9,7 @@ import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil, uebergabeGescheitert 
 import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { messeAnrufEnde } from "../utils/betriebsmessung.js";
 import { MS_PER_SECOND } from "../utils/timer.ts";
+import { maskiereLogText } from "../log-maske.ts";
 import { anrufZustandVon } from "../begriffe/anruf-zustand.ts";
 
 const finishedCalls = new WeakSet();
@@ -132,11 +133,20 @@ async function zusammenfassungMitGrund({ store, call, summary, grundSatz }) {
   return ergaenzt;
 }
 
+const FEHLER_EINZELHEITEN = ["code", "detail", "where"];
+
+function fehlerEinzelheiten(err) {
+  const zeilen = FEHLER_EINZELHEITEN.filter((feld) => err[feld]).map(
+    (feld) => `${feld}=${maskiereLogText(String(err[feld]))}`,
+  );
+  return zeilen.length ? [zeilen.join(" ")] : [];
+}
+
 async function notifySafely(store, eintrag) {
   try {
     await store.addNotification(eintrag.title, eintrag.body, eintrag.callId);
   } catch (err) {
-    console.error("[notification]", err.message);
+    console.error("[notification]", err.message, ...fehlerEinzelheiten(err));
   }
 }
 
