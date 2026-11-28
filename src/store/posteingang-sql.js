@@ -3,6 +3,7 @@ import { MAX_NOTIFICATIONS } from "../begriffe/speicher.ts";
 
 const KONTEXT_SQL = `SELECT set_config('app.current_tenant', $1, false)`;
 const SPERRE_SQL = `SELECT pg_advisory_xact_lock(hashtext($1))`;
+const MANDANT_SPERRE_SQL = `SELECT 1 FROM tenant WHERE id = $1 FOR KEY SHARE`;
 const ANRUF_SQL = `SELECT 1 FROM call WHERE id = $1 AND tenant_id = $2`;
 const LESEN_SQL = `SELECT id, call_id AS "callId", text, type, done, created_at AS "createdAt" FROM action_item
   WHERE tenant_id = $1 AND call_id = $2 ORDER BY seq`;
@@ -77,6 +78,7 @@ async function einfuegen(client, call, item) {
 
 async function meldungEinfuegen(client, call, meldung) {
   await client.query(KONTEXT_SQL, [call.tenantId]);
+  await client.query(MANDANT_SPERRE_SQL, [call.tenantId]);
   const { rows } = await client.query(MELDUNG_ANLEGEN_SQL, [meldung.id, meldung.title, meldung.body, meldung.at, call.id, call.tenantId]);
   await client.query(MELDUNG_KUERZEN_SQL, [call.tenantId, MAX_NOTIFICATIONS]);
   return rows.length > 0;
