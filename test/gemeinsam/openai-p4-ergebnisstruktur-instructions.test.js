@@ -10,6 +10,7 @@ import {
 } from "../../src/mcp-server-info.js";
 import { NOT_PLACED } from "../../src/telephony/failure-reason.ts";
 import { MCP_TEXTS } from "../../src/i18n/mcp-texts.ts";
+import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import {
   startServer,
   seedState,

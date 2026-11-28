@@ -39,7 +39,7 @@ test("mandant: tenantLanguage liefert die Sprache aus dem Zustand als Promise", 
   const antwort = bereiche.mandantProfil.tenantLanguage("t_a");
   assert.ok(antwort instanceof Promise);
   assert.equal(await antwort, "fr");
-  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_b"), "en");
+  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_b"), "de");
 });
 
 test("mandant: tenantGeo liefert Land und Sprache des Mandanten, ohne Mandanten null", async () => {
