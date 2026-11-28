@@ -25,7 +25,7 @@ function gestellteUhr() {
   return uhr;
 }
 
-function starteMitUhr(t, uhr, taktMs = TAKT_MS, grenzeMs = GRENZE_MS) {
+function starteMitUhr(t, uhr, { taktMs, grenzeMs } = { taktMs: TAKT_MS, grenzeMs: GRENZE_MS }) {
   const meldungen = [];
   t.mock.method(globalThis, "fetch", async (adresse) => {
     meldungen.push(String(adresse));
@@ -62,7 +62,7 @@ test("Lebenszeichen: ein Sprung der Uhr über der Grenze verhindert die Meldung,
 
 test("Lebenszeichen: ein Verzug nur im Messtakt verhindert die nächste Meldung", async (t) => {
   const uhr = gestellteUhr();
-  const meldungen = starteMitUhr(t, uhr, LANGER_TAKT_MS, HOEHERE_GRENZE_MS);
+  const meldungen = starteMitUhr(t, uhr, { taktMs: LANGER_TAKT_MS, grenzeMs: HOEHERE_GRENZE_MS });
   const herzschlag = uhr.takt(LANGER_TAKT_MS);
   const messung = uhr.takt(MESSTAKT_MS);
   uhr.stelle(ANHALTEN_MS);
