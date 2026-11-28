@@ -219,4 +219,27 @@ wa() { local D=$(mktemp -d); LOG=$D; N=1; ISSUE=6183; echo "$2" > $LOG/bau-1.log
 pruefe "WA ist offener PR auf eigenem Zweig: laeuft als PR weiter statt zu halten" "$(wa keiner "WARTET=6402" "paket/6183-foo")" "ERGEBNIS=6402|WA_FILE=|HALT="
 pruefe "WA ist kein offener eigener Zweig (Issue, Vorgaenger, fremder PR): haelt wie bisher" "$(wa keiner "WARTET=6402" "")" "|WA_FILE=6402|HALT=wartet auf PR 6402 (Neustart danach von selbst, sobald #6402 geschlossen ist)"
 pruefe "ist der Bau schon mit PR=<nummer> fertig, greift die WARTET-Pruefung gar nicht" "$(wa 5555 "PR=5555" "paket/6183-foo")" "ERGEBNIS=5555|WA_FILE=|HALT="
+# 28.11.: Ein PR unter Antonios Konto (nicht App) wird nicht mehr zum Halt, sondern unverändert auf einen App-PR mit neuem system/-Zweig übernommen; der alte PR und der paket/-Zwilling werden mit Verweis geschlossen.
+KU2=$(sed -n '/^konto_umzug() {/,/sleep 20; }$/p' $S)
+[ -n "$KU2" ] || { echo "ROT  konto_umzug nicht in paket.sh gefunden"; exit 1; }
+sleep() { :; }; APPU=/dev/null; LOG=$T/ku; mkdir -p $LOG; KULOG=$T/ku.aufrufe; : > $KULOG
+kopf() { echo 256de60c953363f8ec35596801cdd4df874929b2; }
+gitr() { echo "gitr $*" >> $KULOG; }
+gh() { case "$*" in
+  "pr view 6411 "*"headRefName"*) echo system/6183-6c ;;
+  "pr view 6411 "*"body"*) echo "Teil von #6183" ;;
+  "pr view 6411 "*"title"*) echo "Paket 6183-6c" ;;
+  "pr list "*"--head system/6183-6c-2 "*) ;;
+  "pr list "*"--head paket/6183-6c "*) echo 6409 ;;
+  "pr list "*"--head system/6183-6c "*) echo 6411 ;;
+  "pr create "*) echo "$*" >> $KULOG; echo https://github.com/sundartha/hermes/pull/6500 ;;
+  "pr close "*) echo "gh $*" >> $KULOG ;;
+esac; }
+eval "$KU2"; NEU=; konto_umzug 6411
+pruefe "Antonios PR wird auf einen App-PR mit neuem system/-Zweig übernommen" "$NEU" "6500"
+pruefe "derselbe Kopf geht auf den neuen Zweig" "$(grep -c 'push -q hermes 256de60c953363f8ec35596801cdd4df874929b2:refs/heads/system/6183-6c-2' $KULOG)" "1"
+pruefe "der neue PR hat den neuen Zweig als Kopf" "$(grep -c 'pr create .*--head system/6183-6c-2' $KULOG)" "1"
+pruefe "alter PR und paket/-Zwilling werden mit Verweis geschlossen" "$(grep 'pr close' $KULOG | grep -c 'Übernommen in #6500')" "2"
+pruefe "paket.sh ruft konto_umzug statt zu halten, wenn der PR Antonio20045 gehört" "$(grep -c '\[ "\$A" = Antonio20045 \] && konto_umzug \$PR && PR=\$NEU' $S)" "1"
+unset -f gh gitr kopf sleep
 exit $fehler
