@@ -36,7 +36,7 @@
         "src/process-guards.js",
         "src/mail-boot-probe.js"
       ],
-      "eingaenge": ["src/boot-guard.ts", "src/lebenszeichen.js"],
+      "eingaenge": ["src/boot-guard.ts"],
       "nutzt": [],
       "importiertJedeDatei": true
     },
