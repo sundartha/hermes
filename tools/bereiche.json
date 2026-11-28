@@ -105,6 +105,7 @@
       "^src/store\\.[jt]s$",
       "^src/config\\.[jt]s$",
       "^src/boot-guard\\.[jt]s$",
+      "^src/lebenszeichen\\.[jt]s$",
       "^src/(telephony|elevenlabs|geo|llm|queue|research|ui)/registry\\.[jt]s$",
       "^src/konfiguration/standardsprache\\.[jt]s$"
     ],
