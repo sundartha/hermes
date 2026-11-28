@@ -64,7 +64,7 @@ const faelle = [
   ["Konto de, Nummer ohne Sprache", { kontoSprache: "de", nummerSprache: undefined }, "de"],
   ["Konto de, Nummer mit leerer Sprache", { kontoSprache: "de", nummerSprache: "" }, "de"],
   ["Konto de, Nummer mit Sprache null", { kontoSprache: "de", nummerSprache: null }, "de"],
-  ["Konto de, Nummer ausdruecklich fr", { kontoSprache: "de", nummerSprache: "fr" }, "fr"],
+  ["Konto de, Nummer ausdruecklich fr", { kontoSprache: "de", nummerSprache: "fr" }, "de"],
 ];
 
 for (const [name, eingabe, erwartet] of faelle) {

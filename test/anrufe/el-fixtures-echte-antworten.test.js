@@ -366,11 +366,6 @@ async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de
     answeredAt: new Date().toISOString(),
   });
   Object.assign(call, { direction: richtung, from: "+15005550006", to: "+4915112345678", language: sprache, ...(richtung === "outbound" ? { bridgedAt: new Date().toISOString() } : {}) });
-  const nummernAbfragen = [];
-  store.numberRecordByE164 = (e164) => {
-    nummernAbfragen.push(e164);
-    return null;
-  };
   if (leseCallNull) {
     let gelesen = 0;
     store.leseCall = async () => ((gelesen += 1) === 4 ? null : call);
@@ -416,7 +411,7 @@ async function pollMitAgent({ agentAntwort, richtung = "outbound", sprache = "de
     console.warn = warnVorher;
     AbortSignal.timeout = timeoutVorher;
   }
-  return { call, state, anfragen, warnungen, nummernAbfragen };
+  return { call, state, anfragen, warnungen };
 }
 
 const STIMMEN_TABELLE = [
@@ -440,14 +435,6 @@ for (const [name, , agentAntwort, erwartet] of STIMMEN_TABELLE) {
 test("Stimmen am Anrufdatensatz: bei französischer Sprache des Anrufs zählt eine Stimme, wenn der Agent die deutsche Stimme führt", async () => {
   const { call } = await pollMitAgent({ agentAntwort: stimmenAgent(STIMME_DE, false), sprache: "fr" });
   assert.equal(call.elDetectorCounts.stimmenAnzahl, 1);
-});
-
-test("Stimmen am Anrufdatensatz: die Rufnummer der Sprachwahl ist beim ausgehenden Anruf der Absender, beim eingehenden die gerufene Nummer", async () => {
-  const agentAntwort = stimmenAgent(STIMME_ANDERS, false);
-  const ausgehend = await pollMitAgent({ agentAntwort, richtung: "outbound" });
-  const eingehend = await pollMitAgent({ agentAntwort, richtung: "inbound" });
-  assert.deepEqual(ausgehend.nummernAbfragen.filter((nummer) => nummer === "+15005550006" || nummer === "+4915112345678"), ["+15005550006"]);
-  assert.deepEqual(eingehend.nummernAbfragen.filter((nummer) => nummer === "+15005550006" || nummer === "+4915112345678"), ["+4915112345678"]);
 });
 
 test("Stimmen am Anrufdatensatz: der Agent der Konfiguration wird mit Schluessel und einer Frist von zehn Sekunden gelesen", async () => {

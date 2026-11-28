@@ -96,7 +96,8 @@ export function makeAnbieter(antwort) {
   anbieter.setzeAntwort = (neueAntwort) => {
     anbieter.antwort = neueAntwort;
   };
-  anbieter.fetch = async (_url, init) => {
+  anbieter.fetch = async (url, init) => {
+    if (String(url).includes("/v1/convai/agents/")) return okAntwort({});
     if (init.method === "DELETE") {
       anbieter.deletes += 1;
       anbieter.ereignisse.emit(EREIGNIS_AENDERUNG);
