@@ -1,3 +1,5 @@
+import { fehlerText } from "../utils/fehler-text.ts";
+
 const FEHLER = "[pg] plattform-nummern fehlgeschlagen:";
 const SPALTEN = "id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note";
 const LESEN_SQL = `SELECT ${SPALTEN} FROM platform_number_use WHERE released_at IS NULL OR id = ANY($1::text[]) ORDER BY bound_at`;
@@ -11,7 +13,7 @@ export interface Bindung {
   provider: string;
   tenantId?: string | null;
   providerNumberId?: string | null;
-  boundAt: string;
+  boundAt: string | null;
   releasedAt?: string | null | undefined;
   note?: string | null;
 }
@@ -39,6 +41,11 @@ interface Abhaengigkeiten {
   protokoll?: { error: (...teile: unknown[]) => void };
 }
 
+export interface PlattformNutzungSql {
+  nachladen: (spiegel: Bindung[]) => Promise<void>;
+  schreiben: (spiegel: Bindung[]) => Promise<void>;
+}
+
 const alsIso = (zeit: Zeit): string | null => (zeit instanceof Date ? zeit.toISOString() : (zeit ?? null));
 
 function zeileZuBindung(zeile: Zeile): Bindung {
@@ -49,7 +56,7 @@ function zeileZuBindung(zeile: Zeile): Bindung {
     provider: zeile.provider,
     tenantId: zeile.tenant_id,
     providerNumberId: zeile.provider_number_id,
-    boundAt: alsIso(zeile.bound_at) as string,
+    boundAt: alsIso(zeile.bound_at),
     releasedAt: alsIso(zeile.released_at),
     note: zeile.note,
   };
@@ -75,17 +82,17 @@ async function inTransaktion(client: Client, arbeit: () => Promise<void>): Promi
     await arbeit();
     await client.query("COMMIT");
   } catch (fehler) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch(() => undefined);
     throw fehler;
   }
 }
 
-export function machePlattformNutzungSql({ einreihen, runner, protokoll = console }: Abhaengigkeiten) {
+export function machePlattformNutzungSql({ einreihen, runner, protokoll = console }: Abhaengigkeiten): PlattformNutzungSql {
   async function ausfuehren<T>(arbeit: () => Promise<T>): Promise<T> {
     try {
       return await arbeit();
     } catch (fehler) {
-      protokoll.error(FEHLER, (fehler as Error).message);
+      protokoll.error(FEHLER, fehlerText(fehler));
       throw fehler;
     }
   }
