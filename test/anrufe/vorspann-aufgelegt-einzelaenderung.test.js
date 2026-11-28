@@ -16,6 +16,7 @@ const CALLEE = "cc_callee_einzel";
 const EL = "cc_el_einzel";
 const ZIEL = "+4915112399005";
 const ZEILE_SQL = "SELECT aufgelegt FROM vorspann_zustand WHERE call_id = $1";
+const EL_BEIN_SQL = "SELECT el_call_control_id FROM call WHERE id = $1";
 const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()";
 const SPERRTRIGGER_SQL = `CREATE FUNCTION aufgelegt_gesperrt() RETURNS trigger AS $$ BEGIN
   IF NEW.aufgelegt IS DISTINCT FROM OLD.aufgelegt THEN RAISE EXCEPTION 'aufgelegt gesperrt'; END IF;
@@ -96,6 +97,7 @@ async function bisAbgebrochen({ a, sql, signer, aufrufe }, art) {
   const callId = rows[0].id;
   assert.equal((await ereignis(signer, a, { callId, art: "call.answered", kennung: "ab" })).status, HTTP_OK);
   await zeilenBis(async () => aufrufe.wiedergaben, (liste) => liste.length === 1);
+  await zeilenBis(async () => (await sql(EL_BEIN_SQL, [callId])).rows[0]?.el_call_control_id ?? null, (bein) => bein === EL);
   return { callId, abbruch: (srv) => ereignis(signer, srv, { callId, art, kennung: "ende" }) };
 }
 
