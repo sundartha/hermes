@@ -243,7 +243,6 @@ function makeMemoryStore({ numbers, throwOnCreateCall = { value: false } } = {})
     tenantBudgetSnapshot: () => ({ capCents: 1000000, spentCents: 0, remainingCents: 1000000 }),
     reserveExceedsBudget: () => false,
     claimPlatformSpendWarning: () => null,
-    resolveCallLanguage: () => "de",
     countOutboundCallsSince: (_iso, { tenantId, to } = {}) =>
       calls.filter((call) => call.tenantId === tenantId && (to === undefined || call.to === to)).length,
     activeCallsFor: (tenantId) => calls.filter((call) => call.tenantId === tenantId && !call.ended),

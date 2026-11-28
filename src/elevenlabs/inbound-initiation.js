@@ -92,8 +92,8 @@ function inboundSituationFuer({ variante, owner, fremdEroeffnung }) {
     : vorlage.inboundSituation({ owner });
 }
 
-function inboundEroeffnungFuer({ store, config, call }) {
-  const locale = inboundElLocaleOf({ store, config, call });
+function inboundEroeffnungFuer({ store, call }) {
+  const locale = inboundElLocaleOf({ call });
   const bundle = localeFor(locale.language);
   const { ownerName, firstName } = store.tenantContext(call.tenantId);
   const fremd = bundle.inboundEroeffnung(ownerName);

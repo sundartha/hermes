@@ -425,7 +425,6 @@ export const {
   counterpartyMemoryGelesen,
   findTenantByNumber,
   numberRecordByE164,
-  resolveCallLanguage,
   tenantLanguage,
   addActionItem,
   callActionItems,

@@ -167,7 +167,6 @@ function kettenStoreTeilB(state, overrides = {}) {
     tenantBudgetSnapshot: () => ({ capCents: 1000000, spentCents: 0, remainingCents: 1000000 }),
     reserveExceedsBudget: () => false,
     claimPlatformSpendWarning: () => null,
-    resolveCallLanguage: () => "de",
     activeCallsFor: (tenantId) => activeCallsFor(state, tenantId),
     activeCallsForSql: async (tenantId) => activeCallsFor(state, tenantId),
     releaseOutboundReserveCents: (tenantId, cents) => releaseOutboundReserveCents(state, tenantId, cents),

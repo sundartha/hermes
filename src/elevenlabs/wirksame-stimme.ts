@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { anfrage } from "../utils/anfrage.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
-import { callLocaleOf, inboundElLocaleOf, type LocaleSpeicher } from "./call-locale.ts";
+import { callLocaleOf, inboundElLocaleOf } from "./call-locale.ts";
 import { fetchAgent, type ConvaiKonto } from "./convai.ts";
 
 const STIMMEN_FRIST_S = 10;
@@ -46,7 +46,7 @@ interface Anruf {
   bridgedAt?: string | null;
 }
 
-interface Speicher extends LocaleSpeicher {
+interface Speicher {
   leseCall: (callId: string) => Promise<Anruf | null>;
 }
 
@@ -54,9 +54,9 @@ interface Konfiguration {
   voice: { elevenLabsOutbound: ConvaiKonto & { agentId: string } };
 }
 
-function angeforderteStimme({ store, call }: { store: Speicher; call: Anruf }): string {
+function angeforderteStimme({ call }: { call: Anruf }): string {
   const wahl = call.direction === "inbound" ? inboundElLocaleOf : callLocaleOf;
-  return wahl({ store, call, ownerName: "" }).voiceId;
+  return wahl({ call, ownerName: "" }).voiceId;
 }
 
 export async function ermittleStimmenAnzahl({
@@ -73,7 +73,7 @@ export async function ermittleStimmenAnzahl({
   try {
     const call = await store.leseCall(callId);
     if (!call) return null;
-    const angefordert = angeforderteStimme({ store, call });
+    const angefordert = angeforderteStimme({ call });
     const { agentId, ...konto } = config.voice.elevenLabsOutbound;
     const agent = await fetchAgent({ fetchImpl, account: konto, agentId, timeoutMs: STIMMEN_FRIST_MS });
     return stimmenAnzahlVon({ angefordert, agent, vorspannGespielt: Boolean(call.bridgedAt) });

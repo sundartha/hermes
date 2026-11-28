@@ -24,7 +24,6 @@ function makeHarnessConfig() {
 function makeHarnessStore(state) {
   return {
     numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
-    resolveCallLanguage: (args) => ops.resolveCallLanguage(state, args),
     budgetExceeded: (tenantId, cfg) => ops.budgetExceeded(state, tenantId, cfg, new Date().toISOString()),
     tenantBudgetSnapshot: (tenantId, cfg) =>
       ops.tenantBudgetSnapshot(state, tenantId, cfg, new Date().toISOString()),

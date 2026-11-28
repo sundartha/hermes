@@ -1,7 +1,6 @@
 import { normNum, E164, countryAllowed, allowedPrivateNumberCodes } from "../../begriffe/rufnummern.ts";
 import { NUMBER_STATUS, NUMBER_TRANSITIONS } from "../../begriffe/nummern.ts";
 import { TENANT_STATUS, KYC_LEVEL, KYC_ORDER } from "../../begriffe/mandant.ts";
-import { DEFAULT_LANGUAGE } from "../../konfiguration/standardsprache.ts";
 import { isKnownPlanSlug } from "../../plans.ts";
 import { isDenied } from "../../telephony/number-denylist.ts";
 import { tenantsOf } from "./grundlagen.js";
@@ -376,15 +375,6 @@ export function tenantContext(state: MandantZustand, ownerName: unknown, tenantI
 
 function firstNameOf(fullName: unknown): string {
   return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] ?? "" : "";
-}
-
-export function resolveCallLanguage(
-  state: MandantZustand,
-  { tenantId, numberRecord }: { tenantId: string; numberRecord?: { language?: string | null } | null | undefined },
-): string {
-  const settingsLang = settingsFor(state, tenantId).language;
-  const tenant = findTenant(state, tenantId);
-  return (settingsLang ?? "") || (numberRecord?.language ?? "") || (tenant?.defaultLanguage ?? "") || DEFAULT_LANGUAGE;
 }
 
 export function registerTenant(

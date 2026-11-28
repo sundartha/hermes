@@ -432,7 +432,6 @@ test("3403 Eingehender Anruf ohne EL-Zugang: die Notbremse-Frist folgt dem Minut
   const angelegt = [];
   const store = {
     numberRecordByE164: async () => ({ tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx" }),
-    resolveCallLanguage: async () => "de",
     budgetExceeded: () => false,
     tenantBudgetSnapshot: () => ({ remainingCents: 60 }),
     createCall: (leg) => {

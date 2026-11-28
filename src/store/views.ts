@@ -1,6 +1,7 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.ts";
 import { GLOBAL_CAP_REASON } from "../begriffe/nummern-vergabe.ts";
-import { findTenant, resolveCallLanguage, ersatzZuAlterNummer } from "./state-ops.js";
+import { findTenant, settingsFor, ersatzZuAlterNummer } from "./state-ops.js";
+import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { omitKeys } from "../utils/object.ts";
 import type { MandantZustand } from "./zustand/mandant.ts";
 
@@ -76,7 +77,12 @@ export function findActiveNumber(
 }
 
 export function tenantLanguage(state: Zustand, tenantId: string): string {
-  return resolveCallLanguage(state, { tenantId, numberRecord: findActiveNumber(state, tenantId) });
+  return (
+    (settingsFor(state, tenantId).language ?? "") ||
+    (findActiveNumber(state, tenantId)?.language ?? "") ||
+    (findTenant(state, tenantId)?.defaultLanguage ?? "") ||
+    DEFAULT_LANGUAGE
+  );
 }
 
 export function hasActiveNumber(state: Zustand): boolean {

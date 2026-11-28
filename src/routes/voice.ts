@@ -21,7 +21,7 @@ import { KOSTENPROFIL } from "../billing/kostenarten.ts";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.ts";
 import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen, istOutboundElProfil } from "../elevenlabs/inbound-bridge-state.ts";
 import { e164Endung, inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.ts";
-import { inboundElLocaleOf, type LocaleSpeicher } from "../elevenlabs/call-locale.ts";
+import { inboundElLocaleOf } from "../elevenlabs/call-locale.ts";
 import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.ts";
 import {
   AUSGEHENDE_RUECKFALL_ENTSCHEIDUNG,
@@ -94,7 +94,7 @@ interface Konfiguration {
 
 type NummernBeleg = NonNullable<Parameters<typeof inboundPfadEntscheidung>[0]["numberRecord"]> & { tenantId: string };
 
-interface Speicher extends LocaleSpeicher {
+interface Speicher {
   getCall: (callId: unknown) => AnrufOderLeer;
   leseCall?: (callId: string) => Promise<AnrufOderLeer>;
   leseCallUngebunden?: (callId: string) => Promise<AnrufOderLeer>;
@@ -388,8 +388,8 @@ function sendAuflegen({ res, call }: { res: Antwort; call: AnrufOderLeer }, { re
   res.type("text/xml").send(render([hangupD()], call?.provider));
 }
 
-async function fehlersatzFuer({ call }: { call: Anruf }, { store, bereiche }: VoiceDeps) {
-  const aufloesung = inboundElLocaleOf({ store, call });
+async function fehlersatzFuer({ call }: { call: Anruf }, { bereiche }: VoiceDeps) {
+  const aufloesung = inboundElLocaleOf({ call });
   const bundle = sprachtexteFuer(aufloesung.language);
   return {
     text: bundle.inboundFehlersatz((await bereiche.mandant.tenantContext(call.tenantId)).ownerName),

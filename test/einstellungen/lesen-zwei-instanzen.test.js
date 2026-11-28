@@ -59,7 +59,7 @@ async function instanz(runner, optionen) {
   return mitFassade(store);
 }
 
-const sprache = (store) => store.resolveCallLanguage({ tenantId: BOOTSTRAP_TENANT_ID, numberRecord: null });
+const sprache = (store) => store.tenantLanguage(BOOTSTRAP_TENANT_ID);
 const einstellungen = (store) => store.tenantContext(TENANT_ID).settings;
 const zeile = async (db, tenantId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);

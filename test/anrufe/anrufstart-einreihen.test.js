@@ -56,7 +56,6 @@ async function baueStore(protokoll) {
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     reserveExceedsBudget: () => true,
     claimPlatformSpendWarning: () => null,
-    resolveCallLanguage: () => "de",
     activeCallsFor: () => [],
     activeCallsForSql: async () => [],
     releaseOutboundReserveCents: () => true,

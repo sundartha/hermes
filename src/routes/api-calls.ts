@@ -32,7 +32,6 @@ import { mapStatus } from "../call-result.ts";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.ts";
 import { ownerSelfCallGranted } from "../callee-is-owner.ts";
 import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.ts";
-import type { LocaleSpeicher } from "../elevenlabs/call-locale.ts";
 import { elevenlabsOutbound } from "../elevenlabs/registry.ts";
 import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.ts";
 import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../elevenlabs/outbound-weg.ts";
@@ -198,8 +197,7 @@ interface Speicher {
   save: () => unknown;
   anrufpauseGelesen?: () => Promise<unknown>;
   anrufpauseAktiv?: () => unknown;
-  numberRecordByE164: WegAufruf["store"]["numberRecordByE164"] & LocaleSpeicher["numberRecordByE164"];
-  load: LocaleSpeicher["load"];
+  numberRecordByE164: WegAufruf["store"]["numberRecordByE164"];
 }
 
 interface Bereiche {
@@ -907,8 +905,7 @@ export function makeCallRoutes({
 
       const { ownerName } = await bereiche.mandant.tenantContext(ctx.tenantId);
       const callLocale = anrufSprache({
-        store,
-        call: { tenantId: String(ctx.tenantId), from: ctx.fromNumber, to: ctx.to, language: requestedLanguage },
+        call: { to: ctx.to, language: requestedLanguage },
         ownerName,
       });
       const opening = await eroeffnungHolen({

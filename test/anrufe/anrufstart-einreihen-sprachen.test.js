@@ -27,7 +27,6 @@ async function baueStore(protokoll, sprache) {
   const frei = { unrestricted: true, allowedCountryCodes: null, maxCallsPerHour: null, allowedNumbers: [], allowConsult: false, allowLookup: false };
   const basis = {
     tenantLanguage: () => sprache,
-    resolveCallLanguage: () => sprache,
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
     tenantGeo: () => ({ country: "DE", defaultLanguage: sprache }),

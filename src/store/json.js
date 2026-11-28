@@ -616,10 +616,6 @@ export function numberRecordByE164(e164) {
   return ops.numberRecordByE164(load(), e164);
 }
 
-export function resolveCallLanguage(args) {
-  return ops.resolveCallLanguage(load(), args);
-}
-
 export function tenantLanguage(tenantId) {
   return tenantLanguageOf(load(), tenantId);
 }

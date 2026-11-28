@@ -44,7 +44,7 @@ export {
 import { newId, getCall } from "./zustand/grundlagen.js";
 export { newId, tenantsOf, getCall } from "./zustand/grundlagen.js";
 import { findTenant, seedBootstrapKyc } from "./zustand/mandant.ts";
-export { tenantContext, registerTenant, resolveCallLanguage, SUBSCRIPTION_PATCH_FIELDS } from "./zustand/mandant.ts";
+export { tenantContext, registerTenant, SUBSCRIPTION_PATCH_FIELDS } from "./zustand/mandant.ts";
 export {
   numberRecordByE164,
   findTenantByNumber,

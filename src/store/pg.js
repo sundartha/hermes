@@ -632,7 +632,6 @@ function rueckfrageRechercheMethoden({ requireState, save, anrufe }) {
     counterpartyMemoryGelesen: (tenantId, e164) => anrufe.gedaechtnis(requireState(), tenantId, e164),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
     numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
-    resolveCallLanguage: (args) => ops.resolveCallLanguage(requireState(), args),
     tenantLanguage: (tenantId) => tenantLanguageOf(requireState(), tenantId),
   };
 }

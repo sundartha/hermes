@@ -119,9 +119,3 @@ test("tenantSubscription: gesetzte Abo-Felder kommen je Schluessel an, ungesetzt
     cancelAtPeriodEnd: true,
   });
 });
-
-test("resolveCallLanguage: Mandant ohne Eintrag und ohne Nummernsprache faellt auf die Standardsprache, die Nummernsprache geht vor", async () => {
-  const store = await speicherMitMandanten();
-  assert.equal(await store.resolveCallLanguage({ tenantId: UNBEKANNT, numberRecord: null }), "de");
-  assert.equal(await store.resolveCallLanguage({ tenantId: OHNE_NAMEN, numberRecord: { language: "fr" } }), "fr");
-});

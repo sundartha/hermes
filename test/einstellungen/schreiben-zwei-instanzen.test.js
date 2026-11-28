@@ -41,7 +41,7 @@ async function instanz(runner) {
   return store;
 }
 
-const sprache = (store) => store.resolveCallLanguage({ tenantId: BOOTSTRAP_TENANT_ID, numberRecord: null });
+const sprache = (store) => store.tenantLanguage(BOOTSTRAP_TENANT_ID);
 const zeile = async (db, tenantId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
   return (await db.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])).rows[0];

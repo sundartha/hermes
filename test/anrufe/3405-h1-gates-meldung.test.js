@@ -28,7 +28,6 @@ function kettenStore() {
     load: () => ({
       numbers: [vorspannSeedNummer({ tenantId: TENANT, nummer: "+491700000000", registrierung: "phnum_secp6" })],
     }),
-    resolveCallLanguage: () => "de",
     activeCallsFor: () => [],
     activeCallsForSql: async () => [],
     persistCall: async () => {},

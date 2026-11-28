@@ -327,7 +327,6 @@ export function speicherBereiche(speicher) {
       countNoSpeechTurn: async (callId) => speicher.countNoSpeechTurn(callId),
       clearNoSpeechStreak: async (callId) => speicher.clearNoSpeechStreak(callId),
       numberRecordByE164: async (e164) => nummerSuchen(speicher, e164),
-      resolveCallLanguage: async (eingabe) => speicher.resolveCallLanguage(eingabe),
     },
     gespraech: {
       getCall: async (callId) => speicher.getCall(callId),

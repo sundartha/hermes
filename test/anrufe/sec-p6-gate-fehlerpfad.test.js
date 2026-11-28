@@ -62,7 +62,6 @@ function kettenStore(overrides = {}) {
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     reserveExceedsBudget: () => true,
     claimPlatformSpendWarning: () => null,
-    resolveCallLanguage: () => "de",
     activeCallsFor: () => [],
     activeCallsForSql: async () => [],
     releaseOutboundReserveCents: () => true,
@@ -217,7 +216,6 @@ const KETTEN_QUELLEN = Object.freeze({
 const NICHT_KETTEN_QUELLEN = Object.freeze([
   "numberRecordByE164",
   "claimPlatformSpendWarning",
-  "resolveCallLanguage",
   "activeCallsFor",
   "releaseOutboundReserveCents",
   "createCall",

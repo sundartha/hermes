@@ -18,7 +18,6 @@ const ANRUFE = [
   ["countNoSpeechTurn", [ANRUF], 2],
   ["clearNoSpeechStreak", [ANRUF], undefined],
   ["numberRecordByE164", [NUMMER], { e164: NUMMER }],
-  ["resolveCallLanguage", [{ tenantId: MANDANT, numberRecord: null }], "fr"],
 ];
 
 const MANDANT_TABELLE = [["tenantContext", [MANDANT], { ownerName: OWNER, settings: {} }]];

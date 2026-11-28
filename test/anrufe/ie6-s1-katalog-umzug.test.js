@@ -82,7 +82,6 @@ test("OUT-27 (Mechanismus, gruen) - der TeXML-Originationspfad reicht das gegate
     const store = {
       tenantPrivateNumber: () => null,
       resolveProfile: () => ({ allowConsult: false }),
-      resolveCallLanguage: () => "de",
       withStoreLock: (fn) => fn(),
       activeCallsFor: () => [],
       releaseOutboundReserveCents: () => true,

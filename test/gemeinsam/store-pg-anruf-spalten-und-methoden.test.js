@@ -122,7 +122,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "recordRelayTtsCharacters", "recordSipCallId", "recordTenantTtsCharacters", "recordTtsCharacters",
   "recordUsageEvent", "recordWebhookAnchors", "registrierungAnhaengen", "releaseOutboundReserve",
   "releaseOutboundReserveCents", "removeNewsletterRecipient", "reservationOf", "reserveExceedsBudget",
-  "resolveCallLanguage", "resolveProfile", "resolveTenant", "save", "schliesseKostenAbgleich",
+  "resolveProfile", "resolveTenant", "save", "schliesseKostenAbgleich",
   "seedBootstrapNumber", "setBillingHold", "setCallEndedAt", "setCancellationMailPending",
   "setContractEndCleanupPending", "setKycLevel", "setNewsletterConsent", "setPrivateNumber", "setProfile",
   "setSuspendedAtIfAbsent", "setTenantBudget", "setTenantGeo", "setTenantStripe", "setTenantSubscription",

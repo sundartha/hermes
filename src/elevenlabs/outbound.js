@@ -460,9 +460,9 @@ function openingLinesOf({ call, locale }) {
   };
 }
 
-export function eroeffnungFuerAnruf({ store, config, call }) {
+export function eroeffnungFuerAnruf({ store, call }) {
   const { ownerName, firstName } = store.tenantContext(call.tenantId);
-  const locale = callLocaleOf({ store, config, call, ownerName });
+  const locale = callLocaleOf({ call, ownerName });
   const offenlegung = localeFor(locale.disclosureLanguage);
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
@@ -727,7 +727,7 @@ function makeInhaltsAnfrage({ store, config, consultAllowedForCall, lookupAvaila
       callee: call.to,
       jetzt: () => new Date(),
     });
-    const locale = callLocaleOf({ store, config, call, ownerName });
+    const locale = callLocaleOf({ call, ownerName });
     const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
     const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
     const tenantToken = tenantToolToken({

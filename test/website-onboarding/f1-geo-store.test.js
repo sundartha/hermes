@@ -11,12 +11,10 @@ import {
   setTenantGeo,
   findTenant,
   numberRecordByE164,
-  resolveCallLanguage,
   updateSettings,
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.ts";
 import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.ts";
-import { DEFAULT_LANGUAGE } from "../../src/konfiguration/standardsprache.ts";
 import { applySchema, migrate } from "../../src/db/migrate.js";
 import { languageForCountry } from "../../src/i18n/locales.ts";
 
@@ -84,68 +82,6 @@ test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); in
   );
   assert.equal(numberRecordByE164(s, "+49000"), null, "unbekannte Nummer -> null");
   assert.equal(numberRecordByE164(s, ""), null, "leere e164 -> null");
-});
-
-test("resolveCallLanguage: settings.language-Override schlaegt number.language (hoechste Stufe)", () => {
-  const s = makeDefaultState();
-  s.tenants = [{ id: A, status: "active", defaultLanguage: "de" }];
-  s.settings[A] = { ...defaultSettings(), language: "en" };
-  const numberRecord = { language: "fr" };
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord }), "en", "Override gewinnt");
-});
-
-test("resolveCallLanguage: ohne Override greift number.language", () => {
-  const s = makeDefaultState();
-  s.tenants = [{ id: A, status: "active", defaultLanguage: "de" }];
-  s.settings[A] = { ...defaultSettings(), language: null };
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: { language: "fr" } }), "fr");
-});
-
-test("resolveCallLanguage: ohne Override + ohne number.language greift tenant.defaultLanguage", () => {
-  const s = makeDefaultState();
-  s.tenants = [{ id: A, status: "active", defaultLanguage: "fr" }];
-  s.settings[A] = { ...defaultSettings(), language: null };
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: { language: null } }), "fr");
-  assert.equal(
-    resolveCallLanguage(s, { tenantId: A, numberRecord: null }),
-    "fr",
-    "kein Record -> Number-Stufe faellt durch",
-  );
-});
-
-test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)", () => {
-  const s = makeDefaultState();
-  s.tenants = [{ id: A, status: "active" }];
-  s.settings[A] = { ...defaultSettings(), language: null };
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: null }), DEFAULT_LANGUAGE);
-});
-
-test("LANG-17 (Mechanismus, gruen) - resolveCallLanguage-Praezedenz ueber alle Falsy-Kombinationen", () => {
-  const FALSY = [null, ""];
-  for (const settingsLang of [...FALSY, "en"]) {
-    for (const numberLang of [...FALSY, "fr"]) {
-      for (const tenantLang of [...FALSY, "de"]) {
-        const s = makeDefaultState();
-        s.tenants = [{ id: A, status: "active", defaultLanguage: tenantLang }];
-        s.settings[A] = { ...defaultSettings(), language: settingsLang };
-        const expected = settingsLang || numberLang || tenantLang || DEFAULT_LANGUAGE;
-        assert.equal(
-          resolveCallLanguage(s, { tenantId: A, numberRecord: { language: numberLang } }),
-          expected,
-          `settings=${settingsLang} number=${numberLang} tenant=${tenantLang}`,
-        );
-      }
-    }
-  }
-});
-
-test("PROMPT-17 (Mechanismus, gruen) - Nummern-Record OHNE language-Feld faellt sauber auf tenant.defaultLanguage", () => {
-  const s = makeDefaultState();
-  s.tenants = [{ id: A, status: "active", defaultLanguage: "en" }];
-  s.settings[A] = { ...defaultSettings(), language: null };
-  const legacyRecord = { id: "num_legacy", e164: "+4930111222333" };
-  assert.equal(Object.hasOwn(legacyRecord, "language"), false, "Vorbedingung: Feld fehlt wirklich");
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: legacyRecord }), "en");
 });
 
 test("LANG-19 (SOLL, rot) - updateSettings normalisiert language='EN' zu 'en' statt es still zu verwerfen", () => {

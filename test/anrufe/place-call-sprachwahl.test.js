@@ -135,53 +135,31 @@ describe("P4a-A: der Sprachwunsch ueber die echte HTTP-Route", () => {
 });
 
 const OWNER_NAME = "Pin B-Testowner";
-const PLATFORM_VOICE_ID = "plattform-stimme-p4a";
 const DE_NUMMER = TELNYX_TEST_PEER_NUMBER;
 
 describe("P4a-B: callLocaleFor trennt Gespraechs- und Offenlegungssprache rein", () => {
-  it("P4a-B1: callLanguage='fr', Ziel DE -> language=fr, disclosureLanguage=de, firstMessage folgt DE, Stimme folgt FR", () => {
-    const ergebnis = callLocaleFor(
-      { tenants: [{ id: "t1", defaultLanguage: "de" }], settings: {} },
-      {
-        tenantId: "t1",
-        numberRecord: null,
-        ownerName: OWNER_NAME,
-        defaultVoiceId: PLATFORM_VOICE_ID,
-        to: DE_NUMMER,
-        callLanguage: "fr",
-      },
-    );
+  const basis = { ownerName: OWNER_NAME };
+
+  it("P4a-B1: callLanguage='fr', Ziel DE -> language=fr, disclosureLanguage=fr, firstMessage folgt der Variable, Stimme ist die eine", () => {
+    const ergebnis = callLocaleFor({ ...basis, to: DE_NUMMER, callLanguage: "fr" });
     assert.equal(ergebnis.language, "fr");
     assert.equal(ergebnis.disclosureLanguage, "fr");
     assert.equal(ergebnis.firstMessage, "{{eroeffnung}}");
     assert.equal(ergebnis.voiceId, "cqPdIo76zSHFDcSZpFov");
   });
 
-  it("P4a-B2: ohne callLanguage, Ziel DE, Tenant fr -> language=fr (Umkehrung, F-2 Punkt 2), disclosureLanguage=de (unveraendert)", () => {
-    const ergebnis = callLocaleFor(
-      { tenants: [{ id: "t2", defaultLanguage: "fr" }], settings: {} },
-      {
-        tenantId: "t2",
-        numberRecord: null,
-        ownerName: OWNER_NAME,
-        defaultVoiceId: PLATFORM_VOICE_ID,
-        to: DE_NUMMER,
-      },
-    );
-    assert.equal(ergebnis.language, "fr");
+  it("P4a-B2: ohne callLanguage, Ziel DE -> language=de, disclosureLanguage=de", () => {
+    const ergebnis = callLocaleFor({ ...basis, to: DE_NUMMER });
+    assert.equal(ergebnis.language, "de");
     assert.equal(ergebnis.disclosureLanguage, "de");
   });
 
-  it("P4a-B3: Positiv-Kontrolle - die drei Faelle sind in language UND disclosureLanguage paarweise unterscheidbar", () => {
-    const state = { tenants: [{ id: "t3", defaultLanguage: "en" }], settings: {} };
-    const basis = { tenantId: "t3", numberRecord: null, ownerName: OWNER_NAME, defaultVoiceId: PLATFORM_VOICE_ID };
-    const fall1 = callLocaleFor(state, { ...basis, to: DE_NUMMER, callLanguage: "fr" });
-    const fall2 = callLocaleFor(state, { ...basis, to: DE_NUMMER });
-    const fall3 = callLocaleFor(state, { ...basis, to: undefined });
+  it("P4a-B3: Positiv-Kontrolle - Gespraechs- und Offenlegungssprache sind unterscheidbar", () => {
+    const fall1 = callLocaleFor({ ...basis, to: DE_NUMMER, callLanguage: "fr" });
+    const fall2 = callLocaleFor({ ...basis, to: FR_TARGET });
 
     assert.notEqual(fall1.language, fall2.language);
-    assert.equal(fall2.language, fall3.language, "Voraussetzung: fall2/fall3 unterscheiden sich nur in disclosureLanguage");
-    assert.notEqual(fall2.disclosureLanguage, fall3.disclosureLanguage);
+    assert.notEqual(fall2.disclosureLanguage, fall2.language);
     assert.equal(fall1.disclosureLanguage, fall1.language, "fall1: eine Sprache je Anruf");
   });
 });
@@ -338,35 +316,26 @@ describe("Eroeffnung-Gate: KI-Hinweis in der Eroeffnung", () => {
 });
 
 describe("Nullish-Vorbereitung: Offenlegungs- und Gespraechssprache", () => {
-  const TENANT = "tenant-nullish";
-  const STATE_FR = Object.freeze({
-    tenants: [{ id: TENANT, country: "FR", language: "fr" }],
-    settings: { [TENANT]: { language: "fr" } },
-  });
-  const OPTIONEN = { tenantId: TENANT, numberRecord: null, ownerName: "Owen Barrett", defaultVoiceId: "v" };
+  const OPTIONEN = { ownerName: "Owen Barrett" };
   const FAELLE = [
     { name: "Angerufener in Deutschland", to: "+4915123456789", erwartet: "de" },
     { name: "Angerufener in Frankreich", to: FR_TARGET, erwartet: "fr" },
     { name: "Angerufener in Grossbritannien", to: "+447911123456", erwartet: "en" },
-    { name: "Land ohne Sprachtabelle faellt auf den Auftraggeber", to: "+819012345678", erwartet: "fr" },
-    { name: "+1 faellt auf den Auftraggeber", to: "+15125550143", erwartet: "fr" },
-    { name: "keine Nummer faellt auf den Auftraggeber", to: null, erwartet: "fr" },
-    { name: "unbrauchbare Nummer faellt auf den Auftraggeber", to: "keine", erwartet: "fr" },
+    { name: "Land ohne Sprachtabelle faellt auf die Startsprache", to: "+819012345678", erwartet: "de" },
+    { name: "+1 faellt auf die Startsprache", to: "+15125550143", erwartet: "de" },
+    { name: "keine Nummer faellt auf die Startsprache", to: null, erwartet: "de" },
+    { name: "unbrauchbare Nummer faellt auf die Startsprache", to: "keine", erwartet: "de" },
   ];
 
-  it("Offenlegungssprache: Sprache des Angerufenen, sonst die des Auftraggebers", () => {
+  it("Offenlegungssprache: Sprache des Angerufenen, sonst die Startsprache", () => {
     for (const fall of FAELLE)
-      assert.equal(
-        callLocaleFor(STATE_FR, { ...OPTIONEN, to: fall.to }).disclosureLanguage,
-        fall.erwartet,
-        fall.name,
-      );
+      assert.equal(callLocaleFor({ ...OPTIONEN, to: fall.to }).disclosureLanguage, fall.erwartet, fall.name);
   });
 
-  it("Gespraechssprache: angegebene Sprache vor Auftraggeber, leere Angabe zaehlt als fehlend", () => {
-    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: "de" }).language, "de");
-    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: "" }).language, "fr");
-    assert.equal(callLocaleFor(STATE_FR, { ...OPTIONEN, to: null, callLanguage: null }).language, "fr");
+  it("Gespraechssprache: angegebene Sprache vor Startsprache, leere Angabe zaehlt als fehlend", () => {
+    assert.equal(callLocaleFor({ ...OPTIONEN, to: null, callLanguage: "fr" }).language, "fr");
+    assert.equal(callLocaleFor({ ...OPTIONEN, to: null, callLanguage: "" }).language, "de");
+    assert.equal(callLocaleFor({ ...OPTIONEN, to: null }).language, "de");
   });
 });
 
