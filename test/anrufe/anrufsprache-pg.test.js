@@ -23,11 +23,12 @@ const ZIEL_PORTUGAL = "+351912345678";
 const KI_HINWEIS_DE = /KI-Assistent/;
 
 async function anrufEinerAnderenInstanz(db, ueber, bindung) {
-  store.load().tenants[0].defaultLanguage = "en";
+  const [mandant] = store.load().tenants;
+  mandant.defaultLanguage = "en";
   const runner = { withClient: (arbeit) => arbeit({ query: (text, params) => db.query(text, params), exec: (sql) => db.exec(sql) }) };
   const fremd = makePgStore(runner);
   await fremd.init();
-  const tenantId = store.load().tenants[0].id;
+  const tenantId = mandant.id;
   const call = fremd.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL_PORTUGAL, goal: "Test", tenantId, provider: "telnyx", ...ueber });
   Object.assign(call, {
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
