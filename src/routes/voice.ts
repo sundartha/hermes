@@ -569,6 +569,21 @@ async function leseCallVorAntwort(store: Speicher, callId: string, res: Antwort)
   return lesen;
 }
 
+const AUFLEGEN_WIEDERHOLUNGEN = 3;
+const AUFLEGEN_WIEDERHOLUNG_ABSTAND_MS = 1000;
+
+async function wiederholeAufgelegt(vorspannAblauf: VoiceDeps["vorspannAblauf"], args: Parameters<VoiceDeps["vorspannAblauf"]["behandle"]>[0]): Promise<void> {
+  for (let versuch = 0; versuch < AUFLEGEN_WIEDERHOLUNGEN; versuch += 1) {
+    await sleep(AUFLEGEN_WIEDERHOLUNG_ABSTAND_MS);
+    try {
+      await vorspannAblauf.behandle(args);
+      return;
+    } catch (fehler) {
+      console.error(VORSPANN_LOG_PREFIX, fehlerText(fehler));
+    }
+  }
+}
+
 async function antworteAufVorspannEreignis(
   req: Aufruf,
   res: Antwort,
@@ -582,20 +597,23 @@ async function antworteAufVorspannEreignis(
   }
   const ereignisse = webhookEvents(call.provider);
   const ereignis = { ...ereignisse.parseCallControlEvent(req.body), wiedergabeStatus: ereignisse.parseWiedergabeStatus(req.body) };
-  const verarbeitung = vorspannAblauf.behandle({
+  const auftrag = {
     call,
     ereignis,
     zugang: elZugangVon(config),
     nachLesen: () => {
       bestaetigeFallsOffen(res);
     },
-  });
+  };
+  const verarbeitung = vorspannAblauf.behandle(auftrag);
   if (ereignis.ereignis !== CALL_CONTROL_EREIGNIS.AUFGELEGT) bestaetigeFallsOffen(res);
   try {
     await verarbeitung;
   } catch (fehler) {
-    if (!res.headersSent) res.status(HTTP_SERVICE_UNAVAILABLE).end();
+    const fruehBestaetigt = res.headersSent;
+    if (!fruehBestaetigt) res.status(HTTP_SERVICE_UNAVAILABLE).end();
     console.error(VORSPANN_LOG_PREFIX, fehlerText(fehler));
+    if (fruehBestaetigt && ereignis.ereignis === CALL_CONTROL_EREIGNIS.AUFGELEGT) await wiederholeAufgelegt(vorspannAblauf, auftrag);
     return;
   }
   console.log(VORSPANN_LOG_PREFIX, "verarbeitet", JSON.stringify({ callId: call.id, ereignis: ereignis.ereignis }));
