@@ -17,6 +17,11 @@ const ANRUF_SCHREIBEN_SQL = "UPDATE call SET summary = 'Flush' WHERE id = $1";
 const WARTENDE_SQL = "SELECT count(*)::int AS anzahl FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'";
 const MELDUNGEN_SQL = "SELECT count(*)::int AS anzahl FROM notification WHERE call_id = $1";
 
+const anzahlVon = async (verbindung, sql, parameter) => {
+  const { rows } = await verbindung.query(sql, parameter);
+  return rows[0].anzahl;
+};
+
 async function verbinde(adresse, t) {
   const verbindung = new pg.Client({ connectionString: adresse });
   verbindung.on("error", () => {});
@@ -48,7 +53,7 @@ test("Die Abbruch-Meldung wartet auf den Flush einer anderen Instanz, statt mit 
   const meldung = addNotification("Anruf abgebrochen", "Der Anruf wurde abgebrochen.", call.id);
   const meldungGeschrieben = meldung.then(() => null, (fehler) => fehler);
   await zeilenBis(
-    async () => (await verwaltung.query(WARTENDE_SQL)).rows[0].anzahl,
+    () => anzahlVon(verwaltung, WARTENDE_SQL),
     (anzahl) => anzahl >= 1,
   );
   let flushFehler = null;
@@ -62,5 +67,5 @@ test("Die Abbruch-Meldung wartet auf den Flush einer anderen Instanz, statt mit 
   const meldungFehler = await meldungGeschrieben;
   assert.equal(meldungFehler?.code, undefined);
   assert.equal(flushFehler?.code, undefined);
-  assert.equal((await verwaltung.query(MELDUNGEN_SQL, [call.id])).rows[0].anzahl, 1);
+  assert.equal(await anzahlVon(verwaltung, MELDUNGEN_SQL, [call.id]), 1);
 });
