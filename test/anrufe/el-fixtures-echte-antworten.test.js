@@ -350,7 +350,6 @@ const STIMMEN_AGENT_ID = "agent_stimmen";
 const STIMMEN_AGENT_PFAD = `/v1/convai/agents/${STIMMEN_AGENT_ID}`;
 const STIMMEN_ZEHN_SEKUNDEN_MS = 10_000;
 const STIMME_DE = "cqPdIo76zSHFDcSZpFov";
-const STIMME_FR = "WeAAwKYcS06VmXw086yZ";
 const STIMME_ANDERS = "stimme_beim_anbieter";
 const STIMMEN_HTTP_FEHLER = 500;
 
