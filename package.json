@@ -24,6 +24,7 @@
     "elevenlabs:check": "node scripts/check-elevenlabs-tests.js",
     "elevenlabs:drift": "node scripts/check-elevenlabs-drift.mjs",
     "elevenlabs:push": "node scripts/push-elevenlabs.mjs",
+    "elevenlabs:uebernehmen": "node scripts/elevenlabs-schluessel-uebernehmen.mjs",
     "exa:key": "node scripts/exa-key-setzen.mjs",
     "reconcile:stale-subs": "node scripts/reconcile-stale-subscriptions.js",
     "reconcile:orphan-accounts": "node scripts/reconcile-orphan-accounts.js",

@@ -9,6 +9,7 @@ import { EXIT, LOG_PREFIX, makeAusgabeWaechter } from "./iel-geheimnisse-ausgabe
 import { laufeBelegInit, laufeStimmenBeleg } from "./iel-geheimnisse-belege.mjs";
 import { RICHTUNGEN, laufeConversationBeleg } from "./iel-geheimnisse-conversation.mjs";
 import { laufeSetzen } from "./iel-geheimnisse-setzen.mjs";
+import { elevenLabsSchluessel, SCHLUESSELBUND_HINWEIS } from "./lib/schluesselbund.mjs";
 
 const UNTERBEFEHL = Object.freeze({
   SETZEN: "setzen",
@@ -117,7 +118,8 @@ export function fehlendeSchluessel({ argumente, abh }) {
 }
 
 export function standardAbhaengigkeiten() {
-  const { apiKey, apiBase, agentId } = config.voice.elevenLabsOutbound;
+  const { apiKey: konfigSchluessel, apiBase, agentId } = config.voice.elevenLabsOutbound;
+  const apiKey = elevenLabsSchluessel(konfigSchluessel);
   return {
     fetchImpl: anfrage,
     zufall: randomBytes,
@@ -144,7 +146,7 @@ async function laufeBefehl({ argv, abh }) {
   }
   const fehlend = fehlendeSchluessel({ argumente, abh });
   if (fehlend.length > 0) {
-    waechter.fehler(`Fehler (fail-closed): ${fehlend.join(LISTEN_TRENNER)} fehlt - nichts gelesen, nichts geschrieben.`);
+    waechter.fehler(`Fehler (fail-closed): ${fehlend.join(LISTEN_TRENNER)} fehlt - nichts gelesen, nichts geschrieben. ${SCHLUESSELBUND_HINWEIS}`);
     return EXIT.ROT;
   }
   try {
