@@ -34,24 +34,30 @@ async function pruefeDatenbank(adresse, fristMs) {
   }
 }
 
+const ECHTE_ZEIT = {
+  jetzt: () => performance.now(),
+  planeTakt: (aufgabe, abstandMs) => setInterval(aufgabe, abstandMs).unref(),
+};
+
 export function starteLebenszeichen(
   { herzschlagUrl, herzschlagTaktMs, herzschlagVerzugGrenzeMs, herzschlagFristMs },
   speicher = config.store,
+  zeit = ECHTE_ZEIT,
 ) {
   const adresse = herzschlagUrl.trim();
   if (!adresse) return;
   const histogramm = createHistogram();
-  let letzteMessung = performance.now();
-  setInterval(() => {
-    const jetzt = performance.now();
+  let letzteMessung = zeit.jetzt();
+  zeit.planeTakt(() => {
+    const jetzt = zeit.jetzt();
     histogramm.record(Math.max(1, Math.round((jetzt - letzteMessung - MESSTAKT_MS) * NS_JE_MS)));
     letzteMessung = jetzt;
-  }, MESSTAKT_MS).unref();
+  }, MESSTAKT_MS);
   const mitDatenbank = speicher.storeBackend === PG_SPEICHER;
-  let letzterTakt = performance.now();
+  let letzterTakt = zeit.jetzt();
   let pruefungLaeuft = false;
-  setInterval(async () => {
-    const jetzt = performance.now();
+  zeit.planeTakt(async () => {
+    const jetzt = zeit.jetzt();
     const taktVerzugMs = jetzt - letzterTakt - herzschlagTaktMs;
     const histogrammMs = histogramm.max / NS_JE_MS;
     letzterTakt = jetzt;
@@ -75,5 +81,5 @@ export function starteLebenszeichen(
       }
     }
     void meldeHerzschlag(adresse, herzschlagFristMs);
-  }, herzschlagTaktMs).unref();
+  }, herzschlagTaktMs);
 }
