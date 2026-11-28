@@ -45,6 +45,7 @@ const VORSPANN_FRISTEN_NAME = "0033_vorspann_fristen.sql";
 const NUMMER_LEBEND_NAME = "0034_nummer_lebend.sql";
 const OFFENER_AUFTRAG_SCHLUESSEL_NAME = "0035_offener_auftrag_schluessel.sql";
 const ANRUF_FEHLERSERIE_NAME = "0036_anruf_fehlerserie.sql";
+const ANRUF_SPRACHE_AUSDRUECKLICH_NAME = "0037_anruf_sprache_ausdruecklich.sql";
 
 const TAKEOVER_LOCK_TIMEOUT = "2s";
 
@@ -209,6 +210,10 @@ const MIGRATION_READERS = [
   {
     name: ANRUF_FEHLERSERIE_NAME,
     read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_FEHLERSERIE_NAME), "utf8"),
+  },
+  {
+    name: ANRUF_SPRACHE_AUSDRUECKLICH_NAME,
+    read: () => fs.readFileSync(path.join(__dirname, "migrations", ANRUF_SPRACHE_AUSDRUECKLICH_NAME), "utf8"),
   },
 ];
 
