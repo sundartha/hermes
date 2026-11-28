@@ -167,6 +167,7 @@ test("Bricht B den Vorspann ab, steht der Abbruch samt aufgelegtem Bein in der Z
     );
     assert.deepEqual(Object.keys(zeile.stand).sort(), ["ABGEBROCHEN", "ABGEHOBEN"]);
     assert.ok(zeile.aufgelegt.includes(CALLEE_BEIN));
+    await zeilenBis(async () => srv.aufrufe.auflegen, (liste) => liste.length >= 1);
     assert.equal(srv.aufrufe.auflegen.length >= 1, true);
   });
 });
