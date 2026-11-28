@@ -58,7 +58,6 @@ async function anrufstart({ sprache, ziel, auftrag }, firstName) {
   const srv = await startServer({
     env: { ...EL_WEG },
     seed: seedState({
-      settings: { language: sprache },
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, ...(firstName ? { firstName } : {}) }],
     }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
@@ -132,7 +131,6 @@ test("Eroeffnung an Dritte: eine vom Sprachmodell erzeugte Anlasszeile mit zwei 
       LLM_BREAKER_THRESHOLD: "100",
     },
     seed: seedState({
-      settings: { language: "de" },
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: "" }],
     }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,

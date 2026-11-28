@@ -50,8 +50,8 @@ async function fremdeMandantenAnlegen(db) {
   for (const mandant of [FREMDER_MANDANT, ZWEITER_FREMDER_MANDANT]) {
     await db.query("INSERT INTO tenant (id, status) VALUES ($1, 'active')", [mandant]);
     await db.query(
-      `INSERT INTO settings (tenant_id, agent_name, greeting, allow_calendar, allow_booking, allow_summaries, allow_personal_data, allow_bank_data, language)
-       VALUES ($1, 'Hermes', $2, false, false, false, false, false, 'de')`,
+      `INSERT INTO settings (tenant_id, agent_name, greeting, allow_calendar, allow_booking, allow_summaries, allow_personal_data, allow_bank_data)
+       VALUES ($1, 'Hermes', $2, false, false, false, false, false)`,
       [mandant, BEGRUESSUNG_OHNE_HINWEIS],
     );
   }

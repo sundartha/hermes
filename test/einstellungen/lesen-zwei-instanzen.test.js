@@ -59,7 +59,7 @@ async function instanz(runner, optionen) {
   return mitFassade(store);
 }
 
-const sprache = (store) => store.tenantLanguage(BOOTSTRAP_TENANT_ID);
+const agentName = (store) => store.tenantContext(BOOTSTRAP_TENANT_ID).settings.agentName;
 const einstellungen = (store) => store.tenantContext(TENANT_ID).settings;
 const zeile = async (db, tenantId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
@@ -123,10 +123,10 @@ test("Kriterium 7: GET /api/self-service/state auf B liefert nach einer Aenderun
   const db = await pgliteAlsRolleOhneSuperuser();
   const runner = runnerFuer(db);
   const a = await mitMandant(db, runner);
-  a.updateSettings(TENANT_ID, { agentName: "Alt", language: "fr" });
+  a.updateSettings(TENANT_ID, { agentName: "Alt" });
   await a.drainFlushes();
   const b = await instanz(runner);
-  a.updateSettings(TENANT_ID, { agentName: "Neu", language: "de" });
+  a.updateSettings(TENANT_ID, { agentName: "Neu" });
   await a.drainFlushes();
   assert.equal(einstellungen(b).agentName, "Alt", "B ist veraltet");
 
@@ -134,7 +134,6 @@ test("Kriterium 7: GET /api/self-service/state auf B liefert nach einer Aenderun
   try {
     const antwort = await zustand(app);
     assert.equal(antwort.settings.agentName, "Neu");
-    assert.equal(antwort.settings.language, "de");
     assert.equal(antwort.language, "de");
     assert.ok(!JSON.stringify(antwort).includes('"stand"'), "stand taucht in keiner Antwort auf");
   } finally {
@@ -170,20 +169,20 @@ test("Kriterium 7: GET /api/state auf B liefert nach einer Aenderung auf A die n
   }
 });
 
-test("Kriterium 6: Sprache einer veralteten Instanz folgt der Datenbank (Nachstellung #3305, Fall 2)", async () => {
+test("Kriterium 6: Agentenname einer veralteten Instanz folgt der Datenbank (Nachstellung #3305, Fall 2)", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   const runner = runnerFuer(db);
   const a = await instanz(runner);
-  a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr" });
+  a.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Alt" });
   await a.drainFlushes();
   const b = await instanz(runner);
-  a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "de" });
+  a.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Neu" });
   await a.drainFlushes();
-  assert.equal(sprache(b), "fr", "B ist veraltet");
+  assert.equal(agentName(b), "Alt", "B ist veraltet");
 
   assert.equal(await b.einstellungenNachladen(BOOTSTRAP_TENANT_ID), true);
 
-  assert.equal(sprache(b), "de");
+  assert.equal(agentName(b), "Neu");
 });
 
 test("Kriterium 8: A schaltet das Anrufgedaechtnis ab, B nutzt es beim naechsten Anruf nicht mehr", async () => {
@@ -204,7 +203,7 @@ test("Kriterium 8: A schaltet das Anrufgedaechtnis ab, B nutzt es beim naechsten
   assert.deepEqual(b.counterpartyMemory(BOOTSTRAP_TENANT_ID, ANRUFER), []);
 });
 
-test("Kriterium 9: scheitert das Lesen, bleibt die Sprache des alten Stands, die Rechte-Felder gelten als false und das Log meldet es", async () => {
+test("Kriterium 9: scheitert das Lesen, bleibt der Agentenname des alten Stands, die Rechte-Felder gelten als false und das Log meldet es", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   let lesenKaputt = false;
   const runner = runnerFuer(db, async (text) => {
@@ -212,7 +211,7 @@ test("Kriterium 9: scheitert das Lesen, bleibt die Sprache des alten Stands, die
   });
   const a = await instanz(runner);
   a.updateSettings(BOOTSTRAP_TENANT_ID, {
-    language: "fr",
+    agentName: "Alt",
     allowCallMemory: true,
     allowBankData: true,
     allowPersonalData: true,
@@ -220,7 +219,7 @@ test("Kriterium 9: scheitert das Lesen, bleibt die Sprache des alten Stands, die
   });
   await a.drainFlushes();
   const b = await instanz(runner);
-  a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "de" });
+  a.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Neu" });
   await a.drainFlushes();
   const log = fehlerSammeln();
   try {
@@ -229,14 +228,14 @@ test("Kriterium 9: scheitert das Lesen, bleibt die Sprache des alten Stands, die
     lesenKaputt = false;
 
     const kopie = b.tenantContext(BOOTSTRAP_TENANT_ID).settings;
-    assert.equal(sprache(b), "fr", "Sprache des alten Stands");
+    assert.equal(agentName(b), "Alt", "Agentenname des alten Stands");
     for (const recht of ["allowCallMemory", "allowBankData", "allowPersonalData", "allowResearch"]) {
       assert.equal(kopie[recht], false, recht);
     }
     assert.ok(log.meldungen.some((m) => m.includes(NACHLADEN_LOG)), "Fehler wird geloggt");
 
     assert.equal(await b.einstellungenNachladen(BOOTSTRAP_TENANT_ID), true, "naechster Eingang heilt");
-    assert.equal(sprache(b), "de");
+    assert.equal(agentName(b), "Neu");
     assert.equal(b.tenantContext(BOOTSTRAP_TENANT_ID).settings.allowBankData, true);
   } finally {
     log.wiederherstellen();
@@ -248,7 +247,7 @@ test("Kriterium 9: haengt das Lesen, bricht es nach der Frist ab und der Eingang
   const lesen = haengendesLesen();
   const runner = runnerFuer(db, lesen.vorQuery);
   const a = await instanz(runner);
-  a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr", allowBankData: true });
+  a.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Alt", allowBankData: true });
   await a.drainFlushes();
   const b = await instanz(runner);
   const log = fehlerSammeln();
@@ -260,7 +259,7 @@ test("Kriterium 9: haengt das Lesen, bricht es nach der Frist ab und der Eingang
     const lesbar = await nachladen;
     t.mock.timers.reset();
     assert.equal(lesbar, false, "kehrt nach der Frist zurueck, nicht nach dem Haenger");
-    assert.equal(sprache(b), "fr");
+    assert.equal(agentName(b), "Alt");
     assert.equal(b.tenantContext(BOOTSTRAP_TENANT_ID).settings.allowBankData, false);
     assert.ok(log.meldungen.some((m) => m.includes(NACHLADEN_LOG)), "Fristablauf wird geloggt");
   } finally {
@@ -397,26 +396,6 @@ const eingangAuf = (instanzProzess, signer, callSid) =>
 
 const anrufSprachen = async (sql) => (await sql(`SELECT language FROM call ORDER BY started_at, id`)).rows.map((r) => r.language);
 
-const setzeSprache = (sql, sprachwert) =>
-  sql(`UPDATE settings SET language = $2 WHERE tenant_id = $1`, [BOOTSTRAP_TENANT_ID, sprachwert]);
-
-test("Kriterium 6 (Budget-Pfad): ein Anruf auf der veralteten Instanz B traegt die Sprache, die A gesetzt hat", async (t) => {
-  await mitDatenbankVorDemStart(t, {}, async ({ sql, signer, starte }) => {
-    await setzeSprache(sql, "fr");
-    const b = await starte();
-    await setzeSprache(sql, "de");
-
-    const res = await eingangAuf(b, signer, "CAlesen_budget");
-
-    assert.equal(res.status, HTTP_OK);
-    const sprachen = await zeilenBis(
-      () => anrufSprachen(sql),
-      (liste) => liste.length === 1,
-    );
-    assert.deepEqual(sprachen, ["de"]);
-  });
-});
-
 function initAnfrage(instanzProzess, token, nr) {
   return abrufMitFrist(`${instanzProzess.localUrl}${ELEVENLABS_INIT_PATH}`, {
     method: "POST",
@@ -442,7 +421,7 @@ async function initAntwortFuerEingang(instanzProzess, signer, nr) {
   return (await init.json()).conversation_config_override.agent;
 }
 
-test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks tragen die Startsprache, auch wenn A eine andere Sprache in die Datenbank schreibt", async (t) => {
+test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks tragen die Startsprache", async (t) => {
   await mitDatenbankVorDemStart(t, { env: EL_ZUGANG }, async ({ sql, signer, starte }) => {
     await sql(`UPDATE tenant SET owner_name = $2, first_name = $3 WHERE id = $1`, [
       BOOTSTRAP_TENANT_ID,
@@ -453,12 +432,10 @@ test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks trag
       BOOTSTRAP_TENANT_ID,
       REGISTRIERUNG,
     ]);
-    await setzeSprache(sql, "fr");
     const b = await starte();
     const erste = await initAntwortFuerEingang(b, signer, 1);
-    assert.equal(erste.language, "de", "Startsprache, die Einstellung fr wirkt nicht");
+    assert.equal(erste.language, "de", "Startsprache");
 
-    await setzeSprache(sql, "en");
     const zweite = await initAntwortFuerEingang(b, signer, 2);
 
     assert.equal(zweite.language, "de");
@@ -471,22 +448,6 @@ test("Kriterium 6 (ElevenLabs-Eingang): Anruf und Antwort des Init-Webhooks trag
   });
 });
 
-test("Kriterium 6 (place_call): ein Auftrag ohne language ueber B nimmt die Sprache, die A gesetzt hat", async (t) => {
-  await mitHermesAufPostgres(t, {}, async ({ srv, sql }) => {
-    await setzeSprache(sql, "fr");
-    const { rufeAn } = neueAnrufe();
-
-    const res = await rufeAn(srv);
-
-    assert.equal(res.status, HTTP_OK);
-    const sprachen = await zeilenBis(
-      () => anrufSprachen(sql),
-      (liste) => liste.length === 1,
-    );
-    assert.deepEqual(sprachen, ["de"]);
-  });
-});
-
 test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im normalen Pfad, meldet es im Log und der naechste Eingang heilt", async (t) => {
   await mitInstanzHinterRelais(t, { env: GEPINNTER_TENANT }, async ({ a, sql, signer, relais }) => {
     const erster = await eingangAuf(a, signer, "CAlesen_basis");
@@ -496,7 +457,6 @@ test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im 
       (liste) => liste.length === 1,
     );
     assert.doesNotMatch(a.stdout, /\[pg\] einstellungen nachladen fehlgeschlagen/);
-    await setzeSprache(sql, "fr");
 
     relais.anhalten();
     let zweiter;
@@ -514,7 +474,7 @@ test("Kriterium 9 (Eingang): haengt die Datenbank, antwortet /voice/incoming im 
       () => anrufSprachen(sql),
       (liste) => liste.length === 2,
     );
-    assert.deepEqual(sprachen, ["de", "de"], "Startsprache, die Einstellung fr wirkt nicht");
+    assert.deepEqual(sprachen, ["de", "de"], "Startsprache");
 
     const meldungen = a.stdout.match(/\[pg\] einstellungen nachladen fehlgeschlagen/g).length;
     const dritter = await eingangAuf(a, signer, "CAlesen_danach");

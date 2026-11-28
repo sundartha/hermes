@@ -10,29 +10,6 @@ const HIGH = 100;
 const TENANT_ID = "t_e2e04";
 const AT = "2026-01-01T00:00:00Z";
 
-test("Web-Login-Tenant ohne Geo bekommt eine US-DID, language folgt dem Weltdefault (ex E2E-04, Teil 1)", () => {
-  const s = makeDefaultState();
-  registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
-  const geo = tenantGeo(s, TENANT_ID);
-  assert.equal(geo.country, null, "Vorbedingung: Web-Login setzt kein country");
-  assert.equal(geo.defaultLanguage, null, "Vorbedingung: Web-Login setzt kein defaultLanguage");
-
-  const r = requestNumberForPaidTenant(s, {
-    tenantId: TENANT_ID,
-    maxNumbers: HIGH,
-    maxNumbersPerTenant: HIGH,
-  });
-  assert.equal(r.ok, true);
-  assert.equal(r.wert.number.country, "US", "Kauf-Land ist US ueber kauflandFuer");
-
-  assert.equal(
-    r.wert.number.language,
-    "en",
-    `ein US-Nutzer (Web-Login ohne Geo, US-DID) muss "en" bekommen, ` +
-      `nicht das Herkunftsland-Fallback (war "${r.wert.number.language}")`,
-  );
-});
-
 test("Inbound-Greeting auf der resultierenden US-DID ist englisch (ex E2E-04)", async () => {
   const s = makeDefaultState();
   s.numbers.push({
@@ -100,7 +77,7 @@ test("Zusammenfassung fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)",
 
   const call = seedCall({
     tenantId: TENANT_ID,
-    language: r.wert.number.language,
+    language: "en",
     direction: "outbound",
     status: "completed",
     to: "+12025550199",

@@ -15,9 +15,8 @@ const UNKNOWN_TO = "+49999999999";
 
 const FR_NUMBER = "+33111000222";
 const EN_NUMBER = "+44111000333";
-function geoSeed(extraSettings = {}) {
+function geoSeed() {
   return seedState({
-    settings: extraSettings,
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers: [
       {
@@ -27,7 +26,6 @@ function geoSeed(extraSettings = {}) {
         provider: "telnyx",
         status: "active",
         country: "DE",
-        language: "de",
       },
       {
         id: "num_fr",
@@ -36,7 +34,6 @@ function geoSeed(extraSettings = {}) {
         provider: "telnyx",
         status: "active",
         country: "FR",
-        language: "fr",
       },
       {
         id: "num_en",
@@ -45,7 +42,6 @@ function geoSeed(extraSettings = {}) {
         provider: "telnyx",
         status: "active",
         country: "GB",
-        language: "en",
       },
     ],
   });
@@ -154,7 +150,7 @@ test("FR-Nummer -> call.language=fr + FR-Voice (Azure.fr-FR-Denise/fr-FR)", asyn
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, FR_NUMBER);
-    assert.equal(call.language, "de", "Inbound startet auf de, number.language (FR) zaehlt nicht");
+    assert.equal(call.language, "de", "Inbound startet auf de, die FR-Nummer zaehlt nicht");
     assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
     assert.match(twiml, /voice="Azure\.de-DE-KatjaNeural"/, "DE-Voice");
   } finally {
@@ -166,24 +162,9 @@ test("EN-Nummer -> call.language=en + EN-Voice (Azure.en-GB-Sonia/en-GB)", async
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, EN_NUMBER);
-    assert.equal(call.language, "de", "Inbound startet auf de, number.language (EN) zaehlt nicht");
+    assert.equal(call.language, "de", "Inbound startet auf de, die EN-Nummer zaehlt nicht");
     assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
     assert.match(twiml, /voice="Azure\.de-DE-KatjaNeural"/, "DE-Voice");
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer, Override en -> call.language=en)", async () => {
-  const srv = await startServer({ seed: geoSeed({ language: "en" }) });
-  try {
-    const { twiml, call } = await postIncoming(srv, FR_NUMBER);
-    assert.equal(
-      call.language,
-      "de",
-      "Inbound startet auf de, weder Owner-Override (en) noch FR-Nummer zaehlen",
-    );
-    assert.match(twiml, /language="de-DE"/, "Voice folgt der Startsprache");
   } finally {
     await srv.stop();
   }

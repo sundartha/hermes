@@ -261,7 +261,7 @@ test("INBOX-P3 (h): degradierte Gateway-Antwort wird zur sauberen Tool-Fehlermel
 });
 
 test("INBOX-P3 (i, E2E): erster Aufruf liefert den Eintrag, zweiter ist eindeutig leer, dritter mit include_seen liefert ihn erneut", async () => {
-  const seed = seedState({ settings: { language: "en" }, calls: [qualifiedCall()] });
+  const seed = seedState({ calls: [qualifiedCall()] });
   const srv = await startServer({ seed });
   try {
     const first = await readToolResult(

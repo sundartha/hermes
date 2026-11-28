@@ -195,12 +195,11 @@ test("[NIE1] demoCalendar: Uhr 30.01.2027 09:00, drei Termine in Ortszeit, jedes
   assert.notEqual(zweiter[0], kalender[0]);
 });
 
-test("[NIE2] defaultSettings: Rechte aus, language/agentStyle null, frisches Objekt, Begrüßung nennt KI und Transkription", () => {
+test("[NIE2] defaultSettings: Rechte aus, agentStyle null, frisches Objekt, Begrüßung nennt KI und Transkription", () => {
   const einstellungen = defaultSettings();
   for (const feld of ["allowPersonalData", "allowBankData", "allowResearch", "allowCallMemory"]) {
     assert.equal(einstellungen[feld], false, feld);
   }
-  assert.equal(einstellungen.language, null);
   assert.equal(einstellungen.agentStyle, null);
   assert.equal(einstellungen.greeting, DEFAULT_GREETING);
   assert.notEqual(defaultSettings(), einstellungen);
@@ -249,10 +248,9 @@ test("updateSettings: Auswahl wird gross/klein-unabhaengig auf die Schreibweise 
 test("updateSettings: Nicht-Text und unbekannter Text bei einer Auswahl werden abgelehnt, nichts aendert sich", () => {
   const zustand = makeDefaultState();
   updateSettings(zustand, TENANT_B, { agentStyle: STIL_WARM });
-  const ergebnis = updateSettings(zustand, TENANT_B, { agentStyle: 5, language: "gibt-es-nicht" });
+  const ergebnis = updateSettings(zustand, TENANT_B, { agentStyle: 5 });
   assert.deepEqual(ergebnis.changed, []);
   assert.equal(settingsFor(zustand, TENANT_B).agentStyle, STIL_WARM);
-  assert.equal(settingsFor(zustand, TENANT_B).language, null);
 });
 
 test("updateSettings: unbekannte Schluessel werden ignoriert", () => {

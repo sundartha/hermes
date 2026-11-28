@@ -95,8 +95,6 @@ export const STRINGS = {
 
     settingsTitle: "My agent settings",
     settingsHint: "Takes effect on the next call.",
-    agentLanguage: "Agent language",
-    agentLanguageHint: "Choose the language your agent speaks on calls, or leave it automatic.",
     save: "Save",
     settingsAppliedPrefix: "Saved. Applied:",
     settingsAppliedEmpty: "—",
@@ -182,8 +180,6 @@ export const STRINGS = {
 
     settingsTitle: "Mein Agent",
     settingsHint: "Wird beim nächsten Anruf wirksam.",
-    agentLanguage: "Sprache des Agenten",
-    agentLanguageHint: "Wähle die Sprache, die dein Agent bei Anrufen spricht, oder lass es automatisch.",
     save: "Speichern",
     settingsAppliedPrefix: "Gespeichert. Übernommen:",
     settingsAppliedEmpty: "—",

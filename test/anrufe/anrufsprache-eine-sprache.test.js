@@ -22,7 +22,7 @@ const VORSPANN_ENV = Object.freeze({
 async function startInhalt({ to, language, mandantSprache = "de" }) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV },
-    seed: seedState({ settings: { language: mandantSprache }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+    seed: seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {

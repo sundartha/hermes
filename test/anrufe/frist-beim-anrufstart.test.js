@@ -7,7 +7,7 @@ const SEKUNDE_MS = 1000;
 const SPIELRAUM_MS = 15 * SEKUNDE_MS;
 
 test("Eingehender Anruf: die Hoechstdauer-Frist steht an der Anrufzeile, genau eine Hoechstdauer nach dem Start", async (t) => {
-  const srv = await startServer({ seed: seedState({ settings: { language: "de" } }) });
+  const srv = await startServer({ seed: seedState() });
   t.after(() => srv.stop());
   await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
     method: "POST",

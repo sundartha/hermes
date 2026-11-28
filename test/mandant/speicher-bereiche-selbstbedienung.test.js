@@ -17,7 +17,7 @@ function zustand() {
       { id: "t_a", defaultLanguage: "fr", country: "FR", ownerName: "" },
       { id: "t_b", ownerName: "Vorhanden Schon" },
     ],
-    numbers: [{ tenantId: "t_a", status: "active", language: "es" }],
+    numbers: [{ tenantId: "t_a", status: "active" }],
     settings: {},
     calls: [],
   };
@@ -38,10 +38,8 @@ test("mandant: tenantLanguage liefert die Sprache aus dem Zustand als Promise", 
   const bereiche = speicherBereiche(speicher);
   const antwort = bereiche.mandantProfil.tenantLanguage("t_a");
   assert.ok(antwort instanceof Promise);
-  assert.equal(await antwort, "es");
-  state.settings.t_a = { language: "it" };
-  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_a"), "it");
-  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_b"), "de");
+  assert.equal(await antwort, "fr");
+  assert.equal(await bereiche.mandantProfil.tenantLanguage("t_b"), "en");
 });
 
 test("mandant: tenantGeo liefert Land und Sprache des Mandanten, ohne Mandanten null", async () => {

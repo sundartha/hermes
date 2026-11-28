@@ -2,13 +2,11 @@ import { MAX_NOTIFICATIONS } from "../../begriffe/speicher.ts";
 import { defaultSettings } from "../leerzustaende.js";
 import { sanitizeProfile, resolveProfileFrom } from "../../begriffe/profil.ts";
 import { PERSONA_STYLE_IDS } from "../../i18n/locales.ts";
-import { sprachcodeOf } from "../../i18n/sprachcode.ts";
 import { hasInboundNotice } from "../../i18n/inbound-notice.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
 import type { MandantRef } from "./grundzugriffe.ts";
 
 interface Einstellungen {
-  language?: string | null;
   [feld: string]: unknown;
 }
 type Profil = Record<string, unknown>;
@@ -42,12 +40,6 @@ function resolveOptionalEnumOverride(
   return canonical === undefined ? { accepted: false, value: null } : { accepted: true, value: canonical };
 }
 
-function neueSprache(value: unknown): Neuer | null {
-  if (value === null || value === "") return { value: null };
-  const code = sprachcodeOf(value);
-  return code.ok ? { value: code.wert } : null;
-}
-
 const OPTIONAL_ENUM_FIELDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   agentStyle: PERSONA_STYLE_IDS,
 });
@@ -55,7 +47,6 @@ const OPTIONAL_ENUM_FIELDS: Readonly<Record<string, readonly string[]>> = Object
 const FIELD_GUARDS: Readonly<Record<string, Pruefung>> = Object.freeze({ greeting: hasInboundNotice });
 
 function neuerWert(key: string, value: unknown, allowed: Einstellungen): Neuer | null {
-  if (key === "language") return neueSprache(value);
   const enumValues = OPTIONAL_ENUM_FIELDS[key];
   if (enumValues) {
     const override = resolveOptionalEnumOverride(value, enumValues);

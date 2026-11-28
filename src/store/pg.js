@@ -1254,7 +1254,7 @@ async function loadTenantRows(client, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -1990,7 +1990,6 @@ function rowToNumber(r) {
     providerNumberId: r.provider_number_id,
     paymentIntentId: r.payment_intent_id ?? null,
     country: r.country ?? null,
-    language: r.language ?? null,
     providerAgentPhoneNumberId: r.provider_agent_phone_number_id ?? null,
     ...inboundTrunkBelegFelder(r),
     ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
@@ -2042,13 +2041,13 @@ function rowToUsageEvent(zeile) {
 async function flushNumbers(client, tenantId, numbers) {
   for (const n of numbers.filter((zeile) => zeile.tenantId === tenantId)) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        ON CONFLICT (id) DO UPDATE SET
          e164=EXCLUDED.e164, provider=EXCLUDED.provider,
          status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
          payment_intent_id=EXCLUDED.payment_intent_id,
-         country=EXCLUDED.country, language=EXCLUDED.language,
+         country=EXCLUDED.country,
          monthly_cost_cents=EXCLUDED.monthly_cost_cents,
          provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id,
          el_inbound_trunk_belegt_at=EXCLUDED.el_inbound_trunk_belegt_at,
@@ -2062,7 +2061,6 @@ async function flushNumbers(client, tenantId, numbers) {
         n.providerNumberId ?? null,
         n.paymentIntentId ?? null,
         n.country ?? null,
-        n.language ?? null,
         n.monthlyCostCents ?? null,
         n.providerAgentPhoneNumberId ?? null,
         ...inboundTrunkBelegWerte(n),

@@ -19,7 +19,6 @@ const VORSPANN_ENV = Object.freeze({
 
 function seedOwnerDe() {
   return seedState({
-    settings: { language: "de" },
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
   });
 }

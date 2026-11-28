@@ -1,6 +1,6 @@
 import { NUMBER_STATUS } from "../begriffe/nummern.ts";
 import { GLOBAL_CAP_REASON } from "../begriffe/nummern-vergabe.ts";
-import { findTenant, settingsFor, ersatzZuAlterNummer } from "./state-ops.js";
+import { findTenant, ersatzZuAlterNummer } from "./state-ops.js";
 import { DEFAULT_LANGUAGE } from "../konfiguration/standardsprache.ts";
 import { omitKeys } from "../utils/object.ts";
 import type { MandantZustand } from "./zustand/mandant.ts";
@@ -11,7 +11,6 @@ interface Nummer {
   e164: string | null;
   status: string;
   provider?: string;
-  language?: string | null;
 }
 
 export type Zustand = Omit<MandantZustand, "numbers"> & { numbers: Nummer[] } & Parameters<
@@ -78,8 +77,6 @@ export function findActiveNumber(
 
 export function tenantLanguage(state: Zustand, tenantId: string): string {
   return (
-    (settingsFor(state, tenantId).language ?? "") ||
-    (findActiveNumber(state, tenantId)?.language ?? "") ||
     (findTenant(state, tenantId)?.defaultLanguage ?? "") ||
     DEFAULT_LANGUAGE
   );

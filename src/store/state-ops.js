@@ -1108,8 +1108,8 @@ export function findConflict(s, tenantId, startIso, endIso) {
   return getCalendar(s, tenantId).find((ev) => ev.start < endIso && startIso < ev.end) || null;
 }
 
-export function seedBootstrapNumber(state, e164, tenantId, provider, country, language) {
-  bootstrapNummerAnlegen(state, e164, { tenantId, provider, country, language });
+export function seedBootstrapNumber(state, e164, tenantId, provider, country) {
+  bootstrapNummerAnlegen(state, e164, { tenantId, provider, country });
 }
 
 export function seedBootstrapNumberFromConfig(state, e164, tenantId, provider) {

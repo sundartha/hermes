@@ -15,7 +15,6 @@ import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../../begriffe/nummern.t
 import { USAGE_EVENT_KIND } from "../../begriffe/abrechnung.ts";
 import { BOOTSTRAP_TENANT_ID } from "../../begriffe/mandant.ts";
 import { hatKaufbareVorwahl, kauflandFuer, normNum } from "../../begriffe/rufnummern.ts";
-import { languageForCountry } from "../../i18n/locales.ts";
 import { resolvePeriodStartIso } from "../../billing/period.ts";
 import { ok, fehler, type Ergebnis } from "../../utils/ergebnis.ts";
 import { newId, tenantsOf } from "./grundlagen.js";
@@ -39,7 +38,6 @@ import {
 interface Nummernsatz extends Nummer {
   provider?: string;
   country?: string | undefined;
-  language?: string | null;
   providerNumberId?: string | null;
   paymentIntentId?: string | null;
   providerAgentPhoneNumberId?: string | null;
@@ -165,14 +163,12 @@ export function requestNumber(
     tenantId,
     provider = DEFAULT_PROVIDER,
     country = DEFAULT_COUNTRY,
-    language = languageForCountry(country),
     maxNumbers,
     maxNumbersPerTenant,
   }: {
     tenantId: string;
     provider?: string;
     country?: string | undefined;
-    language?: string | null;
     maxNumbers: number;
     maxNumbersPerTenant: number;
   },
@@ -192,7 +188,6 @@ export function requestNumber(
     tenantId,
     provider,
     country,
-    language,
     status: NUMBER_STATUS.REQUESTED,
     providerNumberId: null,
     paymentIntentId: null,
@@ -252,7 +247,6 @@ function openReplacement(state: MitNummern & MitJobs, old: Nummernsatz, maxNumbe
     tenantId: old.tenantId,
     provider: old.provider ?? DEFAULT_PROVIDER,
     country: kauflandFuer(old.country),
-    language: old.language ?? languageForCountry(old.country),
     status: NUMBER_STATUS.REQUESTED,
     providerNumberId: null,
     paymentIntentId: null,
@@ -812,8 +806,7 @@ export function bootstrapNummerAnlegen(
     tenantId,
     provider = DEFAULT_PROVIDER,
     country = DEFAULT_COUNTRY,
-    language = languageForCountry(country),
-  }: { tenantId: string; provider?: string; country?: string; language?: string },
+  }: { tenantId: string; provider?: string; country?: string },
 ): void {
   const norm = normNum(e164);
   if (!norm) return;
@@ -824,7 +817,6 @@ export function bootstrapNummerAnlegen(
     tenantId,
     provider,
     country,
-    language,
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: null,
   });

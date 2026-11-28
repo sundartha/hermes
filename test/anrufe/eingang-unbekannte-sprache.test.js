@@ -10,7 +10,7 @@ const { inboundElLocaleOf, callLocaleOf } = elevenlabsOutbound();
 const SPRACHE_OHNE_TEXT = "xx";
 
 const store = {
-  load: () => ({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+  load: () => ({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
   numberRecordByE164: () => null,
 };
 

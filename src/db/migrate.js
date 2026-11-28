@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../begriffe/mandant.ts";
 import { countryForE164 } from "../begriffe/rufnummern.ts";
-import { DEFAULT_GREETING, languageForCountry } from "../i18n/locales.ts";
+import { DEFAULT_GREETING } from "../i18n/locales.ts";
 import { periodStartFromEnd } from "../billing/period.ts";
 import { MS_PER_SECOND } from "../utils/timer.ts";
 
@@ -362,46 +362,20 @@ export async function backfillAccountEmailCase(db) {
   await db.query(`UPDATE account SET email = lower(trim(email)) WHERE email <> lower(trim(email))`);
 }
 
-const LEGACY_NUMBER_LANGUAGE = "de";
-
 async function setCurrentTenant(db, tenantId) {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
 }
 
-function healedNumberGeo(row, tenantGeo) {
-  const country = row.country || countryForE164(row.e164);
-  if (!country) return null;
-  const chosen = row.language && row.language !== LEGACY_NUMBER_LANGUAGE;
-  if (chosen) return { country, language: row.language };
-  const language = tenantGeo.defaultLanguage || languageForCountry(tenantGeo.country || country);
-  return { country, language };
-}
-
-async function fetchTenantGeo(db, tenantId) {
-  const { rows } = await db.query(
-    `SELECT country, default_language AS "defaultLanguage" FROM tenant WHERE id = $1`,
-    [tenantId],
-  );
-  return { country: rows[0]?.country ?? null, defaultLanguage: rows[0]?.defaultLanguage ?? null };
-}
-
 async function healNumberGeoForTenant(db, tenantId) {
   const { rows } = await db.query(
-    `SELECT id, e164, country, language FROM number
-      WHERE tenant_id = $1 AND (country IS NULL OR language IS NULL OR language = $2)`,
-    [tenantId, LEGACY_NUMBER_LANGUAGE],
+    `SELECT id, e164 FROM number WHERE tenant_id = $1 AND country IS NULL`,
+    [tenantId],
   );
-  if (rows.length === 0) return 0;
-  const tenantGeo = await fetchTenantGeo(db, tenantId);
   let written = 0;
   for (const row of rows) {
-    const healed = healedNumberGeo(row, tenantGeo);
-    if (!healed) continue;
-    if (healed.country === row.country && healed.language === row.language) continue;
-    await db.query(
-      `UPDATE number SET country = $1, language = $2 WHERE id = $3 AND tenant_id = $4`,
-      [healed.country, healed.language, row.id, tenantId],
-    );
+    const country = countryForE164(row.e164);
+    if (!country) continue;
+    await db.query(`UPDATE number SET country = $1 WHERE id = $2 AND tenant_id = $3`, [country, row.id, tenantId]);
     written++;
   }
   return written;
@@ -466,7 +440,6 @@ export function defaultSettings() {
     allowBankData: false,
     allowResearch: false,
     allowCallMemory: false,
-    language: null,
     agentStyle: null,
   };
 }
@@ -490,9 +463,9 @@ export async function seedDefaults(db, tenantId) {
   await db.query(
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
+        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in,
         allow_research, allow_call_memory)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (tenant_id) DO NOTHING`,
     [
       tenantId,
@@ -504,7 +477,6 @@ export async function seedDefaults(db, tenantId) {
       s.allowPersonalData,
       s.allowBankData,
       s.smsSummaryOptIn,
-      s.language,
       s.allowResearch ?? false,
       s.allowCallMemory ?? false,
     ],

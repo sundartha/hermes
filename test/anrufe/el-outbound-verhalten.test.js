@@ -52,7 +52,6 @@ async function mitElevenLabs({ sprache = "de", env = {} }, lauf) {
   const srv = await startServer({
     env: { ...EL_ENV, ELEVENLABS_API_BASE: el.url, ...env },
     seed: seedState({
-      settings: { language: sprache },
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
       profiles: { [BOOTSTRAP_TENANT_ID]: { maxCallsPerHour: null } },
     }),
@@ -90,7 +89,6 @@ async function mitVorspann({ sprache = "de", env = {} }, lauf) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV, ...env },
     seed: seedState({
-      settings: { language: sprache },
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
       profiles: { [BOOTSTRAP_TENANT_ID]: { maxCallsPerHour: null } },
     }),

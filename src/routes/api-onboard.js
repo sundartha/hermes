@@ -179,7 +179,6 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
           tenantId,
           provider: PROVIDER.TELNYX,
           country: numberCountry,
-          language,
           maxNumbers: config.provisioning.maxNumbers,
           maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });

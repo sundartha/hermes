@@ -18,7 +18,6 @@ async function setup() {
   const sessions = makeSessions(runner);
   await accounts.upsertOnFirstLogin({ sub: SUB, email: `${SUB}@kunde.de` });
   await accounts.setStatus(TENANT_ID, "active");
-  await store.updateSettings(TENANT_ID, { language: "en" });
   const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT_ID, ttlSeconds: 3600 });
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const app = express();
@@ -45,7 +44,7 @@ async function setup() {
   };
 }
 
-test("5986-4a: Einstellungen nehmen keine Sprache mehr an, der gespeicherte Wert bleibt, andere Felder gelten weiter", async () => {
+test("5986-4a: Einstellungen kennen keine Sprache mehr: sie erscheint in keiner Antwort und wird nicht gespeichert, andere Felder gelten weiter", async () => {
   const srv = await setup();
   try {
     const res = await abrufMitFrist(`${srv.base}/api/self-service/settings`, {
@@ -55,10 +54,10 @@ test("5986-4a: Einstellungen nehmen keine Sprache mehr an, der gespeicherte Wert
     });
     assert.equal(res.status, HTTP_OK);
     const antwort = await res.json();
-    assert.equal(antwort.language, "en");
+    assert.equal("language" in antwort, false);
     assert.equal(antwort.agentName, "Hermes Vier");
     const gespeichert = srv.store.tenantContext(TENANT_ID).settings;
-    assert.equal(gespeichert.language, "en");
+    assert.equal("language" in gespeichert, false);
     assert.equal(gespeichert.agentName, "Hermes Vier");
   } finally {
     await srv.close();

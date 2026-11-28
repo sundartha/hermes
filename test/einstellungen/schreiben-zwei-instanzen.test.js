@@ -19,7 +19,6 @@ const EINSTELLUNGS_SCHLUESSEL = [
   "allowBankData",
   "allowResearch",
   "allowCallMemory",
-  "language",
   "agentStyle",
 ].sort();
 const FEHLER_LOG = "[pg] einstellungen schreiben fehlgeschlagen";
@@ -41,7 +40,7 @@ async function instanz(runner) {
   return store;
 }
 
-const sprache = (store) => store.tenantLanguage(BOOTSTRAP_TENANT_ID);
+const agentName = (store) => store.tenantContext(BOOTSTRAP_TENANT_ID).settings.agentName;
 const zeile = async (db, tenantId) => {
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
   return (await db.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])).rows[0];
@@ -60,7 +59,6 @@ async function mitMandant(db, runner) {
 function formular(settings, aenderung) {
   return {
     agentName: settings.agentName,
-    language: settings.language ?? "",
     agentStyle: settings.agentStyle ?? "",
     greeting: settings.greeting,
     allowPersonalData: settings.allowPersonalData,
@@ -93,21 +91,21 @@ async function startApp(store, runner) {
   });
 }
 
-test("Kriterium 1 (#3305): der letzte Flush der alten Instanz ueberschreibt die neuere Sprache nicht", async () => {
+test("Kriterium 1 (#3305): der letzte Flush der alten Instanz ueberschreibt den neueren Agentennamen nicht", async () => {
   const db = await pgliteAlsRolleOhneSuperuser();
   const runner = runnerFuer(db);
   const a = await instanz(runner);
-  a.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr" });
+  a.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Alt" });
   await a.drainFlushes();
 
   const b = await instanz(runner);
-  b.updateSettings(BOOTSTRAP_TENANT_ID, { language: "de" });
+  b.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Neu" });
   await b.drainFlushes();
 
   await a.save();
   await a.drainFlushes();
 
-  assert.equal(sprache(await instanz(runner)), "de");
+  assert.equal(agentName(await instanz(runner)), "Neu");
 });
 
 test("Kriterium 2: zwei Instanzen speichern das volle Formular, beide Aenderungen bleiben", async () => {
@@ -255,12 +253,11 @@ test("Kriterium 5: ein neuer Mandant bekommt beim ersten Speichern eine vollstae
   const a = await mitMandant(db, runner);
   assert.equal(await zeile(db, TENANT_ID), undefined, "ohne Speichern keine Zeile");
 
-  a.updateSettings(TENANT_ID, { language: "de" });
+  a.updateSettings(TENANT_ID, { agentName: "Frieda" });
   await a.drainFlushes();
 
   const gespeichert = await zeile(db, TENANT_ID);
   const vorgaben = a.tenantContext(TENANT_ID).settings;
-  assert.equal(gespeichert.language, "de");
   assert.equal(gespeichert.agent_name, vorgaben.agentName);
   assert.equal(gespeichert.greeting, vorgaben.greeting);
   for (const spalte of [

@@ -25,7 +25,6 @@ async function ausgehenderAnruf() {
   const srv = await startServer({
     env: { ...EL_WEG, OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
     seed: seedState({
-      settings: { language: "de" },
       tenants: [
         { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: OWNER_TEST_FIRST_NAME, privateNumber: NUMMER },
       ],

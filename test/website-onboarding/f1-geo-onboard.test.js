@@ -61,7 +61,7 @@ const postJson = (app, body) =>
     body: JSON.stringify(body),
   });
 
-test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.country/language = FR/fr", async () => {
+test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.country", async () => {
   const app = await startOnboardApp();
   try {
     const res = await postJson(app, { tenantId: "t_fr", country: "FR" });
@@ -75,7 +75,6 @@ test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.c
     assert.equal(tenant.defaultLanguage, "fr", "tenant.defaultLanguage persistiert");
     const num = app.state.numbers.find((n) => n.id === json.numberId);
     assert.equal(num.country, "US", "number.country persistiert");
-    assert.equal(num.language, "fr", "number.language persistiert");
   } finally {
     await app.close();
   }
@@ -89,7 +88,6 @@ test("Onboard mit body.country=GB -> en (country->language-Tabelle generisch)", 
     assert.equal(json.country, "GB", "case-insensitiv normalisiert");
     assert.equal(json.language, "en");
     assert.equal(app.state.tenants.find((t) => t.id === "t_gb").defaultLanguage, "en");
-    assert.equal(app.state.numbers.find((n) => n.id === json.numberId).language, "en");
   } finally {
     await app.close();
   }
@@ -111,10 +109,6 @@ test("LANG-23 (Mechanismus, gruen) - parallele Onboards bleiben isoliert (kein G
 
     assert.equal(app.state.tenants.find((t) => t.id === "t_par_fr").defaultLanguage, "fr");
     assert.equal(app.state.tenants.find((t) => t.id === "t_par_gb").defaultLanguage, "en");
-    const frNum = app.state.numbers.find((n) => n.id === frJson.numberId);
-    const gbNum = app.state.numbers.find((n) => n.id === gbJson.numberId);
-    assert.equal(frNum.language, "fr");
-    assert.equal(gbNum.language, "en");
     assert.notEqual(frJson.numberId, gbJson.numberId, "keine geteilte Nummer zwischen den Tenants");
   } finally {
     await app.close();
@@ -157,7 +151,6 @@ test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async 
     const tenant = app.state.tenants.find((t) => t.id === "t_de");
     assert.equal(tenant.country, "DE");
     assert.equal(tenant.defaultLanguage, "de");
-    assert.equal(app.state.numbers.find((n) => n.id === json.numberId).language, "de");
   } finally {
     await app.close();
   }
@@ -188,7 +181,7 @@ test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr",
   }
 });
 
-test("Onboard mit body.country=US -> tenant/number.language = 'en' (ueber den Weltdefault) (ex DID-02)", async () => {
+test("Onboard mit body.country=US -> tenant.defaultLanguage = 'en' (ueber den Weltdefault) (ex DID-02)", async () => {
   const app = await startOnboardApp();
   try {
     const res = await postJson(app, { tenantId: "t_us", country: "US" });
@@ -202,7 +195,6 @@ test("Onboard mit body.country=US -> tenant/number.language = 'en' (ueber den We
     assert.equal(tenant.defaultLanguage, "en", "tenant.defaultLanguage persistiert");
     const num = app.state.numbers.find((n) => n.id === json.numberId);
     assert.equal(num.country, "US", "number.country persistiert");
-    assert.equal(num.language, "en", "number.language persistiert");
   } finally {
     await app.close();
   }
@@ -220,7 +212,6 @@ test("FORCE_NUMBER_COUNTRY=US: number.country US, Sprache + tenant am Herkunftsl
     assert.equal(tenant.defaultLanguage, "de");
     const num = app.state.numbers.find((n) => n.id === json.numberId);
     assert.equal(num.country, "US", "number.country = erzwungenes Kauf-Land");
-    assert.equal(num.language, "de", "number.language bleibt Herkunftssprache");
   } finally {
     await app.close();
   }

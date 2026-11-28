@@ -10,8 +10,8 @@ const SPERRE_SQL = `SELECT id FROM tenant WHERE id = $1 FOR UPDATE`;
 const LEBENDE_SQL = `SELECT count(*)::int AS anzahl FROM number WHERE tenant_id = $1 AND status <> ALL($2) AND id <> $3`;
 const PLATTFORM_SPERRE_SQL = `SELECT pg_advisory_xact_lock(5787, 1)`;
 const PLATTFORM_LEBENDE_SQL = `SELECT (nummern_lebend_gesamt() - (SELECT count(*) FROM number WHERE id = $1 AND status <> ALL($2)))::int AS anzahl`;
-const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country, language)
-  VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`;
+const NUMMER_SQL = `INSERT INTO number (id, tenant_id, provider, status, country)
+  VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`;
 const AUFTRAG_SQL = `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at, instanz)
   VALUES ($1, $2, $3, $4, $5, $6, 0, NULL, $7, $8) ON CONFLICT DO NOTHING`;
 const AUFTRAG_LESEN_SQL = `SELECT ${AUFTRAG_SPALTEN} FROM provisioning_job WHERE tenant_id = $1 AND idempotency_key = $2`;
@@ -49,7 +49,6 @@ const nummerEinfuegen = (client, tenantId, number) =>
     number.provider,
     number.status,
     number.country ?? null,
-    number.language ?? null,
   ]);
 
 async function nummerAnlegen(client, { tenantId, number, hoechstens, plattformHoechstens }) {

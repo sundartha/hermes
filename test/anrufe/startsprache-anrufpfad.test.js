@@ -21,7 +21,6 @@ const VORSPANN_ENV = Object.freeze({
 function seed() {
   return seedState({
     tenants: [{ id: TENANT, idpSubject: SUB, status: "active", ownerName: "Kunde", kycLevel: "card", defaultLanguage: GESPEICHERT }],
-    settings: { [TENANT]: { language: GESPEICHERT } },
     profiles: { [TENANT]: planProfileFor("business") },
     numbers: [
       {
@@ -32,7 +31,6 @@ function seed() {
         status: "active",
         providerNumberId: null,
         providerAgentPhoneNumberId: "phnum_h2t1_1",
-        language: GESPEICHERT,
       },
     ],
   });

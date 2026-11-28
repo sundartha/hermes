@@ -16,7 +16,7 @@ import {
 import { uiResourceUri } from "../../src/ui/contract.js";
 import { WIDGET_CALL } from "../../src/ui/widget-catalog.js";
 import { WIDGET_LOCALE_META_KEY } from "../../src/ui/widget-i18n.js";
-import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, setTenantGeo } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const WIDGET_TOOL_COUNT = 4;
@@ -340,7 +340,7 @@ function widgetLocaleTenantSeed() {
   });
   for (const tenant of [WIDGET_LOCALE_TENANT_DE, WIDGET_LOCALE_TENANT_EN]) {
     registerTenant(state, tenant.id, { idpSubject: tenant.sub });
-    settingsFor(state, tenant.id).language = tenant.language;
+    setTenantGeo(state, tenant.id, { defaultLanguage: tenant.language });
     state.numbers.push({
       id: `num_${tenant.id}`,
       e164: tenant.e164,

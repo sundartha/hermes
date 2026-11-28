@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, postTelnyxIncoming, postElRueckfall, seedCall } from "../helpers.js";
 import { makeCallFinish } from "../../src/telephony/call-finish.js";
-import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, setTenantGeo } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const DID_A = "+4915100000101";
@@ -23,8 +23,8 @@ function twoTenantSeed() {
   registerTenant(s, "t_b_en", { firstName: "Bob", lastName: "B" });
   s.tenants.find((t) => t.id === "t_a_de").status = "active";
   s.tenants.find((t) => t.id === "t_b_en").status = "active";
-  settingsFor(s, "t_a_de").language = "de";
-  settingsFor(s, "t_b_en").language = "en";
+  setTenantGeo(s, "t_a_de", { defaultLanguage: "de" });
+  setTenantGeo(s, "t_b_en", { defaultLanguage: "en" });
   s.numbers.push(
     { id: "num_a", e164: DID_A, tenantId: "t_a_de", provider: "telnyx", status: "active", providerNumberId: null },
     { id: "num_b", e164: DID_B, tenantId: "t_b_en", provider: "telnyx", status: "active", providerNumberId: null },

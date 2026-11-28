@@ -4,7 +4,6 @@ import {
   requestNumber,
   redriveAgeHoldReason,
 } from "../store/state-ops.js";
-import { languageForCountry } from "../i18n/locales.ts";
 import { PROVIDER, NEEDS_MANUAL_RECONCILE_REASON } from "../begriffe/nummern-vergabe.ts";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../begriffe/nummern.ts";
 import { kauflandFuer } from "../begriffe/rufnummern.ts";
@@ -33,12 +32,10 @@ export function requestNumberForPaidTenant(
   if (tenantHasLiveNumber(state, tenantId))
     return fehler("already_provisioned");
   const tenantCountry: string | null | undefined = tenantGeo(state, tenantId).country;
-  const language: string = languageForCountry(tenantCountry);
   return requestNumber(state, {
     tenantId,
     provider: PROVIDER.TELNYX,
     country: kauflandFuer(tenantCountry),
-    language,
     maxNumbers,
     maxNumbersPerTenant,
   });

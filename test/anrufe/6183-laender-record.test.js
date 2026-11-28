@@ -27,7 +27,7 @@ const VORSPANN_ENV = Object.freeze({
 async function mitServer(lauf, zusatzEnv = {}) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV, ...zusatzEnv },
-    seed: seedState({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+    seed: seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {

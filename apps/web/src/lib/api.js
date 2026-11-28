@@ -317,35 +317,6 @@ export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "agentStyle"]);
 
 export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
 
-export const SETTINGS_LANGUAGES = Object.freeze([
-  { value: "", label: "Automatic" },
-  { value: "de", label: "German" },
-  { value: "fr", label: "French" },
-  { value: "en", label: "English" },
-]);
-
-export const SETTINGS_LANGUAGE_LABELS_DE = Object.freeze({
-  "": "Automatisch",
-  de: "Deutsch",
-  fr: "Französisch",
-  en: "Englisch",
-});
-export const SETTINGS_LANGUAGE_LABELS_EN = Object.freeze(
-  Object.fromEntries(SETTINGS_LANGUAGES.map((l) => [l.value, l.label])),
-);
-
-export function settingsLanguageLabel(value) {
-  return tDyn({ en: SETTINGS_LANGUAGE_LABELS_EN, de: SETTINGS_LANGUAGE_LABELS_DE }, value) || value;
-}
-
-const SETTINGS_LANGUAGE_QUALIFIERS_EN = Object.freeze({ "": "(by number)" });
-const SETTINGS_LANGUAGE_QUALIFIERS_DE = Object.freeze({ "": "(nach Nummer)" });
-export function settingsLanguageQualifier(value) {
-  return (
-    tDyn({ en: SETTINGS_LANGUAGE_QUALIFIERS_EN, de: SETTINGS_LANGUAGE_QUALIFIERS_DE }, value) || ""
-  );
-}
-
 export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
   { key: "allowPersonalData", label: "Personal data", hint: "Share address, email, etc." },
   { key: "allowBankData", label: "Bank details", hint: "Share payment data (not recommended)" },

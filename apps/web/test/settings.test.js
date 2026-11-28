@@ -7,7 +7,6 @@ import {
   SETTINGS_FREE_FIELDS,
   SETTINGS_RESTRICT_ONLY_FIELDS,
   SETTINGS_PERMISSION_TOGGLES,
-  SETTINGS_LANGUAGES,
   PERSONA_STYLE_LABELS,
   buildSettingsPatch,
   settingsOutcome,
@@ -16,7 +15,6 @@ import {
   personaStyleOptions,
   privateNumberStatusText,
   savePrivateNumber,
-  settingsLanguageLabel,
   settingsPermissionLabel,
   settingsPermissionHint,
 } from "../src/lib/api.js";
@@ -33,7 +31,7 @@ function withLang(lang, fn) {
   }
 }
 
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../../../src/i18n/locales.ts";
+import { PERSONA_STYLE_IDS } from "../../../src/i18n/locales.ts";
 import {
   SELF_SERVICE_FREE_FIELDS,
   SELF_SERVICE_RESTRICT_ONLY_FIELDS,
@@ -63,19 +61,10 @@ test("Whitelist-Mengen entsprechen dem Backend-Vertrag (self-service.js)", () =>
   assert.deepEqual([...toggleKeys].sort(), [...SETTINGS_RESTRICT_ONLY_FIELDS].sort());
 });
 
-test("SETTINGS_LANGUAGES deckt GENAU die Backend-Sprachen ab (+ '' = automatisch)", () => {
-  const codes = SETTINGS_LANGUAGES.map((l) => l.value).filter((v) => v !== "");
-  assert.deepEqual([...codes].sort(), [...SUPPORTED_LANGUAGES].sort());
-  assert.equal(SETTINGS_LANGUAGES[0].value, "");
-  assert.equal(SETTINGS_LANGUAGES.filter((l) => l.value === "").length, 1);
-  for (const l of SETTINGS_LANGUAGES) assert.ok(l.label.length > 0);
-});
-
 test("buildSettingsPatch baut ausschliesslich die Whitelist-Felder", () => {
   const patch = buildSettingsPatch({
     agentName: "Hermes",
     greeting: "Hallo {owner}",
-    language: "de",
     agentStyle: "warm-persoenlich",
     allowPersonalData: false,
     allowBankData: false,
@@ -118,11 +107,6 @@ test("buildSettingsPatch: explizit uebergebene Permission-Booleans reisen weiter
   assert.deepEqual(patch, { allowPersonalData: true, allowBankData: false });
 });
 
-test("buildSettingsPatch: language reist nicht mehr mit (Spracheinstellung entfaellt, Issue #5986)", () => {
-  const patch = buildSettingsPatch({ language: "fr" });
-  assert.deepEqual(patch, {});
-});
-
 test("buildSettingsPatch: Toggle-Werte werden zu Boolean normalisiert", () => {
   const patch = buildSettingsPatch({
     allowPersonalData: 1,
@@ -139,10 +123,10 @@ test("buildSettingsPatch: agentStyle fehlt, wenn der Snapshot es nicht traegt; r
 });
 
 test("settingsOutcome: uebernommene Felder -> changed, abweichende -> rejected", () => {
-  const patch = { agentName: "Neu", language: "fr", agentStyle: "warm-persoenlich" };
-  const saved = { agentName: "Neu", language: "fr", agentStyle: "warm-persoenlich" };
+  const patch = { agentName: "Neu", agentStyle: "warm-persoenlich" };
+  const saved = { agentName: "Neu", agentStyle: "warm-persoenlich" };
   const out = settingsOutcome(patch, saved);
-  assert.deepEqual(out.changed.sort(), ["agentName", "agentStyle", "language"]);
+  assert.deepEqual(out.changed.sort(), ["agentName", "agentStyle"]);
   assert.deepEqual(out.rejected, []);
 });
 
@@ -160,10 +144,10 @@ test("settingsOutcome: leerer Patch -> leere Listen", () => {
 });
 
 test("settingsOutcome: ein zurueckgesetztes optionales Override (''->null) gilt als changed, nicht rejected", () => {
-  const patch = { language: "", agentStyle: "" };
-  const saved = { language: null, agentStyle: null };
+  const patch = { agentStyle: "" };
+  const saved = { agentStyle: null };
   const out = settingsOutcome(patch, saved);
-  assert.deepEqual(out.changed.sort(), ["agentStyle", "language"]);
+  assert.deepEqual(out.changed.sort(), ["agentStyle"]);
   assert.deepEqual(out.rejected, []);
 });
 
@@ -193,10 +177,10 @@ test("settingsFrom: befuellte Felder unveraendert durch", () => {
 });
 
 test("saveSettings postet den Patch als JSON same-origin ohne Authorization-Header", async () => {
-  const saved = { agentName: "Hermes", language: "de" };
+  const saved = { agentName: "Hermes" };
   const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: saved }));
   try {
-    const patch = { agentName: "Hermes", language: "de" };
+    const patch = { agentName: "Hermes" };
     const result = await saveSettings(patch);
     assert.deepEqual(result, saved);
     const { path, options } = f.calls[0];
@@ -295,17 +279,6 @@ test("savePrivateNumber('') sendet {privateNumber:''} (Loeschen)", async () => {
   } finally {
     f.restore();
   }
-});
-
-test("DE-Modus: settingsLanguageLabel deckt genau die SETTINGS_LANGUAGES-Werte deutsch ab", () => {
-  withLang("de", () => {
-    assert.equal(settingsLanguageLabel(""), "Automatisch");
-    assert.equal(settingsLanguageLabel("de"), "Deutsch");
-    assert.equal(settingsLanguageLabel("fr"), "Französisch");
-    assert.equal(settingsLanguageLabel("en"), "Englisch");
-    assert.equal(settingsLanguageLabel("xx"), "xx");
-  });
-  for (const { value, label } of SETTINGS_LANGUAGES) assert.equal(settingsLanguageLabel(value), label);
 });
 
 test("DE-Modus: settingsPermissionLabel/-Hint decken genau die Toggle-Keys deutsch ab", () => {

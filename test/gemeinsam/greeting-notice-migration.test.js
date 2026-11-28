@@ -10,11 +10,14 @@ import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "../pg-helpers.js";
 test("backfillGreetingNotices: markerlose Greetings bekommen den sprachrichtigen Satz voran, Rueckgabe = beide tenantIds", () => {
   const s = {
     settings: {
-      de_tenant: { greeting: "Hallo, hier ist Hermes.", language: "de" },
-      en_tenant: { greeting: "Hi, this is Hermes.", language: "en" },
+      de_tenant: { greeting: "Hallo, hier ist Hermes." },
+      en_tenant: { greeting: "Hi, this is Hermes." },
     },
     numbers: [],
-    tenants: [],
+    tenants: [
+      { id: "de_tenant", defaultLanguage: "de" },
+      { id: "en_tenant", defaultLanguage: "en" },
+    ],
   };
   const changed = backfillGreetingNotices(s);
   assert.deepEqual(changed.sort(), ["de_tenant", "en_tenant"]);
@@ -43,7 +46,8 @@ test("backfillGreetingNotices: json.load() ergaenzt ein markerloses Bestandsgree
   const fs = await import("fs");
   const path = await import("path");
   const flat = {
-    settings: { agentName: "Alt", greeting: "Hallo, hier ist Hermes.", language: "de" },
+    settings: { agentName: "Alt", greeting: "Hallo, hier ist Hermes." },
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, defaultLanguage: "de" }],
     calendar: [],
     numbers: [],
   };
@@ -66,10 +70,11 @@ test("backfillGreetingNotices: json.load() ergaenzt ein markerloses Bestandsgree
 test("backfillGreetingNotices: init() auf pg schreibt den Pflichtsatz in die DB-Zeile (FORCE-RLS-Pfad)", async () => {
   const { db } = await makePgTestStore();
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
-  await db.query(`UPDATE settings SET greeting = $1, language = 'de' WHERE tenant_id = $2`, [
+  await db.query(`UPDATE settings SET greeting = $1 WHERE tenant_id = $2`, [
     "Hallo, hier ist Hermes.",
     BOOTSTRAP_TENANT_ID,
   ]);
+  await db.query(`UPDATE tenant SET default_language = 'de' WHERE id = $1`, [BOOTSTRAP_TENANT_ID]);
 
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),

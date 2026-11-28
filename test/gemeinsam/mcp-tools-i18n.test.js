@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { registerTools } from "../../src/mcp-tools.js";
 import { startServer, startIdp, mcpPost, toolCall, readToolResult } from "../helpers.js";
-import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, setTenantGeo } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 
 const HTTP_OK = 200;
@@ -124,7 +124,7 @@ function twoLanguageTenantSeed() {
   });
   for (const tenant of [MCP_TENANT_DE, MCP_TENANT_EN]) {
     registerTenant(state, tenant.id, { idpSubject: tenant.sub });
-    settingsFor(state, tenant.id).language = tenant.language;
+    setTenantGeo(state, tenant.id, { defaultLanguage: tenant.language });
     state.numbers.push({
       id: `num_${tenant.id}`,
       e164: tenant.e164,

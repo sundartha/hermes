@@ -39,7 +39,7 @@ function toolResultText(result) {
 test('P4 (T-19/T-20): get_call_result bei laufendem Anruf liefert isError + den lokalisierten Satz, nicht "Output validation error"', async () => {
   const seed = seedState({
     calls: [seedCall({ id: "call_active1" })],
-    settings: { language: "de" },
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", defaultLanguage: "de" }],
   });
   const srv = await startServer({ seed });
   try {
@@ -287,7 +287,7 @@ test("P4 (Review-Runde 2, Befund 1): get_call_result liefert result_summary fuer
         endedAt: new Date().toISOString(),
       }),
     ],
-    settings: { language: "de" },
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", defaultLanguage: "de" }],
   });
   const srv = await startServer({ seed });
   try {

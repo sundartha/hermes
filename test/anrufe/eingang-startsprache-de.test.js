@@ -12,7 +12,6 @@ const ANRUFER = "+4915112345678";
 
 const seedGespeichertFr = () =>
   seedState({
-    settings: { language: "en" },
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", defaultLanguage: "fr" }],
     numbers: [
       {

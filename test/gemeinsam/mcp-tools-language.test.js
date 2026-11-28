@@ -264,7 +264,6 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
 
 test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () => {
   const seed = seedState({
-    settings: { language: "en" },
     calls: [seedCall({ transcript: [{ role: "agent", text: "Hello" }, { role: "callee", text: "Hi" }] })],
   });
   const srv = await startServer({ seed });

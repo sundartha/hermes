@@ -19,7 +19,6 @@ const VORSPANN_ENV = Object.freeze({
 
 const seedGespeichertFr = () =>
   seedState({
-    settings: { language: "fr" },
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", defaultLanguage: "fr" }],
   });
 

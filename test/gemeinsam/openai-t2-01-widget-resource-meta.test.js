@@ -12,7 +12,7 @@ import {
   quelltexteUnter,
   stdioServerTransport,
 } from "../helpers.js";
-import { makeDefaultState, registerTenant, settingsFor } from "../../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, setTenantGeo } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/begriffe/mandant.ts";
 import { widgetHtml } from "../../src/ui/widget-catalog.js";
 import { chatgptEgressStand } from "../../src/ui/registry.js";
@@ -117,7 +117,7 @@ function twoTenantSeed() {
   });
   for (const tenant of [TENANT_DE, TENANT_EN]) {
     registerTenant(state, tenant.id, { idpSubject: tenant.sub });
-    settingsFor(state, tenant.id).language = tenant.language;
+    setTenantGeo(state, tenant.id, { defaultLanguage: tenant.language });
     state.numbers.push({
       id: `num_${tenant.id}`,
       e164: tenant.e164,

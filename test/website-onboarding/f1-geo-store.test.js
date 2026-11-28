@@ -11,12 +11,10 @@ import {
   setTenantGeo,
   findTenant,
   numberRecordByE164,
-  updateSettings,
 } from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, TENANT_STATUS } from "../../src/begriffe/mandant.ts";
 import { DEFAULT_COUNTRY } from "../../src/begriffe/sprache-zeit.ts";
 import { applySchema, migrate } from "../../src/db/migrate.js";
-import { languageForCountry } from "../../src/i18n/locales.ts";
 
 const A = "tenant_a";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 5 };
@@ -44,12 +42,12 @@ before(async () => {
   );
 });
 
-test("defaultSettings() traegt language = null (optionales Override, P4 #8)", () => {
-  assert.equal(defaultSettings().language, null);
+test("defaultSettings() traegt keine language mehr", () => {
+  assert.equal("language" in defaultSettings(), false);
   assert.equal(DEFAULT_COUNTRY, "DE");
 });
 
-test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); inaktiv/unbekannt -> null", () => {
+test("numberRecordByE164: aktive Nummer -> voller Record (tenantId); inaktiv/unbekannt -> null", () => {
   const s = makeDefaultState();
   s.tenants = [{ id: A, status: "active" }];
   s.numbers = [
@@ -60,7 +58,6 @@ test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); in
       provider: "telnyx",
       status: "active",
       country: "FR",
-      language: "fr",
     },
     {
       id: "n_req",
@@ -69,12 +66,10 @@ test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); in
       provider: "telnyx",
       status: "requested",
       country: "FR",
-      language: "fr",
     },
   ];
   const rec = numberRecordByE164(s, "+33111");
   assert.equal(rec.tenantId, A);
-  assert.equal(rec.language, "fr");
   assert.equal(
     numberRecordByE164(s, "+33222"),
     null,
@@ -84,80 +79,36 @@ test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); in
   assert.equal(numberRecordByE164(s, ""), null, "leere e164 -> null");
 });
 
-test("LANG-19 (SOLL, rot) - updateSettings normalisiert language='EN' zu 'en' statt es still zu verwerfen", () => {
-  const s = makeDefaultState();
-  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
-  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "EN" });
-  assert.ok(res.changed.includes("language"), "E1: die Grossschreibung darf nicht still verpuffen");
-  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "en");
-});
-
-test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext ignoriert, formgueltiger Code ohne eigene Texte uebernommen", () => {
-  const s = makeDefaultState();
-  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
-  assert.ok(updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "fr" }).changed.includes("language"));
-  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "fr");
-  updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "" });
-  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, null);
-  s.settings[BOOTSTRAP_TENANT_ID].language = "fr";
-  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "Deutsch bitte" });
-  assert.ok(!res.changed.includes("language"), "Freitext wird nicht uebernommen");
-  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "fr", "alter Wert bleibt");
-  assert.ok(updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "xx" }).changed.includes("language"));
-  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "xx");
-});
-
-test("seedBootstrapNumber: Default-Geo = DE/de (bestehende Aufrufe verhaltens-erhaltend)", () => {
+test("seedBootstrapNumber: Default-Land = DE (bestehende Aufrufe verhaltens-erhaltend)", () => {
   const s = makeDefaultState();
   seedBootstrapNumber(s, "+491511234567", BOOTSTRAP_TENANT_ID);
   const num = s.numbers.find((n) => n.e164 === "+491511234567");
   assert.equal(num.country, DEFAULT_COUNTRY);
-  assert.equal(num.language, "de");
 });
 
-test("seedBootstrapNumber: explizites country/language landet auf dem Record (FR/+33)", () => {
+test("seedBootstrapNumber: explizites country landet auf dem Record (FR/+33)", () => {
   const s = makeDefaultState();
-  seedBootstrapNumber(s, "+33123456789", BOOTSTRAP_TENANT_ID, undefined, "FR", "fr");
+  seedBootstrapNumber(s, "+33123456789", BOOTSTRAP_TENANT_ID, undefined, "FR");
   const num = s.numbers.find((n) => n.e164 === "+33123456789");
   assert.equal(num.country, "FR");
-  assert.equal(num.language, "fr");
 });
 
-test("seedBootstrapNumber: country=FR ohne language -> 'fr' (Sprache am Land, nicht am Weltdefault)", () => {
-  const s = makeDefaultState();
-  seedBootstrapNumber(s, "+33987654321", BOOTSTRAP_TENANT_ID, undefined, "FR");
-  const num = s.numbers.find((n) => n.e164 === "+33987654321");
-  assert.equal(num.country, "FR");
-  assert.equal(num.language, "fr");
-});
-
-test("requestNumber: Default-Geo = DE/de", () => {
+test("requestNumber: Default-Land = DE", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, ...CAPS });
   assert.equal(res.ok, true);
   assert.equal(res.wert.number.country, DEFAULT_COUNTRY);
-  assert.equal(res.wert.number.language, "de");
 });
 
-test("requestNumber: country=FR ohne language -> 'fr'", () => {
-  const s = makeDefaultState();
-  const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, country: "FR", ...CAPS });
-  assert.equal(res.ok, true);
-  assert.equal(res.wert.number.country, "FR");
-  assert.equal(res.wert.number.language, "fr");
-});
-
-test("requestNumber: explizites country/language (FR) landet auf der angefragten Nummer", () => {
+test("requestNumber: explizites country (FR) landet auf der angefragten Nummer", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, {
     tenantId: BOOTSTRAP_TENANT_ID,
     country: "FR",
-    language: "fr",
     ...CAPS,
   });
   assert.equal(res.ok, true);
   assert.equal(res.wert.number.country, "FR");
-  assert.equal(res.wert.number.language, "fr");
   assert.equal(res.wert.number.e164, null, "requested ohne Kauf -> e164 null (Geo aendert das nicht)");
 });
 
@@ -205,7 +156,7 @@ test("json-Roundtrip: setTenantGeo via Fassade persistiert -> Tenant-Record trae
   assert.equal(owner.defaultLanguage, "fr");
 });
 
-test("pg: Number-Geo (country/language) ueberlebt Flush + Re-Hydrierung", async () => {
+test("pg: Number-Land ueberlebt Flush + Re-Hydrierung", async () => {
   const { store, db } = await makePgTestStore();
   const s = store.load();
   s.numbers.push({
@@ -216,16 +167,14 @@ test("pg: Number-Geo (country/language) ueberlebt Flush + Re-Hydrierung", async 
     status: "active",
     providerNumberId: null,
     country: "FR",
-    language: "fr",
   });
   await store.save();
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_fr");
   assert.equal(num.country, "FR");
-  assert.equal(num.language, "fr");
 });
 
-test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null, nicht undefined (R7)", async () => {
+test("pg: Bestands-Nummer ohne country (pre-migration) hydriert zu null, nicht undefined (R7)", async () => {
   const { db } = await makePgTestStore();
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'telnyx','active')`,
@@ -234,7 +183,6 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
   assert.equal(num.country, null, "fehlendes country -> null (kein undefined-Drift)");
-  assert.equal(num.language, null, "fehlendes language -> null (kein undefined-Drift)");
 });
 
 const LEGACY_TENANT = "t_legacy";
@@ -252,74 +200,29 @@ async function seedAndMigrate(numbers) {
   ]);
   for (const n of numbers) {
     await conn.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, country, language)
-       VALUES ($1, $2, $3, 'telnyx', 'active', $4, $5)`,
-      [n.id, LEGACY_TENANT, n.e164, n.country, n.language],
+      `INSERT INTO number (id, tenant_id, e164, provider, status, country)
+       VALUES ($1, $2, $3, 'telnyx', 'active', $4)`,
+      [n.id, LEGACY_TENANT, n.e164, n.country],
     );
   }
   await migrate(conn, LEGACY_TENANT);
   const rows = async () =>
-    (await conn.query(`SELECT id, country, language FROM number ORDER BY id`)).rows;
+    (await conn.query(`SELECT id, country FROM number ORDER BY id`)).rows;
   return { conn, rows };
 }
 
-test("GAP-34 (SOLL, rot) - die Migration zieht number.language auf das Land der Nummer nach, ohne Kollateralschaden, idempotent", async () => {
-  const { conn, rows } = await seedAndMigrate([
-    { id: "num_at", e164: LEGACY_AT_E164, country: "AT", language: "de" },
-    { id: "num_fr", e164: LEGACY_FR_E164, country: "FR", language: "de" },
-    { id: "num_us", e164: LEGACY_US_E164, country: "US", language: "de" },
-  ]);
-  const nach = await rows();
-  assert.deepEqual(
-    nach,
-    [
-      { id: "num_at", country: "AT", language: languageForCountry("AT") },
-      { id: "num_fr", country: "FR", language: languageForCountry("FR") },
-      { id: "num_us", country: "US", language: languageForCountry("US") },
-    ],
-    "die franzoesische und die US-Zeile sprechen weiter Deutsch, weil es keinen Backfill gibt - " +
-      "AT ist die Gegenprobe gegen Kollateralschaden",
-  );
-
-  await migrate(conn, LEGACY_TENANT);
-  assert.deepEqual(await rows(), nach, "zweiter Lauf aendert nichts (idempotent)");
-});
-
 test("GAP-34 (SOLL, rot) - fehlendes Land wird aus der DID-Vorwahl abgeleitet, ohne Vorwahl bleibt es leer (E2: kein Raten)", async () => {
   const { rows } = await seedAndMigrate([
-    { id: "num_de_legacy", e164: LEGACY_DE_E164, country: null, language: null },
-    { id: "num_ohne_did", e164: null, country: null, language: null },
+    { id: "num_de_legacy", e164: LEGACY_DE_E164, country: null },
+    { id: "num_ohne_did", e164: null, country: null },
   ]);
   assert.deepEqual(
     await rows(),
     [
-      { id: "num_de_legacy", country: "DE", language: languageForCountry("DE") },
-      { id: "num_ohne_did", country: null, language: null },
+      { id: "num_de_legacy", country: "DE" },
+      { id: "num_ohne_did", country: null },
     ],
     "eine Bestandsnummer mit eindeutiger Vorwahl bleibt ohne Land - und eine ohne Vorwahl darf keines bekommen",
-  );
-});
-
-test("Geo-Backfill Regression (Review-Blocker R1 zu GAP-34) - Kauf-Land US ueberstimmt NICHT die Sprache eines deutschen Tenants", async () => {
-  const conn = await neuePglite();
-  await applySchema(conn);
-  await conn.query(
-    `INSERT INTO tenant (id, status, country, default_language) VALUES ($1, $2, $3, $4)`,
-    [LEGACY_TENANT, TENANT_STATUS.ACTIVE, "DE", "de"],
-  );
-  await conn.query(
-    `INSERT INTO number (id, tenant_id, e164, provider, status, country, language)
-     VALUES ($1, $2, $3, 'telnyx', 'active', $4, $5)`,
-    ["num_forced_us", LEGACY_TENANT, LEGACY_US_E164, "US", "de"],
-  );
-  await migrate(conn, LEGACY_TENANT);
-  const { rows } = await conn.query(
-    `SELECT id, country, language FROM number WHERE id = 'num_forced_us'`,
-  );
-  assert.deepEqual(
-    rows,
-    [{ id: "num_forced_us", country: "US", language: "de" }],
-    "Kauf-Land bleibt US, Sprache bleibt de - beide Achsen bleiben entkoppelt",
   );
 });
 
@@ -341,29 +244,9 @@ test("pg: Owner ohne Geo behaelt KEIN country/defaultLanguage-Feld nach Re-Hydri
   assert.equal("defaultLanguage" in owner, false, "kein defaultLanguage-Feld am frischen Owner");
 });
 
-test("pg: frische settings tragen language=null (frischer pg == frischer json, P4 #8)", async () => {
-  const { store } = await makePgTestStore();
-  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].language, null);
-});
-
-test("pg: settings.language ist via updateSettings umstellbar + ueberlebt Re-Hydrierung", async () => {
-  const { store, db } = await makePgTestStore();
-  const { changed } = store.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr" });
-  assert.ok(changed.includes("language"), "language in der Whitelist (Default-Feld)");
-  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].language, "fr");
-  await store.save();
-  const reopened = await reopen(db);
-  assert.equal(
-    reopened.load().settings[BOOTSTRAP_TENANT_ID].language,
-    "fr",
-    "umgestellte Sprache persistiert",
-  );
-});
-
 test("pg: doppelter applySchema/init bleibt fehlerfrei (idempotente ADD COLUMN IF NOT EXISTS)", async () => {
   const db = await neuePglite();
   await reopen(db);
   const second = await reopen(db);
-  const { settings } = second.load();
-  assert.equal(settings[BOOTSTRAP_TENANT_ID].language, null);
+  assert.ok(second.load().settings[BOOTSTRAP_TENANT_ID]);
 });

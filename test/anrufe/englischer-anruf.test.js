@@ -6,7 +6,7 @@ import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 const DE_GREETING_MARKER = /Hier ist der KI-Assistent/;
 
 test("Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch (ex PROMPT-03)", async () => {
-  const srv = await startServer({ seed: seedState({ settings: { language: "en" } }) });
+  const srv = await startServer({ seed: seedState() });
   try {
     const res = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",

@@ -6,12 +6,10 @@ import { disclosurePrefixFor } from "../../src/i18n/locales.ts";
 import { TELNYX_TEST_OWNER_NUMBER, TELNYX_TEST_PEER_NUMBER, seedState, startServer } from "../helpers.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
 import { initInhaltFuer } from "../gemeinsam/vorspann-fahrzeug.js";
-import { makePgTestStore } from "../pg-helpers.js";
 
 const HTTP_OK = 200;
 const ES_NUMMER = "+34612345678";
 const FR_NUMMER = "+33612345678";
-const TENANT = "t_sprache_frei";
 
 const VORSPANN_ENV = Object.freeze({
   ELEVENLABS_OUTBOUND_ENABLED: "true",
@@ -23,7 +21,7 @@ const VORSPANN_ENV = Object.freeze({
 async function eroeffnungFuer({ to, language, env = {} }) {
   const srv = await startServer({
     env: { ...VORSPANN_ENV, ...env },
-    seed: seedState({ settings: { language: "de" }, tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+    seed: seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
@@ -82,33 +80,5 @@ describe("Offenlegung ohne Startsprache", () => {
     const eroeffnung = await eroeffnungFuer({ to: ES_NUMMER });
     assert.ok(eroeffnung.includes("KI-Assistent"), JSON.stringify(eroeffnung));
     assert.ok(!eroeffnung.includes("the AI assistant of"), JSON.stringify(eroeffnung));
-  });
-});
-
-describe("Einstellung language nimmt Sprachcodes nach Form", () => {
-  const setze = async (wert) => {
-    const { store } = await makePgTestStore();
-    await store.updateSettings(TENANT, { language: "fr" });
-    await store.updateSettings(TENANT, { language: wert });
-    return store.tenantContext(TENANT).settings.language;
-  };
-
-  it("SE-1: 'es' wird gespeichert", async () => {
-    assert.equal(await setze("es"), "es");
-  });
-
-  it("SE-2: ' PT-br ' wird normalisiert zu 'pt-br'", async () => {
-    assert.equal(await setze(" PT-br "), "pt-br");
-  });
-
-  it("SE-3: ungueltige Werte werden abgelehnt, der alte Wert bleibt", async () => {
-    for (const wert of ["zz9", "x", "de_DE!", 7]) {
-      assert.equal(await setze(wert), "fr", String(wert));
-    }
-  });
-
-  it("SE-4: leer setzt zurueck auf keinen Wert", async () => {
-    assert.equal(await setze(""), null);
-    assert.equal(await setze(null), null);
   });
 });

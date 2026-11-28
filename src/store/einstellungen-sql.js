@@ -11,7 +11,6 @@ const SPALTE_JE_SCHLUESSEL = Object.freeze({
   allowPersonalData: "allow_personal_data",
   allowBankData: "allow_bank_data",
   smsSummaryOptIn: "sms_summary_opt_in",
-  language: "language",
   agentStyle: "agent_style",
   allowResearch: "allow_research",
   allowCallMemory: "allow_call_memory",
@@ -42,7 +41,6 @@ export function rowToSettings(zeile) {
     allowBankData: zeile.allow_bank_data,
     allowResearch: zeile.allow_research ?? false,
     allowCallMemory: zeile.allow_call_memory ?? false,
-    language: zeile.language ?? null,
     agentStyle: zeile.agent_style ?? null,
   };
 }

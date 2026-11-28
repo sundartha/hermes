@@ -28,19 +28,7 @@ test("BK3 Tenant ohne Geo -> Kaufland immer US ueber kauflandFuer", () => {
   assert.equal(r.wert.number.country, "US");
 });
 
-test("BK3 Webhook-/Aktivierungspfad liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_us_lang", {});
-  const r = requestNumberForPaidTenant(s, {
-    tenantId: "t_us_lang",
-    maxNumbers: HIGH,
-    maxNumbersPerTenant: HIGH,
-  });
-  assert.equal(r.ok, true);
-  assert.equal(r.wert.number.language, "en");
-});
-
-test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache bleibt am Herkunftsland (DE)", () => {
+test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_force", {});
   setTenantGeo(s, "t_force", { country: "DE", defaultLanguage: "de" });
@@ -51,20 +39,6 @@ test("BK3 Tenant mit Geo DE -> Kaufland immer US ueber kauflandFuer, Sprache ble
   });
   assert.equal(r.ok, true);
   assert.equal(r.wert.number.country, "US", "Kaufland ist US ueber kauflandFuer");
-  assert.equal(r.wert.number.language, "de", "Sprache am Herkunftsland DE");
-});
-
-test("requestNumberForPaidTenant: Tenant MIT Geo DE -> Sprache 'de'", () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_geo_de", {});
-  setTenantGeo(s, "t_geo_de", { country: "DE", defaultLanguage: "de" });
-  const r = requestNumberForPaidTenant(s, {
-    tenantId: "t_geo_de",
-    maxNumbers: HIGH,
-    maxNumbersPerTenant: HIGH,
-  });
-  assert.equal(r.ok, true);
-  assert.equal(r.wert.number.language, "de", "Sprache folgt der Tenant-Geo");
 });
 
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {

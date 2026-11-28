@@ -15,14 +15,12 @@ const abbrechend = await starteAbbrechendeAttrappe("sprache", [BOOTSTRAP_TENANT_
 after(() => abbrechend.close());
 setWorldDefaultLanguageEnabled(true);
 
-function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
+function ownerSeed() {
   const number = {
     ...vorspannSeedNummer({ tenantId: BOOTSTRAP_TENANT_ID, nummer: OWNER_FR_NUMBER, id: "num_owner" }),
     country: "FR",
   };
-  if (numberLanguage) number.language = numberLanguage;
   return seedState({
-    settings: settingsLanguage ? { language: settingsLanguage } : {},
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers: [number],
   });
@@ -50,7 +48,7 @@ function placeCallWithLanguageWish(srv, language) {
 }
 
 test("LANG-15 (Mechanismus, gruen) - ein Sprachwunsch wird NIE still ignoriert: ohne EL-Weg 400 statt Wirkungslosigkeit", async () => {
-  const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
+  const srv = await startServer({ env: ENV, seed: ownerSeed() });
   try {
     const vorAnzahl = srv.readStore().calls.length;
     const res = await placeCallWithLanguageWish(srv, "en");
@@ -63,7 +61,7 @@ test("LANG-15 (Mechanismus, gruen) - ein Sprachwunsch wird NIE still ignoriert: 
 });
 
 test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprache aus derselben Nummer ab", async () => {
-  const srv = await startServer({ env: ENV_VORSPANN, seed: ownerSeed({ numberLanguage: "fr" }) });
+  const srv = await startServer({ env: ENV_VORSPANN, seed: ownerSeed() });
   try {
     const inboundRes = await abrufMitFrist(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
@@ -85,27 +83,10 @@ test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprach
 });
 
 test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.language=fr)", async () => {
-  const srv = await startServer({ env: ENV_VORSPANN, seed: ownerSeed({ numberLanguage: "fr" }) });
+  const srv = await startServer({ env: ENV_VORSPANN, seed: ownerSeed() });
   try {
     assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR, "Gates passiert -> Offline-Originate (500)");
     assert.equal(outboundCall(srv).language, "de", "ohne language startet der Anruf auf de, die Nummer-Sprache (FR) zaehlt nicht");
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer + en -> call.language=en)", async () => {
-  const srv = await startServer({
-    env: ENV_VORSPANN,
-    seed: ownerSeed({ numberLanguage: "fr", settingsLanguage: "en" }),
-  });
-  try {
-    assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
-    assert.equal(
-      outboundCall(srv).language,
-      "de",
-      "ohne language startet der Anruf auf de, weder Owner-Einstellung (en) noch FR-Nummer zaehlen",
-    );
   } finally {
     await srv.stop();
   }

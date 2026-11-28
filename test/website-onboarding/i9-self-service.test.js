@@ -170,11 +170,11 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
 test("(w1) /state liefert die aufgeloeste Tenant-Sprache (Quelle des lang-Attributs, ex WEB-01)", async () => {
   const s = await setup();
   try {
-    s.bucketB.language = "en";
+    ops.setTenantGeo(s.store.load(), TENANT_B, { defaultLanguage: "en" });
     const en = JSON.parse((await getState(s)).body);
     assert.equal(en.language, "en");
     assert.deepEqual(en.greetingTemplates, greetingTemplatesFor("en"), "eine Aufloesung fuer beides (G5)");
-    s.bucketB.language = "fr";
+    ops.setTenantGeo(s.store.load(), TENANT_B, { defaultLanguage: "fr" });
     const fr = JSON.parse((await getState(s)).body);
     assert.equal(fr.language, "fr");
   } finally {

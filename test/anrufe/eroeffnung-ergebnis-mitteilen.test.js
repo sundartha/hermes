@@ -53,7 +53,6 @@ async function ausgehenderAnruf({ sprache, nummer, auftrag, vorname = OWNER_TEST
   const srv = await startServer({
     env: { ...EL_WEG, OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
     seed: seedState({
-      settings: { language: sprache },
       tenants: [
         { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER, firstName: vorname, privateNumber: nummer },
       ],
