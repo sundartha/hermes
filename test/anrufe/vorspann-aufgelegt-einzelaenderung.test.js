@@ -119,8 +119,8 @@ test("Abnahme 1: Speichert Instanz A am Ereignisende mit veralteter Kopie, nachd
     const { callId, abbruch } = await bisAbgebrochen({ a, sql, signer, aufrufe }, "call.playback.ended");
     assert.equal((await abbruch(b)).status, HTTP_OK);
     await zeilenBis(async () => aufrufe.auflegen, (liste) => liste.includes(EL));
-    const { rows: beide } = await sql(ZEILE_SQL, [callId]);
-    assert.deepEqual(beide[0].aufgelegt.sort(), [CALLEE, EL]);
+    const beide = await zeilenBis(async () => (await sql(ZEILE_SQL, [callId])).rows[0]?.aufgelegt ?? [], (liste) => liste.length === 2);
+    assert.deepEqual([...beide].sort(), [CALLEE, EL]);
     await sql("BEGIN");
     await sql("SELECT 1 FROM vorspann_zustand WHERE call_id = $1 FOR UPDATE", [callId]);
     elFreigeben();
