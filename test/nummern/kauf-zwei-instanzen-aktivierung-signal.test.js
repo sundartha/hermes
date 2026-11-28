@@ -4,8 +4,6 @@ import test from "node:test";
 
 import { postgresVorhanden, zeilenBis } from "../anrufe/hermes-mit-postgres.js";
 import { abrufMitFrist } from "../gemeinsam/antwortfrist.mjs";
-import { starteAnbieterServer } from "../gemeinsam/anbieter-attrappe.mjs";
-import { mitVerbindung, POSTGRES_VARIABLE } from "../gemeinsam/echtes-postgres.js";
 import {
   OIDC_KAUF_ECHT_GEHEIMNIS,
   STRIPE_REGISTER_SCHLUESSEL,
@@ -13,19 +11,15 @@ import {
   TELNYX_KAUF_ECHT_SCHLUESSEL,
   WEB_SITZUNGS_GEHEIMNIS,
 } from "../gemeinsam/erfundene-geheimnisse.js";
-import { gemeinsameUmgebung } from "../gemeinsam/zwei-prozesse.js";
-import { echteDatenbankMitRolle } from "../gemeinsam/test-rolle.js";
-import {
-  PLAN_PRICE_BOOT_ENV,
-  startServer,
-  startTelnyxProvisioningMock,
-} from "../helpers.js";
+import { kaufAufbau } from "../gemeinsam/kauf-zwei-instanzen-aufbau.js";
+import { PLAN_PRICE_BOOT_ENV } from "../helpers.js";
 
 const ZEITGRENZE_MS = 240_000;
 const HTTP_OK = 200;
 const MS_JE_SEKUNDE = 1_000;
 const MANDANT = "t_kauf_echt";
 const ABO = "sub_kauf_echt";
+const SUB = "sub-kauf-echt";
 const STRIPE_PFAD = "/webhooks/stripe";
 const BESTELL_PFAD = "/v2/number_orders";
 const ANZAHL_SQL = `SELECT
@@ -100,59 +94,7 @@ function senden(prozess, koerper, zeit) {
   });
 }
 
-function verwaltungsAdresse(rollenAdresse) {
-  const url = new URL(process.env[POSTGRES_VARIABLE]);
-  url.pathname = new URL(rollenAdresse).pathname;
-  return url.href;
-}
-
-const WEBHOOK_ZEILE = /^.*stripe_webhook_(?:activate|ignored).*$/gm;
-const protokoll = (...prozesse) =>
-  prozesse.flatMap((prozess) => prozess.stdout.match(WEBHOOK_ZEILE) ?? []).join("\n");
-
-async function mitProtokoll(prozesse, schritt) {
-  try {
-    return await schritt();
-  } catch (fehler) {
-    throw new Error(
-      `${fehler.message}\nWebhook-Spuren der beiden Server:\n${protokoll(...prozesse) || "(keine)"}`,
-      { cause: fehler },
-    );
-  }
-}
-
-const bestellungen = (telnyx) =>
-  telnyx.requests.filter((anfrage) => anfrage.method === "POST" && anfrage.path === BESTELL_PFAD);
-
-const spuren = (prozess) => [...prozess.stdout.matchAll(SPUR)].map((treffer) => treffer[1]);
-
-async function aufbau(t) {
-  const db = await echteDatenbankMitRolle(t);
-  const [telnyx, stripe] = [
-    await startTelnyxProvisioningMock(),
-    await starteAnbieterServer(stripeAntwort),
-  ];
-  const gestartet = [];
-  t.after(() =>
-    Promise.all([...gestartet.map((prozess) => prozess.stop()), telnyx.close(), stripe.close()]),
-  );
-  const env = gemeinsameUmgebung(db.adresse, {
-    ...UMGEBUNG,
-    TELNYX_API_BASE: telnyx.url,
-    STRIPE_API_BASE: stripe.url,
-  });
-  const starten = async () => {
-    const prozess = await startServer({ env });
-    gestartet.push(prozess);
-    return prozess;
-  };
-  await (await starten()).stop();
-  gestartet.length = 0;
-  const sql = (text, parameter) =>
-    mitVerbindung(
-      verwaltungsAdresse(db.adresse),
-      async (verbindung) => (await verbindung.query(text, parameter)).rows,
-    );
+const SEED = async (sql) => {
   await sql(
     `INSERT INTO tenant (id, status, owner_name, first_name, kyc_level, country, stripe_customer_id,
        stripe_payment_method_id, stripe_payment_method_type)
@@ -160,25 +102,32 @@ async function aufbau(t) {
     [MANDANT],
   );
   await sql(
-    "INSERT INTO account (sub, email, tenant_id) VALUES ('sub-kauf-echt', 'kauf-echt@test.invalid', $1)",
-    [MANDANT],
+    "INSERT INTO account (sub, email, tenant_id) VALUES ($2, 'kauf-echt@test.invalid', $1)",
+    [MANDANT, SUB],
   );
-  return { telnyx, sql, a: await starten(), b: await starten() };
-}
+};
+
+const aufbau = (t) =>
+  kaufAufbau(t, { umgebung: UMGEBUNG, stripeAntwort, mandant: MANDANT, sub: SUB, seede: SEED });
+
+const bestellungen = (telnyx) =>
+  telnyx.requests.filter((anfrage) => anfrage.method === "POST" && anfrage.path === BESTELL_PFAD);
+
+const spuren = (prozess) => [...prozess.stdout.matchAll(SPUR)].map((treffer) => treffer[1]);
 
 test(
   "Zwei Instanzen, Aktivierung per Signal abgewartet: gleichzeitig bezahltes Abo kauft genau eine Nummer",
   { timeout: ZEITGRENZE_MS },
   async (t) => {
     if (!postgresVorhanden()) return;
-    const { telnyx, sql, a, b } = await aufbau(t);
+    const { telnyx, sql, a, b, diagnose } = await aufbau(t);
     const zeit = await serverSekunden(a);
     const antworten = await Promise.all([
       senden(a, ereignis({ id: "evt_kauf_echt_1", abo: ABO, zeit }), zeit),
       senden(b, ereignis({ id: "evt_kauf_echt_2", abo: null, zeit }), zeit),
     ]);
     for (const antwort of antworten) assert.equal(antwort.status, HTTP_OK);
-    await mitProtokoll([a, b], async () => {
+    await diagnose(async () => {
       await zeilenBis(
         async () => (await sql(ANZAHL_SQL, [MANDANT]))[0],
         (zeile) => zeile.erledigt === 1,
