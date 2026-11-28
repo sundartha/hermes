@@ -21,6 +21,7 @@ import {
 } from "../store.js";
 import {
   E164_FORMAT_ERROR,
+  gateTexteVon,
   isTrunkZeroFormatError,
   leitungsplatzAblehnung,
   runOutboundGates,
@@ -39,7 +40,7 @@ import { KOSTENPROFIL_FUER_WEG, meldeOutboundWeg, outboundWegFuer } from "../ele
 import { meldeVorspannBereit, meldeVorspannRueckfall } from "../elevenlabs/vorspann-erzeugen.js";
 import { beginneAnrufstartMessung } from "../elevenlabs/anrufstart-messung.ts";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor } from "../i18n/locales.ts";
+import { textePaketFuer } from "../i18n/texte-paket.ts";
 import { sprachcodeOf } from "../i18n/sprachcode.ts";
 import { sprachwahlOf } from "../i18n/sprachwahl.ts";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -67,8 +68,6 @@ export type WaehleAnruf = (call: Anruf, bestanden: GatesBestanden) => Promise<Wa
 
 type WegAufruf = Parameters<typeof outboundWegFuer>[0];
 
-const sprachtexteFuer: (language: string) => unknown = localeFor;
-const gateTexteFuer: (language: string) => { gates: { queueUnavailable: string } } = localeFor;
 const torePruefen: (args: { gates: unknown; ctx: Kontext }) => Promise<Ablehnung | GatesBestanden> = runOutboundGates;
 const vorabBriefing: (args: {
   objective: unknown;
@@ -838,7 +837,7 @@ export function makeCallRoutes({
     } catch (fehler) {
       console.error(`[place_call] Warteschlange nicht erreichbar call=${call.id}:`, nachrichtOf(fehler));
       await beendeOhneAnbieter(call.id, `${NOT_PLACED}:${GRUND_WARTESCHLANGE}`);
-      const { queueUnavailable } = gateTexteFuer(store.tenantLanguage(ctx.tenantId)).gates;
+      const { queueUnavailable } = gateTexteVon(store, ctx.tenantId);
       return res.status(HTTP_SERVICE_UNAVAILABLE).json({ error: queueUnavailable });
     }
     return res.json(placeCallResponseBody({ call, ctx, config, deduplicated: false }));
@@ -914,7 +913,7 @@ export function makeCallRoutes({
       const opening = await eroeffnungHolen({
         objective: ctx.objective,
         tenantId: ctx.tenantId,
-        locale: sprachtexteFuer(callLocale.language),
+        locale: textePaketFuer({ language: callLocale.language }),
         calleeIsOwner: calleeIsOwnerOfThisCall,
       });
       const openingLine = opening.line;

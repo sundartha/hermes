@@ -2,7 +2,7 @@ import { HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "../utils/http.ts";
 import { anrufStart, eroeffnungsVariablen, offenlegungssatz, providerVoicemailMessage } from "../anrufe/start/anrufstart.ts";
 import { callLocaleOf } from "./call-locale.ts";
 import { PLACEHOLDER_OPENER, drittEroeffnung as drittEroeffnungText } from "../i18n/eroeffnung.ts";
-import { LOCALES, afterGreeting, localeFor } from "../i18n/locales.ts";
+import { LOCALES, afterGreeting } from "../i18n/locales.ts";
 import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
 import { MAX_CALL_DURATION_CAP_S } from "../begriffe/anrufe.ts";
 import { BRIDGE_STATE, bridgeStateOf, istOutboundElProfil } from "./inbound-bridge-state.ts";
@@ -453,17 +453,16 @@ function vornameOhnePlatzhalter(firstName) {
 }
 
 function openingLinesOf({ call, locale }) {
-  const bundle = localeFor(locale.language);
   return {
-    openingLine: verifiedOpeningLine({ call, locale: bundle }),
-    ownerLine: ownerOpeningLine({ call, locale: bundle }),
+    openingLine: verifiedOpeningLine({ call, locale: locale.gespraechTexte }),
+    ownerLine: ownerOpeningLine({ call, locale: locale.gespraechTexte }),
   };
 }
 
 export function eroeffnungFuerAnruf({ store, config, call }) {
   const { ownerName, firstName } = store.tenantContext(call.tenantId);
   const locale = callLocaleOf({ store, config, call, ownerName });
-  const offenlegung = localeFor(locale.disclosureLanguage);
+  const offenlegung = locale.offenlegungTexte;
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
   const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName });
@@ -486,8 +485,8 @@ export function initiationContent({
   eroeffnungGesagt,
   environment,
 }) {
-  const bundle = localeFor(locale.language);
-  const offenlegung = localeFor(locale.disclosureLanguage);
+  const bundle = locale.gespraechTexte;
+  const offenlegung = locale.offenlegungTexte;
   const { openingLine, ownerLine } = openingLinesOf({ call, locale });
   const owner = auftraggeberAusdruck(ownerName, offenlegung);
   const start = anrufStart({

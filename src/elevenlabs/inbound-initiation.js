@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { localeFor, LOCALES } from "../i18n/locales.ts";
+import { LOCALES } from "../i18n/locales.ts";
 import { EROEFFNUNG_VARIANTE, inboundEroeffnungDefekte } from "../i18n/inbound-opening.ts";
 import { anrufStart } from "../anrufe/start/anrufstart.ts";
 import { inboundElLocaleOf } from "./call-locale.ts";
@@ -94,7 +94,7 @@ function inboundSituationFuer({ variante, owner, fremdEroeffnung }) {
 
 function inboundEroeffnungFuer({ store, config, call }) {
   const locale = inboundElLocaleOf({ store, config, call });
-  const bundle = localeFor(locale.language);
+  const bundle = locale.gespraechTexte;
   const { ownerName, firstName } = store.tenantContext(call.tenantId);
   const fremd = bundle.inboundEroeffnung(ownerName);
   const ownerText = call.callerIsOwner === true ? bundle.inboundEroeffnungOwner(firstName) : "";
