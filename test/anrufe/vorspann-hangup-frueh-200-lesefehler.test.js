@@ -21,6 +21,7 @@ const CALLEE_BEIN = "cc_callee_frueh200";
 const EL_BEIN = "cc_el_frueh200";
 const ZIEL = "+4915112399014";
 const ZUSTAND_FEHLT = "rueckfall grund=zustand_fehlt";
+const PROZESS_LOG = "[vorspann] relation \"vorspann_zustand\" does not exist";
 const LESEFEHLER_LOG = "[el-vorspann] ereignis fehlgeschlagen call=";
 const VERSUCHE_INSGESAMT = 4;
 const NACHLAUF_MS = 4_000;
@@ -162,6 +163,7 @@ test("Bleibt der Zustand nach dem frühen 200 beim Auflegen unlesbar, bleibt der
     await zeilenBis(async () => [frisch.stdout], ([ausgabe]) => zaehle(ausgabe, LESEFEHLER_LOG) >= VERSUCHE_INSGESAMT);
     await assert.rejects(nochEinVersuch(frisch), /nicht erreicht/);
     assert.equal(zaehle(frisch.stdout, LESEFEHLER_LOG), VERSUCHE_INSGESAMT);
+    assert.equal(zaehle(frisch.stdout, PROZESS_LOG), VERSUCHE_INSGESAMT);
     assert.equal((await sql(GEBUCHT_SQL, [callId])).rows[0].status, "active");
     assert.equal(zaehle(frisch.stdout, ZUSTAND_FEHLT), 0);
     assert.deepEqual(aufrufe.auflegen, []);
