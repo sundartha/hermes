@@ -108,7 +108,7 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "markConsultAnswerDelivered", "markConsultAskDelivered", "markCostCrossCheckAttempted",
   "markInboundElFallback", "markInboundElNachlaufStarted", "markInboxEntry", "markMeterEventsSent",
   "markNotPlacedMailSent",
-  "markNumberElInboundTrunkBelegt", "markSummaryMailSent", "markSummarySmsSent", "mitPlattformBindungen", "newId",
+  "markNumberElInboundTrunkBelegt", "markSummaryMailSent", "markSummarySmsSent", "newId",
   "newsletterAbgleichen",
   "noteConsultPoll",
   "numberHasActiveCall",

@@ -39,7 +39,7 @@ import { macheKalenderSql } from "./kalender-sql.js";
 import { macheKostenvergleichSql } from "./kostenvergleich-sql.js";
 import { macheTtsZaehlerSql } from "./tts-zaehler-sql.js";
 import { empfaengerAbmelden, empfaengerAnhaengen, empfaengerBestaetigen, empfaengerEntfernen } from "./newsletter-liste-sql.ts";
-import { machePlattformNutzungSql } from "./plattform-nutzung-sql.js";
+import { machePlattformNutzungSql } from "./plattform-nutzung-sql.ts";
 import { macheNummernSql } from "./nummern-sql.js";
 import {
   einstellungenSchreiben,
