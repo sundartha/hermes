@@ -28,6 +28,7 @@ async function speichereGebundeneAktiveNummer(store, { id, tenantId }) {
     providerNumberId: `ext_${id}`,
   });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
+  await store.plattformBindungenSchreiben();
   await store.save();
 }
 
@@ -51,9 +52,11 @@ test("P1: NEUSTART-Round-Trip - binden, save(), Spiegel verwerfen, neu hydrieren
     tenantId: null,
     note: "test",
   });
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const reopened = await reopen(db);
+  await reopened.plattformBindungenNachladen();
   const [binding] = ops.platformNumberBindings(reopened.load(), ANI);
   assert.ok(binding, "Bindung ueberlebt Neustart");
   assert.equal(binding.purpose, "outbound_ani");
@@ -89,6 +92,7 @@ test("P3 (Positiv-Kontrolle): dasselbe rohe UPDATE auf eine UNGEBUNDENE Zeile ge
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: "ext_n2",
   });
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   await db.query(`UPDATE number SET status='released' WHERE id='n2'`);
@@ -110,7 +114,9 @@ test("P4 (Flush-Regression, PM-11): gebundene, BEREITS released-e Zeile zweimal 
   });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
   const zweiFlushes = async () => {
+    await store.plattformBindungenSchreiben();
     await store.save();
+    await store.plattformBindungenSchreiben();
     await store.save();
     await store.drainFlushes();
   };
@@ -130,6 +136,7 @@ test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundene
     providerNumberId: "ext_n4",
   });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: "outbound_ani", provider: PROVIDER.TELNYX, tenantId: null });
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   await store.nummernSql().nummerEntfernen({ tenantId: "t1", numberId: "n4" });
@@ -158,12 +165,14 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
     provider: PROVIDER.TELNYX,
     tenantId: "t1",
   });
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const fresh = store.load();
   const number = ops.findNumber(fresh, "n5");
   ops.unbindPlatformNumber(fresh, { e164: number.e164, purpose: "outbound_ani" });
   ops.releaseNumber(fresh, "n5");
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const numberRow = (await db.query(`SELECT status, e164 FROM number WHERE id='n5'`)).rows[0];
@@ -178,6 +187,7 @@ test("P6 (Flush-Reihenfolge): Unbind + releaseNumber in EINEM save() - die legit
 test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen; nach Unbind wieder erlaubt", async () => {
   const { store, db } = await makePgTestStore();
   bindeAni(store.load());
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   await assert.rejects(() =>
@@ -190,6 +200,7 @@ test("P7: Teilindex - zweite offene Bindung fuer (e164, purpose) wird abgewiesen
   const fresh = store.load();
   ops.unbindPlatformNumber(fresh, ANI_SCHLUESSEL);
   bindeAni(fresh);
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const openRows = (
@@ -231,10 +242,13 @@ test("P9: Bindungstabelle ist global lesbar - RLS ENABLE+FORCE, nur die globale 
 test("P10: Teilindex - nach Unbind und Rebind stehen die freigegebene und die neue Bindung beide in der Datenbank", async () => {
   const { store, db } = await makePgTestStore();
   bindeAni(store.load());
+  await store.plattformBindungenSchreiben();
   await store.save();
   ops.unbindPlatformNumber(store.load(), ANI_SCHLUESSEL);
+  await store.plattformBindungenSchreiben();
   await store.save();
   bindeAni(store.load());
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const { rows } = await db.query(`SELECT released_at IS NULL AS open FROM platform_number_use WHERE e164=$1`, [ANI]);
@@ -259,6 +273,7 @@ test("P12: Teilindex je Rolle - dieselbe Nummer als Absender-ANI und SMS-Absende
   for (const purpose of purposes) {
     ops.bindPlatformNumber(state, { e164: ANI, purpose, provider: PROVIDER.TELNYX, tenantId: null, note: purpose });
   }
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   const open = await db.query(`SELECT purpose FROM platform_number_use WHERE released_at IS NULL AND e164=$1`, [ANI]);
@@ -272,6 +287,7 @@ test("P13: eine gesperrte, gebundene Nummer laesst sich wieder aktivieren - nur 
   ops.registerTenant(state, suspended.tenantId);
   state.numbers.push({ ...suspended, provider: PROVIDER.TELNYX, providerNumberId: "ext_n13" });
   ops.bindPlatformNumber(state, { e164: CUSTOMER_DID, purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, provider: PROVIDER.TELNYX, tenantId: null });
+  await store.plattformBindungenSchreiben();
   await store.save();
 
   await db.query(`UPDATE number SET status=$2 WHERE id=$1`, [suspended.id, NUMBER_STATUS.ACTIVE]);

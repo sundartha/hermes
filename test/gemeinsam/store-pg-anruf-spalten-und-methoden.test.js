@@ -135,6 +135,9 @@ const ERWARTETE_SPEICHER_METHODEN = [
   "usageOf", "withStoreLock", "zaehleAnrufeSeit",
 ];
 
+ERWARTETE_SPEICHER_METHODEN.push("mitPlattformBindungen", "plattformBindungenNachladen", "plattformBindungenSchreiben");
+ERWARTETE_SPEICHER_METHODEN.sort();
+
 test("Speicher-Methodenliste: der Teststore liefert genau diese Schluessel, keinen doppelt", async () => {
   const { store } = await makePgTestStore();
 

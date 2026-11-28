@@ -749,7 +749,7 @@ export async function bootServer({
   }
 
   await healBootstrapStore({ config, store, messaging });
-  const openPlatformBindings = derivePlatformNumberBindings({ store });
+  const openPlatformBindings = await store.mitPlattformBindungen(() => derivePlatformNumberBindings({ store }));
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store, durableAudit);
