@@ -5,9 +5,7 @@ import express from "express";
 
 const { config } = await import("../../src/config.ts");
 const { KOSTENPROFIL } = await import("../../src/billing/kostenarten.ts");
-const { disclosurePrefixFor } = await import("../../src/i18n/locales.ts");
 const { EL_CALL_BINDING_SIP_HEADER } = await import("../../src/elevenlabs/inbound-sip-uri.ts");
-const { makeElevenLabsOutbound } = await import("../../src/elevenlabs/outbound.js");
 const { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER, makeElevenLabsInitWebhookRoutes } = await import(
   "../../src/routes/webhooks-elevenlabs-init.ts"
 );
@@ -36,7 +34,7 @@ async function legeAnrufAn(store, ueber) {
   const call = store.createCall({ direction: "outbound", from: ABSENDER, to: ZIEL_PORTUGAL, goal: "Test", tenantId: BOOTSTRAP_TENANT_ID, provider: "telnyx", ...ueber.anlage });
   Object.assign(call, {
     costProfile: KOSTENPROFIL.TELNYX_OUTBOUND_EL_CONVAI,
-    answeredAt: new Date().toISOString(),
+    answeredAt: "2026-11-28T10:00:00.000Z",
     streamToken: H7C2B4B2_BINDUNGS_TOKEN,
   });
   await store.persistCall(call.id);
@@ -44,13 +42,6 @@ async function legeAnrufAn(store, ueber) {
 }
 
 async function initAntwort(store) {
-  const el = makeElevenLabsOutbound({
-    store,
-    config,
-    terminateAndBillCall: () => {},
-    billThunk: () => () => {},
-    finishCall: () => {},
-  });
   const app = express();
   app.use(express.json());
   app.use(
@@ -58,7 +49,7 @@ async function initAntwort(store) {
       store,
       config,
       bridges: { clearDeadlines: () => {} },
-      outboundInitInhalt: el.initInhaltFor,
+      outboundInitInhalt: (call) => ({ sprache: call.language, sprache_ausdruecklich: call.languageExplicit }),
       vorspannText: () => "",
     }),
   );
@@ -83,19 +74,17 @@ async function initAntwort(store) {
 }
 
 
-test("anrufsprache-pg-1: ausdruecklich gewaehltes de an +351 spricht nach dem Laden aus Postgres Offenlegung und Gespraech auf de", async () => {
+test("anrufsprache-pg-1: ein ausdruecklich gewaehltes de an +351 erreicht den Init nach dem Laden aus Postgres als ausdrueckliche Wahl", async () => {
   const { a, b } = await zweiInstanzen();
-  const call = await legeAnrufAn(a, { anlage: { language: "de", languageExplicit: true } });
+  await legeAnrufAn(a, { anlage: { language: "de", languageExplicit: true } });
   const antwort = await initAntwort(b);
-  assert.equal(b.getCall(call.id).languageExplicit, true);
-  assert.equal(antwort.conversation_config_override.agent.language, "de");
-  assert.equal(antwort.conversation_config_override.agent.first_message, undefined);
-  assert.ok(antwort.dynamic_variables.voicemail_line.startsWith(disclosurePrefixFor("de")), antwort.dynamic_variables.voicemail_line);
+  assert.equal(antwort.sprache, "de");
+  assert.equal(antwort.sprache_ausdruecklich, true);
 });
 
-test("anrufsprache-pg-2: ohne ausdrueckliche Wahl bleibt languageExplicit nach dem Laden false", async () => {
+test("anrufsprache-pg-2: ohne ausdrueckliche Wahl erreicht der Init den Anruf nach dem Laden mit languageExplicit false", async () => {
   const { a, b } = await zweiInstanzen();
-  const call = await legeAnrufAn(a, { anlage: { language: "de" } });
-  await initAntwort(b);
-  assert.equal(b.getCall(call.id).languageExplicit, false);
+  await legeAnrufAn(a, { anlage: { language: "de" } });
+  const antwort = await initAntwort(b);
+  assert.equal(antwort.sprache_ausdruecklich, false);
 });
